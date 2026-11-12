@@ -301,7 +301,7 @@ verification is recorded in `docs/FUTASAKU_0_4_BASELINE.md`.
 ### The Lab: boards of any shape, reshuffle, longer games
 - Date: 2026-10-04 · Commits: `04297e9`, `9afb814`, `4ef2ccd` · In test only
 - Only if a preset proves fun. Needs SPEC changes, new golden games, and the tests listed in
-  `docs/LAB-KNOWN-BREAKAGE.md` fixed.
+  `docs/history/LAB-KNOWN-BREAKAGE.md` fixed.
 
 ### Live duels (FUTASAKU real time)
 - Date: 2026-10-13 · Branch: `futa0.5-online` · Channels: `/futa0.5/` preview and `futa-test` (also `VITE_LIVE_DUELS=1`)

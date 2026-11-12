@@ -30,7 +30,7 @@ describe('Match Intel attribution', () => {
     expect(publicIntelMoves(viewFor(s, 1), history, 1).at(-1)).toEqual({ who: 'opp', verb: 'CUT', detail: '2' });
     // The statistics credit the attacker (player 0), never the victim.
     expect(matchIntel(viewFor(s, 0), history, []).cuts).toEqual([2, 0]);
-    expect(matchIntel(viewFor(s, 1), history, []).cuts).toEqual([2, 0]);
+    expect(matchIntel(viewFor(s, 1), history, []).cuts).toEqual([0, 2]);
   });
 
   it('a Strangle names the loser, so the WIN beat belongs to the winner — from both seats', () => {
@@ -67,7 +67,7 @@ describe('Match Intel attribution', () => {
         }
         const expected: [number, number] = [0, 0];
         for (const e of history) if (e.t === 'Sever') expected[(1 - e.player) as 0 | 1] += e.coords.length;
-        expect(matchIntel(view, history, []).cuts).toEqual(expected);
+        expect(matchIntel(view, history, []).cuts).toEqual(me===0?expected:[expected[1],expected[0]]);
       }
     }
     expect(severSeen).toBeGreaterThan(0);

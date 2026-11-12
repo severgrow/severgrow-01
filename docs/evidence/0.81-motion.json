@@ -1,0 +1,678 @@
+{
+  "date": "2026-11-06",
+  "baselineCommit": "e8f6ca72063e8e3197c94a56492222b06ae6e40b",
+  "finalSource": "v0.81 tag",
+  "browser": "Chromium 154.0.8037.57, Debian 13, headless",
+  "viewport": [
+    390,
+    844
+  ],
+  "cpuThrottle": 4,
+  "runsPerMove": 3,
+  "method": "Serial baseline then final; no concurrent tests or browsers; same fixture, build channel futa04, harness, runtime and browser. Phase-only metrics exclude boot. CPU emulation and software rendering do not certify a physical phone.",
+  "raw": {
+    "baseline": [
+      {
+        "move": "blast",
+        "rc": "[{\"kind\":\"full\",\"ms\":218.5},{\"kind\":\"full\",\"ms\":199.9},{\"kind\":\"full\",\"ms\":82.4},{\"kind\":\"full\",\"ms\":95.2},{\"kind\":\"full\",\"ms\":233.6}]",
+        "lt": [
+          51,
+          294,
+          93,
+          202,
+          61,
+          427
+        ],
+        "ms": 3010,
+        "p95": 67,
+        "max": 383,
+        "frames": 77,
+        "longMax": 427,
+        "work": {
+          "LayoutDuration": 89,
+          "RecalcStyleDuration": 1298,
+          "ScriptDuration": 182,
+          "TaskDuration": 2710
+        }
+      },
+      {
+        "move": "bomb",
+        "rc": "[{\"kind\":\"full\",\"ms\":289.1},{\"kind\":\"full\",\"ms\":80.5},{\"kind\":\"full\",\"ms\":82.3},{\"kind\":\"full\",\"ms\":180},{\"kind\":\"full\",\"ms\":69},{\"kind\":\"full\",\"ms\":67.6},{\"kind\":\"full\",\"ms\":139.7}]",
+        "lt": [
+          119,
+          210,
+          63,
+          51,
+          81,
+          474
+        ],
+        "ms": 3356,
+        "p95": 83,
+        "max": 383,
+        "frames": 79,
+        "longMax": 474,
+        "work": {
+          "LayoutDuration": 70,
+          "RecalcStyleDuration": 1427,
+          "ScriptDuration": 190,
+          "TaskDuration": 2909
+        }
+      },
+      {
+        "move": "huge cut",
+        "rc": "[{\"kind\":\"full\",\"ms\":349.7},{\"kind\":\"full\",\"ms\":138.6},{\"kind\":\"full\",\"ms\":253.2},{\"kind\":\"full\",\"ms\":174.7},{\"kind\":\"full\",\"ms\":449.5}]",
+        "lt": [
+          55,
+          89,
+          111,
+          83,
+          912,
+          108
+        ],
+        "ms": 3950,
+        "p95": 117,
+        "max": 517,
+        "frames": 66,
+        "longMax": 912,
+        "work": {
+          "LayoutDuration": 86,
+          "RecalcStyleDuration": 1505,
+          "ScriptDuration": 208,
+          "TaskDuration": 3828
+        }
+      },
+      {
+        "move": "bloom",
+        "rc": "[{\"kind\":\"full\",\"ms\":148.5},{\"kind\":\"tile\",\"ms\":98.1},{\"kind\":\"tile\",\"ms\":26.4},{\"kind\":\"tile\",\"ms\":50.9},{\"kind\":\"tile\",\"ms\":29.8},{\"kind\":\"full\",\"ms\":49.4},{\"kind\":\"full\",\"ms\":200}]",
+        "lt": [
+          342,
+          61,
+          89,
+          57,
+          97,
+          268
+        ],
+        "ms": 2071,
+        "p95": 67,
+        "max": 367,
+        "frames": 64,
+        "longMax": 342,
+        "work": {
+          "LayoutDuration": 35,
+          "RecalcStyleDuration": 667,
+          "ScriptDuration": 116,
+          "TaskDuration": 1751
+        }
+      },
+      {
+        "move": "blast",
+        "rc": "[{\"kind\":\"full\",\"ms\":221.6},{\"kind\":\"full\",\"ms\":192.7},{\"kind\":\"full\",\"ms\":59.2},{\"kind\":\"full\",\"ms\":66.4},{\"kind\":\"full\",\"ms\":174.7}]",
+        "lt": [
+          256,
+          96,
+          54,
+          58,
+          158,
+          314
+        ],
+        "ms": 2901,
+        "p95": 67,
+        "max": 350,
+        "frames": 78,
+        "longMax": 314,
+        "work": {
+          "LayoutDuration": 58,
+          "RecalcStyleDuration": 1212,
+          "ScriptDuration": 169,
+          "TaskDuration": 2613
+        }
+      },
+      {
+        "move": "bomb",
+        "rc": "[{\"kind\":\"full\",\"ms\":235},{\"kind\":\"full\",\"ms\":70},{\"kind\":\"full\",\"ms\":127},{\"kind\":\"full\",\"ms\":155.9},{\"kind\":\"full\",\"ms\":82.1},{\"kind\":\"full\",\"ms\":69.3},{\"kind\":\"full\",\"ms\":218.4}]",
+        "lt": [
+          54,
+          230,
+          73,
+          60,
+          93,
+          545
+        ],
+        "ms": 3387,
+        "p95": 67,
+        "max": 300,
+        "frames": 86,
+        "longMax": 545,
+        "work": {
+          "LayoutDuration": 69,
+          "RecalcStyleDuration": 1411,
+          "ScriptDuration": 198,
+          "TaskDuration": 2914
+        }
+      },
+      {
+        "move": "huge cut",
+        "rc": "[{\"kind\":\"full\",\"ms\":238.8},{\"kind\":\"full\",\"ms\":174.9},{\"kind\":\"full\",\"ms\":315.6},{\"kind\":\"full\",\"ms\":141.6},{\"kind\":\"full\",\"ms\":392.8}]",
+        "lt": [
+          100,
+          62,
+          67,
+          59,
+          884,
+          111
+        ],
+        "ms": 3720,
+        "p95": 100,
+        "max": 350,
+        "frames": 73,
+        "longMax": 884,
+        "work": {
+          "LayoutDuration": 100,
+          "RecalcStyleDuration": 1393,
+          "ScriptDuration": 196,
+          "TaskDuration": 3535
+        }
+      },
+      {
+        "move": "bloom",
+        "rc": "[{\"kind\":\"full\",\"ms\":123.4},{\"kind\":\"tile\",\"ms\":80.9},{\"kind\":\"tile\",\"ms\":25},{\"kind\":\"tile\",\"ms\":32.2},{\"kind\":\"tile\",\"ms\":17.3},{\"kind\":\"full\",\"ms\":76.5},{\"kind\":\"full\",\"ms\":127.1}]",
+        "lt": [
+          66,
+          115,
+          79,
+          63,
+          215,
+          67
+        ],
+        "ms": 1960,
+        "p95": 83,
+        "max": 300,
+        "frames": 55,
+        "longMax": 260,
+        "work": {
+          "LayoutDuration": 35,
+          "RecalcStyleDuration": 571,
+          "ScriptDuration": 109,
+          "TaskDuration": 1606
+        }
+      },
+      {
+        "move": "blast",
+        "rc": "[{\"kind\":\"full\",\"ms\":873.9},{\"kind\":\"full\",\"ms\":519.1},{\"kind\":\"full\",\"ms\":97.3},{\"kind\":\"full\",\"ms\":92.9},{\"kind\":\"full\",\"ms\":216.6}]",
+        "lt": [
+          69,
+          75,
+          67,
+          54,
+          82,
+          419
+        ],
+        "ms": 4941,
+        "p95": 533,
+        "max": 1067,
+        "frames": 44,
+        "longMax": 1058,
+        "work": {
+          "LayoutDuration": 116,
+          "RecalcStyleDuration": 2617,
+          "ScriptDuration": 232,
+          "TaskDuration": 4879
+        }
+      },
+      {
+        "move": "bomb",
+        "rc": "[{\"kind\":\"full\",\"ms\":343},{\"kind\":\"full\",\"ms\":119.6},{\"kind\":\"full\",\"ms\":101.7},{\"kind\":\"full\",\"ms\":203.1},{\"kind\":\"full\",\"ms\":96.7},{\"kind\":\"full\",\"ms\":86.8},{\"kind\":\"full\",\"ms\":204}]",
+        "lt": [
+          66,
+          108,
+          53,
+          52,
+          617,
+          56
+        ],
+        "ms": 3617,
+        "p95": 117,
+        "max": 433,
+        "frames": 81,
+        "longMax": 617,
+        "work": {
+          "LayoutDuration": 63,
+          "RecalcStyleDuration": 1601,
+          "ScriptDuration": 204,
+          "TaskDuration": 3296
+        }
+      },
+      {
+        "move": "huge cut",
+        "rc": "[{\"kind\":\"full\",\"ms\":272.5},{\"kind\":\"full\",\"ms\":193.4},{\"kind\":\"full\",\"ms\":247.6},{\"kind\":\"full\",\"ms\":159.6},{\"kind\":\"full\",\"ms\":315.3}]",
+        "lt": [
+          58,
+          58,
+          303,
+          103,
+          750,
+          81
+        ],
+        "ms": 3676,
+        "p95": 117,
+        "max": 417,
+        "frames": 70,
+        "longMax": 750,
+        "work": {
+          "LayoutDuration": 80,
+          "RecalcStyleDuration": 1468,
+          "ScriptDuration": 234,
+          "TaskDuration": 3561
+        }
+      },
+      {
+        "move": "bloom",
+        "rc": "[{\"kind\":\"full\",\"ms\":193.4},{\"kind\":\"tile\",\"ms\":121.8},{\"kind\":\"tile\",\"ms\":32.7},{\"kind\":\"tile\",\"ms\":25.6},{\"kind\":\"tile\",\"ms\":38},{\"kind\":\"full\",\"ms\":98.3},{\"kind\":\"full\",\"ms\":151.1}]",
+        "lt": [
+          421,
+          85,
+          107,
+          107,
+          275,
+          82
+        ],
+        "ms": 2224,
+        "p95": 100,
+        "max": 450,
+        "frames": 58,
+        "longMax": 421,
+        "work": {
+          "LayoutDuration": 72,
+          "RecalcStyleDuration": 795,
+          "ScriptDuration": 132,
+          "TaskDuration": 2032
+        }
+      }
+    ],
+    "final": [
+      {
+        "move": "blast",
+        "rc": "[{\"kind\":\"full\",\"ms\":241.3},{\"kind\":\"full\",\"ms\":286.6},{\"kind\":\"full\",\"ms\":60.1},{\"kind\":\"full\",\"ms\":63.2},{\"kind\":\"full\",\"ms\":227.8}]",
+        "lt": [
+          131,
+          54,
+          58,
+          151,
+          89,
+          369
+        ],
+        "ms": 3061,
+        "p95": 150,
+        "max": 517,
+        "frames": 59,
+        "longMax": 376,
+        "work": {
+          "LayoutDuration": 74,
+          "RecalcStyleDuration": 1479,
+          "ScriptDuration": 151,
+          "TaskDuration": 2902
+        }
+      },
+      {
+        "move": "bomb",
+        "rc": "[{\"kind\":\"full\",\"ms\":262.8},{\"kind\":\"full\",\"ms\":53.2},{\"kind\":\"full\",\"ms\":53.9},{\"kind\":\"full\",\"ms\":137.5},{\"kind\":\"full\",\"ms\":42.2},{\"kind\":\"full\",\"ms\":46.5},{\"kind\":\"full\",\"ms\":148.1}]",
+        "lt": [
+          137,
+          56,
+          75,
+          50,
+          84,
+          397
+        ],
+        "ms": 3204,
+        "p95": 83,
+        "max": 333,
+        "frames": 94,
+        "longMax": 397,
+        "work": {
+          "LayoutDuration": 56,
+          "RecalcStyleDuration": 1233,
+          "ScriptDuration": 202,
+          "TaskDuration": 2770
+        }
+      },
+      {
+        "move": "huge cut",
+        "rc": "[{\"kind\":\"full\",\"ms\":258},{\"kind\":\"full\",\"ms\":169.3},{\"kind\":\"full\",\"ms\":273.2},{\"kind\":\"full\",\"ms\":106},{\"kind\":\"full\",\"ms\":302.5}]",
+        "lt": [
+          202,
+          51,
+          91,
+          51,
+          707,
+          101
+        ],
+        "ms": 3622,
+        "p95": 133,
+        "max": 417,
+        "frames": 70,
+        "longMax": 707,
+        "work": {
+          "LayoutDuration": 123,
+          "RecalcStyleDuration": 1433,
+          "ScriptDuration": 209,
+          "TaskDuration": 3544
+        }
+      },
+      {
+        "move": "bloom",
+        "rc": "[{\"kind\":\"full\",\"ms\":99.8},{\"kind\":\"tile\",\"ms\":12.2},{\"kind\":\"tile\",\"ms\":8.1},{\"kind\":\"tile\",\"ms\":10.3},{\"kind\":\"tile\",\"ms\":13.2},{\"kind\":\"full\",\"ms\":34.1},{\"kind\":\"full\",\"ms\":90.2}]",
+        "lt": [
+          174,
+          133,
+          70,
+          60,
+          112,
+          135
+        ],
+        "ms": 1676,
+        "p95": 83,
+        "max": 283,
+        "frames": 58,
+        "longMax": 174,
+        "work": {
+          "LayoutDuration": 40,
+          "RecalcStyleDuration": 477,
+          "ScriptDuration": 123,
+          "TaskDuration": 1305
+        }
+      },
+      {
+        "move": "blast",
+        "rc": "[{\"kind\":\"full\",\"ms\":142.1},{\"kind\":\"full\",\"ms\":152.3},{\"kind\":\"full\",\"ms\":31.3},{\"kind\":\"full\",\"ms\":54.6},{\"kind\":\"full\",\"ms\":129.6}]",
+        "lt": [
+          216,
+          58,
+          213,
+          73,
+          93,
+          228
+        ],
+        "ms": 2630,
+        "p95": 33,
+        "max": 283,
+        "frames": 93,
+        "longMax": 228,
+        "work": {
+          "LayoutDuration": 55,
+          "RecalcStyleDuration": 925,
+          "ScriptDuration": 135,
+          "TaskDuration": 2133
+        }
+      },
+      {
+        "move": "bomb",
+        "rc": "[{\"kind\":\"full\",\"ms\":231.2},{\"kind\":\"full\",\"ms\":74.5},{\"kind\":\"full\",\"ms\":58.2},{\"kind\":\"full\",\"ms\":199.6},{\"kind\":\"full\",\"ms\":53.3},{\"kind\":\"full\",\"ms\":51},{\"kind\":\"full\",\"ms\":149.5}]",
+        "lt": [
+          73,
+          136,
+          65,
+          50,
+          108,
+          487
+        ],
+        "ms": 3202,
+        "p95": 100,
+        "max": 317,
+        "frames": 70,
+        "longMax": 487,
+        "work": {
+          "LayoutDuration": 91,
+          "RecalcStyleDuration": 1275,
+          "ScriptDuration": 214,
+          "TaskDuration": 2801
+        }
+      },
+      {
+        "move": "huge cut",
+        "rc": "[{\"kind\":\"full\",\"ms\":208.8},{\"kind\":\"full\",\"ms\":178.1},{\"kind\":\"full\",\"ms\":183.2},{\"kind\":\"full\",\"ms\":68},{\"kind\":\"full\",\"ms\":305.9}]",
+        "lt": [
+          51,
+          235,
+          89,
+          50,
+          585,
+          103
+        ],
+        "ms": 3441,
+        "p95": 100,
+        "max": 367,
+        "frames": 72,
+        "longMax": 585,
+        "work": {
+          "LayoutDuration": 91,
+          "RecalcStyleDuration": 1230,
+          "ScriptDuration": 210,
+          "TaskDuration": 3231
+        }
+      },
+      {
+        "move": "bloom",
+        "rc": "[{\"kind\":\"full\",\"ms\":112.5},{\"kind\":\"tile\",\"ms\":16.2},{\"kind\":\"tile\",\"ms\":12.2},{\"kind\":\"tile\",\"ms\":11.6},{\"kind\":\"tile\",\"ms\":31.1},{\"kind\":\"full\",\"ms\":45.3},{\"kind\":\"full\",\"ms\":141.7}]",
+        "lt": [
+          206,
+          159,
+          91,
+          97,
+          206,
+          50
+        ],
+        "ms": 1841,
+        "p95": 100,
+        "max": 350,
+        "frames": 53,
+        "longMax": 206,
+        "work": {
+          "LayoutDuration": 35,
+          "RecalcStyleDuration": 571,
+          "ScriptDuration": 108,
+          "TaskDuration": 1613
+        }
+      },
+      {
+        "move": "blast",
+        "rc": "[{\"kind\":\"full\",\"ms\":186.7},{\"kind\":\"full\",\"ms\":183.9},{\"kind\":\"full\",\"ms\":45.6},{\"kind\":\"full\",\"ms\":42.6},{\"kind\":\"full\",\"ms\":190.6}]",
+        "lt": [
+          52,
+          253,
+          143,
+          65,
+          131,
+          291
+        ],
+        "ms": 2835,
+        "p95": 83,
+        "max": 383,
+        "frames": 70,
+        "longMax": 291,
+        "work": {
+          "LayoutDuration": 58,
+          "RecalcStyleDuration": 1157,
+          "ScriptDuration": 172,
+          "TaskDuration": 2587
+        }
+      },
+      {
+        "move": "bomb",
+        "rc": "[{\"kind\":\"full\",\"ms\":191.6},{\"kind\":\"full\",\"ms\":55.9},{\"kind\":\"full\",\"ms\":52.4},{\"kind\":\"full\",\"ms\":178.2},{\"kind\":\"full\",\"ms\":51.8},{\"kind\":\"full\",\"ms\":55.4},{\"kind\":\"full\",\"ms\":138.6}]",
+        "lt": [
+          69,
+          80,
+          96,
+          110,
+          446,
+          52
+        ],
+        "ms": 3210,
+        "p95": 100,
+        "max": 267,
+        "frames": 79,
+        "longMax": 446,
+        "work": {
+          "LayoutDuration": 72,
+          "RecalcStyleDuration": 1351,
+          "ScriptDuration": 269,
+          "TaskDuration": 2881
+        }
+      },
+      {
+        "move": "huge cut",
+        "rc": "[{\"kind\":\"full\",\"ms\":255.4},{\"kind\":\"full\",\"ms\":156.5},{\"kind\":\"full\",\"ms\":366.9},{\"kind\":\"full\",\"ms\":127.1},{\"kind\":\"full\",\"ms\":421.9}]",
+        "lt": [
+          56,
+          64,
+          69,
+          70,
+          970,
+          104
+        ],
+        "ms": 4101,
+        "p95": 267,
+        "max": 417,
+        "frames": 44,
+        "longMax": 970,
+        "work": {
+          "LayoutDuration": 153,
+          "RecalcStyleDuration": 1731,
+          "ScriptDuration": 266,
+          "TaskDuration": 4137
+        }
+      },
+      {
+        "move": "bloom",
+        "rc": "[{\"kind\":\"full\",\"ms\":128.3},{\"kind\":\"tile\",\"ms\":21},{\"kind\":\"tile\",\"ms\":12.2},{\"kind\":\"tile\",\"ms\":13.8},{\"kind\":\"tile\",\"ms\":7.7},{\"kind\":\"full\",\"ms\":31.5},{\"kind\":\"full\",\"ms\":107.3}]",
+        "lt": [
+          230,
+          151,
+          65,
+          121,
+          151
+        ],
+        "ms": 1800,
+        "p95": 67,
+        "max": 350,
+        "frames": 60,
+        "longMax": 230,
+        "work": {
+          "LayoutDuration": 44,
+          "RecalcStyleDuration": 548,
+          "ScriptDuration": 114,
+          "TaskDuration": 1545
+        }
+      }
+    ]
+  },
+  "medians": {
+    "blast": {
+      "baseline": {
+        "p95": 67,
+        "max": 383,
+        "ms": 3010,
+        "longMax": 427,
+        "work": {
+          "LayoutDuration": 89,
+          "RecalcStyleDuration": 1298,
+          "ScriptDuration": 182,
+          "TaskDuration": 2710
+        }
+      },
+      "final": {
+        "p95": 83,
+        "max": 383,
+        "ms": 2835,
+        "longMax": 291,
+        "work": {
+          "LayoutDuration": 58,
+          "RecalcStyleDuration": 1157,
+          "ScriptDuration": 151,
+          "TaskDuration": 2587
+        }
+      }
+    },
+    "bomb": {
+      "baseline": {
+        "p95": 83,
+        "max": 383,
+        "ms": 3387,
+        "longMax": 545,
+        "work": {
+          "LayoutDuration": 69,
+          "RecalcStyleDuration": 1427,
+          "ScriptDuration": 198,
+          "TaskDuration": 2914
+        }
+      },
+      "final": {
+        "p95": 100,
+        "max": 317,
+        "ms": 3204,
+        "longMax": 446,
+        "work": {
+          "LayoutDuration": 72,
+          "RecalcStyleDuration": 1275,
+          "ScriptDuration": 214,
+          "TaskDuration": 2801
+        }
+      }
+    },
+    "huge cut": {
+      "baseline": {
+        "p95": 117,
+        "max": 417,
+        "ms": 3720,
+        "longMax": 884,
+        "work": {
+          "LayoutDuration": 86,
+          "RecalcStyleDuration": 1468,
+          "ScriptDuration": 208,
+          "TaskDuration": 3561
+        }
+      },
+      "final": {
+        "p95": 133,
+        "max": 417,
+        "ms": 3622,
+        "longMax": 707,
+        "work": {
+          "LayoutDuration": 123,
+          "RecalcStyleDuration": 1433,
+          "ScriptDuration": 210,
+          "TaskDuration": 3544
+        }
+      }
+    },
+    "bloom": {
+      "baseline": {
+        "p95": 83,
+        "max": 367,
+        "ms": 2071,
+        "longMax": 342,
+        "work": {
+          "LayoutDuration": 35,
+          "RecalcStyleDuration": 667,
+          "ScriptDuration": 116,
+          "TaskDuration": 1751
+        },
+        "tileRenderMedian": 32.45
+      },
+      "final": {
+        "p95": 83,
+        "max": 350,
+        "ms": 1800,
+        "longMax": 206,
+        "work": {
+          "LayoutDuration": 40,
+          "RecalcStyleDuration": 548,
+          "ScriptDuration": 114,
+          "TaskDuration": 1545
+        },
+        "tileRenderMedian": 12.2
+      }
+    }
+  }
+}

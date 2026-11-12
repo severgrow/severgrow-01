@@ -94,7 +94,14 @@ describe('autosave: seed + actions (v0.7)', () => {
   it('an unknown level becomes 7', () => {
     const s = played(16, 4);
     const ok = JSON.parse(encodeSave({ seed: s.state.seed, actions: s.log, coach: null, level: 7 }));
-    expect(decodeSave(JSON.stringify({ ...ok, level: 12 }))!.level).toBe(7);
+    // 13: one past the last bot. (12 was the example until the rivals, bots 10-12, made it real.)
+    for (const unknown of [13, 0, 2.5, -1]) expect(decodeSave(JSON.stringify({ ...ok, level: unknown }))!.level).toBe(7);
+  });
+
+  it('a rival (bots 10-12) is a real level: a save against one resumes against it', () => {
+    const s = played(16, 4);
+    const ok = JSON.parse(encodeSave({ seed: s.state.seed, actions: s.log, coach: null, level: 7 }));
+    for (const rival of [10, 11, 12]) expect(decodeSave(JSON.stringify({ ...ok, level: rival }))!.level).toBe(rival);
   });
 
   it('keeps the training tier it came from, so a reloaded game still earns its carry-over', () => {

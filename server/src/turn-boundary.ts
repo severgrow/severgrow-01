@@ -14,6 +14,9 @@ export const turnBoundaryAdvanced = (before: State, after: State): boolean =>
 export const gatedStateFor = (match: MatchRecord, seat: Player): State => {
   if (match.status !== 'active') return match.state;
   if (match.turnStartState === null) return match.state;
+  // BLITZ shows every move as it lands (owner, 2026-11-09): no turn gate in a live duel. The view is
+  // still the seat's own (viewFor hides the other hand and every drawn card).
+  if (match.liveManaged) return match.state;
   const midTurn = match.revision > match.turnStartRevision;
   if (!midTurn) return match.state;
   // The player who owns the in-progress turn sees the live Draw/draft; everyone else is gated.
@@ -24,6 +27,7 @@ export const gatedStateFor = (match: MatchRecord, seat: Player): State => {
 /** Public revision exposed to a seat (opponent stays on the last boundary mid-turn). */
 export const gatedRevisionFor = (match: MatchRecord, seat: Player): number => {
   if (match.status !== 'active') return match.revision;
+  if (match.liveManaged) return match.revision;
   const midTurn = match.revision > match.turnStartRevision;
   if (!midTurn) return match.revision;
   if (seat === match.state.turnPlayer) return match.revision;

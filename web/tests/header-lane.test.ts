@@ -82,14 +82,16 @@ describe('the mode is "Real time" everywhere a player can read it', () => {
       LIVE.leaveWarningHelp,
       LIVE.endedTitle,
       LIVE.rematchWaiting('Fern', 60),
-      LIVE.allowChallenges,
       LIVE.failed,
     ];
     for (const text of strings) expect(text, text).not.toMatch(OLD);
   });
 
-  it('the ONLINE first card no longer says "Play live"', () => {
-    for (const line of ONLINE.firstCardLines) expect(line, line).not.toMatch(OLD);
+  it('the ONLINE hub no longer ships the how-duels first card', () => {
+    // Owner, 2026-11-08: remove "How online duels work" entirely — no copy, no markup, no show path.
+    expect(ONLINE).not.toHaveProperty('firstCardTitle');
+    expect(ONLINE).not.toHaveProperty('firstCardLines');
+    expect(ONLINE).not.toHaveProperty('firstCardOk');
   });
 });
 

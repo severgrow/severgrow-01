@@ -21,6 +21,7 @@ import { MemoryIdentityLinkStore, createAccountsRouter, supabaseAuthProvider } f
 import { playerTag } from '../../src/player-tag.js';
 import { CHROME } from './helpers/local-duel.js';
 import { openMenuEntry, waitMenuEntry } from './helpers/menu-nav.js';
+import { expandYourMatches } from './helpers/lobby-matches.js';
 
 const PORT = 4243;
 const SHOTS = process.env.SHOTS === '1';
@@ -165,9 +166,47 @@ const createDuel = async (page: Page): Promise<string> => {
   await hubOpen(page);
   return code;
 };
-const listText = async (page: Page) => ((await page.locator('#online-matches').innerText().catch(() => '')) ?? '').trim();
+const listText = async (page: Page) => {
+  await expandYourMatches(page);
+  return ((await page.locator('#online-matches').innerText().catch(() => '')) ?? '').trim();
+};
 
 try {
+  // ---- 5b. FIRST TRY ALWAYS WORKS (owner, 2026-11-11: "sometimes when logging through Google it's
+  // not logged in straight away and I need to log in second time"). Two ways the first try was lost:
+  //   (a) our server's hand-over fails once (a cold start): the page retries it by itself;
+  //   (b) the page reloads in the middle of the hand-over (an app update swapping in its new files):
+  //       the reloaded page resumes the sign-in instead of forgetting it.
+  for (const how of ['server fails once', 'reload mid-hand-over'] as const) {
+    const d = await device(browser);
+    await openMenuEntry(d.page, 'menu-online');
+    await waitFor(() => d.page.locator('#acct-welcome').isVisible());
+    await d.page.click('[data-acct="welcome-guest"]');
+    await hubOpen(d.page);
+    await dismissFirstCard(d.page);
+    await waitFor(async () => (await identity(d.page)) !== null);
+    fake.nextUser = how === 'server fails once' ? 'bob' : 'carol';
+    let calls = 0;
+    await d.page.route('**/v1/auth/google', async (route) => {
+      calls += 1;
+      if (calls === 1) {
+        if (how === 'server fails once') return route.fulfill({ status: 503, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{"ok":false}' });
+        await route.abort();
+        await d.page.evaluate('location.reload()').catch(() => undefined);
+        return;
+      }
+      return route.continue();
+    });
+    await d.page.click('[data-acct="hub-google"]');
+    const signed = await waitFor(async () => (await identity(d.page))?.kind === 'account', 25_000);
+    check(`first try (${how}): signed in without a second tap`, signed, `${calls} hand-over call(s)`);
+    check(`first try (${how}): the menu key no longer says LOG IN`, await waitFor(async () => {
+      const key = d.page.locator('#menu-login');
+      return !(await key.isVisible().catch(() => false)) || !/log in/i.test((await key.innerText().catch(() => '')) ?? '');
+    }, 10_000));
+    await d.context.close();
+  }
+
   // ---- 1. a new player: the welcome, then guest play ----
   const d1 = await device(browser);
   await waitFor(() => d1.page.evaluate("document.body.classList.contains('acct-on')") as Promise<boolean>);
@@ -199,6 +238,12 @@ try {
   await d1.page.click('[data-acct="hub-google"]');
   check('after Google, the hub is back and says signed in', await waitFor(async () => (await d1.page.locator('.acct-toast').innerText().catch(() => '')).includes('Signed in'), 25_000));
   check('it returns to Play online', await hubOpen(d1.page));
+  // The sign-in that FORMS an account asks once for a nickname (aeb0064, 2026-10-15). This suite
+  // predates that step and stalled behind its sheet; it now proves the step appears, then skips it
+  // like a player would, keeping the generated name the checks below expect.
+  check('the first sign-in asks for a nickname, once', await waitFor(() => d1.page.locator('[data-acct="nickname-skip"]').isVisible(), 10_000));
+  await d1.page.locator('[data-acct="nickname-skip"]').click();
+  check('skipping closes the nickname step', await waitFor(async () => !(await d1.page.locator('[data-acct="nickname-skip"]').isVisible()), 5_000));
   const acct1 = (await identity(d1.page))!;
   check('SAME player id after signing in (upgraded in place)', acct1.playerId === guest1.playerId && acct1.kind === 'account');
   check('the match is still there', await waitFor(async () => (await listText(d1.page)).includes(friendShown)));

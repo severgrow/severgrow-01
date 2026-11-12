@@ -1,20 +1,68 @@
 // Phase 4 — lobby helpers (pure). Menu words live in src/strings.ts ONLINE.*.
 
 import type { MatchListEntry, MatchStatus } from '../../../server/src/protocol.js';
+export type { MatchStatus };
 import { formatRemaining } from './clock.js';
-import { publicAppOrigin } from './config.js';
+import { PARKED_OFFER_MS, publicAppOrigin } from './config.js';
 import { ONLINE } from '../../../src/strings.js';
 
-export const FIRST_ONLINE_CARD_KEY = 'severgrow.duel.firstCard.v1';
 export const WARN_LAST_MS = 2 * 3_600_000; // last 2 hours (P-12)
 
 /**
- * After this long parked in the Find-opponent queue, offer the honest computer fallback alongside
- * waiting (never instead of it — the search keeps running). Replaces the old "invite a friend"
- * prompt, which was the only option before parking existed.
+ * After this long parked in the Find-opponent queue, offer a practice match or the current
+ * campaign level alongside waiting (never instead of it — the search keeps running). The number
+ * lives in `config.ts`.
  */
-export const PARKED_OFFER_MS = 3 * 60 * 1000;
+export { PARKED_OFFER_MS };
 export const isSearchParked = (elapsedMs: number, offerMs = PARKED_OFFER_MS): boolean => elapsedMs >= offerMs;
+
+/**
+ * What a Find tap may do with the queue. `park` is the only action that creates an entry, and
+ * only when this client is not already in one and a cancel has landed. A repeat find resumes
+ * the same entry. A find while a cancel is still in flight waits, so find → cancel → resume
+ * cannot leave two queue entries.
+ */
+export type FindTap = 'park' | 'resume' | 'wait';
+
+export const findTap = (hasSearch: boolean, cancelPending: boolean): FindTap => {
+  if (cancelPending) return 'wait';
+  if (hasSearch) return 'resume';
+  return 'park';
+};
+
+/**
+ * Error codes that mean this client's parked search or invite wait can never come back — keep
+ * polling would only burn radio and leave the player on a dead screen.
+ */
+export const definiteMatchPollLost = (code: string | null | undefined): boolean => {
+  if (!code) return false;
+  switch (code) {
+    case 'NOT_FOUND':
+    case 'MATCH_NOT_FOUND':
+    case 'NOT_A_PARTICIPANT':
+    case 'MATCH_EXPIRED':
+      return true;
+    default:
+      return false;
+  }
+};
+
+export type MatchPollVerdict = 'active' | 'waiting' | 'cleared' | 'retry';
+
+/**
+ * One decision for the 2 s lobby polls (parked search, invite wait, rematch wait). Transient errors
+ * retry; a finished waiting row or a definitive not-found clears local state.
+ */
+export const matchPollVerdict = (
+  status: MatchStatus | null,
+  errorCode: string | null | undefined,
+): MatchPollVerdict => {
+  if (status === 'active') return 'active';
+  if (status === 'waiting') return 'waiting';
+  if (status === 'finished') return 'cleared';
+  if (definiteMatchPollLost(errorCode)) return 'cleared';
+  return 'retry';
+};
 
 export type LobbyBucket = 'your_turn' | 'waiting' | 'finished';
 
@@ -25,15 +73,19 @@ export type LobbyRow = {
   /** Short status word (never colour alone). */
   statusWord: string;
   /** Icon name for status (paired with the word). */
-  statusIcon: 'play' | 'hourglass' | 'flag' | 'check';
+  statusIcon: 'play' | 'hourglass' | 'flag' | 'check' | 'replay';
   timeLeft: string | null;
   warnLastTwoHours: boolean;
+  /** A finished duel with a real move log: its row opens the replay. */
+  replayable: boolean;
   /** Timeout-grace line for the row (punchy): your spent grace, or the opponent's. */
   graceWord: string | null;
   /** True when the viewer already used their grace on a live match: their next miss loses. */
   atRisk: boolean;
   unseenTurn: boolean;
   inviteHint: string | null;
+  /** Finished rows with an opponent: the "challenge again" key, and whether a rematch is waiting. */
+  rematch: 'offer' | 'theirs' | 'mine' | null;
 };
 
 export const parseJoinHash = (hash: string): string | null => {
@@ -72,11 +124,28 @@ export const lobbyBucket = (entry: MatchListEntry): LobbyBucket => {
   return 'waiting';
 };
 
+/** A finished game whose opponent asked for a rematch: it waits on me, so it is listed with the live games. */
+const rematchWaitsOnMe = (e: MatchListEntry): boolean => e.status === 'finished' && e.rematch === 'theirs';
+
 export const sortLobbyEntries = (entries: readonly MatchListEntry[]): MatchListEntry[] => {
-  const rank = (b: LobbyBucket) => (b === 'your_turn' ? 0 : b === 'waiting' ? 1 : 2);
+  const rank = (e: MatchListEntry) => {
+    if (rematchWaitsOnMe(e)) return 0.5; // right after my turns, before games waiting on them
+    const b = lobbyBucket(e);
+    return b === 'your_turn' ? 0 : b === 'waiting' ? 1 : 2;
+  };
   return [...entries].sort((a, b) => {
-    const d = rank(lobbyBucket(a)) - rank(lobbyBucket(b));
+    const d = rank(a) - rank(b);
     if (d !== 0) return d;
+    if (lobbyBucket(a) === 'your_turn') {
+      const actionable = (e: MatchListEntry) => e.status === 'active' && e.turnPlayer === e.mySeat;
+      const actual = Number(actionable(b)) - Number(actionable(a));
+      if (actual) return actual;
+      if (actionable(a) && actionable(b)) {
+        const deadline = (e: MatchListEntry) => Number.isFinite(e.turnDeadlineAt) ? e.turnDeadlineAt! : Infinity;
+        const first = deadline(a), second = deadline(b);
+        if (first !== second) return first < second ? -1 : 1;
+      }
+    }
     return b.lastActivityAt - a.lastActivityAt;
   });
 };
@@ -110,9 +179,21 @@ export const toLobbyRow = (
         : remaining === null
           ? null
           : formatRemaining(remaining);
+  // A finished duel's row is the way into its REPLAY (owner brief, 2026-10-25), so it says what
+  // tapping it does rather than only that it is over. A match that finished with no committed moves
+  // (an abandoned waiting room) has nothing to watch, so it keeps the plain word.
+  const replayable = bucket === 'finished' && entry.revision > 0;
+  const rematch: LobbyRow['rematch'] = bucket === 'finished' && entry.opponentName?.trim()
+    ? (entry as { rematch?: 'theirs' | 'mine' }).rematch ?? 'offer' : null;
+  // A finished row says the result (owner, 2026-11-10: "just 'Won' or 'Lost'"); its replay and its
+  // challenge-again are the row's own two keys, never words.
+  const result = entry.result;
+  const resultWord = !result ? ONLINE.statusFinished
+    : result.winner === null ? ONLINE.rowDraw
+      : result.winner === entry.mySeat ? ONLINE.rowWon : ONLINE.rowLost;
   const status =
     bucket === 'finished'
-      ? { word: ONLINE.statusFinished, icon: 'check' as const }
+      ? { word: resultWord, icon: 'check' as const }
       : bucket === 'your_turn'
         ? { word: ONLINE.statusYourTurn, icon: 'play' as const }
         : entry.status === 'waiting'
@@ -134,31 +215,43 @@ export const toLobbyRow = (
     matchId: entry.matchId,
     bucket,
     // "MapleFox #7QK2": the tag tells two players with the same nature name apart.
-    opponentName: entry.opponentName?.trim() ? (entry.opponentTag ? `${entry.opponentName.trim()} #${entry.opponentTag}` : entry.opponentName.trim()) : ONLINE.opponentFallback,
+    // No #tag (owner, 2026-11-09: "in YOUR MATCHES don't show players tags - those are mainly for
+    // internal identification").
+    opponentName: entry.opponentName?.trim() || ONLINE.opponentFallback,
     statusWord: status.word,
     statusIcon: status.icon,
+    replayable,
     timeLeft: timeText,
     warnLastTwoHours: remaining !== null && remaining > 0 && remaining <= WARN_LAST_MS && bucket !== 'finished',
     graceWord,
     atRisk: graceWord === ONLINE.graceYouUsed,
     unseenTurn: entry.unseenTurn,
     inviteHint: entry.status === 'waiting' ? ONLINE.waitingInviteHint : null,
+    rematch,
   };
 };
 
 /** Finished matches: keep the latest 10 only (plan). */
 export const trimLobbyList = (entries: readonly MatchListEntry[]): MatchListEntry[] => {
   const sorted = sortLobbyEntries(entries);
-  const live = sorted.filter((e) => lobbyBucket(e) !== 'finished');
-  const finished = sorted.filter((e) => lobbyBucket(e) === 'finished').slice(0, 10);
+  const live = sorted.filter((e) => lobbyBucket(e) !== 'finished' || rematchWaitsOnMe(e));
+  const finished = sorted.filter((e) => lobbyBucket(e) === 'finished' && !rematchWaitsOnMe(e)).slice(0, 10);
   return [...live, ...finished];
 };
+
+/** The Your matches refresh while the hub is on screen (ms). */
+export const HUB_POLL_MS = 10_000;
+/** ...and while the list is open with a game waiting on the opponent: their Throw shows within 4 s. */
+export const HUB_POLL_FAST_MS = 4_000;
+
+export const hubPollMs = (s: { expanded: boolean; entries: readonly MatchListEntry[] }): number =>
+  s.expanded && s.entries.some((e) => e.status === 'active' && e.turnPlayer !== e.mySeat) ? HUB_POLL_FAST_MS : HUB_POLL_MS;
 
 export const yourTurnCount = (entries: readonly MatchListEntry[]): number =>
   entries.filter((e) => lobbyBucket(e) === 'your_turn').length;
 
 export const pageTitleForLobby = (yourTurns: number, base = ONLINE.pageTitleBase): string =>
-  yourTurns > 0 ? `(${yourTurns}) ${base} — your turn` : base;
+  yourTurns > 0 ? `(${yourTurns}) ${base} - your turn` : base;
 
 export const friendlyJoinError = (code: string): string => {
   switch (code) {
@@ -203,4 +296,21 @@ export const matchStatusLabel = (status: MatchStatus): string => {
   if (status === 'waiting') return ONLINE.statusWaitingFriend;
   if (status === 'active') return ONLINE.statusActive;
   return ONLINE.statusFinished;
+};
+
+/**
+ * The game a parked search was CONTINUED into (owner, 2026-11-11): when the other searcher already
+ * shares an open game with this player, the server ends this search and touches that game. So the
+ * waiting page, seeing its search end, opens the active game touched since the search began (on the
+ * server's clock), or null when there is none (then it goes home as before).
+ */
+export const continuedMatchAfterSearch = (
+  matches: readonly { matchId: string; status: string; lastActivityAt: number }[],
+  searchStartedServerMs: number,
+  parkedMatchId: string,
+): string | null => {
+  const hit = matches
+    .filter((m) => m.status === 'active' && m.matchId !== parkedMatchId && m.lastActivityAt >= searchStartedServerMs - 1_000)
+    .sort((a, b) => b.lastActivityAt - a.lastActivityAt)[0];
+  return hit?.matchId ?? null;
 };

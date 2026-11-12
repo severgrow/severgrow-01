@@ -28,12 +28,28 @@ describe('haptics', () => {
     expect(total(HAPTICS.placeTop)).toBeGreaterThan(total(HAPTICS.place));
   });
 
-  it('Vibration off: nothing; small moments only with Effects High', () => {
+  // OWNER CHANGED THE RULE (2026-11-05, with the recorded sounds: vibration "light and rare", a tiny
+  // buzz on your tile landing, a Bloom, a Cut and the win/lose). Was: every moment but press/draw
+  // buzzed with Vibration on, undo and the cascade included.
+  it('Vibration off: nothing; with it on, only the rare moments buzz; the rest need Effects High', () => {
     for (const e of FEEDBACK_EVENTS) expect(hapticFor(e, { ...on, vibration: false })).toBeNull();
-    expect(hapticFor('press', on)).toBeNull();
-    expect(hapticFor('press', { ...on, effects: 'high' })).toBe(HAPTICS.press);
-    expect(hapticFor('undo', on)).toEqual(HAPTICS.undo);
-    expect(hapticFor('undo', { ...on, effects: 'low' })).toEqual(HAPTICS.undo);
+    const rare = ['place', 'placeTop', 'cutSmall', 'cutMedium', 'cutBig', 'cutHuge', 'cutMe', 'win', 'lose'];
+    for (const e of FEEDBACK_EVENTS) {
+      if (rare.includes(e)) expect(hapticFor(e, on), e).toEqual(HAPTICS[e]);
+      else {
+        expect(hapticFor(e, on), e).toBeNull();
+        expect(hapticFor(e, { ...on, effects: 'high' }), e).toEqual(HAPTICS[e]);
+      }
+    }
+    expect(total(HAPTICS.cascade)).toBeLessThan(total(HAPTICS.place));
+  });
+
+  it('light: no buzz is longer than a quarter second, and the strongest pulse is 24 ms', () => {
+    for (const e of FEEDBACK_EVENTS) {
+      expect(total(HAPTICS[e]), e).toBeLessThanOrEqual(250);
+      const pulses = typeof HAPTICS[e] === 'number' ? [HAPTICS[e] as number] : (HAPTICS[e] as readonly number[]).filter((_, i) => i % 2 === 0);
+      expect(Math.max(...pulses), e).toBeLessThanOrEqual(24);
+    }
   });
 });
 

@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { coordKey, legalActions, newGame, planBloom, viewFor } from '../../src/engine/index.js';
 import type { Card, State } from '../../src/engine/index.js';
 import { DESK_IDLE, comboFor, deskClick, deskShape, deskTrace, drawNext, drawStarts, paintMatch } from '../src/logic/draw.js';
-import { EMPTY_SEL, kindOf, kindsAvailable, moveButtons } from '../src/logic/interaction.js';
+import { EMPTY_SEL, kindCards, kindOf, kindsAvailable, moveButtons } from '../src/logic/interaction.js';
 import { Session } from '../src/logic/session.js';
 
 it('shows every Bloom recipe and accepts an unlisted legal six-card route',()=>{
@@ -13,7 +13,13 @@ it('shows every Bloom recipe and accepts an unlisted legal six-card route',()=>{
   const state:State={...start,terrain,phase:'ACT',actor:0,turnPlayer:0,hands:[hand,start.hands[1]]};
   const v=viewFor(state,0),legal=legalActions(v);
   const recipes=moveButtons(v,legal,EMPTY_SEL,true);
-  expect(recipes.map(recipe=>recipe.kind)).toEqual(kindsAvailable(v,legal,EMPTY_SEL).filter(k=>k.kind.startsWith('bloom-')).map(k=>k.kind));
+  // Every recipe is offered, biggest first (owner, 2026-10-30), with a deterministic tie-break.
+  expect(recipes.map(recipe=>recipe.kind)).toEqual(
+    kindsAvailable(v,legal,EMPTY_SEL)
+      .filter(k=>k.kind.startsWith('bloom-'))
+      .map(k=>k.kind)
+      .sort((a,b)=>kindCards(b).length-kindCards(a).length||a.localeCompare(b,'en',{numeric:true})),
+  );
   const six=legal.find(a=>a.t==='Bloom'&&a.cards.length===6);
   expect(six?.t).toBe('Bloom');
   if(six?.t!=='Bloom')return;

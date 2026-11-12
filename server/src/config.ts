@@ -88,6 +88,8 @@ export type ServerConfig = {
   rateLimits: {
     guestPerIpPerHour: number;
     joinPerPlayerPerHour: number;
+    /** Stop-searching calls per player per hour: its own bucket, so it never spends Find's. */
+    cancelSearchPerPlayerPerHour: number;
     joinPerIpPerHour: number;
     /** New matches a single player may CREATE per hour (guards create/cancel loops). */
     createPerPlayerPerHour: number;
@@ -286,6 +288,7 @@ export const DEFAULT_SERVER_CONFIG: ServerConfig = Object.freeze({
   rateLimits: Object.freeze({
     guestPerIpPerHour: envInt('RATE_GUEST_PER_IP_PER_HOUR', 200),
     joinPerPlayerPerHour: envInt('RATE_JOIN_PER_PLAYER_PER_HOUR', 60),
+    cancelSearchPerPlayerPerHour: envInt('RATE_CANCEL_SEARCH_PER_PLAYER_PER_HOUR', 120),
     joinPerIpPerHour: envInt('RATE_JOIN_PER_IP_PER_HOUR', 400),
     // Match creation is the one lifecycle write that had NO limit; a create/cancel loop could mint
     // rows (and burn permanent invite codes) without bound. Both a per-player and a per-IP cap are

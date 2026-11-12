@@ -1,0 +1,2120 @@
+{
+  "conditions": "Linux Chromium, authenticated local HTTP services with simulated Supabase wire. Presence uses WebGL fallback; discard uses normal rendering. No physical-device measurements.",
+  "presence": [
+    {
+      "accountFirst": true,
+      "accountSends": true,
+      "pairingMs": 1775,
+      "onlineMs": 147,
+      "firstBoardToBothOnlineMs": 1614,
+      "invitationMs": 58,
+      "invitationAutomationMs": 96,
+      "endMs": 991,
+      "traces": [
+        {
+          "at": 1794251728190,
+          "url": "/v1/players/me/campaign",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251728190,
+          "url": "/v1/health",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251728201,
+          "url": "/v1/players/me/campaign/progress",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251728213,
+          "url": "/v1/players/me/campaign",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251728225,
+          "url": "/v1/players/me/campaign/progress",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251728258,
+          "url": "/v1/world",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251728258,
+          "url": "/v1/seeds/wallet",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251728258,
+          "url": "/v1/world/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251728258,
+          "url": "/v1/players/me/matches",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251728473,
+          "url": "/v1/players/me/presence",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251728474,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251728506,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251728506,
+          "url": "/v1/players/me/presence",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251728897,
+          "url": "/v1/players/me/matches",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251729972,
+          "url": "/v1/health",
+          "device": "phone"
+        },
+        {
+          "at": 1794251729973,
+          "url": "/v1/guests",
+          "device": "phone"
+        },
+        {
+          "at": 1794251730045,
+          "url": "/v1/world",
+          "device": "phone"
+        },
+        {
+          "at": 1794251730050,
+          "url": "/v1/seeds/wallet",
+          "device": "phone"
+        },
+        {
+          "at": 1794251730050,
+          "url": "/v1/world/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251730052,
+          "url": "/v1/players/me/matches",
+          "device": "phone"
+        },
+        {
+          "at": 1794251730266,
+          "url": "/v1/players/me/presence",
+          "device": "phone"
+        },
+        {
+          "at": 1794251730266,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251730281,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251730282,
+          "url": "/v1/players/me/presence",
+          "device": "phone"
+        },
+        {
+          "at": 1794251730485,
+          "url": "/v1/players/me/matches",
+          "device": "phone"
+        },
+        {
+          "at": 1794251730573,
+          "url": "/v1/matchmaking/find",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251731162,
+          "url": "/v1/matchmaking/find",
+          "device": "phone"
+        },
+        {
+          "at": 1794251731192,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251731205,
+          "url": "/v1/players/me/presence",
+          "device": "phone"
+        },
+        {
+          "at": 1794251731205,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251731205,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251731340,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/chat",
+          "device": "phone"
+        },
+        {
+          "at": 1794251731340,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251731340,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251731391,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251731589,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251731593,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/chat",
+          "device": "phone"
+        },
+        {
+          "at": 1794251731672,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251731673,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251732585,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251732612,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251732613,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251732613,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251732617,
+          "url": "/v1/players/me/presence",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251732617,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251732617,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251732813,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/chat",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251732813,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251732813,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251732813,
+          "url": "/v1/players/me/matches",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251732909,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251732943,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251732944,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/chat",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251733342,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251733342,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251733352,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/chat",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251733754,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251733754,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251733755,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251733984,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251733985,
+          "url": "/v1/players/me/presence",
+          "device": "phone"
+        },
+        {
+          "at": 1794251733985,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251733986,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251733986,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/chat",
+          "device": "phone"
+        },
+        {
+          "at": 1794251733992,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251734018,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251734019,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251734024,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251734040,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251734046,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251734851,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live/challenge",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251734862,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251734862,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251734863,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251734871,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251734871,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251734883,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251735619,
+          "url": "/v1/challenges/251eb466-0c0f-4bc6-a3b1-b5c111d7ecd1/accept",
+          "device": "phone"
+        },
+        {
+          "at": 1794251735675,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251735675,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251735675,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251735675,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251735675,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251735699,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251735699,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251735699,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251735820,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251735882,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/chat",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251736672,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251736681,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251736715,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/chat",
+          "device": "phone"
+        },
+        {
+          "at": 1794251736968,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251736968,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251737061,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251737061,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251737687,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251737691,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251737977,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251737978,
+          "url": "/v1/matches/4d118a2e-f8e4-451e-8af7-d35561273784/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251738908,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        }
+      ]
+    },
+    {
+      "accountFirst": true,
+      "accountSends": false,
+      "pairingMs": 1924,
+      "onlineMs": 444,
+      "firstBoardToBothOnlineMs": 1959,
+      "invitationMs": 251,
+      "invitationAutomationMs": 286,
+      "endMs": 688,
+      "traces": [
+        {
+          "at": 1794251740061,
+          "url": "/v1/players/me/campaign",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251740061,
+          "url": "/v1/health",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251740080,
+          "url": "/v1/players/me/campaign/progress",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251740100,
+          "url": "/v1/players/me/campaign",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251740105,
+          "url": "/v1/players/me/campaign/progress",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251740135,
+          "url": "/v1/world",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251740135,
+          "url": "/v1/seeds/wallet",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251740135,
+          "url": "/v1/world/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251740135,
+          "url": "/v1/players/me/matches",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251740340,
+          "url": "/v1/players/me/presence",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251740340,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251740356,
+          "url": "/v1/players/me/presence",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251740359,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251740832,
+          "url": "/v1/players/me/matches",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251741788,
+          "url": "/v1/health",
+          "device": "phone"
+        },
+        {
+          "at": 1794251741789,
+          "url": "/v1/guests",
+          "device": "phone"
+        },
+        {
+          "at": 1794251741842,
+          "url": "/v1/world",
+          "device": "phone"
+        },
+        {
+          "at": 1794251741845,
+          "url": "/v1/seeds/wallet",
+          "device": "phone"
+        },
+        {
+          "at": 1794251741845,
+          "url": "/v1/world/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251741845,
+          "url": "/v1/players/me/matches",
+          "device": "phone"
+        },
+        {
+          "at": 1794251742049,
+          "url": "/v1/players/me/presence",
+          "device": "phone"
+        },
+        {
+          "at": 1794251742049,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251742066,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251742066,
+          "url": "/v1/players/me/presence",
+          "device": "phone"
+        },
+        {
+          "at": 1794251742311,
+          "url": "/v1/players/me/matches",
+          "device": "phone"
+        },
+        {
+          "at": 1794251742367,
+          "url": "/v1/matchmaking/find",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251742917,
+          "url": "/v1/matchmaking/find",
+          "device": "phone"
+        },
+        {
+          "at": 1794251742941,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251742952,
+          "url": "/v1/players/me/presence",
+          "device": "phone"
+        },
+        {
+          "at": 1794251742952,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251742952,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251743096,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/chat",
+          "device": "phone"
+        },
+        {
+          "at": 1794251743096,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251743096,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251743154,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251743287,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251743289,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/chat",
+          "device": "phone"
+        },
+        {
+          "at": 1794251743356,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251743364,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251744385,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251744414,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251744414,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251744416,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251744425,
+          "url": "/v1/players/me/presence",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251744427,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251744427,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251744624,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/chat",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251744624,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251744624,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251744625,
+          "url": "/v1/players/me/matches",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251744794,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251745040,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251745043,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/chat",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251745137,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251745154,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251745427,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251745427,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251745436,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251745579,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251745579,
+          "url": "/v1/players/me/presence",
+          "device": "phone"
+        },
+        {
+          "at": 1794251745579,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251745579,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251745579,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/chat",
+          "device": "phone"
+        },
+        {
+          "at": 1794251745581,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251745581,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251745582,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251745635,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251745641,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251745644,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251745697,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251745707,
+          "url": "/v1/players/me/presence",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251745707,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251745713,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251745721,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/chat",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251745746,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251745746,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251745747,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251745825,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251746070,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live/challenge",
+          "device": "phone"
+        },
+        {
+          "at": 1794251746091,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251746091,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251746092,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251746103,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251746123,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251746288,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251747055,
+          "url": "/v1/challenges/e8f83ed0-6ecf-4063-a522-9dad099d7839/accept",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251747080,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251747081,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251747082,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251747082,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251747085,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251747088,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251747103,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251747262,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/chat",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251748290,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251748290,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251748291,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251748301,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251748412,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/chat",
+          "device": "phone"
+        },
+        {
+          "at": 1794251748815,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251748816,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251749292,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251749295,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251749352,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251749361,
+          "url": "/v1/matches/d8206ad1-2cfc-4481-9d32-bd32ea2d7b99/live:response",
+          "device": "desktop"
+        }
+      ]
+    },
+    {
+      "accountFirst": false,
+      "accountSends": true,
+      "pairingMs": 2278,
+      "onlineMs": 301,
+      "firstBoardToBothOnlineMs": 2226,
+      "invitationMs": 41,
+      "invitationAutomationMs": 184,
+      "endMs": 914,
+      "traces": [
+        {
+          "at": 1794251750437,
+          "url": "/v1/players/me/campaign",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251750437,
+          "url": "/v1/health",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251750456,
+          "url": "/v1/players/me/campaign/progress",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251750484,
+          "url": "/v1/players/me/campaign",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251750491,
+          "url": "/v1/players/me/campaign/progress",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251750530,
+          "url": "/v1/world",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251750530,
+          "url": "/v1/seeds/wallet",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251750530,
+          "url": "/v1/world/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251750530,
+          "url": "/v1/players/me/matches",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251750720,
+          "url": "/v1/players/me/presence",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251750720,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251750730,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251750730,
+          "url": "/v1/players/me/presence",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251751037,
+          "url": "/v1/players/me/matches",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251751902,
+          "url": "/v1/health",
+          "device": "phone"
+        },
+        {
+          "at": 1794251751902,
+          "url": "/v1/guests",
+          "device": "phone"
+        },
+        {
+          "at": 1794251751963,
+          "url": "/v1/world",
+          "device": "phone"
+        },
+        {
+          "at": 1794251751963,
+          "url": "/v1/seeds/wallet",
+          "device": "phone"
+        },
+        {
+          "at": 1794251751963,
+          "url": "/v1/world/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251751963,
+          "url": "/v1/players/me/matches",
+          "device": "phone"
+        },
+        {
+          "at": 1794251752195,
+          "url": "/v1/players/me/presence",
+          "device": "phone"
+        },
+        {
+          "at": 1794251752195,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251752203,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251752203,
+          "url": "/v1/players/me/presence",
+          "device": "phone"
+        },
+        {
+          "at": 1794251752484,
+          "url": "/v1/players/me/matches",
+          "device": "phone"
+        },
+        {
+          "at": 1794251752571,
+          "url": "/v1/matchmaking/find",
+          "device": "phone"
+        },
+        {
+          "at": 1794251752781,
+          "url": "/v1/matchmaking/find",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251752809,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251752821,
+          "url": "/v1/players/me/presence",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251752822,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251752822,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251752985,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/chat",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251752985,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251752985,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251753095,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251753367,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251753371,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/chat",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251753473,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251753482,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251754587,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251754610,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251754610,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251754623,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251754648,
+          "url": "/v1/players/me/presence",
+          "device": "phone"
+        },
+        {
+          "at": 1794251754648,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251754648,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251754923,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/chat",
+          "device": "phone"
+        },
+        {
+          "at": 1794251754923,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251754923,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251754925,
+          "url": "/v1/players/me/matches",
+          "device": "phone"
+        },
+        {
+          "at": 1794251755011,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251755206,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251755212,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/chat",
+          "device": "phone"
+        },
+        {
+          "at": 1794251755302,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251755313,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251755505,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251755505,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251755506,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251755668,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251755668,
+          "url": "/v1/players/me/presence",
+          "device": "phone"
+        },
+        {
+          "at": 1794251755668,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251755669,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251755669,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/chat",
+          "device": "phone"
+        },
+        {
+          "at": 1794251755671,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251755671,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251755679,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251755684,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251755768,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251755775,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251756768,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live/challenge",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251756782,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251756782,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251756782,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251756782,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251756801,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251756801,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251757538,
+          "url": "/v1/challenges/b91a5b69-ce72-40e5-b8b0-952a92edc253/accept",
+          "device": "phone"
+        },
+        {
+          "at": 1794251757551,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251757551,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251757551,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251757563,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251757563,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251757563,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251757563,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251757625,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251757657,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251757714,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/chat",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251758572,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/chat",
+          "device": "phone"
+        },
+        {
+          "at": 1794251758631,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251758634,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251758661,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251758668,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251758933,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251758942,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251759638,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251759649,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251759674,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251759685,
+          "url": "/v1/matches/48d7cbc2-ab00-482b-b7c3-2fa74c8f3600/live:response",
+          "device": "desktop"
+        }
+      ]
+    },
+    {
+      "accountFirst": false,
+      "accountSends": false,
+      "pairingMs": 2091,
+      "onlineMs": 203,
+      "firstBoardToBothOnlineMs": 2016,
+      "invitationMs": 45,
+      "invitationAutomationMs": 99,
+      "endMs": 933,
+      "traces": [
+        {
+          "at": 1794251760722,
+          "url": "/v1/players/me/campaign",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251760722,
+          "url": "/v1/health",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251760743,
+          "url": "/v1/players/me/campaign/progress",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251760763,
+          "url": "/v1/players/me/campaign",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251760775,
+          "url": "/v1/players/me/campaign/progress",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251760802,
+          "url": "/v1/world",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251760804,
+          "url": "/v1/seeds/wallet",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251760804,
+          "url": "/v1/world/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251760804,
+          "url": "/v1/players/me/matches",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251761053,
+          "url": "/v1/players/me/presence",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251761054,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251761085,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251761085,
+          "url": "/v1/players/me/presence",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251761370,
+          "url": "/v1/players/me/matches",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251762292,
+          "url": "/v1/health",
+          "device": "phone"
+        },
+        {
+          "at": 1794251762292,
+          "url": "/v1/guests",
+          "device": "phone"
+        },
+        {
+          "at": 1794251762375,
+          "url": "/v1/world",
+          "device": "phone"
+        },
+        {
+          "at": 1794251762375,
+          "url": "/v1/seeds/wallet",
+          "device": "phone"
+        },
+        {
+          "at": 1794251762375,
+          "url": "/v1/world/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251762375,
+          "url": "/v1/players/me/matches",
+          "device": "phone"
+        },
+        {
+          "at": 1794251762657,
+          "url": "/v1/players/me/presence",
+          "device": "phone"
+        },
+        {
+          "at": 1794251762657,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251762674,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251762676,
+          "url": "/v1/players/me/presence",
+          "device": "phone"
+        },
+        {
+          "at": 1794251762864,
+          "url": "/v1/players/me/matches",
+          "device": "phone"
+        },
+        {
+          "at": 1794251762939,
+          "url": "/v1/matchmaking/find",
+          "device": "phone"
+        },
+        {
+          "at": 1794251763130,
+          "url": "/v1/matchmaking/find",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251763150,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251763160,
+          "url": "/v1/players/me/presence",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251763161,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251763161,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251763313,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/chat",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251763313,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251763313,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251763409,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251763706,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251763717,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/chat",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251763804,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251763815,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251764940,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251764964,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251764965,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251764966,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251764973,
+          "url": "/v1/players/me/presence",
+          "device": "phone"
+        },
+        {
+          "at": 1794251764974,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251764975,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251765125,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/chat",
+          "device": "phone"
+        },
+        {
+          "at": 1794251765125,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251765125,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251765125,
+          "url": "/v1/players/me/matches",
+          "device": "phone"
+        },
+        {
+          "at": 1794251765178,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251765317,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251765317,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/chat",
+          "device": "phone"
+        },
+        {
+          "at": 1794251765382,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251765383,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251765399,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/chat",
+          "device": "phone"
+        },
+        {
+          "at": 1794251765540,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251765540,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251765548,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251765666,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251765666,
+          "url": "/v1/players/me/presence",
+          "device": "phone"
+        },
+        {
+          "at": 1794251765667,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251765667,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251765667,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/chat",
+          "device": "phone"
+        },
+        {
+          "at": 1794251765670,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251765670,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251765676,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251765711,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251765715,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251765716,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251766469,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live/challenge",
+          "device": "phone"
+        },
+        {
+          "at": 1794251766502,
+          "url": "/v1/players/me/challenges",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251766502,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251766502,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251766502,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251766502,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251766528,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251767277,
+          "url": "/v1/challenges/8e4a733f-af80-44f6-a41f-59edb4bb5c40/accept",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251767301,
+          "url": "/v1/players/me/challenges",
+          "device": "phone"
+        },
+        {
+          "at": 1794251767301,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251767301,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251767301,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251767301,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251767315,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251767315,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251767315,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251767386,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251767499,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/chat",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251768274,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/chat",
+          "device": "phone"
+        },
+        {
+          "at": 1794251768334,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251768346,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251768389,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251768391,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live:response",
+          "device": "phone"
+        },
+        {
+          "at": 1794251768612,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/view",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251768612,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/view",
+          "device": "phone"
+        },
+        {
+          "at": 1794251769347,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251769356,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live:response",
+          "device": "desktop"
+        },
+        {
+          "at": 1794251769403,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live",
+          "device": "phone"
+        },
+        {
+          "at": 1794251769405,
+          "url": "/v1/matches/a012676f-9507-4aeb-ac4c-7d24f88e6afb/live:response",
+          "device": "phone"
+        }
+      ]
+    }
+  ],
+  "discard": [
+    {
+      "mode": "async",
+      "width": 390,
+      "visibleSamples": 15,
+      "oldPilePreserved": true,
+      "finalCard": {
+        "id": 3,
+        "suit": 0,
+        "rank": 2
+      }
+    },
+    {
+      "mode": "async",
+      "width": 1440,
+      "visibleSamples": 8,
+      "oldPilePreserved": true,
+      "finalCard": {
+        "id": 23,
+        "suit": 1,
+        "rank": 3
+      }
+    },
+    {
+      "mode": "blitz",
+      "width": 390,
+      "visibleSamples": 16,
+      "oldPilePreserved": true,
+      "finalCard": {
+        "id": 17,
+        "suit": 0,
+        "rank": 9
+      }
+    },
+    {
+      "mode": "blitz",
+      "width": 1440,
+      "visibleSamples": 10,
+      "oldPilePreserved": true,
+      "finalCard": {
+        "id": 13,
+        "suit": 0,
+        "rank": 7
+      }
+    },
+    {
+      "mode": "reduced",
+      "width": 390,
+      "visibleSamples": 3,
+      "oldPilePreserved": true,
+      "finalCard": {
+        "id": 0,
+        "suit": 0,
+        "rank": 1
+      }
+    }
+  ]
+}

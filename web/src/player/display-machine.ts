@@ -1,5 +1,8 @@
 import type { DisplayEvent } from './display-readout.js';
-import { FlavourDeck } from './led-flavour.js';
+import { PINNED } from '../logic/motion.js';
+import { FlavourDeck, rivalCapFor } from './led-flavour.js';
+import { ArtDeck, artDuration } from './led-art.js';
+import type { LedArt } from './led-art.js';
 import type { LedMotif, LedTone } from './led-cells.js';
 
 export type DisplayFrame = {
@@ -13,8 +16,10 @@ export type DisplayFrame = {
   flash?: 'cut' | 'bloom';
 };
 
-/** Hard floor: no LED message may be replaced sooner than this. */
-export const DISPLAY_MIN_DWELL_MS = 1000;
+/** Hard floor: no LED message may be replaced sooner than this in normal play. */
+export const DISPLAY_MIN_DWELL_MS = PINNED.displayDwell;
+/** The larger floor a LESSON message gets (owner, 2026-10-20): 2 s, so a teaching line is readable. */
+export const LESSON_MIN_DWELL_MS = PINNED.lessonDwell;
 
 const STEP_WORDS = new Set(['DRAW', 'DRAW!', 'GROW', 'GROW!', 'THROW', 'THROW!', 'BLOOM', 'BLOOM!', 'SKIP?']);
 
@@ -43,6 +48,7 @@ export class DisplayMachine {
   private epoch = 0;
   private eventCount = 0;
   private flavour = new FlavourDeck();
+  private art = new ArtDeck();
   private idleCycles = 0;
   /** Sticky idle re-prompt: step word keeps blinking until the player acts. */
   private urgency = false;
@@ -56,6 +62,11 @@ export class DisplayMachine {
   private quiet = false;
   /** The score is held on the sign (a lesson is pointing at it): nothing replaces it. */
   private scoreHeld = false;
+  /** The dwell that applies right now: a lesson message gets the longer floor. */
+  private dwellMs(): number {
+    return this.quiet ? LESSON_MIN_DWELL_MS : DISPLAY_MIN_DWELL_MS;
+  }
+
   /** Queued step announcement while a higher-priority event finishes. */
   private pendingStep: string | null = null;
   private frame: DisplayFrame = { text: '', mode: 'score' };
@@ -76,14 +87,14 @@ export class DisplayMachine {
 
   private remainingDwell(): number {
     if (this.shownAt === 0) return 0;
-    return Math.max(0, DISPLAY_MIN_DWELL_MS - (this.now() - this.shownAt));
+    return Math.max(0, this.dwellMs() - (this.now() - this.shownAt));
   }
 
   /** Ms until a newly queued frame will land (0 if it can paint now). */
   private delayUntilPaint(): number {
     const rem = this.remainingDwell();
     if (rem <= 0 && this.queue.length === 0) return 0;
-    return rem + this.queue.length * DISPLAY_MIN_DWELL_MS;
+    return rem + this.queue.length * this.dwellMs();
   }
 
   private clearDwellQueue() {
@@ -170,7 +181,18 @@ export class DisplayMachine {
     }
   }
   phase(text: string) {
-    if (this.quiet) { this.instruction = text; return; }
+    if (this.quiet) {
+      this.instruction = text;
+      // A lesson keeps its own step words off the sign, but an idle wake blinking the OLD step is
+      // a stale cue: drop it as soon as the step moves on, exactly as supersedeStep does in play.
+      if (this.urgency && isObsoleteStepCue(this.frame.text, this.idleWord(text))) {
+        this.urgency = false;
+        this.clearUrgencyPaint();
+        this.rest();
+        this.scheduleIdle();
+      }
+      return;
+    }
     if (text === this.instruction && !isObsoleteStepCue(this.frame.text, text)
       && !(this.active && isObsoleteStepCue(this.active.message, text))) {
       return;
@@ -244,7 +266,7 @@ export class DisplayMachine {
       ? { shown: text, duration: this.scaled(1200) }
       : this.stepPersonality(text);
     // Logical hold never undercuts the visual 1s floor.
-    const hold = Math.max(DISPLAY_MIN_DWELL_MS, duration);
+    const hold = Math.max(this.dwellMs(), duration);
     const id = ++this.epoch;
     // Below WAIT (20) and play moments so a turn cue can still interrupt; above idle hints.
     this.active = { message: shown, priority: 18, duration: hold, mode: 'amber' };
@@ -268,6 +290,16 @@ export class DisplayMachine {
     this.frame = { ...this.frame, alarm: false, pulse: false };
     this.show(this.frame);
   }
+  /** The sign opens up with the player's finished games (lines a game; the 点 from a few games). */
+  setPersonality(gamesPlayed: number) {
+    this.flavour.setRivalCap(rivalCapFor(gamesPlayed));
+    this.art.setGames(gamesPlayed);
+  }
+  private pickArt(event: DisplayEvent): LedArt | null {
+    if (!event.anim?.length || this.reduced()) return null;
+    const key = event.key ?? `${event.message}:${this.eventCount}`;
+    return event.anim.find(art => this.art.take(art, key)) ?? null;
+  }
   event(event: DisplayEvent) {
     if (this.scoreHeld) return;
     if (this.quiet && event.priority < 30) return;
@@ -283,7 +315,7 @@ export class DisplayMachine {
     const reaction = this.reduced() ? null : this.pickReaction(event);
     const tone = event.flavour?.pool.tone ?? event.mode ?? 'amber';
     // Logical duration also respects the 1s visual floor so finish aligns with paint.
-    const duration = Math.max(DISPLAY_MIN_DWELL_MS, event.duration);
+    const duration = Math.max(this.dwellMs(), event.duration);
     const gate = this.emit({
       text: event.message, mode: event.mode ?? 'amber', compact: event.message.length <= 12,
       ...(event.accent ? { flash: event.accent } : {}), ...(event.pulse ? { pulse: true } : {}),
@@ -291,37 +323,53 @@ export class DisplayMachine {
     // The fact lands first and holds for its full duration. A flavour line may only follow it.
     const motif = event.flavour?.pool.motif;
     const factHold = gate + duration;
-    if (reaction && motif) {
+    const art = this.pickArt(event);
+    // After the fact: a picture (if one was earned), then a line (if one was drawn). A picture
+    // replaces the line's own small motif, never the line.
+    const line = (after: () => void) => {
+      if (!reaction) { after(); return; }
+      this.emit({ text: reaction, mode: tone, compact: true });
+      this.timer = window.setTimeout(() => { if (id === this.epoch) after(); }, this.dwellMs());
+    };
+    const end = () => this.finish(id);
+    if (art) {
+      this.timer = window.setTimeout(() => {
+        if (id !== this.epoch) return;
+        this.emit({ text: '', mode: tone, motif: art });
+        this.timer = window.setTimeout(() => { if (id === this.epoch) line(end); }, Math.max(this.dwellMs(), artDuration(art)));
+      }, factHold);
+    } else if (reaction && motif) {
       this.timer = window.setTimeout(() => {
         if (id !== this.epoch) return;
         // Prior fact has dwelled ≥1s; these paints are immediate and each hold ≥1s.
         this.emit({ text: '', mode: tone, motif });
-        this.timer = window.setTimeout(() => {
-          if (id !== this.epoch) return;
-          this.emit({ text: reaction, mode: tone, compact: true });
-          this.timer = window.setTimeout(() => this.finish(id), DISPLAY_MIN_DWELL_MS);
-        }, DISPLAY_MIN_DWELL_MS);
+        this.timer = window.setTimeout(() => { if (id === this.epoch) line(end); }, this.dwellMs());
       }, factHold);
     } else if (reaction) {
-      this.timer = window.setTimeout(() => {
-        if (id !== this.epoch) return;
-        this.emit({ text: reaction, mode: tone, compact: true });
-        this.timer = window.setTimeout(() => this.finish(id), DISPLAY_MIN_DWELL_MS);
-      }, factHold);
+      this.timer = window.setTimeout(() => { if (id === this.epoch) line(end); }, factHold);
     } else {
-      this.timer = window.setTimeout(() => this.finish(id), factHold);
+      this.timer = window.setTimeout(end, factHold);
     }
   }
   hint(text: string) { if (this.quiet) return; this.event({ message: text, priority: 20, duration: 1050, mode: 'amber' }); }
-  /** Hold a word on the sign for the length of a drag; `release` restores the resting face. */
-  hold(text: string, mode: LedTone = 'amber') {
+  /**
+   * Hold a word on the sign for the length of a drag; `release` restores the resting face.
+   *
+   * `immediate` is for a word that is a STATE CHANGE, not a drag (the in-game replay's REPLAY
+   * sign): it must be on the glass in the same frame, because the board starts moving then. A
+   * drag word keeps its dwell; a lesson's action line is already forced (`quiet`).
+   */
+  hold(text: string, mode: LedTone = 'amber', opts?: { immediate?: boolean }) {
     this.held = true;
     this.urgency = false;
     this.clearTimers();
     this.clearDwellQueue();
     this.clearUrgencyPaint();
     this.active = null;
-    this.emit({ text, mode, compact: text.length <= 12 });
+    // A lesson's action line owns the sign: it never waits behind the score, a result or any
+    // other message (owner, 2026-10-20: the ACTION is always first in levels 1-10). Outside a
+    // lesson (a drag word) the dwell is unchanged.
+    this.emit({ text, mode, compact: text.length <= 12 }, { force: this.quiet || opts?.immediate === true });
   }
   /** Hold the score itself on the sign (the lesson that teaches the score); `release` ends it. */
   holdScore() {
@@ -367,13 +415,18 @@ export class DisplayMachine {
   }
   private scheduleIdle(delay = 2500) {
     window.clearTimeout(this.idleTimer);
-    if (this.active || this.held || this.urgency || this.quiet) return;
+    if (this.active || this.held || this.urgency) return;
+    // A LESSON is quiet by design (the window carries the words), but the sign must still come back
+    // to life when the player goes idle — otherwise it sits dark for the whole level, which reads as
+    // broken (owner, 2026-10-21). So `quiet` no longer suppresses the idle prompt; it only changes
+    // which word is re-prompted and how long a message holds.
     if (this.instruction === 'WAIT' || this.instruction === 'OPPONENT TURN' || this.instruction === 'FUTASAKU') return;
     this.idleTimer = window.setTimeout(() => {
       if (this.active || this.held || this.urgency) return;
       this.idleCycles++;
-      // Re-prompt the step word only — no idle motif chatter.
-      const word = this.instruction;
+      // Re-prompt the step word only — no idle motif chatter. In a lesson the instruction is an
+      // action line ("TAP DRAW PILE"), so it is reduced to its step word first.
+      const word = this.idleWord(this.instruction);
       if (!STEP_WORDS.has(word)) {
         // Blank beat — never touch sticky urgency (already guarded above).
         this.emit({ text: '', mode: 'score' });
@@ -390,6 +443,20 @@ export class DisplayMachine {
       this.clearDwellQueue();
       this.emit({ text: soft ? word.slice(0, -1) : word, mode: 'amber', pulse: true, alarm: true, compact: true });
     }, delay);
+  }
+  /**
+   * A lesson went quiet, and the step word is only a phase name (DRAW / GROW / THROW). The idle
+   * prompt above needs a step word to re-light, so a quiet sign gets one derived from the phase —
+   * that is what makes the display come back to life instead of staying dark.
+   */
+  idleWord(word: string): string {
+    if (STEP_WORDS.has(word)) return word;
+    if (!this.quiet) return word;
+    if (word === 'TAP DRAW PILE' || word === 'DRAW') return 'DRAW';
+    if (word.startsWith('TAP LIT') || word.startsWith('PICK') || word.startsWith('CHOOSE')) return 'GROW';
+    if (word.startsWith('THROW') || word.startsWith('TAP THROW')) return 'THROW';
+    if (word.startsWith('TAP BLOOM') || word.startsWith('TAP »')) return 'GROW';
+    return word;
   }
   interact() {
     window.clearTimeout(this.idleTimer);
@@ -413,6 +480,7 @@ export class DisplayMachine {
     this.pendingStep = null;
     this.eventCount = 0;
     this.flavour.reset();
+    this.art.reset();
     this.idleCycles = 0;
     this.instruction = text;
     this.scoreText = `${you}:${opp}`;

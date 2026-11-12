@@ -41,7 +41,8 @@ describe('moves reference (How to)', () => {
   });
 
   it('keeps the tab label in one place (src/strings.ts)', () => {
-    expect(HELP.howToTab).toBe('How to');
+    // Owner, 2026-10-24: Match Intel's tabs are Now · Tips · Rules (the reference lives under Rules).
+    expect([HELP.nowTab, HELP.tipsTab, HELP.rulesTab]).toEqual(['Now', 'Tips', 'Rules']);
     expect(HELP.intelTab).toBe('Match Intel');
     expect(HELP.howToTitle).toBe('How to play');
   });

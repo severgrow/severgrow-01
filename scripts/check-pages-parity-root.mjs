@@ -6,8 +6,10 @@
 // `/firststep/`. This guard follows Main's bytes to their new address instead of comparing the root,
 // because the root is now a preview channel and is *expected* to change on every deploy.
 //
-// What it still refuses to let a deploy alter: Main, `/test/` and `/test2/`. That is the whole
-// point of the guard, and it is unchanged.
+// What it still refuses to let a deploy alter: Main and `/test2/`. That is the whole point of the
+// guard. `/test/` left this list on 2026-10-29: it is now the STAGING copy of the game, rebuilt on
+// every push to futa0.5-online by scripts/compose-test-route.mjs (which runs after this guard), so it
+// is expected to change. The retired dev copy of Main that used to live there is no longer served.
 //
 // `scripts/compose-futa05-preview.mjs` installs this file over the `futa0.4` copy right before the
 // workflow runs it — see the comment there for why the workflow line itself is not edited.
@@ -78,9 +80,10 @@ const identical = (onDisk, published = onDisk) => {
   console.log(`Published ${published}: identical`);
 };
 
-// /test/ and /test2/ are rebuilt from their published SHAs and must not move by a single byte.
-for (const file of ['test/index.html', 'test2/index.html', 'release.json', 'test2/release.json']) identical(file);
-for (const prefix of ['test', 'test2'])
+// /test2/ is rebuilt from its published SHA and must not move by a single byte. (/test/ is the
+// staging copy now; see the header.) The root release.json still names the old dev SHA, unchanged.
+for (const file of ['test2/index.html', 'release.json', 'test2/release.json']) identical(file);
+for (const prefix of ['test2'])
   for (const name of entryNames(`${prefix}/`)) identical(`${prefix}/assets/${name}`);
 
 // Main: it is always on disk at /firststep/ (the composer puts it there), but where it is *published*

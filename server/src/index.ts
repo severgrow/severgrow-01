@@ -23,6 +23,11 @@ import { WorldEconomyService } from './seeds/service.js';
 import { createWorldEconomyRouter } from './seeds/router.js';
 import { MemoryWorldEconomyStore } from './seeds/memory.js';
 import { postgresWorldEconomyStore } from './seeds/postgres.js';
+import { chatNotifier } from './chat/notifier.js';
+import { createChatRouter } from './chat/router.js';
+import { createTerritoryChatRouter, memoryTerritoryChatStore, postgresTerritoryChatStore } from './chat/territory.js';
+import { memoryChatStore } from './chat/memory.js';
+import { postgresChatStore } from './chat/postgres.js';
 import { adminRouterNode } from './admin/node.js';
 
 const buildStorage = (): { storage: Storage; description: string } => {
@@ -44,7 +49,9 @@ export const startServer = async (options: { port?: number } = {}): Promise<{ po
   const isMemory = storage instanceof MemoryStorage;
   const memoryFeedback = isMemory ? new MemoryFeedbackStore() : null;
   const memoryLinks = isMemory ? new MemoryIdentityLinkStore((p, k, n) => (storage as MemoryStorage).revokeTokensOfPlayer(p, k, n)) : null;
-  const economyStore = isMemory ? new MemoryWorldEconomyStore() : postgresWorldEconomyStore(poolFromUrl(databaseUrlFromEnv()!));
+  // The memory store also serves the public profile's name + online-record halves, so it is given
+  // the same storage the server uses (the Postgres store reads them in its one SQL statement).
+  const economyStore = isMemory ? new MemoryWorldEconomyStore(live.storage) : postgresWorldEconomyStore(poolFromUrl(databaseUrlFromEnv()!));
   const economy = new WorldEconomyService(economyStore, live.storage);
   const service = new MatchService({ storage: live.storage, config, economy });
   // The admin router (docs/ADMIN.md) shares the dev server's OWN in-memory stores, so the dashboard
@@ -55,14 +62,22 @@ export const startServer = async (options: { port?: number } = {}): Promise<{ po
     config,
     databaseUrl: databaseUrlFromEnv(),
     memory: { feedback: memoryFeedback, economy: economyStore instanceof MemoryWorldEconomyStore ? economyStore : null, links: memoryLinks },
+    economyStore,
     note: description,
   });
+  const chatNotifications = chatNotifier(process.env.SUPABASE_URL ?? '', process.env.SUPABASE_ANON_KEY ?? '');
   const server = createHttpServer({
     service,
     config,
     logger: (line) => console.log(line),
     live: chainRouters(
       live.router(service),
+      createChatRouter({ service, storage: live.storage, ...(chatNotifications ? { notifier: chatNotifications } : {}), store: isMemory
+        ? memoryChatStore(storage as MemoryStorage, memoryFeedback!)
+        : postgresChatStore(poolFromUrl(databaseUrlFromEnv()!)) }),
+      createTerritoryChatRouter({ service, storage: live.storage, store: isMemory
+        ? memoryTerritoryChatStore(storage)
+        : postgresTerritoryChatStore(poolFromUrl(databaseUrlFromEnv()!)) }),
       createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t) }),
       await feedbackRouterNode(storage, service, databaseUrlFromEnv(), memoryFeedback),
       await accountsRouterNode(storage, service, databaseUrlFromEnv(), process.env, memoryLinks),

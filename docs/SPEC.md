@@ -59,6 +59,10 @@ seat already set (`src/engine/match.ts`); the browser and `server-core` both use
 and the verifier can never disagree. Archived rule versions set `startingPlayerLottery: false` and
 always start with player 0, so old saves and replays still verify.
 
+The Who-starts ritual is presentation only: it deals two cards from its own nine-card deck — one
+card of every strength 1–9, colours random — so the two revealed numbers can never tie, and the
+higher card always belongs to the seat the engine (or the server) already chose.
+
 A match is reproducible from its **rules version + seed + config + starting-player result**:
 `matchSetup(seed, rulesVersion)` returns exactly that record, and `stateFromSetup` rebuilds the
 opening state from it.
@@ -67,7 +71,8 @@ opening state from it.
 
 ## Difficulty
 
-The three TRAINING tiers (owner direction, 2026-10-15). A tier’s first game starts at the bottom of
+The three practice-match tiers (owner direction, 2026-10-15; the menu entry reads **Practice
+match**). A tier’s first game starts at the bottom of
 its range; the only movement is the one-game carry-over, a win stepping the tier’s next game one bot
 level UP and a loss one DOWN, never outside the tier’s own range.
 

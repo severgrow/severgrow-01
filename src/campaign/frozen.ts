@@ -34,7 +34,11 @@ const R = ['0,0', '0,2', '0,-2'] as const;
 
 /**
  * Level id → the other opening it is played on in the /2/ onboarding build. The root plays these
- * same levels on the product hexagon (see `levels.ts`), so that is each level's current opening.
+ * same levels on the product hexagon (see `levels.ts`), so that is each level's current opening —
+ * except c1-09: since 2026-11-01 level 9 is a real game on the small map, so its current board IS
+ * this entry. The entry stays as the frozen record of the board the /2/ line has always used for
+ * this level (the verifier still tries it); no level-9 proof was ever paid, because lessons 1-9
+ * pay no Seeds.
  */
 export const ALTERNATE_OPENINGS: Readonly<Record<string, AlternateOpening>> = Object.freeze({
   'c1-04': small([], Q),

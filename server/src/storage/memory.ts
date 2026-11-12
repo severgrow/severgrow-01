@@ -2,10 +2,18 @@
 // local development and tests. `commitMove` runs entirely synchronously (no await between the
 // checks and the writes), so in Node's single-threaded model it is atomic, exactly like the
 // row lock the Postgres adapter takes.
+import { mergeAccountGuide, type AccountGuideWire } from '../account-guide.js';
 import type { Player } from '../../../src/engine/index.js';
 import { scores } from '../../../src/engine/index.js';
 import { hasGrace, spendGrace } from '../grace.js';
-import type { OnlineGameResult } from '../protocol.js';
+import { prunableMatches } from '../retention.js';
+import type { RetentionRow } from '../retention.js';
+import {
+  furtherAheadWire,
+  type AccountCampaignProgressWire,
+} from '../account-campaign-progress.js';
+import type { HeadToHead, OfflineCounters, OfflineSummary, OnlineGameResult } from '../protocol.js';
+import { aggregateOfflineStats, mergeOfflineCounters } from '../offline.js';
 import type {
   CommitBatchInput,
   CommitInput,
@@ -63,6 +71,16 @@ export class MemoryStorage implements Storage {
   private readonly moves = new Map<string, MoveRecord[]>();
   private readonly rateLimits = new Map<string, { windowStart: number; count: number }>();
   private readonly linkCodes = new Map<string, DeviceLinkCode>();
+  /** player id → device id → that device's cumulative offline counters (migration 0022). */
+  private readonly offlineByPlayer = new Map<string, Map<string, OfflineCounters>>();
+  /** player id → further-ahead campaign progress snapshot (migration 0023). */
+  private readonly campaignProgressByPlayer = new Map<string, AccountCampaignProgressWire>();
+  private readonly guideByPlayer = new Map<string, AccountGuideWire>();
+
+  /** Synchronous copy boundary for the local chat adapter; no async gap before its write. */
+  chatAuthority(id: string): { match: MatchRecord | null; participants: Participant[] } {
+    return { match: copy(this.matches.get(id) ?? null), participants: copy(this.participants.get(id) ?? []) };
+  }
 
   // ---- players and tokens ----
 
@@ -102,6 +120,50 @@ export class MemoryStorage implements Storage {
     return n;
   }
 
+  // ---- offline record (migration 0022) ----
+
+  async offlineSummaryOf(playerId: string): Promise<OfflineSummary> {
+    return aggregateOfflineStats([...(this.offlineByPlayer.get(playerId)?.values() ?? [])]);
+  }
+
+  async mergeOfflineStats(playerId: string, counters: OfflineCounters, _now: number): Promise<OfflineSummary> {
+    // No await between the read and the write, so the merge is atomic exactly like the SQL upsert.
+    const devices = this.offlineByPlayer.get(playerId) ?? new Map<string, OfflineCounters>();
+    const stored = devices.get(counters.deviceId);
+    devices.set(counters.deviceId, copy(stored ? mergeOfflineCounters(stored, counters) : counters));
+    this.offlineByPlayer.set(playerId, devices);
+    return aggregateOfflineStats([...devices.values()]);
+  }
+
+  async accountCampaignProgressOf(playerId: string): Promise<AccountCampaignProgressWire | null> {
+    const stored = this.campaignProgressByPlayer.get(playerId);
+    return stored ? copy(stored) : null;
+  }
+
+  async accountGuideOf(playerId: string): Promise<AccountGuideWire | null> {
+    const stored = this.guideByPlayer.get(playerId);
+    return stored ? copy(stored) : null;
+  }
+
+  async mergeAccountGuide(playerId: string, incoming: AccountGuideWire, _now: number): Promise<AccountGuideWire> {
+    const stored = this.guideByPlayer.get(playerId);
+    const kept = stored ? mergeAccountGuide(stored, incoming) : mergeAccountGuide({ seen: [], games: 0 }, incoming);
+    this.guideByPlayer.set(playerId, copy(kept));
+    return copy(kept);
+  }
+
+  async mergeAccountCampaignProgress(
+    playerId: string,
+    incoming: AccountCampaignProgressWire,
+    _now: number,
+  ): Promise<AccountCampaignProgressWire> {
+    const stored = this.campaignProgressByPlayer.get(playerId);
+    const kept = stored ? furtherAheadWire(stored, incoming) : incoming;
+    if (stored && kept === stored) return copy(stored);
+    this.campaignProgressByPlayer.set(playerId, copy(kept));
+    return copy(kept);
+  }
+
   // ---- matches ----
 
   async createMatch(match: MatchRecord): Promise<{ ok: true } | Fail> {
@@ -111,6 +173,28 @@ export class MemoryStorage implements Storage {
     this.participants.set(match.id, []);
     this.moves.set(match.id, []);
     return { ok: true };
+  }
+
+  /** finished match id → its rematch's id (migration 0015's unique `matches.rematch_of`). */
+  private readonly rematches = new Map<string, string>();
+
+  async createRematch(match: MatchRecord, rematchOf: string, playerId: string, now: number): Promise<{ ok: true } | Fail> {
+    // No await between the check and the writes: Node's event loop makes this all-or-nothing, the
+    // same guarantee the Postgres store gets from its transaction and unique index.
+    if (this.rematches.has(rematchOf)) return { ok: false, code: 'REMATCH_EXISTS', reason: 'A rematch already exists.' };
+    if (this.inviteIndex.has(match.inviteCode)) return { ok: false, code: 'DUPLICATE_INVITE_CODE', reason: 'Invite code already exists.' };
+    this.matches.set(match.id, copy({ ...match, openQueue: !!match.openQueue }));
+    this.inviteIndex.set(match.inviteCode, match.id);
+    this.participants.set(match.id, [{ matchId: match.id, playerId, seat: 0, joinedAt: now, lastSeenAt: now }]);
+    this.moves.set(match.id, []);
+    this.rematches.set(rematchOf, match.id);
+    return { ok: true };
+  }
+
+  async rematchOf(finishedMatchId: string): Promise<MatchRecord | null> {
+    const id = this.rematches.get(finishedMatchId);
+    const match = id ? this.matches.get(id) : undefined;
+    return match ? copy(match) : null;
   }
 
   async findOpenQueueMatch(playerId: string): Promise<MatchRecord | null> {
@@ -165,19 +249,41 @@ export class MemoryStorage implements Storage {
       }
     }
 
-    // 1. Already parked: return the player's own search so a re-tap never creates a second entry.
+    // 1. RESUME (owner, 2026-11-12: "FIND OPPONENT ... both sat searching and never paired"): a
+    // search that has already become an ACTIVE game is this player's game. Parking again here left
+    // one device polling a brand-new empty match while its opponent sat in the real one. A game
+    // that began as an INVITE is never resumed: an open invite is how a player still meets a
+    // stranger, and one-game-per-pair is scoped to that pair, never global.
+    const fromSearch = [...this.matches.values()]
+      .filter((m) => m.status === 'active' && m.openQueue
+        && (this.participants.get(m.id) ?? []).some((p) => p.playerId === input.playerId))
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    if (fromSearch) {
+      // A leftover solo search (rows the old behaviour left behind) is a duplicate of a search that
+      // already paired: retire it so no stranger is ever seated in a game nobody will watch.
+      const stale = this.ownParked(input.playerId);
+      if (stale) {
+        this.matches.delete(stale.id);
+        this.inviteIndex.delete(stale.inviteCode);
+        this.participants.delete(stale.id);
+        this.moves.delete(stale.id);
+      }
+      const seat = (this.participants.get(fromSearch.id) ?? []).find((p) => p.playerId === input.playerId)!.seat;
+      return { ok: true, match: copy(fromSearch), seat, paired: true, resumed: true };
+    }
+
+    // 2. Already parked: return the player's own search so a re-tap never creates a second entry.
     const own = this.ownParked(input.playerId);
     if (own) {
       const seat = (this.participants.get(own.id) ?? []).find((p) => p.playerId === input.playerId)!.seat;
       return { ok: true, match: copy(own), seat, paired: false };
     }
 
-    // 2. CAP: a player at the per-player limit may not park or accept another match.
-    if (this.openMatchCountFor(input.playerId) >= input.maxOpenMatches) {
-      return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
-    }
+    // 3. CAP, read once: the limit forbids joining a FRESH search or parking (both add an open
+    // match). It never forbids continuing a game the searchers already share (step 4b below).
+    const atCap = this.openMatchCountFor(input.playerId) >= input.maxOpenMatches;
 
-    // 3. Join the oldest waiting open-queue match with one free seat (FIFO), atomically.
+    // 4. Join the oldest waiting open-queue match with one free seat (FIFO), atomically.
     const waiting = [...this.matches.values()]
       .filter((m) => m.status === 'waiting' && m.openQueue)
       .sort((a, b) => a.createdAt - b.createdAt);
@@ -185,6 +291,15 @@ export class MemoryStorage implements Storage {
       const parts = this.participants.get(match.id) ?? [];
       if (parts.some((p) => p.playerId === input.playerId)) continue;
       if (parts.length !== 1) continue;
+      // ONE GAME PER PAIR (owner, 2026-11-09): never pair two players who already share an open game.
+      const opener = parts[0]!.playerId;
+      const shared = [...this.matches.values()].some((m) => m.id !== match.id && m.status !== 'finished'
+        && (this.participants.get(m.id) ?? []).some((p) => p.playerId === input.playerId)
+        && (this.participants.get(m.id) ?? []).some((p) => p.playerId === opener));
+      if (shared) continue;
+      if (atCap) {
+        return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
+      }
       const seat: Player = parts.some((p) => p.seat === 0) ? 1 : 0;
       const next: Participant[] = [
         ...parts,
@@ -205,7 +320,35 @@ export class MemoryStorage implements Storage {
       return { ok: true, match: copy(activated), seat, paired: true };
     }
 
-    // 4. Nobody is waiting: park the player's search.
+    // 4b. CONTINUE (owner, 2026-11-11): the only searcher waiting is someone this player already
+    // shares an open game with. Never a second game for the pair, and never two people waiting for
+    // each other forever: retire that search and hand back their existing game, freshly touched so
+    // the other page (whose search just ended) finds it at the top of its list. It creates no match,
+    // so the open-match cap never blocks it.
+    for (const match of waiting) {
+      const parts = this.participants.get(match.id) ?? [];
+      if (parts.length !== 1 || parts.some((p) => p.playerId === input.playerId)) continue;
+      const opener = parts[0]!.playerId;
+      const shared = [...this.matches.values()]
+        .filter((m) => m.id !== match.id && m.status !== 'finished'
+          && (this.participants.get(m.id) ?? []).some((p) => p.playerId === input.playerId)
+          && (this.participants.get(m.id) ?? []).some((p) => p.playerId === opener))
+        .sort((x, y) => y.updatedAt - x.updatedAt)[0];
+      if (!shared) continue;
+      this.matches.delete(match.id);
+      this.inviteIndex.delete(match.inviteCode);
+      this.participants.delete(match.id);
+      this.moves.delete(match.id);
+      const touched: MatchRecord = { ...shared, updatedAt: input.now };
+      this.matches.set(shared.id, copy(touched));
+      const seat = (this.participants.get(shared.id) ?? []).find((p) => p.playerId === input.playerId)!.seat;
+      return { ok: true, match: copy(touched), seat, paired: true, continued: true };
+    }
+
+    // 5. Nobody is waiting: park the player's search (unless the cap forbids one more open game).
+    if (atCap) {
+      return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
+    }
     if (this.inviteIndex.has(input.parked.inviteCode)) {
       return { ok: false, code: 'DUPLICATE_INVITE_CODE', reason: 'Invite code already exists.' };
     }
@@ -287,6 +430,29 @@ export class MemoryStorage implements Storage {
     return out;
   }
 
+  async headToHead(viewerId: string, opponentId: string): Promise<HeadToHead> {
+    const seen = new Set<string>();
+    let games = 0;
+    let youWins = 0;
+    let themWins = 0;
+    let draws = 0;
+    for (const [matchId, list] of this.participants) {
+      if (seen.has(matchId)) continue;
+      const me = list.find((p) => p.playerId === viewerId);
+      const them = list.find((p) => p.playerId === opponentId);
+      if (!me || !them || list.length !== 2) continue;
+      const match = this.matches.get(matchId);
+      if (!match || match.status !== 'finished' || !match.result) continue;
+      seen.add(matchId);
+      games += 1;
+      const winner = match.result.winner;
+      if (winner === null) draws += 1;
+      else if (winner === me.seat) youWins += 1;
+      else themWins += 1;
+    }
+    return { games, youWins, themWins, draws };
+  }
+
   async addParticipant(participant: Participant): Promise<{ ok: true } | Fail> {
     const list = this.participants.get(participant.matchId) ?? [];
     if (list.some((p) => p.playerId === participant.playerId)) return { ok: false, code: 'ALREADY_JOINED', reason: 'Already in this match.' };
@@ -338,6 +504,11 @@ export class MemoryStorage implements Storage {
 
   async movesOf(matchId: string, sinceRevision: number): Promise<MoveRecord[]> {
     return copy((this.moves.get(matchId) ?? []).filter((m) => m.revision > sinceRevision));
+  }
+
+  async movesOfMatches(matchIds: readonly string[]): Promise<MoveRecord[]> {
+    // One pass over the requested matches, mirroring the single `= any(...)` statement.
+    return copy(matchIds.flatMap((id) => this.moves.get(id) ?? []));
   }
 
   async applyExpiry(matchId: string, now: number): Promise<MatchRecord | null> {
@@ -435,7 +606,57 @@ export class MemoryStorage implements Storage {
       }
       deletedGuests += 1;
     }
-    return { timedOut, expiredWaiting, deletedGuests, graceExtended: graceExtendedIds.length, graceExtendedIds, timedOutIds };
+    // Housekeeping also trims finished matches — but never a player's newest ten, and never one
+    // younger than the age floor (server/src/retention.ts owns the rule).
+    const prunedMatches = await this.pruneFinished(now);
+    return { timedOut, expiredWaiting, deletedGuests, graceExtended: graceExtendedIds.length, graceExtendedIds, timedOutIds, prunedMatches };
+  }
+
+  async finishedMatches(): Promise<RetentionRow[]> {
+    const rows: RetentionRow[] = [];
+    for (const match of this.matches.values()) {
+      if (match.status !== 'finished' || match.finishedAt === null) continue;
+      rows.push({
+        id: match.id,
+        finishedAt: match.finishedAt,
+        players: (this.participants.get(match.id) ?? []).map((p) => p.playerId),
+      });
+    }
+    return rows;
+  }
+
+  async deleteFinished(ids: readonly string[]): Promise<number> {
+    let deleted = 0;
+    for (const id of ids) {
+      const match = this.matches.get(id);
+      // Scoped: the retention rule only ever offers finished matches, and this refuses anything
+      // else even if a caller gets it wrong.
+      if (!match || match.status !== 'finished') continue;
+      this.matches.delete(id);
+      this.inviteIndex.delete(match.inviteCode);
+      this.participants.delete(id);
+      this.moves.delete(id);
+      deleted += 1;
+    }
+    return deleted;
+  }
+
+  /** The one retention pass, shared in shape with the Postgres adapter. */
+  private async pruneFinished(now: number): Promise<number> {
+    const rows = await this.finishedMatches();
+    const doomed = prunableMatches(rows, now);
+    return doomed.length ? this.deleteFinished(doomed) : 0;
+  }
+
+  /**
+   * TEST/e2e helper: mark a match finished at `at` without playing it out, so the retention rule can
+   * be exercised on a fifteen-match history without fifteen real games. Nothing outside tests calls
+   * it (the same shape as `setTurnDeadline` above).
+   */
+  async seedFinished(matchId: string, at: number): Promise<void> {
+    const match = this.matches.get(matchId);
+    if (!match) return;
+    this.matches.set(matchId, copy({ ...match, status: 'finished', finishedAt: at, turnDeadlineAt: null, updatedAt: at }));
   }
 
   async hitRateLimit(bucket: string, windowStart: number, max: number): Promise<{ ok: boolean; count: number }> {

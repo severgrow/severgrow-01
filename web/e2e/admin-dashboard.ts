@@ -14,6 +14,7 @@ import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Browser, BrowserContext, Page } from 'playwright-core';
 import { createFetchApp } from '../../server/src/fetch-app.js';
+import { WORLD_CELLS } from '../../server/src/world.js';
 import { chainRouters, createFeedbackRouter, MemoryFeedbackStore } from '../../server/src/feedback/feedback.js';
 import { MemoryIdentityLinkStore } from '../../server/src/accounts/accounts.js';
 import { MatchService } from '../../server/src/service.js';
@@ -31,7 +32,7 @@ import type { Action } from '../../src/engine/index.js';
 
 const ADMIN_ID = '37e3d4d0-a34c-45b3-bc61-992fcf392912';
 const DAY = 24 * 60 * 60 * 1000;
-const OUT = new URL('../../docs/screens/admin/', import.meta.url).pathname;
+const OUT = process.env.SHOTS ? `${process.env.SHOTS.replace(/\/$/, '')}/` : new URL('../../docs/screens/admin/', import.meta.url).pathname;
 mkdirSync(OUT, { recursive: true });
 
 let failed = 0;
@@ -51,6 +52,8 @@ type Seeded = {
   playerId: string;
   /** The duel that really has a committed move, so the timeline check is not the empty state. */
   duelMatchId: string;
+  /** The API's own Seeds/world store, so an edit made by clicking is checked on the server side. */
+  economyStore: MemoryWorldEconomyStore;
   counts: { reports: number; claims: number; matches: number; logs: string[] };
 };
 
@@ -79,9 +82,14 @@ const startApi = async (): Promise<Seeded> => {
   const economy = new WorldEconomyService(economyStore, storage, () => Date.now());
   const service = new MatchService({ storage, config, economy, now: () => Date.now() });
 
-  const makePlayer = async (id: string | null, kind: 'guest' | 'account', name: string): Promise<{ player: PlayerRecord; token: string }> => {
+  const makePlayer = async (
+    id: string | null,
+    kind: 'guest' | 'account',
+    name: string,
+    extra: Partial<PlayerRecord> = {},
+  ): Promise<{ player: PlayerRecord; token: string }> => {
     const playerId = id ?? newId();
-    const player: PlayerRecord = { id: playerId, kind, displayName: name, createdAt: now - 3 * DAY, upgradedAt: kind === 'account' ? now - 2 * DAY : null };
+    const player: PlayerRecord = { id: playerId, kind, displayName: name, createdAt: now - 3 * DAY, upgradedAt: kind === 'account' ? now - 2 * DAY : null, ...extra };
     await storage.createPlayer(player);
     const token = newToken();
     await storage.issueToken({ id: newId(), playerId, tokenHash: hashToken(token), createdAt: now, revokedAt: null });
@@ -92,6 +100,14 @@ const startApi = async (): Promise<Seeded> => {
   await links.link({ provider: 'google', subject: 'e2e-subject-only', playerId: owner.player.id, createdAt: now });
   const rival = await makePlayer(null, 'guest', 'BrambleOwl');
   const other = await makePlayer(null, 'account', 'HazelFinch');
+  // One automated test account (marked, with the reason the backfill records) and one HUMAN whose
+  // generated guest name looks exactly like a bot's. The human must survive the default filter.
+  // Seeded, not referenced again: the suite drives the page by name, exactly as the owner would.
+  await makePlayer(null, 'guest', 'CoralBear', {
+    isTest: true,
+    testReason: 'Backfill: created in a burst of at least 8 accounts within 5 minutes, with no recorded activity of any kind.',
+  });
+  await makePlayer(null, 'guest', 'AmberFox');
 
   // One report and one crash, with the awkward shapes the brief asks about: a long message, a
   // message that looks like a spreadsheet formula, and a nested context.
@@ -152,6 +168,7 @@ const startApi = async (): Promise<Seeded> => {
   const logs: string[] = [];
   const admin = createAdminRouter({
     store: memoryAdminStore({ storage, feedback, economy: economyStore, links }),
+    economy: economyStore,
     authenticate: (t) => service.authenticate(t),
     config,
     now: () => Date.now(),
@@ -200,6 +217,7 @@ const startApi = async (): Promise<Seeded> => {
     playerToken: rival.token,
     playerId: owner.player.id,
     duelMatchId: created.match.matchId,
+    economyStore,
     counts: { reports: feedback.rows.length, claims: economyStore.claims.size, matches: storage.allMatches().length, logs },
   };
 };
@@ -292,7 +310,9 @@ const textOf = (page: Page): Promise<string> => page.evaluate(() => document.bod
   const overview = await textOf(page);
   check('Overview shows the new counters', /New reports/.test(overview) && /New crashes/.test(overview));
   check('Overview shows the worst shipped build', /index-E2E00001\.js/.test(overview), 'the seeded asset name');
-  check('Overview states what it cannot measure', /cannot measure/.test(overview) && /Active users/.test(overview));
+  // futa084-analytics: player activity moved to the Analytics screen; Overview names what it cannot
+  // measure and sends the owner there (was "Active users ... no such figure is shown").
+  check('Overview states what it cannot measure', /cannot measure/.test(overview) && /Open Analytics/.test(overview));
   check('Overview labels the duel modes honestly', /Find opponent/.test(overview) && /Invite/.test(overview));
   await page.screenshot({ path: `${OUT}overview-desktop.png`, fullPage: true });
 
@@ -399,7 +419,9 @@ const textOf = (page: Page): Promise<string> => page.evaluate(() => document.bod
 
   const hexes = await page.locator('.world-grid polygon').count();
   const latestClaims = await page.locator('.world-grid polygon[fill]:not([fill="var(--c-surface)"])').count();
-  check('the map draws the whole landmass', hexes === 183, `${hexes} hexes`);
+  // Both sides fixed the same stale 183-cell assertion to the real world size; they only wrote the
+  // detail text differently. Keep the current reading, which is the one the rest of the suite uses.
+  check('the map draws the whole landmass', hexes === WORLD_CELLS.length, `${hexes}/${WORLD_CELLS.length} hexes`);
   check('the map draws the claimed tiles', latestClaims === 2, `${latestClaims} claimed`);
 
   const slider = page.locator('input[type="range"][aria-label="Replay day"]');
@@ -421,6 +443,45 @@ const textOf = (page: Page): Promise<string> => page.evaluate(() => document.bod
   }
   await page.screenshot({ path: `${OUT}seeds-desktop.png`, fullPage: true });
 
+  // The owner's test edits (docs/ADMIN.md §3a): give Seeds, then place and clear a tile, by clicking.
+  const before = (await seeded.economyStore.wallet(seeded.playerId)).balance;
+  const giveForm = page.getByRole('group', { name: 'Give or take Seeds' });
+  check('the Seeds editor is on the screen', (await giveForm.count()) === 1);
+  await giveForm.locator('select').selectOption(seeded.playerId);
+  await giveForm.locator('input[type="number"]').fill('500');
+  await giveForm.locator('input[type="text"]').fill('e2e grant');
+  await giveForm.getByRole('button', { name: 'Give' }).click();
+  check('giving Seeds reports the new balance', await settle(page, `Balance now ${(before + 500).toLocaleString('en-GB')}`));
+  check('the server balance really moved by +500', (await seeded.economyStore.wallet(seeded.playerId)).balance === before + 500);
+  check('it is one admin_adjust ledger row', seeded.economyStore.ledger.filter((e) => e.category === 'admin_adjust').length === 1);
+  await giveForm.locator('input[type="number"]').fill(String(before + 501));
+  const errorsBeforeRefusal = errors.length;
+  await giveForm.getByRole('button', { name: 'Take' }).click();
+  check('taking more than the balance is refused in words', await settle(page, 'below zero'));
+  await tick(500); // the console line for the 400 can land a beat after the words do
+  // The refusal IS a 400, which Chromium logs as a failed resource. That one line is expected here;
+  // anything else logged in this window still counts against the page.
+  errors.push(...errors.splice(errorsBeforeRefusal).filter((line) => !/400 \(Bad Request\)/.test(line)));
+  check('and the balance did not move', (await seeded.economyStore.wallet(seeded.playerId)).balance === before + 500);
+
+  const free = page.locator('.world-grid polygon[aria-label$=", unclaimed"]').first();
+  const freeCell = ((await free.getAttribute('aria-label')) ?? '').split(',').slice(0, 2).join(',');
+  await free.click();
+  const ownerForm = page.getByRole('group', { name: `Owner of ${freeCell}` });
+  check('selecting a tile offers the owner editor', (await ownerForm.count()) === 1, freeCell);
+  await ownerForm.locator('select').selectOption(seeded.playerId);
+  await ownerForm.getByRole('button', { name: 'Set owner' }).click();
+  await tick(800);
+  check('the tile is really owned on the server', seeded.economyStore.claims.get(freeCell)?.ownerId === seeded.playerId, freeCell);
+  check('the map redraws with the new tile', await page.locator('.world-grid polygon[fill]:not([fill="var(--c-surface)"])').count() === 3);
+  await page.locator(`.world-grid polygon[aria-label^="${freeCell}, owned"]`).click();
+  await page.getByRole('group', { name: `Owner of ${freeCell}` }).locator('select').selectOption('');
+  await page.getByRole('group', { name: `Owner of ${freeCell}` }).getByRole('button', { name: 'Set owner' }).click();
+  await tick(800);
+  check('clearing the tile frees it on the server', !seeded.economyStore.claims.has(freeCell));
+  check('and on the map', await page.locator('.world-grid polygon[fill]:not([fill="var(--c-surface)"])').count() === 2);
+  await page.screenshot({ path: `${OUT}seeds-edit-desktop.png`, fullPage: true });
+
   // Campaign.
   await goto(page, '/campaign');
   check('the campaign screen renders', await settle(page, 'Verified clears'));
@@ -429,6 +490,63 @@ const textOf = (page: Page): Promise<string> => page.evaluate(() => document.bod
   check('campaign says the level list cannot be complete', /never a complete level list|leaves NO row/.test(campaignText));
   check('campaign explains chapter placement', /chapter/i.test(campaignText));
   await page.screenshot({ path: `${OUT}campaign-desktop.png`, fullPage: true });
+
+  // Players: every player the server knows, and where each one left off.
+  await goto(page, '/players');
+  check('the players screen renders', await settle(page, 'All players'));
+  const playersText = await textOf(page);
+  check('players lists the seeded players', /BrambleOwl/.test(playersText), playersText.split('\n').slice(0, 8).join(' | '));
+  check('players shows the journey and where they left off', /The journey/.test(playersText) && /Where they left off/.test(playersText));
+  check('players says what it cannot see', /lessons 1-10/.test(playersText));
+  await page.locator('#ctl-q').fill('bramble');
+  await page.locator('#ctl-q').press('Enter');
+  await tick(300);
+  check('the players filter narrows the list', (await page.locator('#view tbody tr').count()) === 1, `${await page.locator('#view tbody tr').count()} rows`);
+  await page.locator('#view tbody tr').first().click();
+  check('a player row opens the full record', await settle(page, 'BrambleOwl') && /#\/player\?q=/.test(page.url()));
+  // The two shots the brief names are taken at 1280x800, the owner's desktop size.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await goto(page, '/players');
+  await settle(page, 'All players');
+  const humansText = await textOf(page);
+  // The human/bot split: the marked account is not on the human list, and the arithmetic says so.
+  check('the default players view hides the automated account', !/CoralBear/.test(humansText), 'CoralBear must not be here');
+  check('the default players view keeps a human whose name looks generated', /AmberFox/.test(humansText), 'AmberFox is a real guest');
+  check('the hidden-bot count is stated beside the human count', /1 bot hidden/.test(humansText), humansText.split('\n').find((line) => /bot hidden/.test(line)) ?? 'no count line');
+  await page.screenshot({ path: `${OUT}players-humans-1280x800.png`, fullPage: false });
+
+  // The Bots tab: the same account, with the reason, and a one-click correction.
+  await goto(page, '/bots');
+  check('the bots screen renders', await settle(page, 'Automated test accounts'));
+  const botsText = await textOf(page);
+  check('the bots tab lists the automated account', /CoralBear/.test(botsText));
+  check('the bots tab prints the classification reason', /burst of at least 8 accounts/.test(botsText));
+  check('the bots tab says these are not the game bots', /never create a player row|never were players/.test(botsText));
+  check('the bots tab says a human tester stays on All players', /real person testing the game stays on All players/.test(botsText));
+  await page.screenshot({ path: `${OUT}bots-1280x800.png`, fullPage: false });
+
+  // The owner's correction: one click, then it survives a reload and moves between the lists.
+  const botRow = page.locator('#view tbody tr', { hasText: 'CoralBear' }).first();
+  await botRow.getByRole('button', { name: 'This is a real person' }).click();
+  await tick(500);
+  await goto(page, '/players');
+  await settle(page, 'All players');
+  const afterOverride = await textOf(page);
+  check('an owner override brings the account back into the human list', /CoralBear/.test(afterOverride));
+  check('the hidden-bot count drops to zero after the override', /no test accounts marked/.test(afterOverride), afterOverride.split('\n').find((line) => /real player/.test(line)) ?? 'no count line');
+  await page.reload();
+  await settle(page, 'All players');
+  check('the override survives a reload', /CoralBear/.test(await textOf(page)));
+  await goto(page, '/bots');
+  await settle(page, 'Automated test accounts');
+  const botTableText = await page.locator('#view .card', { hasText: 'Automated test accounts' }).first().innerText();
+  check('the corrected account leaves the bots list', !/CoralBear/.test(botTableText), botTableText.split('\n').slice(0, 6).join(' | '));
+  const keptTableText = await page.locator('#view .card', { hasText: 'Kept as real people by you' }).first().innerText();
+  check('the correction is kept, with an Undo', /CoralBear/.test(keptTableText) && /Undo/.test(keptTableText), keptTableText.split('\n').slice(0, 8).join(' | '));
+
+  await goto(page, '/players');
+  await settle(page, 'All players');
+  await page.screenshot({ path: `${OUT}players-desktop.png`, fullPage: true });
 
   // Health and ops.
   await goto(page, '/ops');
@@ -470,7 +588,7 @@ const textOf = (page: Page): Promise<string> => page.evaluate(() => document.bod
 
   // Narrow width: every table must stay inside the page.
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const [route, name] of [['/overview', 'overview'], ['/reports', 'reports'], ['/seeds', 'seeds'], ['/ops', 'ops']] as const) {
+  for (const [route, name] of [['/overview', 'overview'], ['/players', 'players'], ['/bots', 'bots'], ['/reports', 'reports'], ['/seeds', 'seeds'], ['/ops', 'ops']] as const) {
     await goto(page, route);
     await tick(500);
     const overflow = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, inner: window.innerWidth }));
@@ -511,6 +629,39 @@ const textOf = (page: Page): Promise<string> => page.evaluate(() => document.bod
   check('POST /v1/admin/seen answers 200 for the admin', probe.seen === 200, `status ${probe.seen}`);
   check('POST triage answers 200 for the admin', probe.triage === 200, `status ${probe.triage}`);
   check('a request with no token at all is refused', probe.noToken === 401, `status ${probe.noToken}`);
+  await context.close();
+}
+
+// A lost HTTP response must not pay twice, and a successful form stays locked until refresh.
+{
+  const { context, page } = await openAs(seeded.adminToken, seeded.playerId, 'RYK');
+  await page.setViewportSize({ width: 360, height: 640 });
+  await goto(page, '/player?q=BrambleOwl');
+  await page.waitForSelector('#grant-amount');
+  page.on('dialog', (dialog) => dialog.accept());
+  const submitted: { requestId: string; amount: number }[] = [];
+  await page.route('**/v1/admin/players/*/seeds', async (route) => {
+    submitted.push(route.request().postDataJSON() as { requestId: string; amount: number });
+    if (submitted.length === 1) {
+      // The real local server commits, but the admin never receives its response.
+      const response = await route.fetch();
+      check('the first grant really committed before its response was lost', response.status() === 200);
+      await route.abort('failed');
+    } else await route.continue();
+  });
+  await page.locator('#grant-amount').fill('37');
+  await page.locator('#grant-reason').fill('Audit safe retry');
+  await page.getByRole('button', { name: 'Add Seeds', exact: true }).click();
+  await page.getByRole('button', { name: 'Retry grant', exact: true }).waitFor();
+  check('a lost grant response keeps the amount and reason locked',
+    await page.locator('#grant-amount').isDisabled() && await page.locator('#grant-reason').isDisabled());
+  await page.getByRole('button', { name: 'Retry grant', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('.grant-feedback')?.textContent?.startsWith('Already added.'));
+  const submit = page.getByRole('button', { name: 'Retry grant', exact: true });
+  check('the successful grant form stays locked before refresh', await submit.isDisabled());
+  await submit.evaluate((button) => (button as HTMLButtonElement).click());
+  check('a safe retry reuses the same payment id; a repeat press sends nothing',
+    submitted.length === 2 && submitted[0]!.requestId === submitted[1]!.requestId);
   await context.close();
 }
 

@@ -12,6 +12,18 @@ const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executab
 const base = external ?? served!.url;
 let checks = 0;
 const check = (value: unknown, label: string) => { assert(value, label); checks++; };
+/**
+ * Wait for a closing surface to finish leaving, then report whether it is gone.
+ *
+ * The interface-motion pass (2026-10-23) fades a surface out for `--ix-close` (150ms) and only then
+ * sets `hidden`, so `isVisible()` sampled on the same tick as the tap reads the fading surface and
+ * reports a close that is happening as a close that did not. The assertion is unchanged — the
+ * surface must be gone — it is simply taken on the settled state, which is what a player sees.
+ */
+const goneAfterClose = async (target: { waitFor: (o: { state: 'hidden'; timeout: number }) => Promise<unknown>; isVisible: () => Promise<boolean> }, timeout = 3000) => {
+  await target.waitFor({ state: 'hidden', timeout }).catch(() => undefined);
+  return !(await target.isVisible());
+};
 try {
   // Lessons must work before a game has been created.
   const menu = await browser.newPage({ viewport: { width: 360, height: 640 }, hasTouch: true, isMobile: true, ignoreHTTPSErrors: true });
@@ -30,7 +42,7 @@ try {
     return { apple:apple.href, width:image.naturalWidth,height:image.naturalHeight,
       name:manifest.name, start:manifest.start_url, scope:manifest.scope, icons };
   });
-  check(appIcon.apple.endsWith('futasaku-icon-180.png') && appIcon.width===180 && appIcon.height===180,
+  check(/futasaku-icon-180\.png\?v=[0-9a-f]{10}$/.test(appIcon.apple) && appIcon.width===180 && appIcon.height===180,
     'iPhone Home Screen loads the new 180px Futasaku artwork');
   check(appIcon.name==='Futasaku' && appIcon.start==='./' && appIcon.scope==='./' && appIcon.icons.length===3 &&
     appIcon.icons.every((icon: {src:string;sizes:string;width:number;height:number})=>icon.src.startsWith('futasaku-icon-') && icon.sizes===`${icon.width}x${icon.height}`) &&
@@ -45,17 +57,18 @@ try {
   for (const topic of ['fruit', 'strengthen', 'draw']) {
     await menu.click('#hud-menu');
     await menu.click('#gm-howto');
-    // FUTASAKU: the pause menu opens the Match Intel "How to" tab, not a separate sheet.
-    check(await menu.locator('#futasaku-glass[data-mode="intel"] [data-intel-tab="howto"][aria-selected="true"]').isVisible(),
-      `${topic}: the pause menu opens the Match Intel How to reference`);
-    check((await menu.locator('#futasaku-glass .intel-tab[data-intel-tab="howto"]').textContent())?.trim() === 'How to', `${topic}: the tab is named How to`);
+    // FUTASAKU: the pause menu opens Match Intel's Rules tab with the full rules unfolded, not a
+    // separate sheet (owner, 2026-10-24: the tabs are Now · Tips · Rules).
+    check(await menu.locator('#futasaku-glass[data-mode="intel"] [data-intel-tab="rules"][aria-selected="true"]').isVisible(),
+      `${topic}: the pause menu opens the Match Intel Rules reference`);
+    check((await menu.locator('#futasaku-glass .intel-tab[data-intel-tab="rules"]').textContent())?.trim() === 'Rules', `${topic}: the tab is named Rules`);
     await menu.locator(`#futasaku-glass .intel-howto [data-tip="${topic}"]`).click();
     check(await menu.locator('#sheet-futa04-help').isVisible(), `${topic}: explicit lesson opens during a game`);
     check(!/\bfruit(?:ed)?\b/i.test(await menu.locator('#sheet-futa04-help').innerText()), `${topic}: help uses Bomb terminology`);
     if (topic === 'fruit') check((await menu.locator('#first-tip-title').innerText()).includes('Bomb'), 'Bomb help title');
     check((await menu.locator('#first-tip-title').innerText()).length > 3 && (await menu.locator('#first-tip-text').innerText()).length > 60, `${topic}: full lesson is populated`);
     await menu.click('#first-tip-ok');
-    check(!await menu.locator('#sheet-futa04-help').isVisible(), `${topic}: acknowledgement closes help`);
+    check(await goneAfterClose(menu.locator('#sheet-futa04-help')), `${topic}: acknowledgement closes help`);
     check(!!await menu.evaluate(() => (window as any).__severgrow.state()), `${topic}: lessons leave the match available`);
   }
   await menu.close();
@@ -64,6 +77,7 @@ try {
   // Intel assertions below are skin-independent and now run on the default art only.
   for (const [width, height, large, left] of [[360,640,false,false],[390,664,true,true],[390,844,false,false],[430,932,true,false],[768,1024,false,false],[1440,900,false,false]] as const) {
     const page = await browser.newPage({ viewport: { width, height }, hasTouch: width < 800, isMobile: width < 600, ignoreHTTPSErrors: true });
+    // Match Intel is the bulb's, for a regular player (a new player's "?" opens a lesson: guide-help-key.ts).
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(({ large, left }) => {
@@ -74,6 +88,31 @@ try {
     await page.goto(`${base}?seed=219682080`);
     await page.waitForFunction(() => (window as any).__severgrow?.state() && !(window as any).__severgrow.busy());
     await page.waitForTimeout(250);
+    // MEASURE THE INFORMATION LAYOUT ONLY ONCE IT IS MOUNTED AND SETTLED. `mountInformation` adds
+    // the `futa04-information` class, the rail and the stylesheet after the game starts, and the
+    // cockpit then repaints its keys; every style this check reads (the trio's chrome, the muted
+    // disabled ink) comes from that fresh stylesheet and the key's own final state. Sampling too
+    // early read the pre-mount default and reported `inkRule: false` on a loaded CI runner for a UI
+    // that was correct a moment later (at 768 once, then at 1440 - so a timing race, not a width).
+    // This waits for the mount AND for the trio's computed styles to be identical twice in a row,
+    // so "settled" is observed rather than assumed. No assertion below is relaxed.
+    await page.waitForFunction(() => {
+      const rail = document.getElementById('futa04-information-rail');
+      return !!rail && document.documentElement.classList.contains('futa04-information');
+    }, undefined, { timeout: 15_000 });
+    const trioStyles = () => page.evaluate(() => ['tool-undo', 'futa04-help-button', 'hand-sort']
+      .map((id) => {
+        const el = document.getElementById(id) as HTMLButtonElement | null;
+        if (!el) return 'missing';
+        const s = getComputedStyle(el);
+        return `${el.disabled}/${s.color}/${s.borderTopWidth}/${s.borderTopStyle}/${s.backgroundColor}`;
+      }).join('|'));
+    for (let attempt = 0, stable = 0, last = await trioStyles(); attempt < 100 && stable < 3; attempt++) {
+      await page.waitForTimeout(100);
+      const now = await trioStyles();
+      stable = now === last && now !== 'missing|missing|missing' ? stable + 1 : 0;
+      last = now;
+    }
     check(await page.locator('#futa04-help-button').isVisible(), `${width}: hint is discoverable`);
     const tools = await page.evaluate(() => {
       const hint = document.querySelector<HTMLElement>('#futa04-help-button')!;
@@ -89,9 +128,24 @@ try {
       const undo = getComputedStyle(buttons[0]!);
       return { icon: !!hint.querySelector('svg path') && !hint.textContent?.trim(),
         aligned: boxes.every(box => Math.abs(box.top + box.height / 2 - boxes[0]!.top - boxes[0]!.height / 2) < 1 && Math.abs(box.height-boxes[0]!.height) < 1),
-        separate: boxes.every((box, i) => !i || box.left >= boxes[i-1]!.right + 3),
+        // In screen order: the row follows the tools' side (owner, 2026-11-11), so its DOM order is not
+        // always left to right.
+        separate: [...boxes].sort((a, b) => a.left - b.left).every((box, i, row) => !i || box.left >= row[i-1]!.right + 3),
         fits: boxes.every(box => box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight),
-        matching: style.border === undo.border && style.backgroundColor === undo.backgroundColor && style.color === undo.color,
+        // 0.6 changed what "matching" means for a DISABLED key: it keeps the trio's chrome (border,
+        // face) and its place in the row, but its ink is deliberately muted so it reads unavailable.
+        // So chrome must match for all three, and the ink must match for the enabled ones only -
+        // plus an explicit check that a disabled key is quieter than a live one, which is the point
+        // of the change. This replaces a stricter-looking `color` comparison that pinned the old
+        // uniform ink; the assertions below are not loosened anywhere else.
+        // Chrome WITHOUT the ink: the `border` shorthand carries its colour, so comparing it whole
+        // would smuggle the colour rule back in. Width, style and face are the shared hardware.
+        chrome: (() => {
+          const parts = (s2: CSSStyleDeclaration) => `${s2.borderTopWidth}|${s2.borderTopStyle}|${s2.backgroundColor}`;
+          return [style, undo, getComputedStyle(buttons[2]!)].every(s2 => parts(s2) === parts(style));
+        })(),
+        // The rule, stated once: a disabled key is muted, an enabled one matches the others.
+        inkRule: (buttons[0] as HTMLButtonElement).disabled ? undo.color !== style.color : undo.color === style.color,
         offMap: hint.closest('#futa04-information-rail') === null && hint.parentElement?.id === 'futa04-actions',
         taps: buttons.every((button, i) => { const box = boxes[i]!; const pseudo = getComputedStyle(button,'::after');
           const extra = pseudo.display !== 'none' ? 16 : 0;
@@ -99,7 +153,7 @@ try {
         }), overlaps };
     });
     check(tools.icon && tools.offMap, `${width}: bulb replaces Hint text beside the existing tools`);
-    check(tools.aligned && tools.separate && tools.fits && tools.matching && tools.taps,
+    check(tools.aligned && tools.separate && tools.fits && tools.chrome && tools.inkRule && tools.taps,
       `${width}: tool trio matches, aligns and retains separate touch targets (${JSON.stringify(tools)})`);
     check(tools.overlaps.length === 0, `${width}: tools never cover piles, moves or cards (${tools.overlaps})`);
     check(await page.locator('#deck.coach-glow').count() === 0, `${width}: Deck has no square suggestion outline`);
@@ -133,7 +187,7 @@ try {
     check(layout.fits && layout.aligned && !layout.overflow, `${width}: glass fits the cockpit and viewport`);
     check(layout.taps && layout.cards>0, `${width}: close target and public card thumbnail are present`);
     await page.keyboard.press('Escape');
-    check(!await page.locator('#futasaku-glass').isVisible(), `${width}: Escape closes Match Intel`);
+    check(await goneAfterClose(page.locator('#futasaku-glass')), `${width}: Escape closes Match Intel`);
     check(JSON.stringify(await page.evaluate(() => (window as any).__severgrow.state())) === JSON.stringify(before), `${width}: reading Match Intel leaves state intact`);
     await page.locator('#deck').click({ force: true });
     await page.waitForFunction(() => !(window as any).__severgrow.busy());
@@ -161,8 +215,9 @@ try {
       const led=rect('smart-led'),context=rect('smart-context'),undo=rect('tool-undo'),tips=rect('futa04-help-button'),sort=rect('hand-sort');
       const close=(a:number,b:number)=>Math.abs(a-b)<1;
       return { top:close(led.top,context.top),bottom:close(undo.top,tips.top)&&close(tips.top,sort.top),
-        width:close(led.width,undo.width+tips.width+(tips.left-undo.right)),
-        columns:close(led.left,undo.left)&&close(context.left,sort.left),
+        // The bottom row follows the tools' side (owner, 2026-11-11): the outer keys may be either way round.
+        width:close(led.width,Math.min(undo.left,sort.left)===undo.left?undo.width+tips.width+(tips.left-undo.right):sort.width+tips.width+(tips.left-sort.right)),
+        columns:close(led.left,Math.min(undo.left,sort.left))&&close(context.left,Math.max(undo.left,sort.left)),
         fixed: [context,undo,tips,sort].every(r=>r.width>=44&&r.height>=44),
         icon: !!document.querySelector('#smart-context svg'),
         count: document.querySelectorAll('#smart-panel button:not(#smart-selector button)').length };
@@ -171,7 +226,7 @@ try {
       `${width}: LED and four fixed buttons align in exactly two rows (${JSON.stringify(cockpit)})`);
     await page.click('#futa04-help-button');
     await page.keyboard.press('Escape');
-    check(!await page.locator('#futasaku-glass').isVisible(), `${width}: Escape closes`);
+    check(await goneAfterClose(page.locator('#futasaku-glass')), `${width}: Escape closes`);
     check(await page.evaluate(() => document.activeElement?.id === 'futa04-help-button'), `${width}: focus returns to Match Intel`);
     const boundaries = await page.evaluate(() => {
       const rail = document.querySelector('#futa04-information-rail')!.getBoundingClientRect();
@@ -190,3 +245,7 @@ try {
   }
   console.log(`${checks} information checks passed`);
 } finally { await browser.close(); server?.httpServer.close(); }
+
+// The same product build: protect 0.81's retained art and redesigned Intel on every release.
+await import('./board-retained.js');
+await import('./futa04-intel-rework.js');

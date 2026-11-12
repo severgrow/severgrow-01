@@ -82,3 +82,12 @@ describe('offline queue', () => {
     expect(createQueue(store).items()).toEqual([]);
   });
 });
+
+describe('the screen-fit numbers a report carries (owner, 2026-10-31)', () => {
+  it('reads only the iOS major.minor from a user agent, never the rest', async () => {
+    const { iosVersion } = await import('../src/feedback/core.js');
+    expect(iosVersion('Mozilla/5.0 (iPhone; CPU iPhone OS 26_1 like Mac OS X) AppleWebKit/605.1.15')).toBe('26.1');
+    expect(iosVersion('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36')).toBeNull();
+    expect(iosVersion('Mozilla/5.0 (Linux; Android 14) Chrome/130')).toBeNull();
+  });
+});

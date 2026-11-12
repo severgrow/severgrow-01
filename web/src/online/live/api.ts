@@ -9,7 +9,7 @@ import type { PresenceStatus } from '../../../../server/src/live/types.js';
 export type { ChallengeWire, LiveStatusWire, MyChallengesWire, PresenceStatus };
 
 export type LiveApi = {
-  presence(status: PresenceStatus, matchId: string | null): Promise<void>;
+  presence(status: PresenceStatus, matchId: string | null, announce?: boolean): Promise<void>;
   status(matchId: string): Promise<LiveStatusWire>;
   challenge(matchId: string, kind?: 'live' | 'rematch'): Promise<{ challenge: ChallengeWire; liveMatchId: string | null }>;
   accept(id: string): Promise<{ challenge: ChallengeWire; liveMatchId: string }>;
@@ -33,28 +33,35 @@ export const createLiveApi = (options: { baseUrl: string; token: () => string | 
       'x-futasaku-client-version': DUEL_CLIENT_VERSION,
       'x-futasaku-rules-version': CURRENT_RULES_VERSION,
     };
-    const init: { method: string; headers: Record<string, string>; body?: string } = { method, headers };
+    const init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal } = { method, headers };
     if (body !== undefined) {
       headers['content-type'] = 'application/json';
       init.body = JSON.stringify(body);
     }
-    const res = await doFetch(url(path), init);
-    let data: unknown = null;
+    // A suspended mobile request must not own the coalesced presence/status queue forever.
+    // Only reads and the idempotent heartbeat get this deadline; never replay a timed-out invite.
+    const abort = method === 'GET' || path === '/v1/players/me/presence' ? new AbortController() : null;
+    const deadline = abort ? setTimeout(() => abort.abort(), 12000) : null;
+    if (abort) init.signal = abort.signal;
     try {
-      data = await res.json();
-    } catch {
-      data = null;
-    }
-    const d = data as { ok?: boolean; code?: string; message?: string } | null;
-    if (!(res.ok ?? (res.status >= 200 && res.status < 300)) || d?.ok === false) {
-      throw new DuelError(d?.code ?? 'HTTP_ERROR', d?.message ?? `Request failed (${res.status}).`, res.status);
-    }
-    return data as T;
+      const res = await doFetch(url(path), init);
+      let data: unknown = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
+      const d = data as { ok?: boolean; code?: string; message?: string } | null;
+      if (!(res.ok ?? (res.status >= 200 && res.status < 300)) || d?.ok === false) {
+        throw new DuelError(d?.code ?? 'HTTP_ERROR', d?.message ?? `Request failed (${res.status}).`, res.status);
+      }
+      return data as T;
+    } finally { if (deadline !== null) clearTimeout(deadline); }
   };
   const id = (s: string) => encodeURIComponent(s);
   return {
-    presence: async (status, matchId) => {
-      await send('POST', '/v1/players/me/presence', { status, ...(matchId ? { matchId } : {}) });
+    presence: async (status, matchId, announce = false) => {
+      await send('POST', '/v1/players/me/presence', { status, ...(matchId ? { matchId } : {}), ...(announce ? {announce:true} : {}) });
     },
     status: async (matchId) => (await send<{ live: LiveStatusWire }>('GET', `/v1/matches/${id(matchId)}/live`)).live,
     challenge: (matchId, kind = 'live') => send('POST', `/v1/matches/${id(matchId)}/live/challenge`, { kind }),

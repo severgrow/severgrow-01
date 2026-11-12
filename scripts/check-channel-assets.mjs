@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 const channel = process.env.CHANNEL ?? 'futa04';
 const dir = process.env.BUILD_DIR ?? 'web/dist';
 const names = readdirSync(`${dir}/assets`);
@@ -33,17 +34,36 @@ function pngInfo(file) {
   return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20), colorType: buf[25] };
 }
 for (const icon of manifest.icons ?? []) {
-  const file = `${dir}/${icon.src}`;
+  const file = `${dir}/${icon.src.replace(/\?.*$/, '')}`;
   assert(existsSync(file), `manifest icon missing from the build: ${icon.src}`);
   const info = pngInfo(file);
   const [w, h] = String(icon.sizes ?? '').split('x').map(Number);
   assert(info.width === w && info.height === h, `${icon.src} is ${info.width}x${info.height}, manifest declares ${icon.sizes}`);
 }
-const apple = /<link rel="apple-touch-icon" href="\.\/([^"]+)"/.exec(html);
+const apple = /<link rel="apple-touch-icon" href="\.\/([^"?]+)(?:\?[^"]*)?"/.exec(html);
 assert(apple, 'index.html is missing its apple-touch-icon link');
 assert(existsSync(`${dir}/${apple[1]}`), `apple-touch-icon missing from the build: ${apple[1]}`);
 const appleType = pngInfo(`${dir}/${apple[1]}`).colorType;
 assert(appleType === 2 || appleType === 3, `apple-touch-icon ${apple[1]} carries an alpha channel (PNG colour type ${appleType}) — iOS renders transparent pixels black`);
+
+// --- Content stamps (owner, 2026-11-10: old tab icons on .com and /test) ----------------------
+// Browsers keep tab and app icons by ADDRESS, so an icon replaced under the same name stays old for
+// anyone who saw it. The build stamps each with ?v=<fingerprint of its bytes> (web/build-asset-
+// versions.ts). A missing or stale stamp here means a changed icon would again not reach players.
+const fingerprint = (file) => createHash('sha256').update(readFileSync(file)).digest('hex').slice(0, 10);
+const stampOk = (ref, where) => {
+  const m = /^(?:\.\/|https:\/\/www\.futasaku\.com\/)?([^?]+)\?v=([0-9a-f]{10})$/.exec(ref);
+  assert(m, `${where}: ${ref} carries no content stamp (?v=<fingerprint>) - a changed file would stay cached`);
+  assert(existsSync(`${dir}/${m[1]}`), `${where}: ${m[1]} is missing from the build`);
+  assert.equal(m[2], fingerprint(`${dir}/${m[1]}`), `${where}: ${m[1]} stamp does not match its bytes`);
+};
+const headRefs = [...html.matchAll(/<link\b[^>]*\brel="(?:icon|shortcut icon|apple-touch-icon|manifest)"[^>]*\bhref="([^"]+)"/g)].map((m) => m[1]);
+assert(headRefs.length >= 3, 'index.html lost its icon/manifest links');
+for (const ref of headRefs) stampOk(ref, 'index.html');
+for (const m of html.matchAll(/<meta\b[^>]*\b(?:property="og:image"|name="twitter:image")[^>]*\bcontent="([^"]+)"/g)) stampOk(m[1], 'share image');
+for (const icon of manifest.icons ?? []) stampOk(icon.src, 'manifest icon');
+// /favicon.ico: what any tool that ignores the links asks for. It must exist and be the new mark.
+assert(existsSync(`${dir}/favicon.ico`), 'favicon.ico missing from the build');
 
 // Regression guard for the /futa0.5/ live build (the exact class of silent failure that shipped a
 // bundle with no online config, so create-duel / find-opponent showed "Something went wrong.

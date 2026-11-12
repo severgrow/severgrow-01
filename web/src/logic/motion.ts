@@ -1,17 +1,174 @@
-// Step 7: the motion tokens. Every duration and easing in the page comes from this short list
-// (the CSS custom properties of the same names hold the same values; a test keeps them equal).
-// Input is never locked by motion: a tap during an animation jumps it to its end.
+// Phase 0: one motion language.
+//
+// There are exactly TWO tempo tokens:
+//   ack          the immediate answer to a press or a tap (96 ms)
+//   consequence  a physical move on the board (336 ms)
+// Everything else is derived, never a second hand-picked number:
+//   quick  = 2 * ack
+//   moment = 2 * consequence + ack / 2
+// The legacy names (`tap`, `move`, `quick`, `moment`) stay as aliases, so every existing use
+// resolves to the same millisecond value it did before this file changed.
+//
+// `PINNED` is the choreography that must never drift: values measured with web/e2e/motion-audit.ts
+// and asserted by web/tests/motion.test.ts. Code imports these names instead of repeating literals.
+
+/** The only two tempo tokens. */
+// 0.75, "the planet standard" (owner, 2026-11-04: "Tighten all in-game animations (card play, Grow,
+// Bomb, Blast, turn change, scoring): shorter, crisper, precise, tactile; never bouncy or floaty").
+// Every in-game beat is about a fifth shorter, and the settle curve no longer overshoots into a
+// bounce: it lands with a hair of give (1.03), a click, not a spring. Reading time is untouched (the
+// display's 1 s and the lessons' 2 s dwells), so nothing becomes harder to follow.
+export const TEMPO = Object.freeze({ ack: 80, consequence: 264 });
+
+/** Values that are part of the game's feel and are deliberately pinned. */
+export const PINNED = Object.freeze({
+  /** A human card leaves the pile and lands in the hand. */
+  humanDraw: 312,
+  /** A human card leaves the hand and reaches the discard pile (the step's wait). */
+  throw: 312,
+  /** The thrown card's own flight, which lands inside that wait (32359b5: the snappier beat). */
+  throwFlight: 248,
+  /**
+   * The human throw's boomerang (owner, 2026-11-08: "doesn't look satisfying and is too quick ... make
+   * it 10/10"; owner, 2026-11-12: "make the card feel lighter - snappy, natural, more satisfying",
+   * and it "can be quicker"): one flick, now 420 ms (was 500). A throw ends the turn and own
+   * animation never blocks input (0.8), so it may outlast `throw`.
+   */
+  boomerang: 420,
+  /**
+   * The CEILING for a card dealt to the opponent seat, in wall-clock ms (owner, 2026-11-12: the deal
+   * at the end of a replayed turn took too long; it must be fast and snappy, never slower than the
+   * player's own draw, and it must not hold up the hand-over to the player's turn). The animation's
+   * natural length is 280 ms, but a replay plays at 60% of live speed (x1.67), which stretched it to
+   * ~467 ms; this is a hard cap applied after every speed scale.
+   */
+  oppDeal: 240,
+  /** The shortest hold for a live enemy turn, so a quiet turn cannot blink past. */
+  liveReveal: 600,
+  /** The LED display's minimum dwell before another message may replace it (normal play). */
+  displayDwell: 1000,
+  /**
+   * A LESSON message's minimum dwell (levels 1-10). The owner asked for 2 s there so a teaching
+   * line cannot be replaced before it is read; normal play keeps 1 s, because the sign is a live
+   * scoreboard and a 2 s floor makes every step feel sluggish.
+   */
+  lessonDwell: 2000,
+  /** A whole cut at Normal speed, whatever the number of tiles or chained cuts. */
+  cutCap: 2000,
+  /** The cut's local flash never exceeds this, even at Slow speed. */
+  flash: 60,
+  /** Two short freezes used by the existing choreography (light and heavy impacts). */
+  hitStopShort: 48,
+  hitStop: 80,
+  /** One ripple ring starts every this many ms, capped by the plan itself. */
+  ripple: 56,
+  /** How long a grown tile holds after it lands. */
+  growHold: 120,
+  /** A multi-tile grow starts the next tile when the previous one is this far through its pop. */
+  growOverlap: 0.5,
+  /** A Bloom lands its tiles this many moves apart (owner, 2026-11-05: a bit slower, room for the stabs). */
+  bloomGap: 1.14,
+  /** Beta 0.8 (owner, 2026-11-06: "slow down big blasts or big cuts"): Big / Huge cut ripple, ms per ring. */
+  rippleBig: 80,
+  rippleHuge: 96,
+  /** Blast: ms per ring as the tiles fall, and the longest the biggest Blast may hold. */
+  blastRing: 64,
+  blastMax: 1500,
+  /** The opponent's moves play this much slower than mine ("same weight, a touch slower"). */
+  opponentPace: 1.1,
+});
+
+/** The derived durations, plus the legacy aliases that existing code already reads. */
 export const MOTION = Object.freeze({
-  /** a press: buttons and cards answer at once */
-  tap: 96,
-  /** small state changes: a ring, a highlight, a chip */
-  quick: 192,
-  /** a tile, a card or a panel moving */
-  move: 336,
-  /** an earned moment: a Bloom ripple, a big cut, the Strangle finish beats */
-  moment: 720,
+  /** The two source tokens, exposed under their own names. */
+  ack: TEMPO.ack,
+  consequence: TEMPO.consequence,
+  /** Legacy name for `ack`. */
+  tap: TEMPO.ack,
+  /** Derived: two acknowledgements. */
+  quick: TEMPO.ack * 2,
+  /** Legacy name for `consequence`. */
+  move: TEMPO.consequence,
+  /** Derived: two consequences plus half an acknowledgement. */
+  moment: TEMPO.consequence * 2 + TEMPO.ack / 2,
 });
+
+/** One easing family: the same control points, with the settle variant overshooting to 1.1. */
+const STANDARD_EASE = 'cubic-bezier(0.2, 0.9, 0.2, 1)';
+const SETTLE_EASE = 'cubic-bezier(0.2, 0.9, 0.2, 1.03)';
 export const EASE = Object.freeze({
-  out: 'cubic-bezier(0.2, 0.8, 0.3, 1)',
-  spring: 'cubic-bezier(0.2, 0.8, 0.3, 1.1)',
+  /** The canonical easing: decelerate into the resting position. */
+  standard: STANDARD_EASE,
+  /** The same control points, with a small overshoot for a physical landing. */
+  settle: SETTLE_EASE,
+  /** Legacy aliases. */
+  out: STANDARD_EASE,
+  spring: SETTLE_EASE,
 });
+
+/** Continuous marquees are the only place for `linear`; the LED projector is the only `steps(1)`. */
+export const EASE_SPECIAL = Object.freeze({ marquee: 'linear', led: 'steps(1)' });
+
+/**
+ * The hand's idle breath (phase 4). It is ambient continuous motion, so it lives with the
+ * marquees rather than in a one-off duration: 4.5-6 s per card, 0.4-0.8% of the card's size.
+ * Lighter cards sway a little more; at most seven cards breathe at once. The values are
+ * presentation only and never reach a legal action's duration.
+ */
+export const BREATH = Object.freeze({ minPeriod: 4500, maxPeriod: 6000, minAmp: 0.004, maxAmp: 0.008, maxCards: 7 });
+
+/** A deterministic 32-bit mix: the same card id breathes the same way in every session. */
+const mix = (n: number): number => {
+  let h = Math.imul(n | 0, 0x9e3779b1) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0;
+  h ^= h >>> 13;
+  return h >>> 0;
+};
+
+/** A card's breath period in ms, 4500-6000, fixed by its id. */
+export const breathPeriodOf = (cardId: number): number =>
+  BREATH.minPeriod + (mix(cardId) % (BREATH.maxPeriod - BREATH.minPeriod + 1));
+
+/** A negative delay in ms so cards do not breathe in step (the phase is part of the breath). */
+export const breathPhaseOf = (cardId: number): number => -(mix(cardId ^ 0x5bd1e995) % BREATH.maxPeriod);
+
+/** 0.8% for the lightest card down to 0.4% for the heaviest. */
+export const breathAmpOf = (weight: number): number => {
+  const w = Math.max(0, Math.min(1, weight));
+  return BREATH.maxAmp + (BREATH.minAmp - BREATH.maxAmp) * w;
+};
+
+/**
+ * The breath's amplitude as a thousandth (8 = 0.8%), quantised to the five steps the stylesheet
+ * can bake. Why quantise at all: a keyframe whose `scale` is `calc()` over a custom property cannot
+ * run on the compositor, so every card forced a full style pass on the main thread every frame for
+ * as long as the hand was breathing — the single biggest idle cost after the display's blink
+ * (measured 2026-10-29, web/e2e/perf-phone.ts). Static keyframes composite for free.
+ *
+ * The steps are 0.008 / 0.007 / 0.006 / 0.005 / 0.004, so the largest error against `breathAmpOf`
+ * is 0.0005 of the card's size — 0.03 px on a 60 px card at the widest, which no display can show.
+ */
+export const breathAmpStep = (weight: number): 4 | 5 | 6 | 7 | 8 => {
+  const thousandths = Math.round(breathAmpOf(weight) * 1000);
+  if (thousandths >= 8) return 8;
+  if (thousandths === 7) return 7;
+  if (thousandths === 6) return 6;
+  if (thousandths === 5) return 5;
+  return 4;
+};
+
+/**
+ * The one motion gate. Every path that animates reads this: a reduced-motion preference or a
+ * time scale of zero (Speed Off / fast-forward) means "no motion", never a new preference.
+ */
+export const motionAllowed = (reduceMotion: boolean, timeScale: number): boolean =>
+  !reduceMotion && timeScale > 0;
+
+/**
+ * The opponent's dealt card, in wall-clock ms: the natural deal beat scaled by the current speed —
+ * but never past `PINNED.oppDeal`. A replay plays at 60% of live speed (x1.67) and used to stretch
+ * this 280 ms deal to ~467 ms, holding the hand-over to the player's turn; the ceiling is applied
+ * AFTER every scale so live, async and replay all deal on the same short beat (owner, 2026-11-12).
+ */
+export const oppDealMs = (timeScale: number, quick: boolean): number =>
+  Math.max(1, Math.round(Math.min((quick ? 130 : 280) * Math.max(timeScale, 0.1), PINNED.oppDeal)));

@@ -45,7 +45,7 @@ try {
     else assert.equal(await page.locator('#futa04-outcome-light').getAttribute('data-tone'),'good');
     if (!reduced) {
       await page.waitForFunction(()=>document.querySelector('#smart-panel')?.classList.contains('hardware-reflect'));
-      assert.equal(await page.locator('#smart-led').evaluate(el=>getComputedStyle(el,'::before').animationName),'futa04-hardware-reflect');
+      assert.equal(await page.locator('#smart-led-bloom').evaluate(el=>getComputedStyle(el).animationName),'futa04-hardware-reflect');
     } else assert.equal(await page.locator('#smart-panel').evaluate(el=>el.classList.contains('hardware-reflect')),false);
     assert.deepEqual(errors,[]);
     await page.close();

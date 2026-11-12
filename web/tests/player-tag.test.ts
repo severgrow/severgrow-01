@@ -22,9 +22,11 @@ describe('player tags', () => {
     expect(taggedName('MapleFox', null)).toBe('MapleFox');
   });
 
-  it('the online list shows "Name #TAG" when the server sends a tag, and the plain name otherwise', () => {
+  // OWNER CHANGED THE RULE (2026-11-09): "in YOUR MATCHES don't show players tags - those are
+  // mainly for internal identification". The list shows the plain name, tag or not.
+  it('the online list shows the plain name, never the internal #TAG', () => {
     const base = { matchId: 'm', status: 'active', mySeat: 0, turnPlayer: 0, turnDeadlineAt: null, opponentName: 'MapleFox', lastActivityAt: 0, unseenTurn: false, revision: 1, graceUsed: [0, 0], gracePeriods: 1, result: null } as const;
-    expect(toLobbyRow({ ...base, opponentTag: '7QK2' } as never, 0).opponentName).toBe('MapleFox #7QK2');
+    expect(toLobbyRow({ ...base, opponentTag: '7QK2' } as never, 0).opponentName).toBe('MapleFox');
     expect(toLobbyRow(base as never, 0).opponentName).toBe('MapleFox');
   });
 });

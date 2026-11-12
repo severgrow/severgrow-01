@@ -9,6 +9,9 @@ import { drawLandmark } from './landmarks.js';
 import { materialsOf } from '../logic/materials.js';
 import { drawSeedStone } from './seedstone.js';
 import { DEFAULT_ART_SPRITES } from './defaultArtSprites.js';
+// The replay's canvas pictures paint the same faces; they read this list from the module the board
+// already loaded, so neither the poster nor the video pulls a second copy of the sprite URLs.
+export { DEFAULT_ART_SPRITES };
 // Board ground/rocks live with the game assets (V3 pack archived off this branch).
 import groundUrl from '../assets/board/empty_ground_01.webp';
 import rock1 from '../assets/board/rock_hex_01.webp';
@@ -21,6 +24,13 @@ import rock5 from '../assets/board/rock_hex_05.webp';
 // masonry/wood border inside that same cell, including its six corners.
 const artSize = (index: number) => index >= 18 ? 68 : index < 9 ? 80 : 76;
 const rockUrls = [rock1, rock2, rock3, rock4, rock5];
+// The replay's canvas pictures paint the same board; they read these URLs from the module the board
+// already loaded, so neither the poster nor the video pulls a second copy of them.
+export const BOARD_GROUND = groundUrl;
+export const BOARD_ROCKS = rockUrls;
+// A bonus hex's metal frame (its only marker in Futasaku) rides the same hand-over, so the
+// replay's canvas pictures draw the same gold the board does.
+export { GOLD_FRAME_ATLAS, goldFrameCrop } from './goldframes.js';
 
 /**
  * Board pictures that could not be loaded, so the board never asks for them again.
@@ -57,6 +67,7 @@ const noteArtFailure = (url: string): void => {
 
 // The small home and tile images start downloading while the menu is visible.
 // Once decoded, every repeat of a variant shares the browser's image cache.
+const artDecodes: Promise<unknown>[] = [];
 if (typeof Image !== 'undefined') {
   for (const url of [...DEFAULT_ART_SPRITES, groundUrl, ...rockUrls]) {
     const img = new Image();
@@ -65,9 +76,16 @@ if (typeof Image !== 'undefined') {
     // for an intact file too, and dropping good art would be worse than the placeholder).
     img.addEventListener('error', () => noteArtFailure(url));
     img.src = url;
-    void img.decode().catch(() => undefined);
+    artDecodes.push(img.decode().catch(() => undefined));
   }
 }
+
+/**
+ * Resolves when every picture the first board composes is decoded (or has failed): the ground,
+ * both homes, the nine territory faces and the rocks. The downloads already started above, so
+ * waiting on this is a decode wait, not a second request. Never rejects.
+ */
+export const boardArtReady: Promise<void> = Promise.all(artDecodes).then(() => undefined);
 
 /** The supplied hex art's upper-right edge is its visual base. Turn that edge
  * onto the board's bottom side without rotating the board or its hitboxes. */

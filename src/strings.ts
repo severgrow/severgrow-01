@@ -62,8 +62,19 @@ export const ONLINE = Object.freeze({
   brand: 'FUTASAKU',
   tagline: 'GROW · CONNECT · CONQUER',
   playOnline: 'Play online',
+  /**
+   * THE MENU KEY'S LIVE WORD (owner, 2026-11-01): while an unfinished duel is waiting on THIS
+   * player's move, the Play online entry says so instead of the generic label, and goes back the
+   * moment the turn passes or the match ends. One word pair, no badge and no second screen.
+   */
+  yourMove: 'your move',
+  /** The Play online key's spoken name while matches wait (the visible words never change). */
+  menuYourMoveName: (n: number) => `Play online. ${n} ${n === 1 ? 'match' : 'matches'} waiting for your move`,
+  menuYourMoveTitle: (n: number) => `${n} ${n === 1 ? 'match waits' : 'matches wait'} for your move`,
   playOffline: 'Play offline',
   pageTitleBase: 'FUTASAKU',
+  connectionOffline: 'Offline',
+  connectionReconnecting: 'Reconnecting',
   hubTitle: 'Play online',
   hubBack: 'Back',
   // The shared Territory: one tile per won duel, the same map for everyone. Read as "Territory"
@@ -77,8 +88,80 @@ export const ONLINE = Object.freeze({
   worldYou: 'You',
   worldHeld: (filled: number, cells: number) => `${filled} of ${cells} tiles grown`,
   worldError: 'Could not read the map. Try again.',
+  worldRanking: 'Ranking',
+  worldChallenges: 'Challenges',
+  worldCurrent: 'Current',
+  worldHistory: 'History',
+  worldNoChallenges: 'No open challenges.',
+  worldNoHistory: 'No past challenges yet.',
+  worldMenu: 'Territory menu',
+  /**
+   * YOUR COLOUR (owner, 2026-10-30). The swatches' names live in `src/tile-colours.ts` with the
+   * colours themselves, so the picker, the map and the server can never name a colour differently.
+   */
+  worldColour: 'Colour',
+  worldColourLabel: 'Your tiles',
+  worldColourHint: 'Tap a colour. Your tiles change at once.',
+  worldColourSaving: 'Changing colour…',
+  /** The 24 h rule (owner, 2026-10-30), shown BEFORE a press and after a refusal. */
+  worldColourCooldown: (left: string) => `Changes again in ${left}.`,
+  worldColourCooldownNotice: (left: string) => `You can change your colour again in ${left}.`,
+  worldColourFailed: 'That colour could not be saved. Try again.',
+  worldColourCurrent: 'Current colour',
+  worldColourUnavailable: 'Colours are not available on this server yet.',
+  /** Territory chat (owner, 2026-10-28): one shared channel, newest 30 messages. */
+  worldChat: 'Global chat',
+  worldChatLoading: 'Connecting…',
+  worldChatPlaceholder: 'Say something',
+  worldChatSend: 'Send',
+  worldChatEmpty: 'No messages yet. Say hello.',
+  worldChatBlock: 'Block',
+  worldChatBlockConfirm: 'Confirm block',
+  worldChatReport: 'Report',
+  worldChatReported: 'Reported. Thank you.',
+  worldChatRetry: 'Retry',
+  worldChatFailed: 'Could not send. Try again.',
+  worldChatSlow: 'Slow down a little.',
+  worldChatOffline: 'Chat is not reachable right now.',
+  /** Your standing, at the top of the ranking (owner, 2026-10-28: "addictive, satisfying"). */
+  worldPlace: (rank: number, players: number) => `#${rank} of ${players}`,
+  worldToPass: (gap: number, name: string) => `${gap} ${gap === 1 ? 'tile' : 'tiles'} to pass ${name}`,
+  worldLeading: 'You hold the most land',
+  worldNoStanding: 'Grow a tile to join the ranking',
+  worldSell: (price: number) => `Sell this tile · +${price}`,
+  worldSellConfirm: 'Confirm sell',
+  /** The sell key's own words (owner, 2026-11-04: a word, not an icon). */
+  worldSellKey: (price: number) => `SELL · +${price}`,
+  worldSellKeyArmed: 'TAP TO SELL',
+  /** A tile nobody holds (owner, 2026-11-04: "'Free tile' sounds like you can take it for free"). */
+  /** `currency` is the economy's own word (web/src/online/seed-icon.ts SEEDS_WORD): this file stays free of it. */
+  worldUnclaimed: (cost: number, currency: string) => `UNCLAIMED · ${cost} ${currency.toUpperCase()} TO GROW`,
+  worldUnclaimedShort: (cost: number, currency: string) => `UNCLAIMED · NEEDS ${cost} ${currency.toUpperCase()}`,
+  worldUnclaimedFar: 'UNCLAIMED · OUT OF REACH FOR NOW',
+  /** The tile bar's icon keys (owner, 2026-11-01: actions are icons, not text). The visible text is
+   *  gone, so these words are the keys' SPOKEN labels and titles — the label is not extra, it is
+   *  the replacement. */
+  worldGrowKey: 'Grow a tile',
+  worldGrowConfirm: 'Confirm grow',
+  /** Guest on an unclaimed tile (owner, 2026-11-08): Seeds pay to guests; growing needs an account. */
+  worldSignInToGrow: 'SIGN IN TO GROW',
+  worldSignInKey: 'Sign in',
+  worldSeeProfile: 'See profile',
+  worldGrowing: 'Growing…',
+  worldSelling: 'Selling…',
+  worldSellBusy: 'This tile is being challenged. It can be sold once the challenge is over.',
+  worldSellFailed: 'That tile could not be sold. The map has refreshed; nothing was taken.',
+  worldRankingTitle: 'Territory ranking',
+  worldTiles: (n: number) => `${n} ${n === 1 ? 'TILE' : 'TILES'}`,
+  worldConnectedTiles: (n: number) => `${n} CONNECTED TILES`,
+  worldMe: 'YOU',
+  worldActivity: 'Recent tiles',
   /** the Seeds invitation card's button that opens the Territory (uppercase, like its LATER sibling) */
   worldInviteOpen: 'OPEN TERRITORY',
+  /** the invitation card's quiet dismiss key (uppercase sibling of worldInviteOpen) */
+  worldInviteLater: 'LATER',
+  /** one line under the balance on the Seeds invitation card */
+  worldInviteBody: 'Your place in the world is waiting.',
   playWithFriend: 'Play with a friend',
   findOpponent: 'Find opponent',
   // No baked-in dots: the UI appends the SHARED animated ellipsis (web/src/online/live/wait-dots.ts).
@@ -86,12 +169,17 @@ export const ONLINE = Object.freeze({
   findOpponentHint: 'Matched with the next player who taps Find opponent.',
   /** Find-opponent states (punchy copy standard). */
   searchTitle: 'Finding an opponent',
-  searchBody: 'You are in the queue. The duel opens the moment someone else joins.',
-  searchParkedTitle: 'Nobody yet',
-  searchParkedBody: 'You stay in the queue.',
-  searchPlayComputer: 'Play the computer',
+  searchBody: "Play while we search. We'll let you know when someone joins.",
+  searchParkedTitle: 'Finding an opponent',
+  /** Owner, 2026-11-08: name the practice match and the player's own level, and say a real opponent still connects. */
+  searchParkedBody: (_level: number | null) =>
+    "Play while we search. We'll let you know when someone joins.",
+  searchPlayComputer: 'Practice match',
+  searchPlayLevel: (level: number) => `Level ${level}`,
   searchInviteFriend: 'Invite a friend',
   searchKeepWaiting: 'Keep searching',
+  /** Shown on the board, between the menu and the logo, while that offline game waits. */
+  searchLooking: 'Looking for opponent',
   searchStop: 'Stop searching',
   searchCancelled: 'Search stopped',
   searchStatusSr: 'Searching for an opponent.',
@@ -103,13 +191,18 @@ export const ONLINE = Object.freeze({
   matchedNotice: 'Opponent found.',
   computerVs: 'vs the computer',
   /** Timeout grace (owner rule: one grace per player per match). */
-  graceYourWarning: 'Time ran out — one more chance',
+  graceYourWarning: 'Time ran out - one more chance',
   graceYouUsed: 'Grace used',
   graceOpponentUsed: 'Opponent used their grace',
   graceWarningSr: 'Time ran out. One more chance.',
   graceOpponentSr: 'Your opponent used their grace.',
   graceYouSr: 'You used your grace.',
   yourMatches: 'Your matches',
+  /** The disclosure label carries the count: "Your matches (3)". */
+  yourMatchesCount: (count: number) => `Your matches (${count})`,
+  /** The red badge's spoken name. Never a bare "!" — screen readers hear the sentence. */
+  matchesWaitingOne: '1 match waiting for your move',
+  matchesWaitingMany: (count: number) => `${count} matches waiting for your move`,
   create: 'Create a duel',
   join: 'Join with a code',
   joinTitle: 'Join a duel',
@@ -125,6 +218,20 @@ export const ONLINE = Object.freeze({
   codeTapCopy: 'Tap to copy',
   codeCopied: 'Code copied',
   waitingTitle: 'Waiting for a friend',
+  /** A standard duel's mutual rematch: the first to press waits here for the other's press. */
+  rematchWaitingTitle: 'Waiting for their rematch',
+  /** Your matches, a finished row (owner, 2026-11-09: "challenge this player again"). */
+  rowRematchKey: (name: string) => `Challenge ${name} again`,
+  rowRematchAccept: (name: string) => `${name} wants a rematch. Challenge ${name} again`,
+  rowReplayKey: (name: string) => `Watch the replay against ${name}`,
+  /** The question before a challenge-again (owner's words, 2026-11-10). */
+  rematchConfirm: (name: string) => `You want to challenge ${name} again?`,
+  rematchConfirmYes: 'Challenge',
+  rematchConfirmNo: 'Not now',
+  rowWon: 'Won',
+  rowLost: 'Lost',
+  rowDraw: 'Draw',
+  rematchWaitingBody: 'The new game starts the moment they press Rematch too.',
   waitingBody: 'Send the link. The duel opens when they join.',
   waitingExpiry: 'Invite expires in 48 hours.',
   waitingInviteHint: 'Waiting for a friend to join',
@@ -139,6 +246,8 @@ export const ONLINE = Object.freeze({
   starterOpponentSr: 'Your opponent moves first in this match.',
   statusYourTurn: 'Your turn',
   statusTheirTurn: "Opponent's turn",
+  /** Your matches' state column: the same meaning in a word that fits the grid (owner, 2026-11-11). */
+  rowTheirTurn: 'Their turn',
   /**
    * The turn word while the opponent's finished turn is being replayed. It is NOT "Opponent's
    * turn": that is the exact confusion the two-phone playtest reported (both phones reading the
@@ -153,19 +262,8 @@ export const ONLINE = Object.freeze({
   statusFinished: 'Finished',
   warnLastTwoHours: 'Less than 2 hours left',
   emptyMatches: 'No matches yet.',
-  firstCardTitle: 'How online duels work',
-  firstCardLines: Object.freeze([
-    'Play in real time when both of you are here, or take turns over time.',
-    'Your opponent only sees your turn after you Throw.',
-    // Accurate, not scarier than the rule. It used to say "Miss it and you lose", but the server
-    // gives ONE grace period per player (gracePeriodsPerPlayer: 1, and the in-match line already
-    // reads "Time ran out — one more chance"). Overstating it could make a tester abandon a duel
-    // they would have survived.
-    'Each turn has 24 hours. Run out of time and you get one more chance; run out twice and you lose.',
-  ] as const),
-  firstCardOk: 'Got it',
   storageNote:
-    'Your online matches live on this device until accounts exist.',
+    'Guest matches live on this device. Sign in to keep them on every device.',
   /**
    * Shown once when a rejected token forced a fresh guest on this device. Honest, not alarming:
    * the old identity (and its matches) is gone, so the player knows why their list is empty.
@@ -175,7 +273,7 @@ export const ONLINE = Object.freeze({
   linkCodeHelp: linkCodeHelpText(),
   linkCodeMake: 'Make a link code',
   linkCodeRedeem: 'Enter a link code',
-  linkCodeDone: (code: string) => `Code ${code} — enter it on the other browser.`,
+  linkCodeDone: (code: string) => `Code ${code} - enter it on the other browser.`,
   openDuelSoon: 'Duel screen opens in the next update.',
   errBadOrExpired: 'That code is wrong or has expired.',
   errCodeFormat: inviteCodeFormatHint(),
@@ -233,6 +331,38 @@ export const ONLINE = Object.freeze({
   errMoveIllegal: 'That move is not legal right now.',
   errDrawFailed: 'Draw failed.',
   errResignFailed: 'Resign failed.',
+});
+
+/** The pause faceplate (owner direction, 2026-10-22). One set of words for both the offline pause
+ *  and the online match menu: a pause SUSPENDS a match; a match menu is still a live duel. The words
+ *  here are deliberately small and literal — no "quit", no "exit", no implied frozen clock. */
+export const PAUSE = Object.freeze({
+  /** Offline heading: the game quietly suspended itself. */
+  title: 'Paused',
+  /** Online heading: a menu over a match that is still running. */
+  matchTitle: 'Match menu',
+  /** The one dominant offline action. */
+  resume: 'Resume',
+  /** The one dominant online action: the match has not gone anywhere. */
+  returnToMatch: 'Return to match',
+  /** The secondary key's specific words; main.ts picks one by mode. */
+  restartLevel: 'Restart level',
+  restartMatch: 'Restart match',
+  restartLevelTitle: 'Restart this level?',
+  restartMatchTitle: 'Restart this match?',
+  restartLevelBody: 'The level starts again from its opening. Your progress in this level is lost.',
+  restartMatchBody: 'The match starts again with a fresh deal at the same difficulty. This game is lost.',
+  keepPlaying: 'Keep playing',
+  mainMenu: 'Main menu',
+  /** The compact turn-history helper (the reference's own title is HELP.howToTitle). */
+  history: 'What happened',
+  /** The words under the pause panel's icon tools (their spoken labels are the full names). */
+  howToShort: 'Rules',
+  historyShort: 'History',
+  practiceMode: 'Practice',
+  duelMode: 'Duel',
+  /** Online only: a truthful note over a match that is still live while the menu is open. */
+  clockRuns: 'The match clock keeps running.',
 });
 
 /**
@@ -296,8 +426,8 @@ export const RESULT = Object.freeze({
   won: 'You won',
   lost: 'You lost',
   draw: 'A draw',
-  /** Offline win headline: "You beat Level 7!" */
-  beatLevel: (level: number) => `You beat Level ${level}!`,
+  /** The practice result's second line: "Practice match · Medium" (never the opponent's 1-9 level). */
+  practice: (difficulty: string) => `Practice match · ${difficulty}`,
   /** Why the game ended. */
   doubleStrangle: 'Both homes were surrounded at once.',
   strangleWon: `You surrounded ${OPP.theirs} home.`,
@@ -311,7 +441,7 @@ export const RESULT = Object.freeze({
   /** Appended when the raw scores were level and tile strength decided it. */
   decidedByStrength: ' Scores were level; higher total tile strength decided it.',
   /** Appended when scores and tile strength both matched — a true draw. */
-  trueDraw: ' Scores and tile strengths matched — a true draw.',
+  trueDraw: ' Scores and tile strengths matched - a true draw.',
   /** Online-only endings, still from the reader's point of view. */
   timeoutWon: `${OPP.The} ran out of time.`,
   timeoutLost: 'You ran out of time.',
@@ -329,9 +459,118 @@ export const RESULT = Object.freeze({
   more: 'More',
   /** The same disclosure once it is open. */
   less: 'Less',
+  /** The quiet way out of an offline result. (An online result uses `ONLINE.menuButton`.) */
+  backToMenu: 'Back to menu',
+  /**
+   * THE FOUR KEYS (owner brief, 2026-11-11). The card leads with the one forward action, and the
+   * result's details live one tap away in their own window: this is that window's key.
+   */
+  growTiles: 'Grow tiles on the planet',
+  details: 'Result',
+  /**
+   * THE PLANET PANE on the card: the resting hint, and its one-off states. The owner's words
+   * (2026-11-11: "Tap a tile") — the richer owner/value line belongs to the tile bar, not to the
+   * resting hint. The word for the currency is NOT here (src/strings.ts stays free of it); the pane
+   * takes those lines from web/src/online/seed-icon.ts, beside every other Seeds line.
+   */
+  planetHint: 'Tap a tile',
+  planetLoading: 'Finding your place in the world…',
+  planetUnavailable: 'The world could not load right now.',
+  planetRetry: 'Try again',
 });
 
-/** The words for the one-card Grow. Code still uses action `Sprout`; players read Grow. */
+/**
+ * THE DOUBLE HARVEST (surprise brief, 2026-10-29): the one-sentence alternative for the finish
+ * card's stamp. It names the two joined masses, how they meet, and whether a home was sealed — the
+ * figure's picture in words, so the stamp never carries meaning by colour alone.
+ */
+export const HARVEST = Object.freeze({
+  tiles: (n: number) => `${n} ${n === 1 ? 'tile' : 'tiles'}`,
+  sentence: (mine: number, theirs: number, touching: number, cutOff: number, sealed: 'your' | 'their' | null) => {
+    const parts = [`Your network, ${HARVEST.tiles(mine)}.`, `Theirs, ${theirs}.`];
+    if (cutOff > 0) parts.push(`${HARVEST.tiles(cutOff)} cut off.`);
+    parts.push(touching === 0 ? 'No sides touch.' : touching === 1 ? '1 side touches.' : `${touching} sides touch.`);
+    if (sealed) parts.push(`${sealed === 'your' ? 'Your' : 'Their'} home is sealed.`);
+    return parts.join(' ');
+  },
+});
+
+/**
+ * THE REPLAY (owner brief, 2026-10-25): "at the end of every game you are able to see a replay of
+ * the whole match … only the board and the logo … make it clear when the turn switches and which
+ * player was going."
+ */
+const TO_MOVE = 'to move';
+export const REPLAY = Object.freeze({
+  /** The finish card's control. */
+  watch: 'Watch replay',
+  /** The replay screen's own name (its accessible label). */
+  title: 'Replay',
+  /** The offline player's name on a replay: the same word the finish card uses. */
+  you: 'You',
+  /** The tail of the turn line; the player's name is set in the seat's own ink beside it. */
+  moveSuffix: TO_MOVE,
+  /** Whose turn it is, as one quiet line. */
+  toMove: (name: string) => `${name} ${TO_MOVE}`,
+  /** Restart from the first move. */
+  again: 'Replay again',
+  /** Leave the replay and come back to the finish card. */
+  close: 'Close',
+  /** What a screen reader hears for the scrub bar. */
+  scrub: 'Replay position',
+  /** The footer's one share key: it makes the replay's video and opens the share sheet. */
+  share: 'Share replay',
+  /** While recording: "Recording 12s / 50s" — the replay's own length, not the file's size. */
+  recording: (done: string, total: string) => `Recording ${done} / ${total}`,
+  /** The way out of a recording that is already running. */
+  cancel: 'Cancel',
+  /** The recording is done and being handed to the phone (share sheet, else a download). */
+  videoReady: 'Preparing the video…',
+  /** What the player sees when the file has gone through the share sheet. */
+  videoShared: 'Video shared',
+  videoSendFailed: 'Could not send the video. Try again or save it.',
+  /** What the player sees when the file went to their downloads. */
+  videoSaved: 'Video saved',
+  /** Said plainly when this browser cannot record, or the encoder stopped. */
+  videoFailed: 'Could not make the video',
+  /** The fast export (the phone's own encoder): "Making video 40%". */
+  making: (percent: number) => `Making video ${percent}%`,
+  /** The file is ready and waiting for a tap (a phone only opens its share sheet from a tap). */
+  videoDone: 'Video ready',
+  /** The key that hands the finished file to the phone's share sheet. */
+  shareVideo: 'Share',
+  /** The key that saves the finished file to the device instead. */
+  saveVideo: 'Save',
+  /** The notch on the scrub bar at the play that turned the match. */
+  turningPoint: 'Turning point',
+  /** The notch's own name, with the honest count of tiles the cut took. */
+  turningPointLabel: (tiles: number) => `Turning point · ${tiles} tile${tiles === 1 ? '' : 's'}`,
+  /** Said only when this match never cut anything: there is no notch to press. */
+  noTurningPoint: 'No turning point in this match',
+  /** The video's one line under the address: what the game is, in its own words (the site's own). */
+  tagline: 'Small board. Big decisions.',
+  /** The wordmark on the poster and the video (the only brand words the image carries): the address. */
+  mark: 'FUTASAKU.COM',
+  /** The replay's signature under the mark (owner, 2026-10-26: "an elegant place to place futasaku.com"). */
+  site: 'futasaku.com',
+  /** A biggest-moment mark on the scrub bar: who made the play and what it did, in plain words. */
+  /** What a moment did, for its caption over the board (the name is set beside it, in its ink). */
+  momentWhat: (cut: number, swing: number): string =>
+    cut > 0 ? `cut ${cut} tile${cut === 1 ? '' : 's'}` : `${swing}-point swing`,
+  momentLabel: (name: string, cut: number, swing: number): string =>
+    cut > 0
+      ? `${name} cut ${cut} tile${cut === 1 ? '' : 's'}`
+      : `${name} · ${swing} point swing`,
+  /** The online match list's word for a finished duel's row. */
+  pastRow: 'Watch replay',
+  /** Shown when a stored replay cannot be loaded (an old match, a lost connection). */
+  unavailable: 'That replay is not available.',
+  loading: 'Loading replay…',
+});
+
+/**
+ * The words for the one-card Grow. Code still uses action `Sprout`; players read Grow.
+ */
 export type MoveWords = {
   Name: string;
   name: string;
@@ -437,7 +676,7 @@ export const BLOOM = Object.freeze({
   buttonKeep: (n: number, kept: number) => `Bloom ${n} tiles, keep the ${kept === 1 ? 'other' : `other ${kept}`}`,
   /** How to play (HTML) */
   howto:
-    ' On your Grow turn you may also <b>bloom</b> (optional add-on): 3 to 6 cards that go together — the same number in different suits (a set), or numbers in a row in one suit (a run). They grow that many tiles in any shape, as long as one touches your tiles. Each tile keeps its card\'s number.',
+    ' On your Grow turn you may also <b>bloom</b> (optional add-on): 3 to 6 cards that go together - the same number, in any suits (a set), or numbers in a row in one suit (a run). They grow that many tiles in any shape, as long as one touches your tiles. Each tile keeps its card\'s number.',
   /** the general hint */
   hint: 'Bloom on Grow: a set or a run of 3 to 6 cards.',
   /** why a held group cannot bloom right now */
@@ -495,7 +734,7 @@ export const FRUIT = Object.freeze({
 export const BLAST = Object.freeze({
   Name: 'Blast',
   name: 'blast',
-  howto: ' Two Bombs can <b>Blast</b> together: clear an enemy tile and its six neighbours (homes are safe). Blast is an extra play, like Bloom — it does not use your Grow.',
+  howto: ' Two Bombs can <b>Blast</b> together: clear an enemy tile and its six neighbours (homes are safe). Blast is an extra play, like Bloom - it does not use your Grow.',
   suggest: (hex: string, n: number) => `Blast at ${hex}, clearing ${n} tiles`,
   youDid: (hex: string) => `You blasted at ${hex}`,
   oppDid: (hex: string) => `${OPP.The} blasted at ${hex}`,
@@ -570,7 +809,8 @@ export const ONBOARD = Object.freeze({
    * goal is stated, the window points at the opponent's landmark and names it once. After that the
    * word means something.
    */
-  theirHome: 'THEIR HOME',
+  // Owner, 2026-10-24: the display never says "their".
+  theirHome: 'OPPONENT HOME',
   theirHomeLine: 'This one. Surround it to win.',
   /**
    * What the level was teaching, said back to the player on the finish card after a win: the "you
@@ -590,12 +830,13 @@ export const ONBOARD = Object.freeze({
   grow: 'GROW',
   growLine: 'Tap a lit tile.',
   throwTitle: 'THROW',
-  throwLine: 'Tap a card twice to throw it.',
-  throwAgain: 'Tap the same card again.',
+  throwLine: 'Tap a card to pick it for the Throw.',
+  throwAgain: 'Swipe up, or tap the Throw pile.',
   throwDone: 'Tap » when you are done.',
   twoWays: 'TWO WAYS',
   twoWaysLine: 'More than one tile works. Pick one.',
-  theirTurn: 'THEIR TURN',
+  // Owner, 2026-10-24: while the opponent plays, the display just says WAIT.
+  theirTurn: 'WAIT',
   theirTurnLine: 'Watch where they grow.',
   /** The one new idea each level introduces (levels 4-10), shown once on its first turn. */
   lessons: Object.freeze({
@@ -615,21 +856,185 @@ export const ONBOARD = Object.freeze({
 export const HELP = Object.freeze({
   /** the only tutorial entry on the main menu */
   tutorial: 'Tutorial',
-  /** Match Intel tab 1 — what happened in this match */
+  /** the glass's own name (its spoken label) */
   intelTab: 'Match Intel',
-  /** Match Intel tab 2 — the moves reference */
-  howToTab: 'How to',
+  /** Match Intel's three tabs (owner, 2026-10-24: "Now · Tips · Rules"): the match as it stands,
+   *  tips for this moment, and the ten lessons as cards with the full rules folded below. */
+  nowTab: 'Now',
+  tipsTab: 'Tips',
+  rulesTab: 'Rules',
   /** the reference heading (also the legacy sheet title) */
   howToTitle: 'How to play',
   /** the tutorial's closing pointer to the reference (its last line) */
-  tutorialFinal: 'Look up a move in Match Intel › How to.',
+  tutorialFinal: 'Look up a move in Match Intel › Rules.',
+});
+
+/** Match Intel's words (owner, 2026-10-24: "pristine… easy to go through and read"). Titles are
+ *  sentences, labels are short capitals, the rest is one plain sentence each. Every tip names
+ *  only what is public: the board, my own hand and the Throw pile. */
+export const INTEL = Object.freeze({
+  record: 'Match record',
+  comparison: 'YOU · OPPONENT',
+  lead: (by: number): string => `You lead by ${by}`,
+  behind: (by: number): string => `They lead by ${by}`,
+  level: 'All square',
+  scoreLine: (you: number, them: number, _turn: number): string => `${you} - ${them} points`,
+  latest: 'LATEST',
+  noMoves: 'No moves yet. The first card is face up on the Throw pile.',
+  thrown: 'THROWN SO FAR',
+  thrownNone: 'Nothing thrown yet.',
+  /** one sentence per public move; `you` is true for my own */
+  move: (you: boolean, verb: string, detail: string | null): string => {
+    const who = you ? 'You' : 'They';
+    const card = detail === 'BOMB' ? 'a Bomb' : detail ? `a ${detail}` : 'a card';
+    switch (verb) {
+      case 'THREW': return `${who} threw ${card}.`;
+      case 'TOOK': return `${who} took ${card} from the Throw pile.`;
+      case 'DREW': return `${who} drew ${card} from the Draw pile.`;
+      case 'GREW': return `${who} grew ${card}.`;
+      case 'UP': return `${who} strengthened a tile ${detail ?? ''}.`.replace(' .', '.');
+      case 'BLOOM': return `${who} bloomed ${detail ?? 'three'} tiles at once.`;
+      case 'BOMB': return `${who} played a Bomb.`;
+      case 'BLAST': return `${who} blasted ${detail ?? 'several'} tiles.`;
+      case 'CUT': return `${who} cut off ${detail ?? 'some'} tiles.`;
+      case 'WIN': return `${who} surrounded the home.`;
+      default: return `${who}: ${verb.toLowerCase()}${detail ? ` ${detail}` : ''}.`;
+    }
+  },
+  seeRule: 'Open the rule',
+  fullRules: 'Full rules',
+  /** The four verdicts. They name what the player is deciding (a risk, a gain, the clock),
+   *  not the lesson a rule came from — that is the whole point of the rework (owner, 2026-10-29:
+   *  "tips should be more strategic tips, not the basic info of rules"). */
+  kind: Object.freeze({
+    danger: 'DANGER',
+    opportunity: 'OPPORTUNITY',
+    tempo: 'TEMPO',
+    endgame: 'ENDGAME',
+  }),
+  /** The small line above a tab's content. It says WHICH surface this is: Tips is this match,
+   *  Rules is reference. The two tabs never read alike. */
+  scope: Object.freeze({
+    now: 'THE MATCH',
+    tips: 'THIS MATCH',
+    rules: 'HOW THE GAME WORKS',
+    turn: (n: number): string => `TURN ${n}`,
+    reference: 'REFERENCE',
+  }),
+  /** Readout labels, including the folded public Match record. */
+  stat: Object.freeze({
+    land: 'LAND',
+    cuts: 'CUTS',
+    deck: 'DECK',
+    hand: 'HAND',
+    bombs: 'UNSEEN BOMBS',
+  }),
+  /** A quiet Tips tab still looks composed: no blank panel, no empty sentence. */
+  quiet: Object.freeze({
+    title: 'NO OPEN FRONT',
+    line: 'Neither home is exposed. The next Grow sets the shape of the match.',
+  }),
+  complete: Object.freeze({ title: 'MATCH COMPLETE', line: 'Review the final position in Now.' }),
+  /** ONE strategic read of the position, shown on Now above the readout. Every variant is
+   *  derived from public information only (board, deck count, both homes). */
+  observation: Object.freeze({
+    home: (left: number, taken: number): string => left === 1
+      ? 'They need one more side of your home to take the match.'
+      : `Your home is down to ${left} open sides; they already hold ${taken}.`,
+    theirHome: (left: number): string => left === 1
+      ? 'Their home is one side from falling.'
+      : `Their home is down to ${left} open sides.`,
+    deck: (n: number): string => n === 1
+      ? 'The last card is in the Draw pile. The count decides what follows.'
+      : `${n} cards left in the Draw pile. The count is coming.`,
+    lead: (by: number, deck: number): string => `You are ${by} tile${by === 1 ? '' : 's'} up with ${deck} left in the Draw pile.`,
+    behind: (by: number, deck: number): string => `You are ${by} tile${by === 1 ? '' : 's'} down with ${deck} left in the Draw pile.`,
+    level: (tiles: number): string => `The land is level at ${tiles} tile${tiles === 1 ? '' : 's'} each.`,
+    open: (deck: number): string => `Both homes stand alone. ${deck} cards left in the Draw pile.`,
+  }),
+  /** The tips. Each one names THIS match's numbers and the decision they create; none states a
+   *  rule on its own. `intel-guide.ts` builds the evidence chips from the same counts, so a tip
+   *  cannot cite a number the engine disagrees with. */
+  tips: Object.freeze({
+    home: (left: number, taken: number) => left === 1
+      ? {
+        headline: 'Your home is one side from falling.',
+        detail: `They hold ${taken}. Close the last side before their next Grow.`,
+      }
+      : {
+        headline: `Your home has ${left} open sides.`,
+        detail: `They hold ${taken} of your home's sides. Fill one before they close the ring.`,
+      },
+    surround: (left: number, taken: number, finish: 'Grow' | 'Bloom' | null) => finish
+      ? { headline: `You can finish with a ${finish}.`, detail: 'It surrounds their home this turn.' }
+      : left === 1
+      ? {
+        headline: 'Their home is one side from falling.',
+        detail: `You hold ${taken}. Take the last side and the match is yours.`,
+      }
+      : {
+        headline: `Their home has ${left} open sides.`,
+        detail: `You hold ${taken} of them. Close one and they have ${left - 1} left to defend.`,
+      },
+    weak: (loss: number) => ({
+      headline: `One hex holds ${loss} of your tiles together.`,
+      detail: 'It is within their reach. Strengthen it, or grow a second link so the cut costs less.',
+    }),
+    cut: (loss: number, rank: number) => ({
+      headline: `One Grow severs ${loss} of their tiles.`,
+      detail: `Your ${rank} takes the hex their chain hangs from.`,
+    }),
+    deck: (n: number) => ({
+      headline: n === 1 ? 'One card left in the Draw pile.' : `${n} cards left in the Draw pile.`,
+      detail: 'The final count is close. Gold scores double.',
+    }),
+    pile: (rank: number) => ({
+      headline: 'The pile top completes a Bloom.',
+      detail: `Take the ${rank} instead of drawing blind: the set is already in your hand.`,
+    }),
+    blast: (tiles: number) => ({
+      headline: `A Blast clears ${tiles} of their tiles.`,
+      detail: 'Two Bombs, one move: the target and its neighbours go, and your Grow is untouched.',
+    }),
+    bloom: (tiles: number, growAvailable = true) => ({
+      headline: `A Bloom lands ${tiles} tiles in one move.`,
+      detail: growAvailable ? 'It widens the network without spending your Grow.' : 'Your Grow is already used. A Bloom is still available.',
+    }),
+    bomb: (theirBest: number, usesGrow = true) => ({
+      headline: `A Bomb can clear their ${theirBest}.`,
+      detail: `${usesGrow ? 'It uses your Grow.' : 'No Grow spent.'} Homes are immune.`,
+    }),
+    gold: () => ({
+      headline: 'Gold is in reach.',
+      detail: 'It scores double at the end; take it if you can hold it.',
+    }),
+    throw: () => ({
+      headline: 'Every card you throw is one they can take.',
+      detail: 'The Grow is done. What you throw lands face up on the pile.',
+    }),
+    land: (mine: number, theirs: number, deck: number) => ({
+      headline: mine > theirs ? `You hold ${mine} tiles to their ${theirs}.`
+        : mine < theirs ? `They hold ${theirs} tiles to your ${mine}.`
+        : `Level at ${mine} tile${mine === 1 ? '' : 's'} each.`,
+      detail: `Keep your land connected. ${deck} cards left in the Draw pile.`,
+    }),
+    stronger: (takeable: number) => ({
+      headline: `${takeable} of their tiles ${takeable===1?'is':'are'} open to your stronger card.`,
+      detail: 'Take one: they lose a tile and you gain it.',
+    }),
+  }),
 });
 
 /** FUTASAKU 0.5 main menu and its PLAY submenu (owner direction, 2026-10-15). One place for the
- *  words: LOG IN above PLAY, and PLAY holding exactly Play online / LEVEL <n> / Training. */
+ *  words: the bottom row's LOG IN (or the player's name) beside Settings (owner brief, 2026-10-21),
+ *  and PLAY holding exactly LEVEL <n> / Play online / Practice match (LEVEL leads the column since
+ *  the owner's 2026-10-20 decision). */
 export const MENU = Object.freeze({
-  /** the sign-in button at the top of the menu; hidden the moment the player is signed in */
+  /** The sign-in key, now the LEFT key of the menu's bottom row (owner brief, 2026-10-21). It reads
+   *  this only while signed out; a signed-in player's key carries their name instead. */
   login: 'LOG IN',
+  /** The spoken name of the bottom row's group: the account key and Settings, side by side. */
+  footerLabel: 'Account and settings',
   /** LEVEL <n>'s spoken label: the button starts the game, it does not open the level list. */
   levelAria: (number: number): string => `Play level ${number}`,
   /** the one doorway to the offline modes and the duel lobby */
@@ -642,8 +1047,8 @@ export const MENU = Object.freeze({
   // Removed (owner, 2026-10-16): the "Levels" entry that opened the whole chapter/level list. The
   // player is not given access to every level - MENU.level(n) starts the next one they have not
   // completed. Kept out of strings.ts entirely rather than left as a string nothing reads.
-  /** the PLAY entry that opens the three training tiers */
-  training: 'Training',
+  /** the PLAY entry that opens the three practice-match tiers */
+  training: 'Practice match',
   /** the PLAY entry that opens the campaign: "LEVEL 1", "LEVEL 25" (the level the player is on) */
   level: (number: number): string => `LEVEL ${number}`,
   /** The PLAY entry once every built level is complete: there is no next level to name, so it opens
@@ -651,8 +1056,8 @@ export const MENU = Object.freeze({
    *  level is unfinished the entry stays the single way in (owner, 2026-10-16). */
   levels: 'LEVELS',
   levelsAria: 'Levels. Choose a completed level to replay.',
-  /** the training screen's heading (the tier picker keeps its legacy heading off the product menu) */
-  trainingTitle: 'Training',
+  /** the practice-match screen's heading (the tier picker keeps its legacy heading off the product menu) */
+  trainingTitle: 'Practice match',
 });
 
 /** Tutorial Pro window copy — one place for every player-facing tutorial line. */
@@ -699,8 +1104,8 @@ export const TUTORIAL = Object.freeze({
   }),
   bloomHow: Object.freeze({
     title: 'What can bloom?',
-    set: 'A set: same number, different suits — three to six cards.',
-    run: 'A run: numbers in a row, one suit — three to six cards.',
+    set: 'A set: same number, any suits - three to six cards.',
+    run: 'A run: numbers in a row, one suit - three to six cards.',
     badSuit: 'Not a run: two suits mixed.',
     badGap: 'Not a run: a gap in the numbers.',
   }),
@@ -716,36 +1121,41 @@ export const TUTORIAL = Object.freeze({
  * accounts — so these words still read correctly once sign-in ships.
  */
 export const INSTALL = Object.freeze({
-  title: 'Grow FUTASAKU on your home screen',
+  // Owner, 2026-11-08: "some of its copy is lame ... quick, easy and adjusted to iOS/Android/desktop".
+  // Short lines in each platform's own words: Android's dialog says Install, iOS 26 keeps Share under ⋯.
+  title: 'Put FUTASAKU on your home screen',
   why: Object.freeze([
-    'Opens full-screen — straight in, no browser bars',
-    'Works offline, even with no signal',
-    'One tap from your home screen — no typing the address',
+    'Full screen - no browser bars',
+    'Plays offline, even with no signal',
+    'One tap to open',
   ] as const),
-  install: 'Add to home screen',
+  /** Shown only where the browser's own install dialog exists (Android / Chromium). */
+  install: 'Install',
   done: 'Got it',
   notNow: 'Not now',
   never: "Don't show again",
   iosSteps: Object.freeze([
-    'Tap the Share button — the square with the arrow pointing up.',
-    'Choose Add to Home Screen, then tap Add.',
+    'Tap Share (on iOS 26 it is under the ⋯ button).',
+    // iOS 26 asks whether to "Open as Web App"; off, the game opens inside Safari with its bars.
+    'Tap Add to Home Screen, keep Open as Web App on, tap Add.',
   ] as const),
+  /** Android browsers without the install dialog (Samsung Internet, Firefox ...). */
   manualSteps: Object.freeze([
-    'Open your browser menu (the three dots).',
-    'Choose Install app or Add to Home Screen.',
+    'Open the browser menu (⋮).',
+    'Tap Install app or Add to Home screen.',
   ] as const),
   /**
    * On a computer there is no home screen: Chrome and Edge install the game as its own window,
    * started from the dock, taskbar or Start menu. Same invitation, desktop words.
    */
   desktop: Object.freeze({
-    title: 'Open FUTASAKU in its own window',
+    title: 'Give FUTASAKU its own window',
     why: Object.freeze([
-      'Its own window — no tabs, no browser bars',
-      'Works offline, even with no connection',
-      'Start it from your dock, taskbar or Start menu',
+      'No tabs, no browser bars',
+      'Plays offline',
+      'Opens from your dock, taskbar or Start menu',
     ] as const),
-    install: 'Open in its own window',
+    install: 'Install',
     /** The icon-only button, top right of the main menu on a computer (its tooltip / screen-reader name). */
     windowButton: Object.freeze({
       install: 'Open FUTASAKU in its own window',
@@ -753,23 +1163,25 @@ export const INSTALL = Object.freeze({
       exitFullscreen: 'Leave full screen',
     }),
     manualSteps: Object.freeze([
-      'Click the install icon at the right end of the address bar (Safari on a Mac: open the File menu).',
-      'Choose Install (Safari: Add to Dock).',
+      'Chrome or Edge: click the install icon in the address bar.',
+      'Safari on a Mac: File, then Add to Dock.',
     ] as const),
   }),
 });
+
 
 /**
  * Live duels (test channel only, `web/src/online/live/`). Two players who share an online match
  * switch the SAME match to a short per-turn clock. Nothing about the board or the rules changes.
  */
 export const LIVE = Object.freeze({
-  // Owner's rename, 2026-10-14: the mode is "Real time" everywhere a player can read it. The
-  // internal identifiers (LIVE_TURN_MS, the `live` mode id, DB columns, file names) stay.
-  goLive: 'Real time',
+  // Owner's rename, 2026-10-14: "Real time"; then 2026-11-06 (0.82): "BLITZ replaces real time" — the
+  // mode is "Blitz" everywhere a player can read it. Internal identifiers (LIVE_TURN_MS, the `live`
+  // mode id, DB columns, file names) stay.
+  goLive: 'Blitz',
   // No rule-stating number of seconds anywhere in the copy (owner, 2026-10-14): the live turn
   // length never appears as words. The live clock in the header is the only place a digit shows.
-  goLiveAria: (name: string, _secs: number) => `Start a real time duel with ${name}`,
+  goLiveAria: (name: string, _secs: number) => `Start a Blitz duel with ${name}`,
   waiting: (name: string, _secs: number) => `Waiting for ${name}`,
   // The waiting words carry no dots: the UI appends the SHARED animated ellipsis (see wait-dots).
   waitingFor: (name: string) => `Waiting for ${name}`,
@@ -780,39 +1192,48 @@ export const LIVE = Object.freeze({
   // "Waiti…". It is still the word for waiting — never a cut-off word, never a dropped control.
   waitingTiny: 'Wait',
   cancel: 'Cancel',
-  inLiveGame: 'In real time',
-  // The bolt's hidden words when a real-time duel is not possible because the opponent is away.
+  inLiveGame: 'In Blitz',
+  // The bolt's hidden words when a Blitz duel is not possible because the opponent is away.
   away: 'Opponent away',
-  awayAria: (name: string) => `Real time duel: ${name || 'your opponent'} is away`,
+  awayAria: (name: string) => `Blitz duel: ${name || 'your opponent'} is away`,
   notAvailable: 'Not available',
   busy: 'Busy',
-  rateLimited: 'Try real time again later',
-  wantsToGoLive: 'wants a real time duel',
+  rateLimited: 'Try Blitz again later',
+  wantsToGoLive: 'wants a Blitz duel',
   wantsRematch: 'wants a rematch',
-  terms: (_secs: number) => 'Same match · each turn has a countdown',
+  // The ACCEPT window (owner, 2026-11-06: "in the window asking to confirm send/accept BLITZ say
+  // 21seconds, no undo"). The seconds are the server's own limitMs.
+  terms: (secs: number) => `${secs} seconds a turn. No undo.`,
   accept: 'Accept',
   notNow: 'Not now',
+  // The SENDER's confirmation before the invite leaves the device (owner, 2026-10-26: tapping the
+  // bolt must ask first). The seconds come from the server's own `limitMs` (LIVE_TURN_MS, default
+  // 30 s, env-overridable), so the window never promises a number the match is not using.
+  duelQuestion: 'Blitz duel',
+  duelTerms: (secs: number) => `${secs} seconds a turn. No undo.`,
+  sendChallenge: 'Send challenge',
+  sendingChallenge: 'Sending challenge',
   notNowFrom: (name: string) => `${name}: Not now`,
   expired: 'No answer',
-  live: 'Real time',
-  chip: (_secs: number) => 'Real time',
-  chipAria: (_secs: number) => 'Real time duel, each turn has a countdown',
+  live: 'Blitz',
+  chip: (_secs: number) => 'Blitz',
+  chipAria: (_secs: number) => 'Blitz duel, each turn has a countdown',
   timeLeftSr: (secs: number) => `${secs} seconds left`,
   timesUp: "Time's up",
-  leaveLive: 'Leave real time',
+  leaveLive: 'Leave Blitz',
   // Owner's ruling, 2026-10-14: leaving real-time FORFEITS the match, so the confirm states the
   // consequence outright. The warning lives in the confirm itself — there is no way to leave real
   // time that does not acknowledge the loss.
-  leaveConfirm: 'Leave and lose this real-time duel?',
+  leaveConfirm: 'Leave and lose this Blitz duel?',
   // Said BEFORE the situation, on the accept surface (the challenge glass): one short line...
-  leaveWarning: 'Leaving real time loses',
+  leaveWarning: 'Leaving loses the match',
   // ...plus the fuller explanation in the same glass window, never a wall of text.
   // Owner, 2026-10-15: the reconnect grace is never explained to players (it still exists).
-  leaveWarningHelp: 'In real time, leaving or running out of time loses the whole match. Normal 24-hour games are unaffected.',
+  leaveWarningHelp: 'Running out of time ends your turn. Normal 24-hour games are unaffected.',
   // The header strip's "the opponent has dropped" state. The animated dots are added by the UI (the
   // shared `wait-dots` treatment), never baked into this string.
   opponentReconnecting: 'Opponent reconnecting',
-  endedTitle: 'Real time ended',
+  endedTitle: 'Blitz ended',
   endedFinished: 'Match over',
   endedLeft: 'Back to 24-hour turns',
   backToYourGame: 'Back to your game',
@@ -823,9 +1244,7 @@ export const LIVE = Object.freeze({
   rematch: 'Rematch',
   rematchWaiting: (name: string, _secs: number) => `Rematch? Waiting for ${name}`,
   close: 'Close',
-  allowChallenges: 'Allow real time challenges',
-  allowChallengesHelp: 'Off: you show as Not available.',
-  failed: 'Could not start real time right now.',
+  failed: 'Could not start Blitz right now.',
 });
 
 /**
@@ -834,34 +1253,40 @@ export const LIVE = Object.freeze({
  */
 export const FEEDBACK = Object.freeze({
   open: 'Report a problem',
+  /** The pause panel's tool key carries a one-word label under its flag (owner, 2026-10-23). */
+  openShort: 'Report',
   title: 'Report a problem',
   prompt: 'What happened? What did you expect?',
   placeholder: 'e.g. After my Bloom the board froze and I could not throw.',
-  attached: 'We also send your app version, phone type, screen size and where you are in the game (turn and step) — never your cards or your name.',
+  attached: 'We also send your app version, phone type, screen size and where you are in the game (turn and step) - never your cards or your name.',
   send: 'Send',
   cancel: 'Cancel',
   sending: 'Sending…',
-  sent: 'Thanks — sent.',
+  sent: 'Thanks - sent.',
   queued: 'Saved. It will send when you are back online.',
   failed: 'Could not send. Please try again in a minute.',
   empty: 'Please write a few words first.',
   guideLink: 'Tester guide',
   close: 'Close',
-  /** The beta line on the main menu, between the wordmark and the buttons. */
-  betaVersion: '0.55',
-  betaNote: (version: string) => `This is a beta version (${version}) of an evolving game. If you spot any problems or have suggestions for improvement,`,
-  betaLink: 'let us know here.',
+  betaVersion: '0.85',
+  /**
+   * The beta line on the main menu, between the wordmark and the buttons: ONE quiet instrument
+   * label — the version, then the way to say something (owner, 2026-10-31: minimal; the four-line
+   * sentence was the heaviest thing on the menu). Owner (2026-10-27): no date or time stamp.
+   */
+  betaNote: (version: string) => `Beta ${version} ·`,
+  betaLink: 'Feedback',
 });
 
 /** The one-page tester guide (futasaku.com/#beta). Each section: a heading and a few lines. */
 export const BETA_GUIDE = Object.freeze({
   title: 'Welcome, tester',
-  intro: 'Thank you for helping test FUTASAKU. This page has everything you need — it takes two minutes.',
+  intro: 'Thank you for helping test FUTASAKU. This page has everything you need - it takes two minutes.',
   sections: Object.freeze([
     Object.freeze({
       heading: 'Put it on your home screen',
       lines: Object.freeze([
-        'iPhone (Safari): tap Share, then Add to Home Screen.',
+        'iPhone (Safari): tap Share (under ⋯ on iOS 26), then Add to Home Screen.',
         'Android (Chrome): tap the ⋮ menu, then Install app or Add to Home screen.',
         'It then opens full-screen like an app, and works offline for games against the computer.',
       ]),
@@ -869,7 +1294,7 @@ export const BETA_GUIDE = Object.freeze({
     Object.freeze({
       heading: 'Learn the game',
       lines: Object.freeze([
-        'Play the Tutorial from the main menu once — it is short and shows every move.',
+        'Play the Tutorial from the main menu once - it is short and shows every move.',
         'Then try a game against the computer before playing a person.',
       ]),
     }),
@@ -878,18 +1303,40 @@ export const BETA_GUIDE = Object.freeze({
       lines: Object.freeze([
         'Main menu → Play online → invite a friend and send them the code or link.',
         'Each turn can take up to 24 hours. There are no notifications yet, so tell your opponent when you have moved, or agree a time to play together.',
-        'When you both have the match open, you can try Real time: 60 seconds a turn. Careful — in Real time, running out of time or leaving loses the match.',
+        'When you both have the match open, you can play Blitz: 30 seconds a turn, every move seen as it happens. Running out of time ends your turn; leaving loses the match.',
       ]),
     }),
     Object.freeze({
       heading: 'Tell us what you find',
       lines: Object.freeze([
         'Anything odd, confusing, slow or broken: open the menu (☰) and tap Report a problem.',
-        'Say what you did and what happened. Screenshots help too — send them to whoever invited you.',
+        'Say what you did and what happened. Screenshots help too - send them to whoever invited you.',
         'Crashes are reported automatically, without your cards or your name.',
       ]),
     }),
   ]),
+});
+
+/**
+ * The TUTORIAL (owner, 2026-10-24): the first nine campaign levels, replayable from Settings.
+ * "Tutorial" is the owner's word for it, so it is the label everywhere the player sees it. A replay
+ * is deliberately inert: these words never promise progress ("play again", not "continue").
+ */
+export const TUTORIAL_REPLAY = Object.freeze({
+  title: 'Tutorial',
+  /** the Settings row's short value, beside the entry */
+  levelsWord: 'Levels 1–9',
+  /** what the sheet says the replay is, in one line */
+  hint: 'Play the first nine levels again. Your place in the campaign stays where it is.',
+  /**
+   * A tutorial tile's spoken label. The tile carries its number and, from level 1 to 9, the
+   * lesson's name (the visible `.ct-name`); both are in the spoken label, because the name is
+   * copy a screen reader must not lose. Lesson 10 has no name and no tile.
+   */
+  levelAria: (number: number, name?: string): string =>
+    `Level ${number}.${name ? ` ${name}.` : ''} Play the tutorial lesson.`,
+  /** the finish card's leading action after a tutorial lesson: back to where they came from */
+  back: 'Back to Tutorial',
 });
 
 /**
@@ -908,6 +1355,9 @@ export const BETA_GUIDE = Object.freeze({
  */
 export const SETTINGS = Object.freeze({
   title: 'Settings',
+  /** the Tutorial entry (owner, 2026-10-24): replays campaign levels 1-9 from Settings. */
+  tutorial: TUTORIAL_REPLAY.title,
+  tutorialLevels: TUTORIAL_REPLAY.levelsWord,
   lookHeading: 'Look',
   colours: 'Colours',
   materialDetail: 'Material detail',
@@ -926,6 +1376,7 @@ export const SETTINGS = Object.freeze({
   motionHeading: 'Motion and comfort',
   reduceMotion: 'Reduce motion',
   largeText: 'Large text',
+  /** The in-game guide's switch (owner, 2026-11-09). */
   eyeCandy: 'Decorative effects',
   speed: 'Speed',
   effects: 'Effects',
@@ -943,23 +1394,44 @@ export const SETTINGS = Object.freeze({
 /** Accounts: "Continue with Google" (web/src/accounts/, docs/ACCOUNTS.md). */
 export const ACCOUNT = Object.freeze({
   continueGoogle: 'Continue with Google',
+  continueEmail: 'Continue with email',
+  emailTitle: 'Your FUTASAKU account',
+  emailBody: 'New here or returning? Enter your email. We’ll send a one-time code. No password needed.',
+  emailLabel: 'Email',
+  emailCodeLabel: 'One-time code',
+  emailSend: 'Send code',
+  emailVerify: 'Sign in',
+  emailSent: (email: string) => `Enter the code sent to ${email}. Check spam too.`,
+  emailInvalid: 'Enter a valid email address.',
+  emailCodeInvalid: 'Enter the code from your email.',
+  emailRetry: 'Sign-in could not finish. Tap Sign in to retry.',
+  emailCodeFailed: 'That code could not be verified. Try again or request a new one.',
+  emailSendFailed: 'Could not send a code. Please try again.',
+  emailLimited: 'Too many tries. Wait a little before trying again.',
+  emailResend: 'Resend code',
+  emailChange: 'Use another email',
+  emailClose: 'Close',
   playAsGuest: 'Play as guest',
   welcomeTitle: 'Keep your games',
-  welcomeBody: 'Sign in with Google to keep your online matches safe and pick them up on any phone or computer.',
-  welcomeSmall: 'Games against the computer never need an account. You can sign in later from Settings.',
+  welcomeBody: 'Sign in to keep your online matches safe and pick them up on any phone or computer.',
+  /** Quiet optional line after a guest clears a level (or a first claim). Dismissible, once. */
+  keepProgressTitle: 'Keep your progress',
+  keepProgressBody: 'Sign in to keep campaign progress on every device.',
+  keepProgressYes: 'Sign in',
+  keepProgressDismiss: 'Not now',
   privacy: 'Privacy',
   hubGuest: 'Playing as a guest: your matches live only on this device.',
   settingsTitle: 'Account',
   youAre: (name: string) => `You are ${name}`,
-  signedIn: (email: string | null) => (email ? `Signed in with Google · ${email}` : 'Signed in with Google'),
-  guestNote: 'Guest on this device. Sign in with Google to keep your matches on every device.',
+  signedIn: (email: string | null, provider: 'google' | 'email' = 'google') => email ? `Signed in${provider === 'google' ? ' with Google' : ''} · ${email}` : 'Signed in',
+  guestNote: 'Guest on this device. Sign in to keep your matches on every device.',
   signOut: 'Sign out',
   signOutTitle: 'Sign out on this device?',
-  signOutBody: 'Your matches stay in your account. Sign in with Google again to get them back.',
+  signOutBody: 'Your matches stay in your account. Sign in again to get them back.',
   deleteAccount: 'Delete my account',
   deleteTitle: 'Delete your account?',
   deleteLines: Object.freeze([
-    'Your Google sign-in and your email address are deleted from FUTASAKU.',
+    'Your sign-in and your email address are deleted from FUTASAKU.',
     'Every other phone or computer signed in to this account is signed out.',
     'This device keeps playing as a guest. Finished matches stay in your opponents’ history under your nature name.',
   ]),
@@ -974,10 +1446,11 @@ export const ACCOUNT = Object.freeze({
   nicknameTitle: 'Choose your name',
   nicknameBody: 'This is the name other players see. You can change it later in Settings.',
   nicknamePlaceholder: 'Your name',
+  nicknameRequiredBody: 'Type the name other players will see. You can change it later in Settings.',
   nicknameSave: 'Save',
   nicknameSkip: 'Skip for now',
   nicknameSaved: 'Name saved.',
-  nicknameError: "That name cannot be used. Use 1 to 40 letters, numbers, spaces or - _ '.",
+  nicknameError: "That name cannot be used. Use 1 to 8 letters, numbers, spaces or - _ '.",
   nicknameSettings: 'Change nickname',
   linked: (name: string) => `Signed in. Your matches are saved to your account, ${name}.`,
   welcomeBack: (name: string) => `Signed in. Welcome back, ${name}.`,
@@ -988,13 +1461,55 @@ export const ACCOUNT = Object.freeze({
 });
 
 /**
+ * The player's profile (owner brief, 2026-10-21). A SKELETON: five read-only lines and nothing to
+ * press. The words are here so a later rename is one line; the VALUES are never invented — an
+ * unknown number is an em dash, never a 0.
+ */
+export const PROFILE = Object.freeze({
+  title: 'Profile',
+  /** The account key's spoken label while signed in; the name is part of the label. */
+  open: (name: string): string => `${name}. Your profile`,
+  /** The identity line names the tag too, because that is what the value carries (`name #TAG`). */
+  nameTag: 'Name & tag',
+  /** The Seeds line's label is the ECONOMY's word, and it lives with the wallet's own wording in
+   *  web/src/online/seed-icon.ts (`SEEDS_WORD`): this file must stay free of that word
+   *  (web/tests/seed-words.test.ts), and the profile takes it from the one place the currency is
+   *  named to the player. */
+  tiles: 'TOTAL TILES',
+  connectedTiles: 'CONNECTED TILES',
+  matchesWon: 'Matches won',
+  /** An em dash is a FACT: this value is not known. It is never a made-up 0. */
+  unknown: '—',
+  /** Player stats (owner, 2026-11-01): two rows of three, the offline record above the online one. */
+  playTitle: 'Your games',
+  /** VISITOR MODE (owner, 2026-11-01: "allow to look up other peoples profile on territory"). The
+   *  same sheet, one quiet line saying whose it is, and the record's own heading. A visitor sees the
+   *  owner's ONLINE record only; the offline row and the Seeds line are not rendered at all. */
+  theirGames: 'Their games',
+  /** The visible short form; the sheet's spoken label spells it out. */
+  levelShort: (n: number) => `Lvl ${n}`,
+  /**
+   * The player's level, in the name line. SHORTENED (owner, 2026-11-02: "level can be lvl to safe
+   * space"): the name line also carries the player's whole nickname, and "Level" cost it five
+   * characters of width for no meaning the number does not already carry. Spoken as "level" for a
+   * screen reader by the element's own label.
+   */
+  offline: 'Offline',
+  online: 'Online',
+  games: 'Games',
+  winRate: 'Win rate',
+  /** The longest winning run ever, not the current one: the tile says what its value means. */
+  longestStreak: 'Longest streak',
+});
+
+/**
  * The privacy policy, opened at futasaku.com/#privacy (web/src/accounts/mount.ts). Keep it TRUE: every
  * line here is checked against the code in docs/ACCOUNTS.md ("Privacy policy — where each line comes
  * from"). Change the code, change this, change `updated`.
  */
 export const PRIVACY = Object.freeze({
   title: 'Privacy',
-  updated: 'Last updated 15 October 2026',
+  updated: 'Last updated 31 October 2026',
   intro:
     'FUTASAKU is a small independent game. We collect as little as we can, we never sell data, and there are no ads or tracking.',
   sections: Object.freeze([
@@ -1013,9 +1528,10 @@ export const PRIVACY = Object.freeze({
       ]),
     }),
     Object.freeze({
-      heading: 'Signing in with Google',
+      heading: 'Signing in',
       lines: Object.freeze([
-        'Sign-in runs through Supabase Auth. It receives from Google your email address, your name, your profile picture link and your Google account id.',
+        'Email sign-in uses a one-time code sent by Supabase Auth. We do not store passwords. Google sign-in remains optional.',
+        'For Google sign-in, Supabase Auth receives from Google your email address, your name, your profile picture link and your Google account id.',
         'We use them only to recognise you when you sign in again. Our game database keeps just a link between your sign-in and your player. Your email is shown only to you, in Settings.',
         'We never see your Google password, and we never post anything or read anything else from your Google account.',
       ]),
@@ -1039,7 +1555,7 @@ export const PRIVACY = Object.freeze({
     Object.freeze({
       heading: 'Deleting your data',
       lines: Object.freeze([
-        'Settings → Delete my account removes your Google sign-in and your email from FUTASAKU at once, and signs out your other devices.',
+        'Settings → Delete my account removes your sign-in and your email from FUTASAKU at once, and signs out your other devices.',
         'Finished matches stay in your opponents’ history under your generated name, which is not linked to you any more.',
         'To have everything removed, matches included, or to ask what we hold about you, use Report a problem and say so, or email info@futasaku.com.',
         'You can also remove FUTASAKU from your Google account at myaccount.google.com/permissions.',
@@ -1073,6 +1589,13 @@ export const PRIVACY = Object.freeze({
  * The copy stays in the game's own voice and promises nothing the game does not do.
  */
 export const CAMPAIGN = Object.freeze({
+  /**
+   * The restart rest (owner, 2026-11-01): five new deals in a row without a move rest the campaign
+   * for an hour. One quiet sheet: a title, the minutes left, one key.
+   */
+  restTitle: 'Campaign resting',
+  restBody: (minutes: number) => `Back in ${minutes} min.`,
+  restOk: 'OK',
   /** the main menu entry that opens the campaign */
   title: 'Campaign',
   /** the main menu entry that keeps the old difficulty picker */
@@ -1084,10 +1607,21 @@ export const CAMPAIGN = Object.freeze({
   resume: 'Resume',
   /** the prominent button that opens the current level when nothing is unfinished */
   play: 'Continue',
-  /** the question shown only when a saved match is NOT the next unfinished level */
-  askTitle: 'Your campaign match is unfinished.',
+  /** The question asked when the player enters a level that has an unfinished saved match (owner
+   *  decision, 2026-10-19: there is no resume on the main menu, so entering always asks). When the
+   *  save belongs to the level being entered, the question and both answers are about THAT level;
+   *  when it belongs to another level, they name both honestly. */
+  askTitle: (saved: number, next: number): string =>
+    saved === next ? `Level ${saved} is unfinished.` : 'Another level is unfinished.',
   askBody: (saved: number, next: number): string =>
-    `Level ${saved} is still in progress. Start level ${next} instead?`,
+    saved === next
+      ? `Continue level ${saved} where you left off, or start it over?`
+      : `Level ${saved} is still in progress. Start level ${next} instead?`,
+  /** continue the saved match on the level being entered */
+  askContinue: (level: number): string => `Continue level ${level}`,
+  /** throw that saved match away and play the level from its opening */
+  askRestart: (level: number): string => `Start level ${level} over`,
+  /** the saved match is a different level: resume it, or start the level being entered */
   askResume: (saved: number): string => `Resume level ${saved}`,
   askStart: (next: number): string => `Start level ${next}`,
   /** the state words on a level tile (a completed tile is tapped to replay it) */
@@ -1096,6 +1630,13 @@ export const CAMPAIGN = Object.freeze({
   locked: 'Locked',
   /** small progress line under the heading, e.g. "3 of 10 complete" */
   progress: (done: number, total: number): string => `${done} of ${total} complete`,
+  /**
+   * The caption under the PLAY submenu's LEVEL <n> key (owner direction, 2026-10-23): "3 of 10
+   * lessons completed". It is deliberately its own key rather than `progress`, because this line
+   * counts LESSONS in the level's own chapter (levels 1-10 are the tutorial), while the campaign
+   * screen's `progress` counts every level built. The line retires once the chapter is finished.
+   */
+  lessonsCompleted: (done: number, total: number): string => `${done} of ${total} lessons completed`,
   /** the chapter label, e.g. "Chapter I" (Roman numeral from the chapter number) */
   chapterName: (chapter: number): string =>
     `Chapter ${['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][chapter - 1] ?? chapter}`,
@@ -1149,8 +1690,9 @@ export const CAMPAIGN = Object.freeze({
   resumeHint: 'Your level is unfinished.',
   /** the log line when a campaign level opens (Level N · name) */
   started: (number: number): string => `Level ${number}`,
-  /** the campaign finish title after a win: "Level 6 complete" */
-  levelWon: (number: number): string => `Level ${number} complete`,
+  /** the campaign finish title after a win: "Level 6 Complete" (owner, 2026-10-24: capital C, it is
+   *  the outcome word of the lockup and reads as a stamp, not a sentence tail). */
+  levelWon: (number: number): string => `Level ${number} Complete`,
   /** the finish screen's secondary way out, back to the level list */
   back: 'Back to levels',
   /**
@@ -1168,102 +1710,111 @@ export const CAMPAIGN = Object.freeze({
 // ======================================================================================
 // LESSONS — levels 1-10 are the tutorial (/3 onboarding line, 2026-10-18).
 //
-// Every word a player reads in a teaching level. The glass window shows an instruction (6 words or
-// fewer, caps, LED) and a reason (12 words or fewer); a wrong tap is answered in the window or the
-// LED, never on the board. One word list: Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points.
-// Bloom is never "set" or "run"; no tile colours. Scoring words follow SPEC ("Ending the game").
+// Every word a player reads in a teaching level. The DISPLAY (the cockpit's LED) says what to do
+// now: a short action line, never a lone word. The INFO BOX (#lesson-plate) explains: one full
+// sentence, shown once, dismissed by a tap anywhere. A wrong tap is answered on the display.
+// One word list: Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points, home. Bloom is never
+// "set" or "run"; no tile colours. Scoring words follow SPEC ("Ending the game").
 // docs/LESSON-SCRIPTS.md holds the same text beat by beat; web/tests/lesson-words.test.ts pins both.
 // ======================================================================================
+/** THE PLANET: the Territory's name and words on the staging copy (owner, 2026-11-04). */
+export const PLANET = Object.freeze({
+  title: 'THE PLANET',
+  menu: 'The Planet',
+  controls: 'The Planet. Drag or use the arrow keys to turn it. Pinch or use plus and minus to zoom. Enter selects the tile in the middle.',
+  unavailable: 'The Planet needs WebGL, which this device has turned off.',
+  /** The ranking's meter (owner, 2026-11-04: "x/2347 ... tiles on the planet taken ... phrase it better"). */
+  grown: 'PLANET GROWN',
+  grownSpoken: (taken: string, total: string) => `${taken} of ${total} tiles on the planet are grown`,
+  /** A tap on one of the twelve black pentagons. */
+  pentagon: 'Black stone: nothing grows here. Try any hexagon.',
+});
+
 export const LESSON = Object.freeze({
-  // shared turn words (the one-word window after a lesson's first turn)
-  draw: 'DRAW',
-  grow: 'GROW',
-  throwWord: 'THROW',
-  theirTurn: 'THEIR TURN',
-  theirTurnLine: 'They draw, grow and throw too.',
-  // the turn, spelled out the first time
-  tapDraw: 'TAP THE DRAW PILE',
-  tapDrawLine: 'Every turn starts with drawing 1 card.',
-  pickCard: 'PICK THE LIT CARD',
-  pickCardLine: 'This card will be placed on the board.',
-  tapTile: 'TAP A LIT TILE',
-  tapTileLine: 'Tap here to Grow this card.',
-  youGrew: 'YOU GREW',
-  youGrewLine: 'Tiles keep the rank of the card used.',
+  // ---- the display: what to do now (never more than three words) ----
+  // Owner, 2026-10-20: the LED is small and read at a glance, so the action is at most three
+  // words ("TAP THE DRAW PILE" -> "TAP DRAW PILE"). The game's own names stay: DRAW PILE and
+  // THROW PILE, never "discard". The box keeps the full sentences below.
+  tapDraw: 'TAP DRAW PILE',
+  tapThrowPile: 'TAP THROW PILE',
+  chooseCard: 'CHOOSE A CARD',
+  tapTile: 'TAP LIT TILE',
+  tapTiles: 'TAP LIT TILES',
   throwCard: 'THROW A CARD',
-  throwCardLine: 'Throw 1 card to end your turn.',
-  throwPile: 'TAP THE THROW PILE',
-  throwPileLine: 'Move the card here, or tap it again.',
-  done: 'DONE GROWING',
-  doneLine: 'Tap » to go on to Throw.',
-  // the objective
-  yourTree: 'THIS IS YOUR HOME',
-  yourTreeLine: 'Grow by placing cards on the board, on tiles that connect to your home.',
-  theirHome: 'THAT IS THEIR HOME',
-  theirHomeLine: 'Surround it to win, or have more points at the end.',
-  pileLow: 'PILE ALMOST EMPTY',
-  pileLowLine: 'You can see how many cards are left in the Draw pile.',
-  lastTurn: 'LAST TURN',
-  lastTurnLine: 'Pile empty: each tile is 1 point. Numbers on tiles don’t count.',
-  // level 2
-  biggerWins: 'BIGGER NUMBER WINS',
-  biggerWinsLine: 'You can replace your tile with a stronger card.',
-  takeTile: 'CUT THROUGH THEIR TILE',
-  takeTileLine: 'A card can cut through opponent’s weaker tile.',
-  // level 3
-  rocksBlock: 'ROCKS BLOCK',
-  rocksBlockLine: 'Nothing can grow on a rock.',
-  goldDouble: 'GOLD COUNTS DOUBLE',
-  goldDoubleLine: 'Gold tiles score two points. Take it first.',
-  // level 4
-  cutLink: 'CUT THEIR LINK',
-  cutLinkLine: 'Disconnect opponent’s tiles from their home to destroy them.',
-  withered: 'THEY WITHERED',
-  witheredLine: 'Disconnected tiles don’t score anything.',
-  // level 5
-  cardsThatBloom: 'CARDS THAT BLOOM',
-  cardsThatBloomLine: '3 cards with the same number, or 3 of same suit in order.',
-  playLitLine: 'Three together make a Bloom.',
+  tapThrow: 'TAP »',
   tapBloom: 'TAP BLOOM',
-  tapBloomLine: 'Then tap or draw the tiles on board. Have to connect to your home.',
-  // the Bloom picked: its tiles are next (owner, 2026-10-19: tap Bloom first, then the tiles)
-  bloomTiles: 'TAP THE LIT TILES',
-  bloomTilesLine: 'Tap or draw the tiles on board. Have to connect to your home.',
-  bloomed: 'BLOOM!',
-  bloomedLine: 'A Bloom is an extra move, growing multiple tiles at once.',
-  // level 6
-  surround: 'SURROUND THEIR HOME',
-  surroundLine: 'Surround their home from each side for an instant win.',
-  canWin: 'YOU CAN WIN',
-  canWinLine: 'Take the last open side of their home.',
-  // level 7
-  bombTile: 'BOMB THEIR TILE',
-  bombTileLine: 'A Bomb removes 1 enemy tile. It replaces Grow in your turn.',
-  // level 8
-  blast: 'TWO BOMBS MAKE A BLAST',
-  blastLine: 'A Blast clears a large area. Homes are safe.',
-  freeGrow: 'FREE GROW',
-  freeGrowLine: 'A Blast is an extra move on top of Grow and Blooms.',
-  // level 9
-  pileGold: 'THROW PILE IS GOLD',
-  pileGoldLine: 'An indicator that its top card completes a Bloom in your hand.',
-  skipGrow: 'SKIP GROW',
-  skipGrowLine: 'You can end a turn without growing to save cards for later.',
-  // finish cards: title + one line that says how you won
-  youWin: 'YOU WIN',
+  tapBlast: 'TAP BLOOM',
+  chooseBomb: 'CHOOSE THE BOMB',
+  // Owner, 2026-10-24: never "their" on the display, and (2026-10-19) never a tile colour: the
+  // tile to take is the lit one.
+  bombTile: 'BOMB LIT TILE',
+  tapTheirTile: 'TAP LIT TILE',
+  tapLastSide: 'TAP LAST SIDE',
+  // a power's once-ever hello (the card itself glows)
+  bloomHello: 'TAP TO BLOOM',
+  bombHello: 'TAP THE BOMB',
+  theirTurn: 'WAIT',
+  lastCards: 'LAST CARDS',
+  lastTurn: 'LAST TURN',
+  // level 1's first three explanations: the display welcomes, it scrolls and never competes with
+  // the box (owner, 2026-10-22: it used to blink DRAW DRAW DRAW while the box was being read)
+  welcome: 'HELLO ♥ WELCOME ♥',
+  // ---- the info box: explanations, one full sentence each ----
+  yourHomeLine: 'This is your home. Place cards on the tiles that connect to your home to Grow.',
+  theirHomeLine: 'TO WIN: surround opponent’s home tile, or have more tiles on the board when the Draw pile runs out.',
+  tapDrawLine: 'Every turn has 3 steps – Draw, Grow and Throw. You start by drawing 1 card from the top of the Draw pile or the Throw pile.',
+  growLine: 'Grow: drag one of your cards from your hand onto the board, or tap it to select and then place it on the board.',
+  // Owner's word list (2026-10-20, "Draw pile / Throw pile"): keep the online line's wording.
+  throwLine: 'Throw: swipe up, drag the card to the Throw pile, or tap the pile. This ends your turn.',
+  youGrewLine: 'Tiles keep the rank of the card used. Higher ranks are harder to cut.',
+  biggerWinsLine: 'Strengthen: a stronger card can replace your own tile.',
+  // "Take", not "Cut": a cut is level 4's idea (breaking the chain), and the two never share a name (owner, 2026-10-24).
+  takeTileLine: 'Take: a higher card can take an opponent’s tile.',
+  rocksBlockLine: 'Nothing can Grow on a rock.',
+  goldDoubleLine: 'A gold tile counts double, so it is worth two points.',
+  cutLinkLine: 'Cut a tile to break the chain behind it.',
+  witheredLine: 'Tiles cut off from their home disappear.',
+  cardsThatBloomLine: 'BLOOM: three cards with the same number, or three in order in one suit.',
+  bloomedLine: 'Bloom grows several tiles at once and does NOT use your Grow.',
+  surroundLine: 'Surround: fill every tile around their home for an instant win.',
+  bombLine: 'Bomb: removes one enemy tile, even a 9. Uses your Grow.',
+  blastLine: 'Blast: two Bombs clear a large area. Homes are safe.',
+  freeGrowLine: 'Blast clears several tiles at once and does NOT use your Grow.',
+  pileGoldLine: 'The Throw pile glows gold when its top card completes a Bloom in your hand.',
+  // the last lesson's send-off, before the first real game (owner, 2026-10-24), verbatim
+  firstGameLine: 'You are ready now for your first game of Futasaku. Good luck!',
+  optionalLine: 'Tap » to skip Grow/Bloom and keep your cards for later.',
+  // right after the skip, the Undo key lit (owner, 2026-10-22)
+  undoLine: 'You are able to undo your previous moves until you Throw a card at the end of your turn.',
+  lastTurnLine: 'The Draw pile is empty – this is your last turn.',
+  theirTurnLine: 'They Draw, Grow and Throw too.',
+  restartLine: 'This lesson cannot finish from here.',
+  // the one button the box ever holds, only while the lesson cannot finish (owner, 2026-10-22)
+  startAgain: 'START AGAIN',
+  // finish cards: the one idea learned, with a small mark, then the way on
+  learned: 'YOU LEARNED',
+  /**
+   * A WON lesson's finish title (owner, 2026-11-12): the level is the kicker, LEARNED the outcome —
+   * the same two-line lockup a campaign win uses (Level 12 / Complete). A lesson LOSS never shows
+   * it; the card keeps the honest `resultTitle` ("You lost" / "A draw").
+   */
+  learnedTitle: (level: number): string => `Lesson ${level} Learned`,
   wonOnPoints: 'You had more points – you won!',
   wonByKo: 'You surrounded their home.',
   goldDecided: 'Gold put you ahead.',
   canPlay: 'YOU CAN PLAY FUTASAKU',
-  canPlayLine: 'Next: the big board.',
+  // Level 10 is itself the big board now (owner, 2026-11-04): what follows is Chapter II.
+  canPlayLine: 'Next: Chapter II, Broken Ground.',
   // wrong taps (the engine says why; these are its words)
   drawFirst: 'DRAW FIRST',
   notYet: 'NOT YET',
   tapLit: 'TAP THE LIT ONE',
   connect: 'CONNECT TO YOUR HOME',
   rockBlocks: 'ROCK BLOCKS THIS',
-  isTheirHome: 'THAT IS THEIR HOME',
+  isTheirHome: 'HOMES ARE SAFE',
   isYourHome: 'THAT IS YOUR HOME',
+  /** level 1 withholds Overgrow: a tap on their tile with a higher card says why, not "too weak" */
+  theirTileSafe: 'THEIR TILE IS SAFE',
   tooWeak: (card: number, tile: number): string => `TOO WEAK: ${card} VS ${tile}`,
   ownTile: 'YOUR TILE NEEDS A HIGHER CARD',
   mustTouch: 'MUST TOUCH YOUR TILES',
@@ -1272,10 +1823,67 @@ export const LESSON = Object.freeze({
   oneDraw: 'ONE CARD PER TURN',
   bloomNeeds: 'THREE CARDS OR MORE',
   bloomMatch: 'SAME NUMBER, OR COUNTING UP',
-  theirTurnNow: 'THEIR TURN',
-  // the way out of a lesson that cannot finish any more
-  restart: 'RESTART LEVEL',
-  restartLine: 'This lesson cannot finish now. Start again.',
-  showMe: 'Show me',
-  next: 'NEXT',
+  theirTurnNow: 'WAIT',
+  /**
+   * The tutorial's lesson names, one per teaching beat (owner, 2026-11-01: "in tutorial in settings
+   * in level 1-9 give each lesson a short name", then "make the names of lessons match the action
+   * they re teaching in each"). Shown beside the lesson's number in Settings → Tutorial, and
+   * nowhere else: the info box never carries a level name (docs/LESSON-SCRIPTS.md).
+   *
+   * Owner, 2026-11-01 (second direction): a name NAMES THE ACTION the lesson drills, in the player's
+   * own words — Draw / Grow / Throw, Strengthen / Take, Cut, Bloom, Surround, Bomb, Blast, the Throw
+   * pile. It is deliberately not a poetic chapter title: a player scanning Settings should be able
+   * to see which lesson teaches the move they are stuck on. So a name may be a single word when the
+   * action IS one word ("Bloom", "Bomb", "Blast"), and it must never be the rule read back as a
+   * sentence.
+   *
+   * Level 10 is the send-off, not a teaching beat, so it has no name and no placeholder. This is
+   * the ONE map: a component reads it, never a name of its own. Pinned by
+   * web/tests/lesson-names.test.ts.
+   */
+  names: Object.freeze({
+    1: 'Draw and Throw',
+    2: 'Strengthen',
+    3: 'Rock and Gold',
+    4: 'Cut the Link',
+    5: 'Bloom',
+    6: 'Surround',
+    7: 'Bomb',
+    8: 'Blast',
+    9: 'Throw Pile',
+  } as Readonly<Record<number, string>>),
 });
+
+/** Match chat: stable phrase IDs are stored, labels are translated at render time.
+ * A localisation integration can replace this copy object; never persist translated phrases. */
+export const MATCH_CHAT = {
+  title: 'Match chat', open: 'Open match chat', close: 'Close chat', you: 'You', opponent: 'Opponent',
+  empty: 'A little company across the board.',
+  // Owner, 2026-10-26: chat can be sent at any point in an active match. The old sentence promised
+  // the opponent-turn rule that no longer exists.
+  available: 'Chat is open for this match',
+  ended: 'Match ended · history only',
+  message: 'Message', send: 'Send', pending: 'Sending…', sent: 'Sent', failed: 'Not sent',
+  retry: 'Retry', discard: 'Discard', older: 'Earlier messages', newer: 'New messages',
+  quickPhrases: 'Quick phrases', messageActions: 'Message actions',
+  reconnecting: 'Live updates reconnecting…', offline: 'Offline · draft saved',
+  opponentOnline: 'Opponent online', opponentOffline: 'Opponent offline', opponentUnknown: 'Opponent status unavailable',
+  // A direct mute key in the chat header (owner, 2026-10-26): no ··· menu any more.
+  mute: 'Mute chat', unmute: 'Unmute chat',
+  // The cockpit chat key's accessible name while this player has muted this match.
+  mutedToggle: 'Chat muted for this match',
+  // The quiet line the OTHER player reads. It states the fact only: no reason, no timestamp.
+  opponentMuted: 'Opponent muted chat for this match.',
+  block: 'Block chat with opponent', blockShort: 'Block',
+  unblock: 'Unblock opponent', unblockShort: 'Unblock',
+  blocked: 'Chat blocked · history only',
+  report: 'Report message',
+  // Reporting always mutes this match too (owner, 2026-10-26).
+  reportConfirm: 'Report and mute', reportDone: 'Report sent for review. Chat muted.',
+  abuse: 'Abusive message', spam: 'Spam', other: 'Other', cancel: 'Cancel',
+  loading: 'Connecting chat…', unavailable: 'Chat unavailable · try again', reconnect: 'Reconnect chat',
+  error: 'Couldn’t complete that. Try again.', rate: 'Give your opponent a moment.',
+  unread: (n: number) => `${n} unread ${n === 1 ? 'message' : 'messages'}`,
+  remaining: (n: number) => `${n} characters remaining`,
+  phrases: { 'good-luck': 'Good luck!', 'nice-move': 'Nice move!', gg: 'GG' },
+};

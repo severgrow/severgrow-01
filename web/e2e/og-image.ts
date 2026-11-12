@@ -55,7 +55,6 @@ const SEED = Number(process.env.OG_SEED ?? 8080);
 const MOVES = Number(process.env.OG_MOVES ?? 12);
 
 /** The app's default (ink) look: the cream accent the app tints its mark with, on near-black paper. */
-const ACCENT = '#efe5cb';
 const PAPER = '#0d0e11';
 
 const asset = (rel: string) => resolve(REPO, 'web/src/assets', rel);
@@ -190,21 +189,11 @@ server.close();
 
 // ---------- 2. compose the card ----------
 
-/**
- * One brand mark, painted in `--c-accent` from its own alpha — the same `feFlood` + `feComposite`
- * recipe `branding.ts` uses for the menu emblem and the HUD wordmark, so the card shows the
- * product's own mark in the product's own colour rather than a second, hand-tinted copy.
- */
-const painted = (id: string, file: string, srcW: number, srcH: number, w: number) => {
+/** PLAIN wordmark (owner brand pack) — cream on transparent. Prefer SVG; PNG is the OG fallback. */
+const painted = (id: string, file: string, srcW: number, srcH: number, w: number, mime = 'image/png') => {
   const h = Math.round((w * srcH) / srcW);
   return `<svg class="${id}" width="${w}" height="${h}" viewBox="0 0 ${srcW} ${srcH}" role="img" aria-label="${TITLE}">`
-    + `<defs><filter id="${id}-tint" color-interpolation-filters="sRGB">`
-    + '<feComponentTransfer result="mark-mask">'
-    + '<feFuncR type="linear" slope="0" intercept="1"/><feFuncG type="linear" slope="0" intercept="1"/>'
-    + '<feFuncB type="linear" slope="0" intercept="1"/><feFuncA type="discrete" tableValues="0 1"/>'
-    + '</feComponentTransfer>'
-    + `<feFlood style="flood-color:${ACCENT}"/><feComposite operator="in" in2="mark-mask"/>`
-    + `</filter></defs><image href="${dataUri(readFileSync(file), 'image/webp')}" width="${srcW}" height="${srcH}" filter="url(#${id}-tint)"/></svg>`;
+    + `<image href="${dataUri(readFileSync(file), mime)}" width="${srcW}" height="${srcH}" preserveAspectRatio="xMidYMid meet"/></svg>`;
 };
 
 const cardHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8" />
@@ -230,7 +219,7 @@ const cardHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8" />
   .tag span { display:block; }
 </style></head><body>
   <div class="board"></div><div class="scrim"></div>
-  <div class="lock">${painted('emblem', asset('futasaku-emblem.webp'), 1254, 1254, 112)}${painted('wordmark', asset('futasaku-white.webp'), 2200, 715, 288)}</div>
+  <div class="lock">${painted('wordmark', asset('brand/plain-wordmark.svg'), 2106, 662, 428, 'image/svg+xml')}</div>
   <p class="tag">${TAGLINE.map((line) => `<span>${line}</span>`).join('')}</p>
 </body></html>`;
 
@@ -327,7 +316,9 @@ const iconRefs = [...indexHtml.matchAll(/<link rel="(?:icon|apple-touch-icon)"[^
 check('index.html names at least one icon', iconRefs.length > 0, iconRefs.join(', '));
 for (const ref of iconRefs) {
   const file = resolve(REPO, 'web/src/assets/futa04-icons', ref);
-  check(`icon ${ref} exists (current futasaku art)`, existsSync(file) && ref.startsWith('futasaku-icon-'),
+  // Favicon is the tree-hex (futasaku-favicon-*); apple-touch / PWA tiles are futasaku-icon-*.
+  const current = /^(futasaku-icon-|futasaku-favicon-)/.test(ref);
+  check(`icon ${ref} exists (current futasaku art)`, existsSync(file) && current,
     existsSync(file) ? ref : `${file} is missing`);
 }
 const apple = indexHtml.match(/<link rel="apple-touch-icon"[^>]*href="\.\/([^"]+)"/)?.[1];

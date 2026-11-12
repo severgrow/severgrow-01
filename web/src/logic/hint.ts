@@ -34,6 +34,11 @@ export type HintCtx = {
   /** v0.7: I hold cards that can bloom, but no Bloom fits on the board (the smallest group's size) */
   bloomBlocked?: number | null;
   throwEndsTurn: boolean;
+  /**
+   * The Throw step with a card already picked (owner, 2026-10-25). The line then names the
+   * gesture — swipe up or tap the pile — because a second card tap now puts it down.
+   */
+  throwPicked?: boolean;
   /** v0.8: a Fruit card in my hand can be played now (offered next to the sprout) */
   fruitReady?: boolean;
   /** v0.8: what used the turn's sprout so far (a Fruit card uses it too), or null */
@@ -86,6 +91,9 @@ export const hintFor = (c: HintCtx): Hint => {
       return h('Nothing can grow: Throw', 'down');
     }
     case 'DISCARD':
+      // A picked card is waiting: say the two gestures that throw it. The card tap now only
+      // puts it down, so "tap the card again" would be a lie.
+      if (c.throwPicked) return h('Swipe up, or tap the pile', 'down');
       return h(c.throwEndsTurn ? 'Throw 1 card to end turn' : 'Throw 1 card', 'down');
     case 'KNOCK':
       return h('Knock, or end your turn', 'down');

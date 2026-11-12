@@ -24,20 +24,31 @@ const mapPlayer = (player: Player, p: Perspective | null): Player =>
  */
 export type StepContext = {
   rankById?: ReadonlyMap<number, number>;
+  cardById?: ReadonlyMap<number, Card>;
   board?: Board;
 };
 
 /** The card-id → rank map for a rules config, from the engine's own card order. */
 export const stepContextFor = (view: View | null | undefined): StepContext => {
   if (!view) return {};
-  return { rankById: rankMap(view.config), board: view.board };
+  return { rankById: rankMap(view.config), cardById: cardMap(view.config), board: view.board };
+};
+
+const cardMaps = new WeakMap<RulesConfig, Map<number, Card>>();
+const cardMap = (config: RulesConfig): Map<number, Card> => {
+  let map = cardMaps.get(config);
+  if (!map) {
+    map = new Map(createCards(config).map(card => [card.id, card]));
+    cardMaps.set(config, map);
+  }
+  return map;
 };
 
 const rankMaps = new WeakMap<RulesConfig, Map<number, number>>();
 const rankMap = (config: RulesConfig): Map<number, number> => {
   let map = rankMaps.get(config);
   if (!map) {
-    map = new Map(createCards(config).map((c) => [c.id, c.rank]));
+    map = new Map([...cardMap(config).values()].map((c) => [c.id, c.rank]));
     rankMaps.set(config, map);
   }
   return map;
@@ -129,8 +140,12 @@ export const stepsFromEvent = (
           destroyed: e.destroyed.map((c) => mapCoordKey(c, p)),
         },
       ];
-    case 'Discard':
-      return []; // no card body without hand knowledge
+    case 'Discard': {
+      // The discarded ID is public. Resolve its face from the rules' deterministic deck,
+      // never from the opponent's hidden hand. Unknown IDs are safely omitted.
+      const card = context.cardById?.get(e.card);
+      return card ? [{ k: 'discard', player: mapPlayer(e.player, p), card: { ...card } }] : [];
+    }
     case 'Sever':
       return [
         {

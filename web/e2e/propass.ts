@@ -180,18 +180,38 @@ for (const ph of PHONES) {
     // 4 tiles, and 3 from a group of 4 ("keep the other")
     const { page } = await open(stateWith({}, SET4), ph);
     // two ways to bloom: one "Bloom" button opens the list; it says "Bloom 3 tiles, keep the other"
-    const toggle = await page.locator('#moves .bloom-toggle').isVisible();
-    await page.click('#moves .bloom-toggle').catch(() => {});
-    const label3 = (await page.locator('#moves [data-kind^="bloom-3-"]').textContent()) ?? '';
-    const box = await page.locator('.bloom-options').boundingBox();
-    const inView = !!box && box.x >= 0 && box.x + box.width <= ph.w + 0.5 && box.y >= 0;
-    await page.click('#moves .bloom-toggle').catch(() => {});
+    const bloomToggle = page.locator('#moves .bloom-toggle');
+    await bloomToggle.waitFor({ state: 'visible' });
+    const toggle = await bloomToggle.isVisible();
+    const bloomOptions = page.locator('#moves .bloom-options');
+    await bloomToggle.click();
+    // Only measure once the list is really open. No catch: a click that never lands must fail
+    // here with its real error, not turn into a missing panel later ("box none").
+    // Read the open list in ONE synchronous step inside the page. `#moves` is rebuilt on every
+    // render, so measuring through separate Playwright calls raced any redraw that landed between
+    // "find the panel" and "measure it": the old, detached panel measured as nothing ("box none"),
+    // which CI hit on a loaded runner. Waiting here until the open list really has a box keeps the
+    // assertion whole - a list that never opens, or never shows, still times out and fails.
+    const opened = await page.waitForFunction(() => {
+      const panel = document.querySelector<HTMLElement>('#moves .bloom-options');
+      const toggleEl = document.querySelector('#moves .bloom-toggle');
+      if (!panel || panel.hidden || toggleEl?.getAttribute('aria-expanded') !== 'true') return null;
+      const r = panel.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return null;
+      return { x: r.x, y: r.y, width: r.width, height: r.height, label3: panel.querySelector('[data-kind^="bloom-3-"]')?.textContent ?? '' };
+    }, undefined, { timeout: 10_000 }).then((h) => h.jsonValue() as Promise<{ x: number; y: number; width: number; height: number; label3: string }>);
+    const label3 = opened.label3;
+    const box = { x: opened.x, y: opened.y, width: opened.width, height: opened.height };
+    const inView = box.x >= 0 && box.x + box.width <= ph.w + 0.5 && box.y >= 0;
+    // The same control closes the list; wait for that before pick() reopens it.
+    await bloomToggle.click();
+    await bloomOptions.waitFor({ state: 'hidden' });
     await pick(page, 4);
     await tDrag(page, ['-1,1', '0,1', '1,0', '1,1']);
     await confirm(page);
     const n4 = Object.values((await st(page)).board).filter((t) => t?.owner === 0 && !t.root).length;
     check(`${tag}: a Bloom of 4 places 4 tiles`, n4 === 4);
-    check(`${tag}: two ways to bloom: one button opens the choices, all on screen, one says "Bloom 3 tiles, keep the other"`, toggle && inView && /Bloom 3 tiles, keep the other/.test(label3), `${label3}; toggle ${toggle}; box ${box ? [box.x, box.y, box.width, box.height].map((n) => Math.round(n)).join(',') : 'none'}`);
+    check(`${tag}: two ways to bloom: one button opens the choices, all on screen, one says "Bloom 3 tiles, keep the other"`, toggle && inView && /Bloom 3 tiles, keep the other/.test(label3), `${label3}; toggle ${toggle}; box ${[box.x, box.y, box.width, box.height].map((n) => Math.round(n)).join(',')}`);
     await page.close();
     const { page: p2 } = await open(stateWith({}, SET4), ph);
     await pick(p2, 3);

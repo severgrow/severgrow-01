@@ -1,3 +1,4 @@
+import { ONLINE } from '../../../src/strings.js';
 // Sync engine: ping hint + poll safety net (P-11). Missed pings never leave the board stale.
 
 import { DuelClient, DuelError } from '../../../server/src/client.js';
@@ -16,6 +17,19 @@ export const POLL_HIDDEN_MS = 30_000;
  * wait feel immediate even when the ping is unavailable.
  */
 export const POLL_WAITING_MS = 900;
+/**
+ * While the Realtime channel is JOINED, a ping announces every change within a fraction of a second,
+ * so the poll is only a safety net (owner, 2026-11-09: "no looping, no empty refresh or server
+ * comms"). A ping is never dropped (see fetchView) and a reconnect fetches at once, so a slow net
+ * costs nothing; the fast cadences above come back the moment the channel is down.
+ */
+export const POLL_PUSHED_MS = 8_000;
+/**
+ * While WAITING for the opponent the safety net stays short even with the channel joined (owner,
+ * 2026-11-09: an async turn took ~15 s to appear and "this should never ever break"). A ping that
+ * is lost on a phone that slept or changed network can never cost more than this.
+ */
+export const POLL_PUSHED_WAITING_MS = 3_000;
 
 /**
  * Why a view was fetched. The driver uses this to tell the LIVE enemy turn (a poll or ping while
@@ -90,6 +104,8 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
   let inFlight: Promise<void> | null = null;
   /** Waiting on the opponent: poll faster so their finished turn appears almost at once. */
   let waiting = false;
+  /** The match's Realtime topic is joined: pings carry the news and the poll can rest. */
+  let pushed = false;
 
   const setConnection = (status: ConnectionStatus, nextNotice: string | null = null) => {
     connection = status;
@@ -103,9 +119,15 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
     options.onView?.(player, serverNow, reason);
   };
 
+  /** A ping that arrived while a fetch was already on the wire (see below). */
+  let fetchAgain: ViewReason | null = null;
   const fetchView = async (reason: ViewReason): Promise<void> => {
     if (stopped) return;
     if (inFlight) {
+      // The request on the wire may have left BEFORE the move this ping announces (owner,
+      // 2026-11-09: Blitz moves showed up seconds late). A ping is never dropped: one more fetch
+      // follows the current one. A poll or refresh can still share the one in flight.
+      if (reason === 'ping') fetchAgain = 'ping';
       await inFlight;
       return;
     }
@@ -120,9 +142,9 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
           return;
         }
         if (!networkOnline) {
-          setConnection('offline', 'Reconnecting');
+          setConnection('offline', ONLINE.connectionOffline);
         } else {
-          setConnection('reconnecting', 'Reconnecting');
+          setConnection('reconnecting', ONLINE.connectionReconnecting);
         }
         return;
       } finally {
@@ -136,10 +158,16 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
       if (connection !== 'client_too_old') setConnection('online', null);
     })();
     await inFlight;
+    if (fetchAgain && !inFlight) {
+      const again = fetchAgain;
+      fetchAgain = null;
+      await fetchView(again);
+    }
   };
 
   const pollMs = (): number => {
     if (!visible) return POLL_HIDDEN_MS;
+    if (pushed) return waiting ? POLL_PUSHED_WAITING_MS : POLL_PUSHED_MS;
     return waiting ? POLL_WAITING_MS : POLL_ACTIVE_MS;
   };
 
@@ -179,7 +207,18 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
     async start() {
       if (!stopped) return;
       stopped = false;
-      unsub = options.channel.subscribe(options.matchId, { onPing, onPresence });
+      unsub = options.channel.subscribe(options.matchId, {
+        onPing,
+        onPresence,
+        onConnection: (connected) => {
+          if (connected === pushed) return;
+          pushed = connected;
+          // Back to the fast safety net at once when the channel drops; rest when it joins.
+          if (!stopped) schedule();
+        },
+        // A rejoin may have missed pings while it was down: one fetch catches up.
+        onReconnect: () => void fetchView('ping').catch(logApplyError),
+      });
       options.channel.track?.(options.matchId, true);
       await fetchView('initial');
       schedule();
@@ -216,10 +255,10 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
     setOnline(next) {
       networkOnline = next;
       if (next) {
-        setConnection('reconnecting', 'Reconnecting');
+        setConnection('reconnecting', ONLINE.connectionReconnecting);
         void fetchView('online').catch(logApplyError);
       } else {
-        setConnection('offline', 'Reconnecting');
+        setConnection('offline', ONLINE.connectionOffline);
       }
     },
 

@@ -19,5 +19,5 @@ export const accountsRouterNode = async (storage: Storage, service: MatchService
   const url = env.SUPABASE_URL?.trim();
   const anonKey = (env.SUPABASE_ANON_KEY ?? env.VITE_SUPABASE_ANON_KEY)?.trim();
   const auth = url && anonKey ? supabaseAuthProvider({ url, anonKey, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY ?? null }) : null;
-  return createAccountsRouter({ links, storage, auth, authenticate: (t) => service.authenticate(t), now: () => service.serverNow() });
+  return createAccountsRouter({ links, storage, auth, emailEnabled: env.EMAIL_ACCOUNTS_ENABLED === 'true', authenticate: (t) => service.authenticate(t), now: () => service.serverNow() });
 };

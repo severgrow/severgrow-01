@@ -10,21 +10,22 @@ import { CAMPAIGN_LEVELS, FIRST_CAMPAIGN_LEVEL } from './levels.js';
 /**
  * The campaign's own resume save — a saved unfinished campaign match.
  *
- * v2 (2026-10-19): the campaign was reset when levels 1-10 became the guided lessons. A v1 save
- * belongs to a game that no longer exists (different opening, different teaching), so it is not
- * read at all: the old key stays on disk unused rather than being migrated into a mismatch.
+ * v3 (2026-10-19): the onboarding polish changed lesson versions and several authored boards, so
+ * a v2 match cannot be resumed onto a board it no longer matches. A v2 (or v1) save is not read at
+ * all: the old key stays on disk unused rather than being migrated into a mismatch.
  */
-export const CAMPAIGN_SAVE_KEY = 'severgrow.campaign.save.v2';
+export const CAMPAIGN_SAVE_KEY = 'severgrow.campaign.save.v3';
 /** Which offline match the player last played, so Continue resumes the right one. */
 export const LAST_MODE_KEY = 'severgrow.lastmode.v1';
 /**
  * The campaign progress record.
  *
- * v2 (2026-10-19): owner direction — everyone starts the campaign again from level 1, because the
- * first ten levels are now the tutorial. A v1 record is ignored, so an existing player sees a fresh
- * campaign; the old key is left alone so nothing is destroyed on their device.
+ * v3 (2026-10-19): owner direction — reset the campaign once more for the onboarding polish, so
+ * nobody resumes onto a changed board or keeps progress through a lesson script that has moved on.
+ * A v2 (or v1) record is ignored, so an existing player starts at level 1; the old key is left
+ * alone so nothing is destroyed on their device.
  */
-export const CAMPAIGN_PROGRESS_KEY = 'severgrow.campaign.progress.v2';
+export const CAMPAIGN_PROGRESS_KEY = 'severgrow.campaign.progress.v3';
 
 export const CAMPAIGN_PROGRESS_VERSION = 1;
 
@@ -173,4 +174,113 @@ export const currentLevel = (
     if (!isCompleted(p, level.id)) return level;
   }
   return furthest;
+};
+
+/**
+ * RAISE a local record to the place an ACCOUNT already has on the server (owner report,
+ * 2026-10-25: a phone at level 35 and a desktop at level 1 for the same account).
+ *
+ * Campaign progress is otherwise device-local; the server only knows the furthest Campaign level
+ * this account has a verified first-clear receipt for (`campaignHighestLevel`). Paying a level's
+ * first clear requires a server-verified win, so a receipt at level N means levels 1..N were
+ * cleared by that account — even when an old receipt is missing (levels 4-9 are lessons and pay
+ * nothing, level 10 pays as `lesson:10`). That is why the result completes every BUILT level up
+ * to `serverHighestLevel` in level order rather than trusting a sparse receipt list.
+ *
+ * The rule is deliberately ONE-WAY:
+ *   - server ahead  → the local record is raised (never replayed from level 1);
+ *   - local ahead   → returned unchanged, object and all (no regression);
+ *   - equal         → returned unchanged (no rewrite);
+ *   - unknown/none  → returned unchanged (guest, offline, or a failed read).
+ * `best` attempts already on the device are kept. The input is never mutated.
+ */
+export const reconcileProgress = (
+  local: CampaignProgress,
+  serverHighestLevel: number | null | undefined,
+  levels: readonly CampaignLevel[] = CAMPAIGN_LEVELS,
+): CampaignProgress => {
+  // A finite, positive integer is the only shape that means anything. Anything else is "unknown".
+  if (typeof serverHighestLevel !== 'number' || !Number.isFinite(serverHighestLevel)) return local;
+  const highest = Math.trunc(serverHighestLevel);
+  if (highest < FIRST_CAMPAIGN_LEVEL.number) return local;
+
+  const ordered = [...levels].sort((a, b) => a.number - b.number);
+  const reached = ordered.filter((level) => level.number <= highest);
+  if (reached.length === 0) return local;
+
+  const missing = reached.filter((level) => !local.completed.includes(level.id)).map((level) => level.id);
+  // All of the server's cleared levels are already known locally: the local record is equal or
+  // further ahead, and it stays exactly as it is.
+  if (missing.length === 0) return local;
+
+  const raised: CampaignProgress = {
+    version: CAMPAIGN_PROGRESS_VERSION,
+    // Derived after the fact, like every other write, so the stored counter can never disagree.
+    unlocked: 0,
+    completed: [...local.completed, ...missing],
+    best: { ...local.best },
+  };
+  raised.unlocked = unlockedThrough(raised, levels);
+  // A server answer can only ever open more. If the filled list still does not move the place
+  // (e.g. a gap below a level the account has not cleared), leave the caller's record alone.
+  return raised.unlocked > local.unlocked ? raised : local;
+};
+
+/**
+ * How far a record has come, for FURTHER-AHEAD comparison (owner, 2026-11-08). Higher unlocked
+ * wins; at the same place, more completed ids; then an attempt already recorded on the open level.
+ * No invented score — `best` is only consulted as "has this level been tried".
+ */
+export type ProgressRank = {
+  unlocked: number;
+  completedCount: number;
+  attemptedCurrent: 0 | 1;
+};
+
+export const progressRank = (
+  p: CampaignProgress,
+  levels: readonly CampaignLevel[] = CAMPAIGN_LEVELS,
+): ProgressRank => {
+  const unlocked = unlockedThrough(p, levels);
+  const current = levels.find((level) => level.number === unlocked);
+  return {
+    unlocked,
+    completedCount: p.completed.length,
+    attemptedCurrent: current && p.best[current.id] ? 1 : 0,
+  };
+};
+
+export const compareProgressRank = (a: ProgressRank, b: ProgressRank): number => {
+  if (a.unlocked !== b.unlocked) return a.unlocked - b.unlocked;
+  if (a.completedCount !== b.completedCount) return a.completedCount - b.completedCount;
+  return a.attemptedCurrent - b.attemptedCurrent;
+};
+
+/**
+ * Keep the further-ahead of two records. Equal → return `preferred` (same object), so a tie never
+ * rewrites the caller's storage.
+ */
+export const furtherAheadProgress = (
+  preferred: CampaignProgress,
+  other: CampaignProgress,
+  levels: readonly CampaignLevel[] = CAMPAIGN_LEVELS,
+): CampaignProgress =>
+  compareProgressRank(progressRank(preferred, levels), progressRank(other, levels)) >= 0
+    ? preferred
+    : other;
+
+/**
+ * Device + optional account snapshot + verified receipt highest → one record.
+ * Raises both sides from receipts first, then keeps the further-ahead of the two.
+ */
+export const mergeAccountProgress = (
+  local: CampaignProgress,
+  accountSnapshot: CampaignProgress | null | undefined,
+  serverHighestLevel: number | null | undefined,
+  levels: readonly CampaignLevel[] = CAMPAIGN_LEVELS,
+): CampaignProgress => {
+  const raisedLocal = reconcileProgress(local, serverHighestLevel, levels);
+  if (!accountSnapshot) return raisedLocal;
+  const raisedAccount = reconcileProgress(accountSnapshot, serverHighestLevel, levels);
+  return furtherAheadProgress(raisedLocal, raisedAccount, levels);
 };

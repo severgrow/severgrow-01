@@ -24,6 +24,9 @@ import {
   noteServerNow,
   POLL_ACTIVE_MS,
   POLL_HIDDEN_MS,
+  POLL_PUSHED_MS,
+  POLL_PUSHED_WAITING_MS,
+  POLL_WAITING_MS,
   presenceFromPeers,
   presenceLabel,
   remainingMs,
@@ -268,6 +271,50 @@ describe('draft + session storage', () => {
     }
   });
 
+  it('undo is offered exactly when it can be honoured, after a grow and after a restore', () => {
+    // Owner, 2026-10-21: a player could not undo after growing. `canUndo` answered from the
+    // drafted actions alone while `undo()` also needed a saved state, so the control could be
+    // offered and then refuse. The two must agree in every state, including one restored from
+    // sessionStorage (a refresh mid-draft).
+    const store = memoryStore();
+    const state = newGame(11);
+    let s = state;
+    const actor = s.actor;
+    if (s.phase === 'DRAW') {
+      const draw = legalActions(viewFor(s, actor)).find((a) => a.t === 'Draw');
+      if (draw) s = applyAs(s, actor, draw);
+    }
+    const view = viewFor(s, s.actor);
+    const draft = createDraftEngine({ matchId: 'undo1', storage: store });
+    draft.syncFromServer(view, 3);
+
+    // Nothing drafted yet: neither offered nor honourable.
+    expect(draft.canUndo()).toBe(false);
+    expect(draft.undo()).toBe(false);
+
+    const grow = draft.legal().find((a) => a.t === 'Sprout' || a.t === 'Bloom' || a.t === 'PlayFruit' || a.t === 'MegaBomb');
+    expect(!!grow).toBe(true);
+    expect(draft.play(grow!)).toBe(true);
+
+    // After a grow: offered AND honourable, and undoing really takes the move back.
+    expect(draft.canUndo()).toBe(true);
+    const before = draft.actions().length;
+    expect(draft.undo()).toBe(true);
+    expect(draft.actions().length).toBe(before - 1);
+    expect(draft.canUndo()).toBe(false); // nothing left to take back
+    expect(draft.undo()).toBe(false); // and it says so, rather than pretending
+
+    // The same must hold for a draft restored from storage.
+    expect(draft.play(grow!)).toBe(true);
+    draft.persist();
+    const restored = createDraftEngine({ matchId: 'undo1', storage: store });
+    restored.syncFromServer(view, 3);
+    expect(restored.actions().length).toBe(1);
+    expect(restored.canUndo()).toBe(true);
+    expect(restored.undo()).toBe(true);
+    expect(restored.canUndo()).toBe(false);
+  });
+
   it('survives offline: draft stays in memory when storage writes fail', () => {
     const view = sampleView(newGame(3));
     const draft = createDraftEngine({ matchId: 'm2', storage: failingStore() });
@@ -283,6 +330,20 @@ describe('draft + session storage', () => {
 });
 
 describe('sync engine (poll + ping)', () => {
+  it('distinguishes offline from reconnecting and quietly clears the notice after recovery',async()=>{
+    const payload=samplePayload({revision:1});
+    const {fetchImpl}=makeFetch({
+      'GET /v1/matches/m1/view?since=0':{status:200,body:{ok:true,player:payload,serverNow:1000}},
+      'GET /v1/matches/m1/view?since=1':{status:200,body:{ok:true,player:payload,serverNow:1001}},
+    });
+    const states:Array<[string,string|null]>=[];
+    const sync=createSyncEngine({client:new DuelClient({baseUrl:'https://api.example',fetch:fetchImpl,storage:memoryStore()}),token:'tok',matchId:'m1',channel:createFakeChannel().channel,
+      setTimer:()=>1,clearTimer:()=>undefined,onConnection:(state,notice)=>{states.push([state,notice]);}});
+    await sync.start();sync.setOnline(false);expect(states.at(-1)).toEqual(['offline','Offline']);
+    sync.setOnline(true);expect(states.at(-1)).toEqual(['reconnecting','Reconnecting']);
+    await sync.refresh();expect(states.at(-1)).toEqual(['online',null]);sync.stop();
+  });
+
   it('polls fast when visible, slow when hidden; ping and visibility force a refresh', async () => {
     const timers: { fn: () => void; ms: number }[] = [];
     let visible = true;
@@ -339,6 +400,68 @@ describe('sync engine (poll + ping)', () => {
     await sync.refresh();
     expect(calls.length).toBeGreaterThan(before);
 
+    sync.stop();
+  });
+
+  it('a ping that lands while a fetch is on the wire is never dropped: one more fetch follows (Blitz, owner 2026-11-09)', async () => {
+    const payload = samplePayload({ revision: 1 });
+    let release: (() => void) | null = null;
+    const seen: string[] = [];
+    const fetchImpl: FetchLike = async (url) => {
+      const since = new URL(String(url)).searchParams.get('since') ?? '0';
+      seen.push(since);
+      // the SECOND request (the poll) is held on the wire until the test releases it
+      if (seen.length === 2) await new Promise<void>((r) => { release = r; });
+      const revision = seen.length === 1 ? 1 : seen.length === 2 ? 1 : 2;
+      return { ok: true, status: 200, json: async () => ({ ok: true, player: { ...payload, revision }, serverNow: 1000 }) } as never;
+    };
+    const fake = createFakeChannel();
+    const views: number[] = [];
+    const sync = createSyncEngine({
+      client: new DuelClient({ baseUrl: 'https://api.example', fetch: fetchImpl, storage: memoryStore() }),
+      token: 'tok', matchId: 'm1', channel: fake.channel, setTimer: () => 1, clearTimer: () => undefined,
+      onView: (p) => views.push(p.revision),
+    });
+    await sync.start();
+    const poll = sync.refresh(); // on the wire, left before the move
+    await new Promise((r) => setTimeout(r, 0));
+    fake.emitPing('m1', { revision: 2, status: 'active' }); // the move lands now
+    release!();
+    await poll;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(seen.length).toBe(3); // the ping's own fetch ran after the one in flight
+    expect(views.at(-1)).toBe(2);
+    sync.stop();
+  });
+
+  it('rests the poll while the Realtime topic is joined, and is fast again the moment it drops (owner 2026-11-09)', async () => {
+    const payload = samplePayload({ revision: 1 });
+    const { fetchImpl } = makeFetch({ 'GET /v1/matches/m1/view?since=0': { status: 200, body: { ok: true, player: payload, serverNow: 1 } }, 'GET /v1/matches/m1/view?since=1': { status: 200, body: { ok: true, player: payload, serverNow: 2 } } });
+    const timers: number[] = [];
+    let connection: ((on: boolean) => void) | undefined;
+    let reconnect: (() => void) | undefined;
+    let fetches = 0;
+    const channel = { subscribe: (_m: string, h: { onConnection?: (on: boolean) => void; onReconnect?: () => void }) => { connection = h.onConnection; reconnect = h.onReconnect; return () => undefined; } };
+    const sync = createSyncEngine({
+      client: new DuelClient({ baseUrl: 'https://api.example', fetch: async (u, i) => { fetches++; return fetchImpl(u, i); }, storage: memoryStore() }),
+      token: 'tok', matchId: 'm1', channel: channel as never, isVisible: () => true,
+      setTimer: (_fn, ms) => { timers.push(ms); return timers.length; }, clearTimer: () => undefined,
+    });
+    await sync.start();
+    sync.setWaiting(true);
+    expect(timers.at(-1)).toBe(POLL_WAITING_MS);
+    connection!(true);
+    // waiting for the opponent: never more than 3 s, even with the channel joined
+    expect(timers.at(-1)).toBe(POLL_PUSHED_WAITING_MS);
+    expect(POLL_PUSHED_WAITING_MS).toBeLessThanOrEqual(3000);
+    sync.setWaiting(false);
+    expect(timers.at(-1)).toBe(POLL_PUSHED_MS);
+    connection!(false);
+    expect(timers.at(-1)).toBe(POLL_ACTIVE_MS);
+    const before = fetches;
+    reconnect!(); // a rejoin catches up once
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetches).toBe(before + 1);
     sync.stop();
   });
 
@@ -588,5 +711,28 @@ describe('service worker API bypass (P-5)', () => {
     expect(src).toContain('isDuelApi');
     expect(src).toContain('/functions/v1/duel');
     expect(src).toContain('never touch the cache');
+  });
+});
+
+describe('OnlineDriver snapshot reuses its screen mapping (tests/online-snapshot-cache.test.ts)', () => {
+  it('asked twice with nothing changed, the board and moves are the same objects; a new view replaces them', async () => {
+    const base = samplePayload({ revision: 1 });
+    const { fetchImpl } = makeFetch({
+      'GET /v1/matches/m1/view?since=0': { status: 200, body: { ok: true, player: base, serverNow: 1 } },
+    });
+    const client = new DuelClient({ baseUrl: 'https://api.example', fetch: fetchImpl, storage: memoryStore() });
+    const driver = createOnlineDriver({
+      client, token: 'tok', matchId: 'm1', channel: createFakeChannel().channel, initial: base,
+      setTimer: () => 1, clearTimer: () => undefined, isVisible: () => true, isOnline: () => true,
+    });
+    const a = driver.snapshot();
+    const b = driver.snapshot();
+    expect(b.screenView).toBe(a.screenView);
+    expect(b.screenLegal).toBe(a.screenLegal);
+    expect(b.screenEvents).toBe(a.screenEvents);
+    await driver.start();
+    const c = driver.snapshot();
+    // the started driver applied a NEW payload object: the mapping was redone, and is equal
+    expect(c.screenView).toEqual(a.screenView);
   });
 });

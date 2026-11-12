@@ -1,0 +1,669 @@
+{
+  "baselineCommit": "e657a8ac",
+  "runner": "Linux system Chromium, software graphics, 4x CPU; synthetic, not a physical phone",
+  "measurements": {
+    "baseline": [
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.5,
+          "recalcMsPerS": 12.910499999999992,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 1.9125000000000114,
+          "taskMsPerS": 29.93749999999995,
+          "longTaskMs": 0,
+          "drawFramesPerS": 182,
+          "beginMainPerS": 1.5,
+          "rasterMsPerS": 13.15000000000006
+        },
+        "turn": {
+          "frames": 16,
+          "fps": 19.200768030721246,
+          "median": 33.20000000000073,
+          "p95": 416.6999999999989,
+          "worst": 416.6999999999989,
+          "over33": 3,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": [],
+          "list": [
+            "INF i. [transform]",
+            "INF i. [transform]",
+            "INF i. [transform]",
+            "INF i. [transform]",
+            "INF i. [transform]",
+            "INF i. [transform]",
+            "INF i. [transform]",
+            "INF #game::before.screen.game [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF #deck.pile.deck [scale]",
+            "INF span::after.pile-card [opacity]",
+            "INF #discard.pile.discard [scale]",
+            "INF span::after.pile-card [opacity]",
+            "INF #smart-led-ink. [opacity]",
+            "INF #smart-led-bloom. [opacity]",
+            "INF button.card.s1 [scale]",
+            "INF button.card.s1 [scale]",
+            "INF button.card.s2 [scale]",
+            "INF button.card.s2 [scale]",
+            "INF button.card.s3 [scale]",
+            "INF button.card.s3 [scale]",
+            "INF button.card.fruit [scale]"
+          ]
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "animations": 0,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 29.47350000000004,
+          "taskMsPerS": 78.53399999999988
+        }
+      }
+    ],
+    "root": [
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.5,
+          "recalcMsPerS": 9.120499999999975,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 0.5805000000000116,
+          "taskMsPerS": 28.603500000000004,
+          "longTaskMs": 0,
+          "drawFramesPerS": 173,
+          "beginMainPerS": 1.5,
+          "rasterMsPerS": 24.780500000000156
+        },
+        "turn": {
+          "frames": 10,
+          "fps": 13.042911177774867,
+          "median": 33.399999999999636,
+          "p95": 466.6000000000022,
+          "worst": 466.6000000000022,
+          "over33": 4,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": [],
+          "list": [
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF #game::before.screen.game [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF #deck.pile.deck [scale]",
+            "INF span::after.pile-card [opacity]",
+            "INF #discard.pile.discard [scale]",
+            "INF span::after.pile-card [opacity]",
+            "INF #smart-led-ink. [opacity]",
+            "INF #smart-led-bloom. [opacity]",
+            "INF button.card.s1 [scale]",
+            "INF button.card.s1 [scale]",
+            "INF button.card.s2 [scale]",
+            "INF button.card.s2 [scale]",
+            "INF button.card.s3 [scale]",
+            "INF button.card.s3 [scale]",
+            "INF button.card.fruit [scale]"
+          ]
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "animations": 0,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 31.71400000000002,
+          "taskMsPerS": 93.92500000000004
+        }
+      },
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.5,
+          "recalcMsPerS": 5.3995000000000015,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 3.904500000000005,
+          "taskMsPerS": 25.928000000000175,
+          "longTaskMs": 0,
+          "drawFramesPerS": 182,
+          "beginMainPerS": 1.5,
+          "rasterMsPerS": 16.203000000000024
+        },
+        "turn": {
+          "frames": 11,
+          "fps": 15.000681849174942,
+          "median": 16.700000000000728,
+          "p95": 466.7000000000007,
+          "worst": 466.7000000000007,
+          "over33": 3,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": [],
+          "list": [
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF #game::before.screen.game [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF #deck.pile.deck [scale]",
+            "INF span::after.pile-card [opacity]",
+            "INF #discard.pile.discard [scale]",
+            "INF span::after.pile-card [opacity]",
+            "INF #smart-led-ink. [opacity]",
+            "INF #smart-led-bloom. [opacity]",
+            "INF button.card.s1 [scale]",
+            "INF button.card.s1 [scale]",
+            "INF button.card.s2 [scale]",
+            "INF button.card.s2 [scale]",
+            "INF button.card.s3 [scale]",
+            "INF button.card.s3 [scale]",
+            "INF button.card.fruit [scale]"
+          ]
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "animations": 0,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 36.461999999999996,
+          "taskMsPerS": 106.89450000000011
+        }
+      },
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.5,
+          "recalcMsPerS": 3.9615000000000067,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 0.9175000000000155,
+          "taskMsPerS": 22.02700000000002,
+          "longTaskMs": 0,
+          "drawFramesPerS": 182,
+          "beginMainPerS": 1.5,
+          "rasterMsPerS": 13.777000000000067
+        },
+        "turn": {
+          "frames": 13,
+          "fps": 17.73049645390069,
+          "median": 16.700000000000728,
+          "p95": 416.59999999999854,
+          "worst": 416.59999999999854,
+          "over33": 4,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": [],
+          "list": [
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF #game::before.screen.game [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF #deck.pile.deck [scale]",
+            "INF span::after.pile-card [opacity]",
+            "INF #discard.pile.discard [scale]",
+            "INF span::after.pile-card [opacity]",
+            "INF #smart-led-ink. [opacity]",
+            "INF #smart-led-bloom. [opacity]",
+            "INF button.card.s1 [scale]",
+            "INF button.card.s1 [scale]",
+            "INF button.card.s2 [scale]",
+            "INF button.card.s2 [scale]",
+            "INF button.card.s3 [scale]",
+            "INF button.card.s3 [scale]",
+            "INF button.card.fruit [scale]"
+          ]
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "animations": 0,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 31.571500000000086,
+          "taskMsPerS": 90.39799999999998
+        }
+      }
+    ],
+    "futasaku": [
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.5,
+          "recalcMsPerS": 3.452500000000025,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 0.9579999999999866,
+          "taskMsPerS": 21.845499999999962,
+          "longTaskMs": 0,
+          "drawFramesPerS": 182,
+          "beginMainPerS": 1.5,
+          "rasterMsPerS": 12.401000000000042
+        },
+        "turn": {
+          "frames": 19,
+          "fps": 24.78476389251238,
+          "median": 16.69999999999891,
+          "p95": 383.2999999999993,
+          "worst": 383.2999999999993,
+          "over33": 2,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": [],
+          "list": [
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF #game::before.screen.game [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF #deck.pile.deck [scale]",
+            "INF span::after.pile-card [opacity]",
+            "INF #discard.pile.discard [scale]",
+            "INF span::after.pile-card [opacity]",
+            "INF #smart-led-ink. [opacity]",
+            "INF #smart-led-bloom. [opacity]",
+            "INF button.card.s1 [scale]",
+            "INF button.card.s1 [scale]",
+            "INF button.card.s2 [scale]",
+            "INF button.card.s2 [scale]",
+            "INF button.card.s3 [scale]",
+            "INF button.card.s3 [scale]",
+            "INF button.card.fruit [scale]"
+          ]
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "animations": 0,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 26.723000000000052,
+          "taskMsPerS": 77.34299999999993
+        }
+      }
+    ],
+    "ocean": [
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.5,
+          "recalcMsPerS": 10.987499999999983,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 4.689499999999986,
+          "taskMsPerS": 41.188500000000076,
+          "longTaskMs": 0,
+          "drawFramesPerS": 174.5,
+          "beginMainPerS": 1.5,
+          "rasterMsPerS": 56.023500000000055
+        },
+        "turn": {
+          "frames": 14,
+          "fps": 18.262457605009125,
+          "median": 16.700000000000728,
+          "p95": 383.3000000000011,
+          "worst": 383.3000000000011,
+          "over33": 4,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": [],
+          "list": [
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF #game::before.screen.game [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF #deck.pile.deck [scale]",
+            "INF span::after.pile-card [opacity]",
+            "INF #discard.pile.discard [scale]",
+            "INF span::after.pile-card [opacity]",
+            "INF #smart-led-ink. [opacity]",
+            "INF #smart-led-bloom. [opacity]",
+            "INF button.card.s1 [scale]",
+            "INF button.card.s1 [scale]",
+            "INF button.card.s2 [scale]",
+            "INF button.card.s2 [scale]",
+            "INF button.card.s3 [scale]",
+            "INF button.card.s3 [scale]",
+            "INF button.card.fruit [scale]"
+          ]
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "animations": 0,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 33.951999999999984,
+          "taskMsPerS": 85.55599999999997
+        }
+      }
+    ],
+    "forest": [
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.5,
+          "recalcMsPerS": 7.711999999999996,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 0.742500000000007,
+          "taskMsPerS": 22.340000000000025,
+          "longTaskMs": 0,
+          "drawFramesPerS": 182,
+          "beginMainPerS": 1.5,
+          "rasterMsPerS": 15.468500000000072
+        },
+        "turn": {
+          "frames": 16,
+          "fps": 24.61917218033545,
+          "median": 16.69999999999891,
+          "p95": 383.2999999999993,
+          "worst": 383.2999999999993,
+          "over33": 1,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": [],
+          "list": [
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF #game::before.screen.game [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF #deck.pile.deck [scale]",
+            "INF span::after.pile-card [opacity]",
+            "INF #discard.pile.discard [scale]",
+            "INF span::after.pile-card [opacity]",
+            "INF #smart-led-ink. [opacity]",
+            "INF #smart-led-bloom. [opacity]",
+            "INF button.card.s1 [scale]",
+            "INF button.card.s1 [scale]",
+            "INF button.card.s2 [scale]",
+            "INF button.card.s2 [scale]",
+            "INF button.card.s3 [scale]",
+            "INF button.card.s3 [scale]",
+            "INF button.card.fruit [scale]"
+          ]
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "animations": 0,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 41.78900000000007,
+          "taskMsPerS": 107.8800000000002
+        }
+      }
+    ],
+    "magic-fields": [
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.5,
+          "recalcMsPerS": 6.6789999999999905,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 0.7429999999999937,
+          "taskMsPerS": 26.78249999999993,
+          "longTaskMs": 0,
+          "drawFramesPerS": 183.5,
+          "beginMainPerS": 1.5,
+          "rasterMsPerS": 20.453000000000078
+        },
+        "turn": {
+          "frames": 16,
+          "fps": 18.82574420520066,
+          "median": 16.700000000000728,
+          "p95": 483.2999999999993,
+          "worst": 483.2999999999993,
+          "over33": 2,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": [],
+          "list": [
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF #game::before.screen.game [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF #deck.pile.deck [scale]",
+            "INF span::after.pile-card [opacity]",
+            "INF #discard.pile.discard [scale]",
+            "INF span::after.pile-card [opacity]",
+            "INF #smart-led-ink. [opacity]",
+            "INF #smart-led-bloom. [opacity]",
+            "INF button.card.s1 [scale]",
+            "INF button.card.s1 [scale]",
+            "INF button.card.s2 [scale]",
+            "INF button.card.s2 [scale]",
+            "INF button.card.s3 [scale]",
+            "INF button.card.s3 [scale]",
+            "INF button.card.fruit [scale]"
+          ]
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "animations": 0,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 26.197000000000024,
+          "taskMsPerS": 87.87150000000032
+        }
+      }
+    ],
+    "volcanic": [
+      {
+        "idle": {
+          "appRafPerS": 0,
+          "recalcCountPerS": 0.5,
+          "recalcMsPerS": 5.093500000000029,
+          "layoutCountPerS": 0,
+          "layoutMsPerS": 0,
+          "scriptMsPerS": 0.8250000000000202,
+          "taskMsPerS": 19.070000000000142,
+          "longTaskMs": 0,
+          "drawFramesPerS": 177.5,
+          "beginMainPerS": 1.5,
+          "rasterMsPerS": 14.296000000000037
+        },
+        "turn": {
+          "frames": 18,
+          "fps": 24.5465702986499,
+          "median": 16.700000000000728,
+          "p95": 350,
+          "worst": 350,
+          "over33": 3,
+          "kind": "Draw"
+        },
+        "anim": {
+          "running": 25,
+          "infinite": 25,
+          "compositor": 25,
+          "paint": 0,
+          "paintProps": {},
+          "samples": [],
+          "list": [
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF i. [opacity,transform]",
+            "INF #game::before.screen.game [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF path.amb-glint [opacity,transform]",
+            "INF #deck.pile.deck [scale]",
+            "INF span::after.pile-card [opacity]",
+            "INF #discard.pile.discard [scale]",
+            "INF span::after.pile-card [opacity]",
+            "INF #smart-led-ink. [opacity]",
+            "INF #smart-led-bloom. [opacity]",
+            "INF button.card.s1 [scale]",
+            "INF button.card.s1 [scale]",
+            "INF button.card.s2 [scale]",
+            "INF button.card.s2 [scale]",
+            "INF button.card.s3 [scale]",
+            "INF button.card.s3 [scale]",
+            "INF button.card.fruit [scale]"
+          ]
+        },
+        "layers": {
+          "filter": 31,
+          "backdrop": 0,
+          "willChange": 0,
+          "biggestShadow": 7,
+          "blur": 0
+        },
+        "hidden": {
+          "animations": 0,
+          "appRafPerS": 0.5,
+          "recalcMsPerS": 27.37249999999991,
+          "taskMsPerS": 75.63849999999994
+        }
+      }
+    ]
+  },
+  "capture": "Serial baked-art checkpoint, before the final Magic Fields seam correction and finite skin-swap acknowledgement"
+}

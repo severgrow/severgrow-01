@@ -1,33 +1,41 @@
-// Bot versions (bots-v0.11): the rivals (10-12) arrived, and bots 1-9 did not change (pinned by
-// levels-frozen.test.ts). So a Training ticket or a Campaign proof issued under bots-v0.10 must
-// still verify after the deploy, and must never be able to name a rival, which v0.10 did not have.
+// Bot versions (bots-v0.12): the rivals (10-12) arrived on top of bots-v0.11 (keeps-growing), and
+// levels 1-9 did not change (levels-frozen.test.ts). Proofs issued under v0.10 or v0.11 must still
+// verify after the deploy, and must never be able to name a rival, which neither version had.
 import { describe, expect, it } from 'vitest';
 import { newMatch, viewFor } from '../../src/engine/index.js';
-import { BOT_VERSIONS, CURRENT_BOT_VERSION, botFor } from '../../src/bots/versions.js';
+import { BOT_VERSIONS, CURRENT_BOT_VERSION, PREVIOUS_BOT_VERSION, botFor, chooseBotAction } from '../../src/bots/versions.js';
 import { BOT_LEVELS, chooseLevelAction, isBotLevel, ladderLevel } from '../../src/bots/levels.js';
+import { chooseKeepsGrowing } from '../../src/bots/keeps-growing.js';
 
 describe('bot versions', () => {
-  it('the current version is bots-v0.11, and it plays the rivals', () => {
-    expect(CURRENT_BOT_VERSION).toBe('bots-v0.11');
+  it('the current version is bots-v0.12, it plays the rivals, and the game plays it', () => {
+    expect(CURRENT_BOT_VERSION).toBe('bots-v0.12');
+    expect(PREVIOUS_BOT_VERSION).toBe('bots-v0.11');
+    expect(chooseBotAction).toBe(chooseKeepsGrowing);
     const s = newMatch(1);
     const v = viewFor(s, s.actor);
     for (const level of [10, 11, 12] as const) expect(() => botFor(CURRENT_BOT_VERSION)!(v, level, 7)).not.toThrow();
   });
 
-  it('bots-v0.10 is still accepted and makes exactly the moves it always made (levels 1-9)', () => {
-    expect(Object.keys(BOT_VERSIONS).sort()).toEqual(['bots-v0.10', 'bots-v0.11']);
-    const old = botFor('bots-v0.10')!;
-    let s = newMatch(42);
-    const v = viewFor(s, s.actor);
-    for (const level of [1, 5, 7, 8, 9] as const) expect(old(v, level, 99)).toEqual(chooseLevelAction(v, level, 99));
-    s = newMatch(43);
-    expect(old(viewFor(s, s.actor), 9, 5)).toEqual(chooseLevelAction(viewFor(s, s.actor), 9, 5));
+  it('v0.10 and v0.11 stay accepted and make exactly the moves they always made (levels 1-9)', () => {
+    expect(Object.keys(BOT_VERSIONS).sort()).toEqual(['bots-v0.10', 'bots-v0.11', 'bots-v0.12']);
+    for (const seed of [42, 43]) {
+      const s = newMatch(seed);
+      const v = viewFor(s, s.actor);
+      for (const level of [1, 5, 7, 8, 9] as const) {
+        expect(botFor('bots-v0.10')!(v, level, 99)).toEqual(chooseLevelAction(v, level, 99));
+        expect(botFor('bots-v0.11')!(v, level, 99)).toEqual(chooseKeepsGrowing(v, level, 99));
+        expect(botFor('bots-v0.12')!(v, level, 99)).toEqual(chooseKeepsGrowing(v, level, 99));
+      }
+    }
   });
 
-  it('bots-v0.10 never plays a rival: a proof that claims one is refused', () => {
+  it('neither older version ever plays a rival: a proof that claims one is refused', () => {
     const s = newMatch(1);
     const v = viewFor(s, s.actor);
-    for (const level of [10, 11, 12] as const) expect(() => botFor('bots-v0.10')!(v, level, 7)).toThrow(/bots-v0.10/);
+    for (const version of ['bots-v0.10', 'bots-v0.11']) {
+      for (const level of [10, 11, 12] as const) expect(() => botFor(version)!(v, level, 7)).toThrow(new RegExp(version));
+    }
   });
 
   it('an unknown version has no bot', () => {

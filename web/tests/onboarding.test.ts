@@ -151,9 +151,9 @@ describe('level 1 says exactly one thing, and then the next', () => {
   it('moves to throwing when the board refuses a grow, and when the turn is spent', () => {
     expect(say({ phase: 'ACT', grew: true })).toEqual({ title: ONBOARD.throwTitle, line: ONBOARD.throwDone, focus: 'end' });
     expect(say({ phase: 'DISCARD' })).toEqual({ title: ONBOARD.throwTitle, line: ONBOARD.throwLine, focus: 'hand' });
-    // The same card, tapped again: the next touch is that card, so it is said and pointed at.
+    // A card is picked: the throw is the swipe up or the Throw pile, so the pile is pointed at.
     expect(say({ phase: 'DISCARD', throwPending: true })).toEqual({
-      title: ONBOARD.throwTitle, line: ONBOARD.throwAgain, focus: 'hand',
+      title: ONBOARD.throwTitle, line: ONBOARD.throwAgain, focus: 'discard',
     });
   });
 

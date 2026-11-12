@@ -17,6 +17,30 @@ const boot = (channel: string, pathname?: string) => {
   return { policy: module.exports, Storage };
 };
 describe('release channel policy', () => {
+  it('the real service worker assigns disjoint caches to root, /2/, /3/ and /test/',()=>{
+    const worker=readFileSync(new URL('../public/futa04-sw.js',import.meta.url),'utf8');
+    const prefixes=['/','/2/','/3/','/test/'].map(path=>runInNewContext(worker+'\nPREFIX',{
+      URL,self:{registration:{scope:'https://futasaku.com'+path},addEventListener:()=>{}},
+    }));
+    expect(new Set(prefixes).size).toBe(4);
+    for(const a of prefixes)for(const b of prefixes)if(a!==b)expect(a.startsWith(b)).toBe(false);
+  });
+  it('/test/ keeps its own save namespace, so staging never touches real progress', () => {
+    const {policy,Storage}=boot('futa05','/test/');
+    expect(policy.STORAGE_PREFIX).toBe('futa05-test:');
+    const store=new Storage();store.data.set('futa05:save','real progress');
+    expect(store.getItem('save')).toBeNull();store.setItem('save','experiment');
+    expect(store.data.get('futa05:save')).toBe('real progress');
+  });
+  // OWNER CHANGED THE RULE (2026-11-04): THE PLANET was /test/-only; asked "When you promote, should
+  // THE PLANET go live for everyone?", the owner answered "Yes, planet goes live". So it is the whole
+  // futa05 game on every route, and still never the locked futa04 line or the other channels.
+  it('THE PLANET is the whole futa05 game, and nothing else', () => {
+    for (const path of ['/', '/2/', '/3/', '/test/', '/test2/']) expect(boot('futa05',path).policy.FEATURES.planet).toBe(true);
+    for (const channel of ['futa04','futa-test','test','live']) {
+      for (const path of ['/', '/test/']) expect(boot(channel,path).policy.FEATURES.planet).toBe(false);
+    }
+  });
   it.each(['live', 'test', 'futa04', 'futa-test', 'futa05'])('%s isolates local and session storage', (channel) => {
     const { policy, Storage } = boot(channel);
     for (const store of [new Storage(), new Storage()]) {
@@ -32,7 +56,7 @@ describe('release channel policy', () => {
   it('Futa04 has approved player features without owner icons or experiments', () => {
     const f = boot('futa04').policy.FEATURES;
     for (const k of ['typography', 'phoneLayout', 'guidance', 'desktopCoach', 'slimHeader', 'tapAgain', 'smartCamera', 'mapBehindCards']) expect(f[k]).toBe(true);
-    for (const k of ['lab', 'design', 'watch', 'replay', 'weakTools', 'ownershipMarks', 'v3']) expect(f[k]).toBe(false);
+    for (const k of ['lab', 'design', 'watch', 'replay', 'weakTools', 'ownershipMarks', 'v3', 'blitz']) expect(f[k]).toBe(false);
   });
   it('futa-test shares Futa04 presentation with its own storage prefix', () => {
     const policy = boot('futa-test').policy;
@@ -72,5 +96,20 @@ describe('release channel policy', () => {
     expect(boot('live').policy.FEATURES.ownershipMarks).toBe(true);
     expect(boot('test').policy.FEATURES.lab).toBe(true);
     expect(boot('test').policy.FEATURES.ownershipMarks).toBe(false);
+  });
+  it('Practice Blitz is part of the live game (futa05 root and /test/)', () => {
+    // OWNER CHANGED THE RULE (2026-11-06: "BLITZ replaces real time ... and also it's still a mode in
+    // PRACTICE MATCH ... promote to both live and test"; 2026-11-07: "still cant see blitz mode in
+    // practice" on the live site). It was /test/-only; now every futa05 route has it.
+    expect(boot('futa05', '/test/').policy.FEATURES.blitz).toBe(true);
+    expect(boot('futa05', '/test/index.html').policy.FEATURES.blitz).toBe(true);
+    expect(boot('futa05', '/').policy.FEATURES.blitz).toBe(true); // the live root
+    expect(boot('futa05', '/2/').policy.FEATURES.blitz).toBe(true);
+    // The locked product and every other copy: never.
+    expect(boot('futa04').policy.FEATURES.blitz).toBe(false);
+    expect(boot('futa04', '/test/').policy.FEATURES.blitz).toBe(false);
+    expect(boot('futa-test').policy.FEATURES.blitz).toBe(false);
+    expect(boot('test', '/test/').policy.FEATURES.blitz).toBe(false);
+    expect(boot('live').policy.FEATURES.blitz).toBe(false);
   });
 });

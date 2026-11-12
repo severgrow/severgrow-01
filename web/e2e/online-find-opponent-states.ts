@@ -3,12 +3,11 @@
 // Builds a local futa05 app (VITE_FIND_OPPONENT=1) against an in-memory MatchService, then drives
 // two independent browser contexts:
 //   * A parks (nobody waiting) and sits on an honest "Finding an opponent" screen;
-//   * after the parked window the three offers appear (Play the computer / Invite a friend /
-//     Keep searching) — and "Keep searching" hides them again;
+//   * three equal actions are available immediately; Back cancels the authoritative queue;
 //   * B taps Find opponent: it joins A's parked search and BOTH open the live duel;
-//   * A chooses "Play the computer" while searching: the offline game runs and the search keeps
-//     going; when B arrives, A gets the dismissible "Opponent found" prompt and "Play now" opens
-//     the duel. The offline game is never lost (Continue still exists).
+//   * A chooses "Practice match" while searching: the offline game runs, "Looking for opponent"
+//     sits on the board, and the search keeps going; when B arrives, A gets the dismissible
+//     "Opponent found" prompt and "Play now" opens the duel. The offline game is never lost.
 //
 //   npx tsx web/e2e/online-find-opponent-states.ts
 import { spawn } from 'node:child_process';
@@ -24,7 +23,7 @@ import { openMenuEntry } from './helpers/menu-nav.js';
 
 const API_PORT = 4301;
 const PREVIEW_PORT = 4208;
-const OUT = new URL('../../docs/screens/online/', import.meta.url).pathname;
+const OUT = (process.env.WAITING_SHOTS_DIR ?? new URL('../../docs/screens/online/', import.meta.url).pathname).replace(/\/?$/, '/');
 const CHROME =
   process.env.PW_CHROMIUM ??
   '/Users/patryk/Library/Caches/ms-playwright/chromium-1248/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
@@ -46,7 +45,7 @@ await new Promise<void>((resolve, reject) => {
       CHANNEL: 'futa05',
       VITE_FIND_OPPONENT: '1',
       VITE_DUEL_API_URL: apiBase,
-      // The product window is three minutes; the walk shortens it so it never waits for real.
+      // The product window is 5 seconds; the walk shortens it so it never waits the real 5 s.
       VITE_PARKED_OFFER_MS: '1200',
     },
     stdio: ['ignore', 'ignore', 'inherit'],
@@ -55,7 +54,8 @@ await new Promise<void>((resolve, reject) => {
 });
 
 const apiConfig = { ...DEFAULT_SERVER_CONFIG, corsOrigins: ['*'] };
-const service = new MatchService({ storage: new MemoryStorage(), config: apiConfig });
+const storage = new MemoryStorage();
+const service = new MatchService({ storage, config: apiConfig });
 const apiServer = createHttpServer({ service, config: apiConfig });
 await new Promise<void>((resolve) => apiServer.listen(API_PORT, '127.0.0.1', resolve));
 
@@ -109,34 +109,62 @@ const newPage = async (viewport: { width: number; height: number }) => {
 };
 
 try {
+  // External cancellation must not strand an empty waiting screen. Back must remove the queue.
+  const cancelled = await newPage({ width: 390, height: 844 });
+  await openFind(cancelled);
+  const identity = await cancelled.evaluate(() => JSON.parse(localStorage.getItem('severgrow.duel.identity.v1')!));
+  check('Find creates a server queue entry', !!await storage.openQueueMatchOfPlayer(identity.playerId));
+  await cancelled.locator('#online-waiting-back').click();
+  await cancelled.waitForSelector('#online-hub:not([hidden])');
+  check('Back removes the server queue entry', !await storage.openQueueMatchOfPlayer(identity.playerId));
+  await cancelled.locator('#online-find').click();
+  await cancelled.waitForSelector('#online-waiting:not([hidden])');
+  await service.cancelSearch(await service.authenticate(identity.token));
+  await cancelled.waitForSelector('#online-hub:not([hidden])', { timeout: 10000 });
+  check('external cancellation returns to the hub', await visible(cancelled, 'online-hub'));
+  await cancelled.context().close();
   // ---- A parks and sees an honest searching screen -------------------------------------------
   const vp = { width: 390, height: 844 };
   const a = await newPage(vp);
   await openFind(a);
-  await a.waitForTimeout(1_200);
+  // Stay well INSIDE the walk's 1.2 s parked window: waiting the whole window made this check race
+  // the very offer it asserts is absent.
+  await a.waitForTimeout(400);
   const searchingTitle = await a.textContent('#online-waiting-title');
   check('parks on a searching screen', (await visible(a, 'online-waiting')) === true);
   check('searching title is honest', (searchingTitle ?? '').includes('Finding an opponent'), searchingTitle ?? '');
-  check('the offer is hidden while searching', (await visible(a, 'online-search-options')) === false);
-  check('cancel reads "Stop searching"', (await a.textContent('#online-cancel-match')) === 'Stop searching');
+  // OWNER'S RULE (2026-11-08, restored 2026-11-11 after a 2026-11-09 pass dropped it): the offer
+  // waits PARKED_OFFER_MS (5 s; this walk's build shortens it) — the search gets a fair chance first.
+  check('no offer before the parked window', (await visible(a, 'online-search-options')) === false);
+  check('Back is the only search cancel control', !(await visible(a, 'online-cancel-match')));
   await a.screenshot({ path: `${OUT}find-opponent-searching-390x844.png` });
 
   // The parked offer appears after the parked window (build-shortened in this walk).
   await a.waitForTimeout(2_500);
-  check('parked title is honest', (await a.textContent('#online-waiting-title'))?.includes('Nobody yet') === true);
+  check('parked title is honest', (await a.textContent('#online-waiting-title'))?.includes('Finding an opponent') === true);
   check('three clear offers appear when parked', (await visible(a, 'online-search-options')) === true);
   const offers = await a.evaluate(() =>
-    ['online-search-computer', 'online-search-invite', 'online-search-keep'].map((id) => document.getElementById(id)?.textContent ?? ''),
+    ['online-search-computer', 'online-search-level', 'online-search-invite'].map((id) => document.getElementById(id)?.textContent ?? ''),
   );
-  check('offer labels are punchy and exact', offers.join('|') === 'Play the computer|Invite a friend|Keep searching', offers.join('|'));
+  check('offer labels are punchy and exact', offers.join('|') === 'Practice match|Level 1|Invite a friend', offers.join('|'));
   await a.screenshot({ path: `${OUT}find-opponent-parked-390x844.png` });
 
-  // Keep searching hides the offer again.
-  await a.click('#online-search-keep');
-  await a.waitForTimeout(300);
-  check('keep searching hides the offer', (await visible(a, 'online-search-options')) === false);
-  await a.waitForTimeout(2_000);
-  check('the offer can come back', (await visible(a, 'online-search-options')) === true);
+  check('no redundant keep-searching control', await a.locator('#online-search-keep').count() === 0);
+  for (const [width, height] of [[360,844],[390,844],[844,390],[768,1024],[1280,800]]) {
+    await a.setViewportSize({ width: width!, height: height! });
+    const sizes = await a.locator('#online-search-options button').evaluateAll(els => els.map(el => {
+      const r=el.getBoundingClientRect();return {width:r.width,height:r.height};
+    }));
+    check(`three standard equal actions at ${width}x${height}`, sizes.length===3 && sizes.every(r=>r.height>=44&&Math.abs(r.width-sizes[0]!.width)<1&&Math.abs(r.height-sizes[0]!.height)<1));
+    check(`no horizontal overflow at ${width}x${height}`, await a.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    for (const id of ['online-search-computer','online-search-level','online-search-invite']) {
+      await a.locator('#'+id).scrollIntoViewIfNeeded();
+      check(`${id} is reachable at ${width}x${height}`,await a.locator('#'+id).isVisible());
+    }
+    await a.screenshot({path:`${OUT}waiting-${width}x${height}.png`});
+  }
+  await a.setViewportSize(vp);
+
 
   // ---- B joins the parked search: both open the live duel -------------------------------------
   const b = await newPage(vp);
@@ -147,16 +175,55 @@ try {
   check('the parked searcher is pulled into the duel too', (await visible(a, 'game')) === true);
   check('the duel HUD is present for both', (await visible(a, 'duel-hud')) && (await visible(b, 'duel-hud')));
 
+  // REPEAT FIND MUST RESUME, NEVER DUPLICATE (owner, 2026-11-12). A page that lost its search
+  // state — a reload here, a second device in the field — used to start a brand-new empty search
+  // and strand the two devices in different games. It must land in the SAME active duel at once.
+  await a.reload({ waitUntil: 'domcontentloaded' });
+  const tResume = Date.now();
+  await openFind(a); // opens the hub and taps Find; either the waiting screen or the duel
+  await a.waitForSelector('#game:not([hidden])', { timeout: 15_000 });
+  check('a repeat Find after a reload reopens the active duel', (await visible(a, 'duel-hud')) === true);
+  console.log(`repeat Find reopened the duel in ${Date.now() - tResume} ms (includes the reload)`);
+  const openGames = async (page: Page) => {
+    const id = await page.evaluate(() => JSON.parse(localStorage.getItem('severgrow.duel.identity.v1')!).playerId as string);
+    return (await storage.matchesOfPlayer(id)).filter((m) => m.status !== 'finished');
+  };
+  const aOpen = await openGames(a);
+  const bOpen = await openGames(b);
+  check(
+    'repeat Find left exactly one open game (active), never a second search',
+    aOpen.length === 1 && aOpen[0]!.status === 'active',
+    aOpen.map((m) => m.status).join(','),
+  );
+  check(
+    'both devices are in that same game',
+    bOpen.length === 1 && bOpen[0]!.id === aOpen[0]!.id && bOpen[0]!.status === 'active',
+    bOpen.map((m) => m.status).join(','),
+  );
+
   // ---- A plays the computer while searching; B arrives -> "Opponent found" --------------------
   const c = await newPage(vp);
   await openFind(c);
   await c.waitForTimeout(2_500);
   await c.click('#online-search-computer');
   await c.waitForSelector('#game:not([hidden])', { timeout: 15_000 });
-  check('play the computer opens the offline game', (await visible(c, 'game')) === true);
-  // The computer game is the local game, never an online duel: the duel HUD is absent, and the
-  // offer the player tapped said "Play the computer" (asserted exactly above).
-  check('the computer game is the local game, not an online duel', (await visible(c, 'duel-hud')) === false);
+  check('practice match opens the offline game', (await visible(c, 'game')) === true);
+  // The practice match is the local game, never an online duel: the duel HUD is absent, and the
+  // offer the player tapped said "Practice match" (asserted exactly above).
+  check('the practice match is the local game, not an online duel', (await visible(c, 'duel-hud')) === false);
+  const looking = await c.evaluate(() => {
+    const el = document.getElementById('online-search-looking');
+    if (!el || el.hidden) return '';
+    const style = getComputedStyle(el);
+    const inHud = !!el.closest('#game .hud');
+    const words = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+    return `${el.getAttribute('role')}|${inHud ? 'hud' : 'no'}|${style.position}|${style.pointerEvents}|${words}`;
+  });
+  check(
+    'looking line is a fixed status between the menu and the logo',
+    looking === 'status|hud|fixed|none|Looking for opponent',
+    looking,
+  );
 
   const d = await newPage(vp);
   await openFind(d);

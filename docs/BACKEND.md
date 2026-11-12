@@ -4,7 +4,7 @@
 
 > **Status pointer:** start at [`ONLINE.md`](ONLINE.md) for the current online-duels status. This
 > document describes the backend as built; the dated verification snapshots are
-> [`ONLINE-SHIP-STATUS.md`](ONLINE-SHIP-STATUS.md) and [`DATABASE-VERIFICATION.md`](DATABASE-VERIFICATION.md).
+> [`ONLINE-SHIP-STATUS.md`](history/ONLINE-SHIP-STATUS.md) and [`DATABASE-VERIFICATION.md`](DATABASE-VERIFICATION.md).
 
 Status: **built and shipped** — the online duel screens and backend are live on `/futa0.5/`.
 `web/src/online/` holds the client layer (identity, sync, draft, OnlineDriver); the backend runs
@@ -107,6 +107,7 @@ All responses are JSON. Authenticated routes require `Authorization: Bearer <tok
 | GET | `/v1/health` | liveness + the pinned rules version |
 | POST | `/v1/guests` | create a guest identity → `{ player, token }` (token shown once) |
 | POST | `/v1/players/me/upgrade` | upgrade a guest to a permanent account (keeps the id) |
+| GET | `/v1/players/:id/profile` | another player's PUBLIC profile (signed in): `{ displayName, tag, level, tiles, colourId, online: { games, wins, longestStreak } }` (the client resolves `colourId` to the shared palette) |
 | POST | `/v1/matches` | create a match → `{ match: { inviteCode, … }, player: view }` |
 | POST | `/v1/matches/join` | join by `{ inviteCode }` → `{ match, player }` |
 | GET | `/v1/matches/:id` | match summary (public: status, revision, seats) |
@@ -119,6 +120,18 @@ A **player view** contains: the engine `View` (`viewFor(state, seat)`), the seat
 and status, the legal actions (only when it is that seat's turn), and the public-safe events. It
 never contains the seed, the deck, either full hand, `fruitKnown`, the event history internals, or
 the authoritative `State`.
+
+**Another player's public profile (`GET /v1/players/:id/profile`, owner 2026-11-01).** A signed-in
+caller may look up any player id from a Territory tile. The answer is a closed allow-list — display
+name, `#tag`, campaign level, tile count, palette colour, and the ONLINE record (finished duels:
+games, wins, longest winning run). There is no email or identity-provider data, no Seeds wallet, no
+offline record, no token and no device: the query selects only those columns, and
+`server/tests/public-profile.test.ts` fails if a private one ever appears in the body or the SQL.
+Unknown and malformed ids are the same `404 NOT_FOUND`. It is **one aggregate statement** (plus a
+cached catalogue probe for the optional colour table), awaited **sequentially**: the Edge pool is
+`max: 2`, and a parallel fan-out is what hung the earlier achievements endpoint (`WORKER_RESOURCE_LIMIT`,
+HTTP 546). There is deliberately no `Promise.race` timeout — abandoning a statement leaks the pool
+connection it holds.
 
 **Cancelling a waiting duel (new).** `POST /v1/matches/:id/cancel` retires the caller's own match
 while it is still `waiting` (an invite nobody ever joined, or a parked Find-Opponent search). It is
@@ -481,7 +494,7 @@ break it.
 | `server/tests/rate-limit-nat.test.ts` | NAT/shared-IP regression: two players behind one IP create + join; a single IP still blocked above the new ceiling; per-player limits trip independently of IP; distinct forwarded IPs get distinct buckets; `cf-connecting-ip` beats a spoofed `x-forwarded-for`; cron sweep uses its dedicated bucket; the new **create** cap per player and per IP |
 | `server/tests/cancel-waiting-match.test.ts` | cancel a waiting invite: owner-only, waiting-only, idempotent, and the cancelled code no longer joins (service + real HTTP) |
 | `web/tests/lobby.test.ts` | lobby helpers; a **regression** drives the real service to the open-duel cap and asserts `TOO_MANY_MATCHES` maps to the specific `ONLINE.errTooMany` line (so the client mapping can never silently diverge from the server code again) |
-| `docs/ONLINE-REPORT.md` | Phase 8 final report (P-1…P-21) |
+| `docs/history/ONLINE-REPORT.md` | Phase 8 final report (P-1…P-21) |
 
 `vitest.config.ts` loads `.env` when it exists, so the real-database suites **run** locally; in CI
 there is no `.env`, so they skip and are pinned separately by `npm run server:db-test` and
@@ -501,7 +514,7 @@ Built since the original phases (so no longer "unfinished"):
 
 - **Live database run** — verified against the real project; see
   [`DATABASE-VERIFICATION.md`](DATABASE-VERIFICATION.md) and
-  [`ONLINE-SHIP-STATUS.md`](ONLINE-SHIP-STATUS.md).
+  [`ONLINE-SHIP-STATUS.md`](history/ONLINE-SHIP-STATUS.md).
 - **Live transport** — a Supabase Realtime **broadcast ping** on turn completion, with polling as
   the safety net (below).
 - **Client UI** — the lobby and duel screen (and the live-duel pop-up) are wired to `DuelClient`;

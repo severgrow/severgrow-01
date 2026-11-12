@@ -32,7 +32,9 @@ const perform = async (p: Page, a: Action, before: State, game: Game) => {
     if (a.t === 'Bloom') throw new Error('complex Bloom: session playback');
     if (a.t === 'Draw') await p.locator(a.from === 'deck' ? '#deck' : '#discard').click({ timeout: 1800 });
     else if (a.t === 'Discard') {
+      // Pick the card, then tap the Throw pile: a second card tap only deselects (owner, 2026-10-25).
       await p.locator(`#hand [data-card="${a.card}"]`).click({ timeout: 1800 });
+      if (!await changed()) await p.locator('#discard').click({ timeout: 1800 });
       if (!await changed() && await p.locator('#confirm-play').isVisible()) await p.locator('#confirm-play').click({ timeout: 1800 });
     } else if (a.t === 'Sprout' || a.t === 'PlayFruit') {
       await p.locator(`#hand [data-card="${a.card}"]`).click({ timeout: 1800 });

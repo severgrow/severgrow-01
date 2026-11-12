@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { apply, coordKey, legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { moveCards, moveHexes, touchesHex } from '../src/names.js';
-import { EMPTY_SEL, growControls, isBoardAction, moveButtons, options, playNow, selFor, tapCard, tapKind, kindLabel, kindOf, shortKindLabel, kindsAvailable, pendingAction, targetHexes, usableCards } from '../src/logic/interaction.js';
+import { EMPTY_SEL, growControls, heldMoveWord, isBoardAction, moveButtons, options, playNow, selFor, tapCard, tapKind, kindLabel, kindOf, shortKindLabel, kindsAvailable, pendingAction, targetHexes, usableCards } from '../src/logic/interaction.js';
+import type { Sel } from '../src/logic/interaction.js';
 import { Session } from '../src/logic/session.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { findState } from './ui-helpers.js';
@@ -275,5 +276,19 @@ describe('Grow step: sprout first, then throw (a small "Skip sprout" link keeps 
 
   it('nothing to grow: no controls (the game moves to Throw by itself)', () => {
     expect(growControls([end])).toEqual({ sproutNote: false, throwButton: true, skipLink: false });
+  });
+});
+
+describe('the display names the held move (owner, 2026-10-24)', () => {
+  it('says what the next board tap does, and how many tiles, never CANCEL', () => {
+    const sel = (over: Partial<Sel>): Sel => ({ ...EMPTY_SEL, ...over });
+    expect(heldMoveWord(EMPTY_SEL, false)).toBeNull();
+    expect(heldMoveWord(sel({ card: 4 }), false)).toBe('GROW 1');
+    expect(heldMoveWord(sel({ card: 4 }), true)).toBe('BOMB');
+    expect(heldMoveWord(sel({ card: 4, kind: 'sprout' }), false)).toBe('GROW 1');
+    expect(heldMoveWord(sel({ kind: 'fruit', card: 9 }), true)).toBe('BOMB');
+    expect(heldMoveWord(sel({ kind: 'bloom-3-4.9.17' }), false)).toBe('BLOOM 3');
+    expect(heldMoveWord(sel({ kind: 'bloom-5-1.2.3.4.5' }), false)).toBe('BLOOM 5');
+    expect(heldMoveWord(sel({ kind: 'bloom-mega-3.8' }), false)).toBe('BLAST');
   });
 });

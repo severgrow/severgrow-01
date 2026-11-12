@@ -36,6 +36,11 @@ ${T} body {
   --font-display: 'Besley', 'Besley Fallback', Georgia, serif;
   --font-ui: 'Fragment Mono', 'Fragment Mono Fallback', ui-monospace, monospace;
   --font-num: 'Futasaku Numerals', 'Fragment Mono', 'Fragment Mono Fallback', ui-monospace, monospace;
+  /* The fixed-advance stack the mechanical counters ask for (var(--font-mono) in the dock's
+     odometer, the Bloom count badge and the finish plate's learned line). It was referenced by
+     those three rules and defined NOWHERE, so each fell back to a different face — system
+     monospace twice and Besley (a serif) once. It is the same face as every other number. */
+  --font-mono: var(--font-num);
   --font: var(--font-ui);
   /* Fragment Mono ships only 400 — never faux-bold the UI face. */
   --w-ui-regular: 400;
@@ -51,7 +56,8 @@ ${T} body {
   --lh-control: 1.15;
   --lh-body: 1.48;
   --lh-small: 1.3;
-  --track-brand: -0.03em;
+  /* Menu FUTASAKU wordmark only (via .title): letters kiss, not crush (owner, 2026-11-07). */
+  --track-brand: -0.055em;
   --track-heading: -0.012em;
   --track-action: 0.02em;
   --track-caps: 0.08em;
@@ -111,14 +117,16 @@ ${T} .tagline {
   line-height: 1.5;
   letter-spacing: 0.012em;
 }
-/* Menu / difficulty / pause: CAPS labels in the cream frames (tracking + optical padding). */
+/* Menu / difficulty / pause: CAPS labels in the cream frames (tracking + optical padding).
+   The pause panel's rows, lead key and corner key all share ONE tracking, so the face reads as a
+   single engraved plate rather than three control families (owner direction, 2026-10-20). */
 ${T} #menu .menu-buttons .btn,
 ${T} #levels .level-grid .difficulty-tile,
-${T} #sheet-menu .sheet-body > .btn {
+${T} #sheet-menu .gm-body .btn {
   font-family: var(--font-ui);
   font-weight: var(--w-ui-semibold);
   line-height: 1.2;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.14em;
   padding-top: 1px;
   text-transform: uppercase;
 }

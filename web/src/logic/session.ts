@@ -20,6 +20,11 @@ export class Session {
   private cuts: { n: number; played: Played }[] = [];
   private restoredOpponentTurn: Played[] | null = null;
   private cache: { state: State; view: View; legal: Action[] } | null = null;
+  /**
+   * Moves the page may offer, narrower than the engine's (a lesson does not offer a power before it
+   * teaches it). Null: every legal move. Set once, before the first move.
+   */
+  allow: ((a: Action) => boolean) | null = null;
   /** Polish pass 3: a drawn line or clump waiting for Confirm (replaces the picked move while legal). */
   private drawn: Action | null = null;
 
@@ -39,7 +44,8 @@ export class Session {
   private get memo() {
     if (this.cache?.state !== this.state) {
       const view = viewFor(this.state, this.viewer);
-      const legal = this.state.phase !== 'GAME_OVER' && this.state.actor === this.viewer ? legalActions(view) : [];
+      const all = this.state.phase !== 'GAME_OVER' && this.state.actor === this.viewer ? legalActions(view) : [];
+      const legal = this.allow ? all.filter(this.allow) : all;
       this.cache = { state: this.state, view, legal };
     }
     return this.cache;
@@ -89,7 +95,7 @@ export class Session {
   }
 
   /** Plays `action` for `who` (default: the player) if it is legal right now. */
-  play(action: Action, who: Player = this.viewer): Played | null {
+  play(action: Action, who: Player = this.viewer, opts: { auto?: boolean } = {}): Played | null {
     const s = this.state;
     if (s.phase === 'GAME_OVER' || s.actor !== who) return null;
     const legal = who === this.viewer ? this.legal : legalActions(viewFor(s, who));
@@ -98,13 +104,20 @@ export class Session {
     // Five/six-card Blooms expose every recipe in the legal menu while the
     // exact player-painted tile assignment is validated on demand by apply.
     if (!enumerated && !(action.t==='Bloom' && action.cards.length>=5 && who===this.viewer)) return null;
+    if (who === this.viewer && this.allow && !this.allow(action)) return null;
     let after:State;
     try { after=apply(s,action); }
     catch(error) { if (!enumerated && error instanceof IllegalActionError) return null; throw error; }
     // Growing tiles, Strengthen, a Fruit card (and pressing "Throw a card") reveal nothing new, so the player
     // may take them back. A draw, a throw or any bot move makes everything before final.
-    if (who === this.viewer && (action.t === 'Bloom' || action.t === 'MegaBomb' || action.t === 'Sprout' || action.t === 'PlayFruit' || action.t === 'EndAct')) this.undoStack.push({ state: s, n: this.log.length });
-    else this.undoStack = [];
+    if (who === this.viewer && (action.t === 'Bloom' || action.t === 'MegaBomb' || action.t === 'Sprout' || action.t === 'PlayFruit' || action.t === 'EndAct')) {
+      // An EndAct the APP plays on the player's behalf — skipping the optional Bloom to go to Throw
+      // after the one Grow — is not a move the player made, so it must not become its own undo stop.
+      // Without this, the first Undo after a Grow took back the app's jump to Throw while the board
+      // still showed the Grow, so it looked like Undo did nothing at all (owner report, 2026-10-24).
+      // A DELIBERATE "throw a card" still checkpoints normally, so that one stays undoable.
+      if (!(opts.auto && action.t === 'EndAct')) this.undoStack.push({ state: s, n: this.log.length });
+    } else this.undoStack = [];
     const played: Played = { before: s, action, after, steps: buildSteps(s, action, after, this.viewer) };
     this.state = after;
     this.restoredOpponentTurn = null;
@@ -153,6 +166,11 @@ export class Session {
     return best?.played ?? null;
   }
 
+  /** The position the log starts from (the set base, or the seed's own start). */
+  get start(): State {
+    return this.base ?? newGame(this.state.seed, this.state.config);
+  }
+
   /** Every action of `player`'s latest turn (for "Replay last turn"). */
   lastTurnOf(player: Player): Played[] {
     for (let i = this.turns.length - 1; i >= 0; i--) if (this.turns[i]!.player === player) return this.turns[i]!.plays;
@@ -163,7 +181,7 @@ export class Session {
     const wantedTurn = this.state.turnNumber - 1;
     const plays: Played[] = [];
     try {
-      let before = this.base ?? newGame(this.state.seed, this.state.config);
+      let before = this.start;
       for (const action of this.log) {
         const after = apply(before, action);
         if (before.turnNumber === wantedTurn && before.turnPlayer === player)

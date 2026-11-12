@@ -1,8 +1,21 @@
 @import "./fonts.css";
+@import "./ui/instrument.css";
 /* Futasaku page styles. Every colour comes from the theme tokens (--c-*), set by
    main.ts from web/src/logic/themes.ts. Theme-only details sit at the end. */
 
 :root {
+  /* THE DARK GLASS (owner, 2026-10-23: "that's not the dark glass"): the game's one glass recipe,
+     the lesson window's and Match Intel's (web/src/player/glass-surface.ts) — a near-black smoked
+     tint, a light blur. Every panel that floats over the game or a menu uses these two tokens. */
+  --dark-glass: rgba(8, 10, 10, 0.42);
+  --dark-glass-blur: blur(9px) saturate(1.05);
+  /* What a panel's backdrop does to the screen behind it: blurred, darkened, a touch less colour. */
+  --veil: blur(7px) brightness(0.58) saturate(0.85);
+  /* The invitations (install / its own window, keep your progress): the game behind them is only a
+     soft dark light, never readable shapes (owner, 2026-11-11: "blur the background behind it way
+     more, now it looks messy with everything behind it"). Shared by both. */
+  --invite-veil: blur(44px) brightness(0.34) saturate(0.6);
+  --invite-shade: 58%;
   --c-bg: #18191a;
   --c-surface: #232425;
   --c-text: #eeebe4;
@@ -18,6 +31,13 @@
   --c-accent: #efe5cb;
   --c-accentInk: #18191a;
   --c-danger: #ff6b4a;
+  /* THE ATTENTION RED, and why it is not --c-danger. MEASURED in the running lobby: every palette
+     rebinds `danger` to #fff4dc (cream — it is the weak-spot chip's chalk ink), so a disc filled
+     with `--c-danger` came out rgb(255,244,220) and the cream "!" vanished into it. This token is
+     the product's alert red, written ONCE here and never by themes.ts, so the online lobby's "!"
+     (and any future "needs you" mark) stays the coral the game already uses for warnings. */
+  --c-alert: #ff6b4a;
+  --c-alertInk: #18191a;
   --font: system-ui, sans-serif;
   --w-text: 500;
   --w-num: 700;
@@ -43,6 +63,12 @@ body {
    taken as "go back" and leaves the game (found by the monkey test). */
 html {
   overscroll-behavior: none;
+  /* The game is one fixed screen: nothing may ever widen the page or let it pan sideways (owner,
+     2026-10-31, iPhone 17). `clip` (not hidden) creates no scroll container for iOS to scroll. */
+  overflow-x: clip;
+  /* The page's own ground is the game's ground: whatever a browser leaves uncovered (iOS 26 Safari
+     draws its glass bar over the page's bottom edge) is the same dark, never a light box. */
+  background: var(--c-bg);
 }
 body {
   background: var(--c-bg);
@@ -56,9 +82,40 @@ body {
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
 }
+/* After the startup gate lifts, keep charcoal on the live shell. `--c-bg` stays soil for boards
+   and panels; without this, the later `html { background: var(--c-bg) }` beats
+   `#first-ground`'s zero-specificity `:where(.space-first)` and a soil strip flashes at reveal
+   (docs/history/IOS-FLASH-AUDIT-0.83.md H5; owner, 2026-11-07). No `:where()` — specificity must win. */
+html.space-first,
+html.space-first body {
+  background: #0e0f10;
+}
 button {
   font: inherit;
   color: inherit;
+}
+/* A TEXT FIELD MUST NEVER MAKE A PHONE ZOOM (owner, 2026-10-26: the match chat "zooms in awkwardly
+   when entering text box to send a message ... should never happen on any phone", and the zoom is
+   what pushed the chat's own close key off the screen).
+   iOS Safari magnifies the whole page when a focused text field computes under 16px, and the page
+   STAYS magnified after the keyboard closes — so this is not a cosmetic detail, it is a layout
+   bug that hides controls. The floor is enforced here, once, on touch pointers only, so a future
+   component cannot reintroduce it by declaring a small font. `max(16px, 1em)` is a FLOOR and not a
+   size: a field designed larger keeps its own size (1em resolves against the parent), and a
+   component that states its own size deliberately still wins this bare-element rule — so it
+   restores the floor for an undeclared field without flattening intentional typography. The two
+   fields that DID declare a zooming size were fixed where they were declared. Checkboxes, radios,
+   ranges and file inputs are excluded — they hold no text and are sized by their own rules. */
+@media (pointer: coarse) {
+  /* `:where()` keeps this at ZERO specificity: it is a floor for fields that never declared a size
+     (it still beats inheritance), and any component that deliberately states its own size wins it.
+     That is why it cannot flatten the typography, and why the two fields that declared a zooming
+     size had to be fixed where they were declared. */
+  :where(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file'])),
+  :where(textarea),
+  :where(select) {
+    font-size: max(16px, 1em);
+  }
 }
 .num {
   font-weight: var(--w-num);
@@ -91,6 +148,26 @@ button {
   z-index: 0;
   background: var(--c-bg);
 }
+/* NO FLASH AT START-UP (0.75): a still star field on the page background before the module runs,
+   in the shared space shader's own deep sky (#0e0f10). The live stars replace it the moment they have
+   drawn (html.space-lit), so the two never show together. Static: no animation, no script. */
+html.space-first:not(.space-lit) #texture {
+  background-color: #0e0f10;
+  background-image:
+    radial-gradient(1.2px 1.2px at 23px 41px, rgba(219, 214, 199, .82), transparent),
+    radial-gradient(1.2px 1.2px at 131px 17px, rgba(219, 214, 199, .55), transparent),
+    radial-gradient(1.2px 1.2px at 207px 96px, rgba(219, 214, 199, .7), transparent),
+    radial-gradient(1.2px 1.2px at 74px 163px, rgba(219, 214, 199, .5), transparent),
+    radial-gradient(1.2px 1.2px at 188px 211px, rgba(219, 214, 199, .78), transparent),
+    radial-gradient(1.2px 1.2px at 248px 152px, rgba(219, 214, 199, .46), transparent),
+    radial-gradient(.9px .9px at 12px 88px, rgba(219, 214, 199, .38), transparent),
+    radial-gradient(.9px .9px at 97px 23px, rgba(219, 214, 199, .26), transparent),
+    radial-gradient(.9px .9px at 61px 119px, rgba(219, 214, 199, .33), transparent),
+    radial-gradient(.9px .9px at 128px 74px, rgba(219, 214, 199, .22), transparent),
+    radial-gradient(.9px .9px at 140px 129px, rgba(219, 214, 199, .4), transparent);
+  background-size: 263px 241px, 263px 241px, 263px 241px, 263px 241px, 263px 241px, 263px 241px,
+    149px 137px, 149px 137px, 149px 137px, 149px 137px, 149px 137px;
+}
 #texture::after {
   content: '';
   position: absolute;
@@ -114,7 +191,15 @@ button {
 [data-theme='ink'] #texture::after {
   display: none;
 }
-/* Spores (Soil): a few faint motes drifting very slowly. Transform-only animation. */
+/* Spores (Soil): a few faint motes drifting very slowly. Transform-only animation.
+   Owner, 2026-11-01: "blur them just slightly so it looks more natural".
+   A soft dot rather than a hard-edged circle — but NOT with `filter: blur()`. A filter on an
+   element that animates re-rasterises every frame (measured on the Territory fog layer: 80 ms of
+   GPU paint against 33 ms without, 188 raster-queue calls against 0), which is exactly the cost the
+   optimisation pass removed. A radial gradient is paint, not a filter: it is rasterised once, then
+   only the compositor's transform moves it. So the mote grows from 3 px to 9 px for the fade to
+   have room, keeps the same peak alpha in its core (so it is the same brightness), and falls off to
+   nothing at the rim — a soft speck instead of a pixel. */
 #spores {
   position: fixed;
   inset: 0;
@@ -124,11 +209,19 @@ button {
 }
 #spores i {
   position: absolute;
-  width: 3px;
-  height: 3px;
+  width: 9px;
+  height: 9px;
+  /* Keep the mote centred where a 3 px dot used to sit (the drift keyframes own `transform`). */
+  margin: -3px 0 0 -3px;
   border-radius: 50%;
-  background: var(--c-text);
-  opacity: 0.13;
+  background: radial-gradient(
+    circle at 50% 50%,
+    var(--c-text) 0%,
+    color-mix(in srgb, var(--c-text) 62%, transparent) 38%,
+    color-mix(in srgb, var(--c-text) 22%, transparent) 62%,
+    transparent 78%
+  );
+  opacity: 0.15;
   animation: drift var(--t, 40s) linear infinite;
   animation-delay: var(--d, 0s);
   /* Give each mote its own layer, so its (transform-only) drift is stepped by the compositor
@@ -183,10 +276,7 @@ button {
   font-size: 0.95rem;
   line-height: 1.1;
   touch-action: manipulation;
-  transition: transform 0.12s, background-color 0.15s, border-color 0.15s;
-}
-.btn:active {
-  transform: scale(0.97);
+  transition: transform var(--dur-ack) var(--ease-standard), background-color var(--ix-open), border-color var(--ix-open);
 }
 .btn.primary {
   background: var(--c-accent);
@@ -228,6 +318,8 @@ button {
   place-items: center;
   font-size: 1.3rem;
   cursor: pointer;
+  /* A tap is a tap: no double-tap zoom armed on the menu key, no 300 ms wait on a phone. */
+  touch-action: manipulation;
 }
 .icon-only.small {
   width: 36px;
@@ -270,11 +362,17 @@ button {
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-/* menu */
+/* menu.
+   FITS THE SCREEN, ALWAYS (owner, 2026-10-19): the whole menu — logo, every visible entry — is on
+   screen at every supported size, with NO scrolling fallback. `overflow:hidden` is deliberate: a
+   scrollbar must never be the answer; the column below is what makes the content fit. */
 .menu {
   display: grid;
+  /* One full-width track, so the column's `min(420px, 100% - 32px)` is measured against the screen,
+     never against whatever its widest child happens to be. */
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
-  overflow-y: auto;
+  overflow: hidden;
 }
 /* One Futasaku surface: menu, difficulty pick, online submenu, the "Opponent found" card and the
    result card share these cream tones. Every surface that shows a `.menu-buttons` button must be in
@@ -289,6 +387,10 @@ button {
 #online-waiting,
 #online-join,
 #online-matched {
+  /* OWNER RULE (2026-10-21): every key on a menu is the same 50px tall — the main menu's column,
+     its footer row and the PLAY submenu's entries. It is one token, not a number per surface; the
+     44px floor everywhere else (board, cockpit, sheets) is untouched. */
+  --menu-key-h: 50px;
   --fu-cream: #e8ddc5;
   --fu-ink: #17181a;
   --fu-cream-70: color-mix(in srgb, #e8ddc5 70%, transparent);
@@ -300,24 +402,54 @@ button {
 }
 .menu-inner {
   width: min(420px, 100% - 32px);
-  /* The column's rhythm — the same 14px every Futasaku menu column uses. */
-  --menu-rhythm: 14px;
+  /* The column's rhythm — the same 14px every Futasaku menu column uses at a normal height. It is
+     a clamp so a SHORT screen compresses the gaps first (never a tap target, never an entry). */
+  --menu-rhythm: clamp(6px, 1.6dvh, 16px);
   /* The wordmark stands one deliberate step further from the buttons than the column's own rhythm.
      The removed tagline used to give this breathing room; since 2026-10-14 it is explicit, so the
-     logo never crowds the actions. Two rhythm steps (28px) is "a bit of space", not a void. */
+     logo never crowds the actions. Two rhythm steps is "a bit of space", not a void. */
   --menu-head-gap: calc(2 * var(--menu-rhythm));
   display: flex;
   flex-direction: column;
   align-items: center;
+  /* Spread the column over the screen instead of clustering it in the middle: the free height is
+     shared evenly above, between and below the three blocks (logo, wordmark, buttons). The column
+     is capped so a very tall screen never stretches the menu into a sparse, silly ladder. */
+  justify-content: space-evenly;
   gap: var(--menu-rhythm);
-  padding: 32px 0;
+  padding: clamp(8px, 2dvh, 28px) 0;
+  /* At least 820px of column on a roomy screen (so the menu is not a small island), and on a very
+     tall tablet it grows with the screen up to 78dvh — always bounded by the screen itself. */
+  height: min(100%, max(820px, 78dvh));
+  max-height: 100%;
+  box-sizing: border-box;
   text-align: center;
 }
-/* The wordmark and the buttons only: the gap is `--menu-head-gap`, and since the column's own gap
-   already contributes one `--menu-rhythm`, the margin adds just the second step. A tagline, when
-   SHOW_MENU_TAGLINE re-inserts one, breaks the `+` match and keeps its own old spacing. */
-#menu .menu-inner > .title + .menu-buttons {
-  margin-top: calc(var(--menu-head-gap) - var(--menu-rhythm));
+/* The wordmark, the beta line and the buttons. The beta line sits BETWEEN them in source order, so
+   the `title + .menu-buttons` pair is now a chain: the wordmark keeps its own step above the beta
+   line, and the beta line carries the full head gap to the buttons. Either way the logo never
+   crowds the actions, and the beta line adds no second void. */
+/* The wordmark, the beta line and the entries are one group (.menu-stack, owner 2026-10-31): the
+   beta line sits ONE equal step from the wordmark and from the entries — never in a band of its own.
+   The step is the head gap and a quarter, so the wordmark still never crowds the actions. */
+#menu .menu-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+#menu .menu-stack > .title + .menu-buttons {
+  margin-top: var(--menu-head-gap);
+}
+#menu .menu-stack > .title + #menu-beta { margin-top: calc(var(--menu-head-gap) * 1.25); }
+/* The beta line itself: quiet cream, one size under the entries, and never a box of its own. Its
+   link's tap target and type live in feedback/mount.ts (that module owns the line). */
+#menu .menu-stack > #menu-beta + .menu-buttons { margin-top: calc(var(--menu-head-gap) * 1.25); }
+/* The step never drops under the 28px head gap where there is height for it (a short landscape
+   phone still compresses it, like every other gap). */
+@media (min-height: 600px) {
+  #menu .menu-stack > .title + #menu-beta,
+  #menu .menu-stack > #menu-beta + .menu-buttons { margin-top: max(28px, calc(var(--menu-head-gap) * 1.25)); }
 }
 .title {
   font-size: clamp(2.6rem, 12vw, 3.6rem);
@@ -340,18 +472,98 @@ button {
   padding: 0 2px;
   text-wrap: balance;
 }
+/* Every key lands in the same frame (owner, 2026-10-22: no key may arrive after the others). The
+   static HTML would otherwise show Settings ~100 ms before the keys main.ts reveals, so the column
+   waits for the menu's first layout (layoutMenu sets data-laid-out). If that never ran, the keys
+   still appear after 1.5 s rather than never. */
+#menu:not([data-laid-out]) .menu-buttons { visibility: hidden; animation: menu-keys-fallback 0s linear 1.5s forwards; }
+@keyframes menu-keys-fallback { to { visibility: visible; } }
+/* THE PRODUCT MENU'S FIRST PAINT (owner, 2026-11-02: "making sure everything appears as quickly as
+   possible"). On the product channels the module used to be the only thing that could show a way to
+   play: the keys waited for `data-laid-out`, and the 1.5s fallback then flashed the LEGACY set
+   ("Play offline", "Tutorial") before the product keys replaced them. The product menu's shape is
+   STATIC (PLAY + the footer) and only its labels are data — so it is shown here from the first paint,
+   with the two legacy-only entries kept out until layout. A tap that lands before the module has
+   attached its listener is delivered once it does (input events queue on the busy main thread), so
+   the early key is not a dead key. `world-reserved` (added by vite.config.ts only when this build has
+   an online endpoint) holds TERRITORY's exact slot invisible, so the column does not shift when the
+   map key is revealed. Channels that are not the product keep the gate unchanged. */
+html.test-typography-v2 #menu:not([data-laid-out]) .menu-buttons {
+  visibility: visible;
+  animation: none;
+}
+html.test-typography-v2 #menu:not([data-laid-out]) :is(#menu-tutorial, #menu-continue, #menu-new, #menu-campaign, #menu-online) {
+  display: none !important;
+}
+html.test-typography-v2.world-reserved #menu:not([data-laid-out]) #menu-world[hidden] {
+  display: grid !important;
+  visibility: hidden;
+  pointer-events: none;
+}
+/* Home-menu PAINT mark: reserve the lockup box from the first frame (CSS image), then branding
+   replaces it with the same PAINT SVG (img) so the column never jumps. */
+html.test-typography-v2 #menu #logo {
+  display: block;
+  width: min(200px, 52vw, 22dvh);
+  aspect-ratio: 1995 / 565;
+  margin: 0 auto;
+  background: center / contain no-repeat url('./assets/brand/plain-wordmark-menu.svg');
+  opacity: 0.9;
+}
+html.test-typography-v2 #menu #logo:has(> :is(svg, img)) {
+  background: none;
+  opacity: 1;
+}
 .menu-buttons {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  /* The action stack keeps its own rhythm; it tightens on a short screen before anything shrinks. */
+  gap: clamp(5px, 1.1dvh, 10px);
 }
+/* The menu's footer (owner brief, 2026-10-21): ONE row at the bottom, account key left and Settings
+   right, both 50px and both the same menu key as the column above. It reuses `.menu-buttons` for
+   the frame/type/height system and only changes the direction. The two keys are placed EXPLICITLY,
+   so Settings stays the right-hand key even when the account key is hidden (a channel with no
+   Google): an empty auto-placed cell would drift it left. */
+#menu .menu-footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: stretch;
+  gap: clamp(5px, 1.1dvh, 10px);
+}
+#menu .menu-footer .btn {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 12px;
+  /* Both keys are the same instrument: one label size, never one big and one small. */
+  font-size: 0.95rem;
+}
+#menu .menu-footer #menu-login {
+  grid-column: 1;
+  grid-row: 1;
+  /* A long display name must not push the key out of the row: it stays one line and ellipsises, and
+     the full name is always in the key's aria-label (and in the profile). Block + line-height is the
+     one layout that lets `text-overflow` work on a button's own text; it still fills the 50px key. */
+  display: block;
+  overflow: hidden;
+  padding: 0 10px;
+  line-height: calc(var(--menu-key-h) - 2px);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#menu .menu-footer #menu-settings { grid-column: 2; grid-row: 1; }
+/* A lone key is never a half-width orphan (owner, 2026-10-29 rule for every menu): with no account
+   key on this channel, Settings spans the row like every key above it. */
+#menu .menu-footer:not(:has(> #menu-login:not([hidden]))) #menu-settings { grid-column: 1 / -1; }
 /* One button system for the whole surface: a quiet 1px cream frame for the default, and a single
    cream fill (Continue) as the only emphasis. No gradient, no glow, no drop shadow.
    Difficulty tiles reuse the same frame so New game → pick level keeps one rhythm; the online
    submenu reuses `.menu-buttons` so its buttons match the menu exactly.
-   Height and corner come from the shared `.btn` scale (56 big / 44 normal, pill — UX.md §controls),
-   so a difficulty row IS a menu button instead of its own 52px / 14px shape. */
+   Height and corner: every MENU key is the owner's 50px `--menu-key-h` (2026-10-21); the shared
+   `.btn` scale still gives 56 big / 44 normal to controls OUTSIDE the menus (board, cockpit, sheets),
+   and the difficulty row is a menu button instead of its own 52px / 14px shape. */
 .menu-buttons .btn,
 #levels .level-grid .difficulty-tile {
   padding: 1px 20px 0;
@@ -365,6 +577,16 @@ button {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+/* The owner's ONE key height (2026-10-21): the menu column, the footer row and the PLAY submenu are
+   all 50px, at every supported size. `height`, not only `min-height`, so a key can never stretch or
+   shrink with the column; the label is one line at every size (Large text included). */
+#menu .menu-buttons .btn,
+#menu .menu-footer .btn,
+#play-menu .menu-buttons .btn,
+#levels .level-grid .difficulty-tile {
+  min-height: var(--menu-key-h);
+  height: var(--menu-key-h);
+}
 .menu-buttons .btn.primary,
 #levels .level-grid .difficulty-tile.primary,
 #levels .level-grid .difficulty-tile.on {
@@ -373,10 +595,159 @@ button {
   color: var(--fu-ink);
   box-shadow: none;
 }
-.menu-buttons .btn:active,
-#levels .level-grid .difficulty-tile:active { transform: translateY(1px); }
 .menu-buttons .btn:focus-visible,
 #levels .level-grid .difficulty-tile:focus-visible { outline: 2px solid var(--fu-cream); outline-offset: 2px; }
+
+
+/* ---------- the Territory entry's instrument read-outs (owner brief, 2026-10-20) ----------
+   Seeds on the left, tiles held on the right, the label between them on ONE centre line. The three
+   cells are placed EXPLICITLY, so the label stays geometrically centred even while both read-outs
+   are hidden: an unknown value must never shift "TERRITORY" sideways, and the entry must read as the
+   same button whether the numbers are there or not.
+   This is not a badge and not two loose numbers: each side is a quiet mono read-out with the game's
+   own glyph (the authored seed, the board's hexagon), the same 16px cell and the same baseline. There
+   is deliberately NO rule or divider between a read-out and the label (owner, 2026-10-20): the two
+   halves are balanced by the grid's equal cells and the shared gaps alone. */
+#menu .menu-buttons .btn.menu-territory {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+  /* The shared big-entry frame and its 44px tap floor are untouched; the sides add no height. */
+  padding: 1px 16px 0;
+  /* The waiting lamp is placed against the key, not inside the symmetric pair. */
+  position: relative;
+}
+/* THE LOOP'S SIGNAL: one small amber lamp when a challenge is waiting for an answer. It is a dot,
+   not a badge: the count lives in the button's spoken label, and a number here would compete with
+   the Seeds/tiles pair that is the entry's whole design. */
+.menu-territory-waiting {
+  position: absolute;
+  top: 9px;
+  right: 11px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c-gold);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-gold) 16%, transparent);
+  animation: menu-territory-waiting 2.6s ease-in-out infinite;
+}
+@keyframes menu-territory-waiting {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .45; }
+}
+.reduce-motion .menu-territory-waiting { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .menu-territory-waiting { animation: none; }
+}
+.menu-territory-label { grid-area: 1 / 2; }
+.menu-territory-side {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--fu-cream-70);
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  font-weight: var(--w-ui-medium, 500);
+  font-variant-numeric: lining-nums tabular-nums;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+.menu-territory-seeds { grid-area: 1 / 1; justify-self: start; }
+.menu-territory-tiles { grid-area: 1 / 3; justify-self: end; }
+.menu-territory-icon {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.menu-territory-icon > svg { width: 16px; height: 16px; }
+.menu-territory-icon .seed-icon { color: var(--fu-cream-70); }
+/* Tabular digits in a shared three-cell column, hugging their own glyph: a 9 becomes a 10 (or a 999
+   a 1,000) inside the same cell, and both sides keep the same width for the usual 1-3 digit values,
+   so the two halves stay mirror images of each other. The number is updated in place (textContent
+   only), so a refresh never re-lays anything out. */
+#menu .menu-territory-value { min-width: 3ch; text-align: start; }
+#menu .menu-territory-tiles .menu-territory-value { text-align: end; }
+/* The countdown reads "18h 42m" with a space in it: it must never wrap inside the entry and push
+   the label, so the value is one unbreakable run (owner, 2026-11-01 polish pass). */
+#menu .menu-territory-value { white-space: nowrap; }
+/* The answer countdown wears the tile timer's colour step (owner, 2026-11-10): calm keeps the
+   entry's ink, warm amber under 12 h, hot red under 3 h. Colour only: the layout never moves. */
+#menu .menu-territory-tiles[data-urgency='warm'] .menu-territory-value { color: #ffc66b; }
+#menu .menu-territory-tiles[data-urgency='hot'] .menu-territory-value { color: #ff7a68; }
+/* The smallest phones: the label and the two read-outs step down together so even a five-digit
+   balance stays inside the entry. Nothing hides, and the button keeps its 44px tap floor. */
+@media (max-width: 340px) {
+  #menu .menu-buttons .btn.menu-territory { padding-inline: 12px; }
+  #menu .menu-territory-side { gap: 4px; font-size: 0.8rem; }
+  #menu .menu-territory-label { font-size: 0.95rem; letter-spacing: 0.05em; }
+}
+/* ---------- PLAY ONLINE'S "YOUR MOVE" MARKER (owner, 2026-11-10) ----------
+   "always keep PLAY ONLINE as button but make an icon signalising we have YOUR MOVE to do on the side
+   of the button - similar to how we have tiles and seeds living inside THE PLANET button". The same
+   three-cell grid as the Territory entry: the label stays centred whether the marker is there or
+   not, and the marker is a quiet read-out in that entry's own type, 16px glyph cell and baseline -
+   in the game's gold, because it is the one thing on the menu waiting for the player. Still: no
+   motion, no badge, no count bubble. */
+#menu-online.menu-online-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+}
+.menu-online-entry > .menu-online-side:first-child { grid-area: 1 / 1; }
+.menu-online-label { grid-area: 1 / 2; }
+.menu-online-turns {
+  grid-area: 1 / 3;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--c-gold, #e3b768);
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  font-weight: var(--w-ui-medium, 500);
+  font-variant-numeric: lining-nums tabular-nums;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+.menu-online-turns[hidden] { display: none; }
+.menu-online-turn-icon { width: 16px; height: 16px; flex: none; }
+@media (max-width: 340px) {
+  .menu-online-turns { gap: 4px; font-size: 0.8rem; }
+}
+/* ---------- THE CAMPAIGN'S SUGGESTION (owner, 2026-11-02) ----------
+   "make slight glow cream around the play and level 1 so its suggestive". A soft cream halo around
+   the two keys that lead to the campaign — PLAY and the LEVEL <n> entry — while lessons 1-10 are
+   unfinished (the rule is in web/src/menu/suggestion.ts). It replaces the ten first-run lamps the
+   owner asked to remove, so it carries the whole pointer and must stay QUIET: two wide, low-alpha
+   shadows, no ring, no neon, no colour of its own beyond the keys' own cream.
+   It is a STATIC `box-shadow` on the key's `::after` halo: painted once, never per frame, and NOT a
+   `filter` on the key (the trap the Territory fog and the surrounded-home glow hit twice). There is
+   no keyframe and no transition, so Reduce motion has no movement to switch off. Because the halo is
+   its own box, the key's material, inset light and focus ring are untouched; because it is
+   `pointer-events:none` and paints outside the key's box, it steals no tap. */
+#menu .menu-buttons > .btn.suggest,
+#play-menu .menu-buttons > .btn.suggest {
+  position: relative;
+  /* Explicit, so "no motion" is a fact the browser reports, not an omission. */
+  animation: none;
+  transition: none;
+}
+#menu .menu-buttons > .btn.suggest::after,
+#play-menu .menu-buttons > .btn.suggest::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: none;
+  box-shadow:
+    0 0 3px color-mix(in srgb, var(--fu-cream) 18%, transparent),
+    0 0 16px 3px color-mix(in srgb, var(--fu-cream) 20%, transparent);
+}
 .menu-lessons {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -434,11 +805,13 @@ button {
   min-width: 1.4ch;
   text-align: center;
 }
-.score.you .num {
-  color: var(--c-you);
-}
+/* THE SCORE DIGITS ARE NEUTRAL (owner, 2026-10-20: no green and red on the points — they read
+   as good/bad or as two colour-coded teams). Both numbers take the page's own text cream, and
+   whose is whose is said by position and by the small mark beside them, never by hue. The marks
+   themselves keep the ownership colours: that is what they are for. */
+.score.you .num,
 .score.bot .num {
-  color: var(--c-bot);
+  color: var(--c-text);
 }
 .score .who {
   color: var(--c-muted);
@@ -611,13 +984,13 @@ html.kbd .board:focus-visible {
   stop-color: var(--c-you);
 }
 .st-bulb-hi.you {
-  stop-color: color-mix(in srgb, var(--c-you) 70%, #fff);
+  stop-color: color-mix(in srgb, var(--c-you) 70%, #f2ede4);
 }
 .st-bulb.bot {
   stop-color: var(--c-bot);
 }
 .st-bulb-hi.bot {
-  stop-color: color-mix(in srgb, var(--c-bot) 72%, #fff);
+  stop-color: color-mix(in srgb, var(--c-bot) 72%, #f2ede4);
 }
 .lit {
   stroke-width: 1.3;
@@ -695,9 +1068,15 @@ html.futa04-information .hex.rich {
   pointer-events: none;
   filter: drop-shadow(0 0 1.6px rgba(231, 181, 83, .32));
 }
-#board .gold-frame-art {
-  filter: sepia(.12) saturate(1.34) hue-rotate(7deg) brightness(1.17) contrast(1.05);
-}
+/* NO FILTER ON THE RIM (owner, 2026-10-24, second pass: "is that in? i think they look the same -
+   still not like gold"). The 2026-10-23 pass filtered a BROWN atlas and could never work: `sepia`,
+   `saturate` and `hue-rotate` push the existing brown around, they cannot re-map a tonal ramp, so
+   the body stayed at hue 35 (orange-brown = varnished timber). The ARTWORK is gold now: the atlas
+   was rebuilt as a real gold ramp - one chromaticity, hue 45 / sat .94, with the top of the ramp
+   desaturating into cream - so there is nothing left for a filter to do, and a 2.25x saturate on top
+   of a correct ramp would blow it out. The glow is the `drop-shadow` on `.gold-frame` and is
+   untouched, as the owner asked. Measured on a rendered board at deviceScaleFactor 3, the rim's body
+   went from hue 33 to hue 45, and its specular from sat .83 to sat .32. */
 /* A V3 board enters on its finished painting, never on grey placeholder hexes. */
 html.futa04-information.design-v3 #board.skin-board:not(.skin-ground-ready) {
   opacity: 0;
@@ -887,7 +1266,7 @@ svg.usable .hex-cell {
   stroke: var(--m-mossTop);
 }
 .veins.bot .vein {
-  stroke: color-mix(in srgb, var(--c-bot) 45%, #fff);
+  stroke: color-mix(in srgb, var(--c-bot) 45%, #f2ede4);
 }
 /* A new vein draws itself on, from the old tile to the new one, finishing with its tile. */
 .vein.grow-in {
@@ -971,8 +1350,7 @@ svg.usable .hex-cell {
   fill: none;
   stroke: var(--c-you);
   stroke-width: 2.4;
-  /* Legal targets pulse gently into view, then breathe. */
-  animation: target-in 0.28s ease-out both, breathe 1.6s ease-in-out 0.28s infinite;
+  /* Arrival is owned by the later .target rule. No idle breath here. */
   transform-box: fill-box;
   transform-origin: center;
 }
@@ -1385,7 +1763,7 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   background: none;
   color: var(--c-muted);
   cursor: pointer;
-  transition: opacity 0.2s;
+  transition: opacity var(--dur-quick);
 }
 .pile-card {
   position: relative;
@@ -1455,10 +1833,10 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
 @keyframes ready {
   0%,
   100% {
-    filter: none;
+    opacity: 1;
   }
   50% {
-    filter: brightness(1.25);
+    opacity: 0.82;
   }
 }
 .pile.ready .pile-stack,
@@ -1513,14 +1891,68 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
 .hand .card {
   transform-origin: 50% 100%;
   transform: rotate(var(--rot, 0deg)) translateY(var(--dy, 0px));
-  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.3, 1.2), opacity 0.2s;
+  translate: 0 0;
+  transition: transform var(--dur-quick) var(--ease-settle), opacity var(--dur-quick) var(--ease-settle), translate var(--dur-quick) var(--ease-settle);
   margin-left: min(-6px, calc((100% - 28px - var(--n) * var(--cw)) / max(var(--n) - 1, 1)));
+  /* Phase 1: a card's weight is a shadow under it, set once per render (never per frame). */
+  box-shadow: 0 var(--shadow-y, 2px) var(--shadow-blur, 4px) rgba(0, 0, 0, var(--shadow-alpha, 0.28));
+}
+/* Phase 4: the idle breath. It animates `scale` only, so the fan's inline rotation/lift and the
+   press's `translate` still compose. A light card sways up to 0.8%, a heavy one 0.4%; the period
+   and phase are per-card (logic/motion.ts), and `linear` with four stops is the smooth loop.
+
+   FIVE BAKED AMPLITUDES, NOT A `var()` (2026-10-29). These keyframes used to read
+   `calc(1 + (var(--breath-scale) - 1) * 0.5)`. A keyframe value that depends on a custom property
+   cannot be handed to the compositor, so each breathing card forced a full style pass on the main
+   thread EVERY frame, for as long as the hand was idle — measured at ~190 ms of style recalculation
+   and ~260 ms of main-thread task per second on a phone-sized screen at 4x CPU throttle (the
+   largest idle cost after the display's blink). The card picks one of five static amplitudes
+   (`breath-a8`..`breath-a4`, logic/motion.ts `breathAmpStep`); 0.03 px is the whole difference. */
+@keyframes hand-breath-a8 {
+  0%, 100% { scale: 1; }
+  25%, 75% { scale: 1.004; }
+  50% { scale: 1.008; }
+}
+@keyframes hand-breath-a7 {
+  0%, 100% { scale: 1; }
+  25%, 75% { scale: 1.0035; }
+  50% { scale: 1.007; }
+}
+@keyframes hand-breath-a6 {
+  0%, 100% { scale: 1; }
+  25%, 75% { scale: 1.003; }
+  50% { scale: 1.006; }
+}
+@keyframes hand-breath-a5 {
+  0%, 100% { scale: 1; }
+  25%, 75% { scale: 1.0025; }
+  50% { scale: 1.005; }
+}
+@keyframes hand-breath-a4 {
+  0%, 100% { scale: 1; }
+  25%, 75% { scale: 1.002; }
+  50% { scale: 1.004; }
+}
+#hand.breathing .card:not(.breath-off) {
+  animation: hand-breath-a6 var(--breath-period, 5200ms) linear var(--breath-phase, 0ms) infinite;
+}
+#hand.breathing .card.breath-a8:not(.breath-off) { animation-name: hand-breath-a8; }
+#hand.breathing .card.breath-a7:not(.breath-off) { animation-name: hand-breath-a7; }
+#hand.breathing .card.breath-a5:not(.breath-off) { animation-name: hand-breath-a5; }
+#hand.breathing .card.breath-a4:not(.breath-off) { animation-name: hand-breath-a4; }
+/* A finger on the fan, a hidden tab or a pause freezes the breath where it is (no jump). */
+#hand.breathing.breath-hold .card:not(.breath-off) {
+  animation-play-state: paused;
+}
+.reduce-motion #hand.breathing .card { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  #hand.breathing .card { animation: none; }
 }
 .hand .card:first-child {
   margin-left: 0;
 }
 .hand .card.lifted {
-  transform: rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 18px));
+  transform: rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - var(--lift, 18px)));
   border-color: var(--c-accent);
   z-index: 2;
 }
@@ -1530,8 +1962,13 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
 .hand .card.dim {
   opacity: 0.5;
 }
+/* thrown while my move still played (main.ts throwHeld): it waits, untouchable, for its flight */
+.hand .card.throw-held {
+  pointer-events: none;
+}
 .hand.waiting .card {
   opacity: 0.85;
+  translate: 0 2px;
 }
 .c-num {
   justify-self: start;
@@ -1576,6 +2013,29 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   z-index: 20;
   pointer-events: none;
 }
+/* The opponent's own cards travel inside this one layer (futa0.5 "the opponent has a body").
+   It sits above the board and cockpit, but inside #game (z-index 1): the tutorial focus (34)
+   and the lesson plate (42) still draw above it, so a flyer can never hide the lit target or
+   the words. A single absolutely positioned card at a time; taps pass straight through. */
+.enemy-flight {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  overflow: visible;
+}
+.enemy-flight .flyer {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+}
+/* The opponent's seat: an invisible anchor measured once per layout, never per frame. */
+.opp-seat {
+  position: absolute;
+  display: block;
+  visibility: hidden;
+  pointer-events: none;
+}
 .card.back {
   background: var(--c-surface);
   background-image: repeating-linear-gradient(45deg, transparent 0 5px, color-mix(in srgb, var(--c-line) 70%, transparent) 5px 6px);
@@ -1587,6 +2047,35 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   inset: 0;
   z-index: 10;
   background: color-mix(in srgb, var(--c-bg) 70%, transparent);
+}
+/* THE VEIL (owner, 2026-10-23): while a panel or the finish card is up, whatever is behind it is
+   blurred and darkened, so the panel reads as the one thing on screen. It lives on the BACKDROP
+   (the scrim, the finish screen), never as a filter on the game: a filter on the whole game made
+   Safari repaint the blurred match on every frame while the panel arrived, so on an iPhone the
+   menus appeared with no animation at all (owner, 2026-10-24). A backdrop blur is composited
+   once, and only the backdrop's opacity moves. */
+html.futasaku-product .scrim,
+html.futasaku-product #gameover,
+html.futasaku-product .install-prompt-scrim {
+  background: color-mix(in srgb, var(--c-bg) 24%, transparent);
+  -webkit-backdrop-filter: var(--veil);
+  backdrop-filter: var(--veil);
+}
+/* NOTHING BEHIND THE GLASS MOVES (measured; docs/PERF-THERMAL.md).
+   Every veil above carries a `backdrop-filter`, and a backdrop blur is only composited ONCE while
+   what it covers is still. While one is up, the screen behind it holds its animation clocks exactly
+   where they were: pausing is free, resuming continues from the same frame, and no decorative
+   breath is lost. The planet's WebGL loop and the stars are stopped by `ui/render-gate.ts` — CSS
+   cannot reach those.
+   PSEUDO-ELEMENTS COUNT TOO: the full-screen warm pass is `#game::before`, and a `*` selector never
+   matches it. Left running, it kept the finish card's blur recompositing every frame — measured at
+   90% of a GPU core with the planet already asleep. */
+html.backdrop-held :is(#game, #menu, #texture)::before,
+html.backdrop-held :is(#game, #menu, #texture)::after,
+html.backdrop-held :is(#game, #menu, #texture, #spores) *,
+html.backdrop-held :is(#game, #menu, #texture, #spores) *::before,
+html.backdrop-held :is(#game, #menu, #texture, #spores) *::after {
+  animation-play-state: paused !important;
 }
 .sheet {
   position: fixed;
@@ -1633,13 +2122,818 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   flex-direction: column;
   gap: 8px;
 }
+
+/* ---------- the pause panel: dark glass over the paused game ---------- */
+/* Owner direction (2026-10-23): "paused menu ... even tho reworked is kinda lame", "using the
+   existing dark glass concept with blurred darkened game interface under it". The game behind is
+   blurred and darkened (html.game-veiled, below); the panel is the same dark glass as the lesson
+   window, floating, with ONE lead key, ONE pair of keys and a quiet row of icon tools.
+   ONE content axis: every part is centred on the panel's own centre line, and the two scores are
+   mirrored across it. Every target is at least 44px; nothing scrolls at 320x568 or in landscape.
+   Settings is the LAST button in the DOM, so it is last in tab order. */
+#sheet-menu {
+  --gm-pad: 18px;
+  --gm-row: 46px;
+  --gm-hair: color-mix(in srgb, var(--c-line) 50%, transparent);
+  --gm-glass: var(--dark-glass);
+  left: 10px;
+  right: 10px;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  padding: 6px var(--gm-pad) 14px;
+  border-radius: calc(var(--radius) * 2);
+  background: var(--gm-glass);
+  -webkit-backdrop-filter: var(--dark-glass-blur);
+  backdrop-filter: var(--dark-glass-blur);
+  /* A pause panel is brief by design: let it use the screen rather than scroll. */
+  max-height: 94dvh;
+  /* The panel rises in on the acknowledgement beat; translate and opacity only. */
+  animation: gm-panel-in var(--dur-quick) var(--ease-standard) both;
+}
+/* The slide uses the independent `translate` property, never `transform`: on wide screens the
+   sheet is a centred dialog positioned with transform, and animating transform would drop that
+   centring mid-flight. `translate` composes with it and still moves only the panel. */
+@keyframes gm-panel-in {
+  from {
+    translate: 0 16px;
+    opacity: 0;
+  }
+  to {
+    translate: 0 0;
+    opacity: 1;
+  }
+}
+/* Reduce motion: the panel is simply there. No slide, no fade — a designed static state. */
+.reduce-motion #sheet-menu,
+#sheet-menu.reduce-motion {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  #sheet-menu {
+    animation: none;
+  }
+}
+/* Wide screens turn every sheet into a centred dialog (the .sheet rule's own transform); the panel's
+   floating edges above must give way to that centring there, or the transform pulls it off screen. */
+@media (min-width: 760px) and (min-aspect-ratio: 1/1), (orientation: landscape) and (max-height: 560px) {
+  #sheet-menu {
+    left: 50%;
+    right: auto;
+    bottom: auto;
+  }
+}
+
+/* the nameplate: the mode as a small kicker over the title, Close in the corner; the name block is
+   centred on the panel axis (three cells: spacer | name | close) */
+#sheet-menu .gm-head {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  min-height: 52px;
+  padding: 0 0 4px;
+  position: static;
+  background: transparent;
+}
+#sheet-menu .gm-name {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+#sheet-menu .gm-head h2 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.4rem;
+  line-height: 1.1;
+  letter-spacing: -0.005em;
+  text-align: center;
+  color: var(--c-text);
+  white-space: nowrap;
+}
+/* The one amber note: the lamp beside the title, reading the LIGHT contract's core tone. */
+/* No lamp dot before the title (owner, 2026-10-23): the word stands alone. */
+#sheet-menu .gm-head h2::before {
+  content: none;
+}
+#sheet-menu .gm-mode {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 0.56rem;
+  line-height: 1.2;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+#sheet-menu .gm-close {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  color: var(--c-muted);
+}
+
+/* the read-out: scores mirrored across the centre, the turn under them. The old 1px centre rule is
+   gone (owner, 2026-11-02); the two labels and the mirror are the structure, and the gap is the
+   old rule + its air so both scores stay exactly where they were. */
+#sheet-menu .gm-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+}
+#sheet-menu .gm-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0 12px;
+}
+#sheet-menu .gm-readout[hidden] {
+  display: none;
+}
+#sheet-menu .gm-scores {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  /* 14px either side of where the 1px rule sat = 29px between the two halves. */
+  column-gap: 29px;
+}
+#sheet-menu .gm-you {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+#sheet-menu .gm-bot {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+#sheet-menu .gm-scores b {
+  font-size: 1.6rem;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+/* Neutral score digits (owner, 2026-10-20: no green/red on the points). Whose score is whose is
+   said by which side it sits on and by the label under it — never by hue. */
+#sheet-menu .gm-you b,
+#sheet-menu .gm-bot b {
+  color: var(--c-text);
+}
+#sheet-menu .gm-scores small {
+  font-size: 0.6rem;
+  line-height: 1;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+#sheet-menu .gm-turn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px 8px;
+  text-align: center;
+  font-size: 0.62rem;
+  line-height: 1.2;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--c-text);
+}
+#sheet-menu .gm-turn:empty {
+  display: none;
+}
+#sheet-menu .gm-turn b {
+  font-weight: inherit;
+  font-size: inherit;
+}
+#sheet-menu .gm-turn small {
+  color: var(--c-muted);
+  font-size: inherit;
+}
+
+/* the lead key: the one filled control on the glass, and in a lesson a twin key beside it */
+#sheet-menu .gm-leads {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+/* Two visible leads (a lesson) sit side by side. The label shrinks with the key so both stay on
+   ONE line at 320px and with Large text - a wrapped label would spill out of a 44px key. */
+#sheet-menu .gm-leads:has(> .gm-lead:not([hidden]) + .gm-lead:not([hidden])) .gm-lead {
+  padding: 0 8px;
+  font-size: clamp(0.6rem, 2.9vw, 0.78rem);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+#sheet-menu .gm-lead {
+  width: 100%;
+  min-height: 52px;
+  height: 52px;
+  margin: 0;
+  /* One key shape across the game: the menu's own 10px corner (owner, 2026-10-31). */
+  border-radius: 10px;
+  font-family: var(--font-ui);
+  font-size: 0.86rem;
+  font-weight: var(--w-text);
+  box-shadow: inset 0 1px 0 var(--light-bloom, rgba(255, 195, 104, 0.3));
+}
+#sheet-menu .gm-lead.ghost {
+  box-shadow: none;
+}
+
+/* the pair: New game and Main menu, two equal keys on one line, the axis between them.
+   THE COLUMNS COME FROM WHAT IS VISIBLE (owner, 2026-10-29: "in 'paused' menu or any similar there
+   should be no orphaned single button that's half the width of regular button"). A fixed
+   `1fr 1fr` keeps an empty second track when one key is hidden, so the lone key was painted at HALF
+   width — the orphan (measured: Main menu 163px in a 334px row in a duel, where Restart is hidden;
+   the old `:has()` guards only ever covered `.gm-acts`, so the pair had none at all).
+   `grid-auto-flow: column` + `grid-auto-columns: 1fr` derive the columns from the row's own items,
+   and `[hidden]` is `display: none !important` (top of this file), so a hidden key is not an item:
+   one visible key fills the line, two split it. No `:has()` decides a width. `.gm-leads` and
+   `.gm-tools` already worked this way; all four rows are now one behaviour. */
+#sheet-menu .gm-pair,
+#sheet-menu .gm-acts {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+/* A row with nothing to put in it takes no space at all: in a live duel both the pair and the duel
+   row can be empty, and the plate must not keep a phantom gap where they were. */
+#sheet-menu .gm-pair:not(:has(> .gm-act:not([hidden]))),
+#sheet-menu .gm-acts:not(:has(> .gm-act:not([hidden]))) {
+  display: none;
+}
+#sheet-menu .gm-act {
+  position: relative;
+  width: 100%;
+  min-height: var(--gm-row);
+  height: auto;
+  padding: 4px 10px;
+  border: 1px solid var(--gm-hair);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--c-text) 4%, transparent);
+  font-family: var(--font-ui);
+  font-size: 0.76rem;
+  font-weight: var(--w-text);
+  line-height: 1.2;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-text);
+  justify-content: center;
+}
+/* A live duel's Resign is the one row that must not look like the others. */
+#sheet-menu #gm-resign:not([hidden]) {
+  color: var(--c-bot);
+}
+
+/* the tool row: quiet icon keys with one word under each — How to play, What happened, Report,
+   Settings (last). Equal columns, so the row is centred on the axis whatever is shown. */
+#sheet-menu .gm-tools {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 4px;
+  margin-top: 12px;
+  /* The old 1px rule is now the row's own top air: no line, same position. */
+  padding-top: 11px;
+}
+#sheet-menu .gm-tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 56px;
+  padding: 6px 2px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--c-muted);
+  font: inherit;
+  cursor: pointer;
+}
+#sheet-menu .gm-tool[hidden] {
+  display: none;
+}
+#sheet-menu .gm-tool .i {
+  font-size: 1.25rem;
+  line-height: 0;
+  color: var(--c-text);
+  opacity: 0.86;
+}
+#sheet-menu .gm-tool-word {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  font-size: 0.56rem;
+  line-height: 1.1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+#sheet-menu .gm-tool:focus-visible {
+  outline: 2px solid var(--c-text);
+  outline-offset: 2px;
+}
+
+/* Short screens (320x568, 360x640): the air comes out first; every target stays 44px. */
+@media (max-height: 700px) {
+  #sheet-menu {
+    --gm-pad: 14px;
+  }
+  #sheet-menu .gm-head {
+    min-height: 46px;
+  }
+  #sheet-menu .gm-head h2 {
+    font-size: 1.2rem;
+  }
+  #sheet-menu .gm-readout {
+    padding: 6px 0 8px;
+    gap: 4px;
+  }
+  #sheet-menu .gm-scores b {
+    font-size: 1.34rem;
+  }
+  #sheet-menu .gm-leads {
+    margin: 8px 0 0;
+  }
+  #sheet-menu .gm-lead {
+    min-height: 46px;
+    height: 46px;
+  }
+  #sheet-menu .gm-act {
+    min-height: 44px;
+    font-size: 0.72rem;
+  }
+  #sheet-menu .gm-tools {
+    margin-top: 8px;
+    padding-top: 6px;
+  }
+  #sheet-menu .gm-tool {
+    min-height: 50px;
+    gap: 4px;
+  }
+}
+
+/* Landscape phones (844x390 and the like): the same face as a centred dialog. */
+@media (max-height: 520px) and (min-width: 560px) {
+  #sheet-menu {
+    --gm-pad: 18px;
+    max-height: 94dvh;
+    padding-top: 10px;
+  }
+  /* Wide screens turn every sheet into a centred dialog; the pause panel keeps its own top edge. */
+  #sheet-menu::before {
+    display: none;
+  }
+  #sheet-menu .gm-body {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  #sheet-menu .gm-head {
+    min-height: 44px;
+  }
+  #sheet-menu .gm-head h2 {
+    font-size: 1.2rem;
+  }
+  #sheet-menu .gm-readout {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 2px 0 6px;
+  }
+  #sheet-menu .gm-scores {
+    grid-template-columns: auto auto;
+    column-gap: 12px;
+  }
+  #sheet-menu .gm-scores b {
+    font-size: 1.35rem;
+  }
+  #sheet-menu .gm-you,
+  #sheet-menu .gm-bot {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+  }
+  #sheet-menu .gm-leads {
+    margin: 4px 0 0;
+  }
+  #sheet-menu .gm-lead {
+    min-height: 44px;
+    height: 44px;
+  }
+  #sheet-menu .gm-pair,
+  #sheet-menu .gm-acts {
+    margin-top: 6px;
+  }
+  #sheet-menu .gm-act {
+    min-height: 44px;
+  }
+  #sheet-menu .gm-tools {
+    margin-top: 6px;
+    padding-top: 4px;
+  }
+  #sheet-menu .gm-tool {
+    min-height: 44px;
+    flex-direction: row;
+    gap: 6px;
+  }
+}
+
+/* A readout takes visual focus: dim the existing menu ink behind the classic glass. The new
+   connected row must not pick up a bright PLAY-key band; no extra veil/filter/material layer. */
+html.has-sheet-profile:not(#no-has) #menu .menu-inner { opacity: .28; }
+
+/* ---------- the player's profile: the pause panel's language, five read-only lines ----------
+   Owner brief (2026-10-21): a SKELETON built now, showing basic info about the player. It borrows
+   the pause panel's language on purpose — ONE content axis, NO rules between neighbours (owner,
+   2026-11-02: "i also dont like the hairline divisions in profile ... id remove and not add in new
+   windows in future"), neutral digits, no new colour, no glow — because it is the same kind of
+   read-out surface. The only control is Close: nothing is editable and there is no sign-out here
+   (Settings owns both). A row is separated from its neighbour by its own padding step; the label's
+   small tracked caps and the value's weight do the reading, never a line. */
+#sheet-profile {
+  --sp-pad: 16px;
+  --sp-row: 46px;
+  /* THE HEADER'S OWN EDGE INSET (owner, 2026-11-02: "profile frame ... next to logo looking ugly").
+     The plate's corners are the glass family's 15px (the sheet had 32px of its own until the
+     2026-11-02 material pass put every window on one corner). A wordmark set flush in the panel's
+     16px gutter therefore had its top-left corner inside the corner square (x = 16 < 32), tucked
+     under the arc: 9.9px of air on the arc in the owner's own screenshot. 20px more puts the mark's
+     left edge at 36px from the plate at 390x844 (28px on short screens, which take 14px; 32px in
+     landscape) — well outside the corner band at any radius the family uses, so the mark cannot
+     meet the curve at any size. */
+  --sp-edge: 20px;
+  /* THE ROW'S OWN PAD, not a rule (owner, 2026-11-02). It was 12px plus a 1px border under every
+     neighbour; the border is gone and the same 1px now lives in the neighbour's top padding, so the
+     row boxes land on exactly the same lines as before. Short screens and landscape retune the
+     token, never the selector, so the first row and its neighbours keep one rhythm. */
+  --sp-row-pad: 12px;
+  /* The 22px bottom air is the same rule at the other end: the record's lowest corners must clear
+     the plate's bottom arcs (all four corners are rounded in landscape), and 14px of padding
+     measured only 7.9px of air there. */
+  padding: 10px var(--sp-pad) max(22px, env(safe-area-inset-bottom));
+  /* THE PLATE IS GLASS, LIKE EVERY OTHER WINDOW (owner, 2026-11-02: "territory and profile windows
+     dont match really ... BOTH (and any other similar) should be using our classic dark glass
+     window style"). It wore a near-opaque plate (alpha 0.982) for ONE measured reason, not for its
+     look: at .42 alpha a blurred bright menu key behind the fifth row drew a soft band across
+     "MATCHES WON" (the owner's screenshot: ground 21 → 72/255). That band is a measure of what the
+     MENU behind the sheet puts through, not of the sheet — so the sheet now wears --dark-glass and
+     the band was re-measured on the settled plate at 390x844 (web/e2e/menu-profile.ts samples the
+     rendered pixels across that row, and fails if the ground ever varies by more than the 8/255
+     the rebuilt .42 sheet measured: a band, not a tint). The plate, its corner and its shadow are
+     now the same three values as the pause plate and the challenge card. */
+  background: var(--dark-glass);
+  /* Five short lines always fit; the cap is honesty about being a brief sheet, not a scroll area. */
+  max-height: 94dvh;
+  animation: gm-panel-in var(--dur-quick) var(--ease-standard) both;
+}
+.reduce-motion #sheet-profile,
+#sheet-profile.reduce-motion {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  #sheet-profile {
+    animation: none;
+  }
+}
+/* THE NAMEPLATE IS THREE BALANCED THINGS: the Futasaku wordmark, the centred word, the close key,
+   on one 44/46px line. The two side cells are equal `1fr` tracks, so the title sits on the panel's
+   own centre line; the middle track is the title's own `max-content` width (a nowrap word, so it
+   never competes for the free space the side cells need). `minmax(68px, ...)` is the wordmark's own
+   67.69px, so a side cell can never shrink under the mark. The old `44px 1fr 44px` kept the mark in
+   a cell it never fitted, which is how it ended up flush in the 16px gutter, under the corner
+   curve (owner, 2026-11-02: "profile frame ... next to logo looking ugly"). */
+#sheet-profile .sp-head {
+  display: grid;
+  /* The side cells are equal, so the title stays centred on the head whatever the mark's width, and
+     `minmax(68px, ...)` is a FLOOR at the wordmark's own 67.69px: a side cell can never shrink
+     under the mark and squeeze it toward the corner. 68px is 3.1x the old 22px stamp. */
+  grid-template-columns: minmax(68px, 1fr) max-content minmax(68px, 1fr);
+  align-items: center;
+  min-height: 46px;
+  padding: 0 0 2px;
+  position: static;
+  background: transparent;
+}
+#sheet-profile .sp-head h2 {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
+  /* The shared product rule pads every sheet title by 44px a side to clear an absolutely placed
+     close key. The profile is a THREE-CELL grid with its own 44px close column, so that padding
+     only inflated the `max-content` middle track and pushed the wordmark back against the edge
+     (measured: the title track became 166.66px). Here the grid owns the clearance. */
+  padding: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.35rem;
+  line-height: 1.1;
+  letter-spacing: -0.005em;
+  text-align: center;
+  color: var(--c-text);
+  white-space: nowrap;
+}
+#sheet-profile .sp-close {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  color: var(--c-muted);
+}
+/* The Futasaku wordmark in the nameplate's left cell — the tree-less mark the HUD badge and the
+   online submenu header carry (web/src/player/branding.ts), so the sheet is signed like the game.
+   It is aria-hidden: the sheet already says Profile, and a logo read aloud is noise.
+   The mark starts `--sp-edge` past the panel's gutter, which is what puts its top-left corner
+   OUTSIDE the plate's 32px corner band instead of under the arc. */
+#sheet-profile .sp-brand {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-inline-start: var(--sp-edge);
+  opacity: 0.9;
+}
+/* THE MARK IS 67.69px WIDE (17.4% of a 390pt screen), SIZED BY ITS HEIGHT to match the game's own
+   22px brand mark (#hud-brand / .online-brand), which is the only comparison that matters for a
+   2200x715 wordmark. The old `width:22px` rendered 22 x 7.14 (5.6% of 390) — a grey smudge in the
+   owner's screenshot, about a third of this. A future edit must not shrink it below 64px wide
+   (16.4% of 390); `web/e2e/menu-profile.ts` fails if it does. MEASURED: 67.69 x 22 CSS px, its left
+   edge 36px from the plate at 390x844 (28px at 320x568/360x640, 32px in landscape), its top-left
+   corner outside the 32px corner band on every screen, with 20.5 / 17px of air to the arc. */
+#sheet-profile .sp-brand svg {
+  display: block;
+  /* flex:none is part of the size: a replaced child with width:auto would otherwise flex-SHRINK to
+     the cell width, letterboxing the mark inside a narrow box. Unshrunk, the 2200:715 ratio at 22px
+     high gives the 67.69px above. */
+  flex: none;
+  width: auto;
+  height: 22px;
+  max-width: 90px;
+}
+/* The five rows: full width, NO rule between neighbours and never a box around each (owner,
+   2026-11-02). The label on the left in the pause panel's small tracked caps and the value on the
+   right in tabular digits are the structure: a change of size and weight is what separates a row
+   from its neighbour here, not a line. */
+#sheet-profile .sp-body {
+  display: block;
+  padding: 0;
+}
+#sheet-profile .sp-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+}
+#sheet-profile .sp-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: var(--sp-row);
+  padding: var(--sp-row-pad) 0;
+  box-sizing: border-box;
+}
+/* The 1px the separator used to occupy is now the neighbour's own top air: no line, no shift. */
+#sheet-profile .sp-row + .sp-row {
+  padding-top: calc(var(--sp-row-pad) + 1px);
+}
+#sheet-profile dt {
+  flex: none;
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  line-height: 1.2;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+#sheet-profile dd {
+  margin: 0;
+  min-width: 0;
+  max-width: 70%;
+  text-align: right;
+  overflow-wrap: anywhere;
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  color: var(--c-text);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+/* The identity line (owner, 2026-11-01): the name and its tag, then the flag of the country the
+   device places itself in and one tile in this player's own Territory colour. The two marks sit on
+   the name's BASELINE and never take a line of their own, so the four rows keep their rhythm.
+   `baseline` (not `center`) is what makes them read as part of the name rather than stickers beside
+   it: a baseline-aligned replaced element (the <svg> tile) rests its bottom edge on the text's
+   baseline, and the flag's emoji baseline does the same. */
+#sheet-profile .sp-row-name dd.sp-name-line {
+  display: flex;
+  /* CENTRE, not baseline (owner, 2026-11-02): the hex and the flag are small marks beside the name,
+     and on the baseline they hang from the text's descender line, which reads as a bottom-aligned
+     chip. Centring puts every mark on the name's own optical centre. */
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  /* The marks drop to a second line when the name needs the room; the name keeps every character. */
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+/* THE WHOLE NICKNAME IS ALWAYS SHOWN (owner, 2026-11-02: "make sure the whole nickname is shown in
+   total"). It used to ellipsis at the row's width, so a real name could be cut to "RYK #VJ…" — and a
+   name you cannot read is worse than a row that breathes. The name takes the space it needs and the
+   ROW WRAPS its marks to a second line if they cannot fit beside it, instead of truncating the one
+   thing on this sheet that identifies the player. */
+#sheet-profile #profile-name {
+  min-width: 0;
+  /* `anywhere` so a long name breaks at the row edge rather than spilling past it: the value is
+     never clipped, and the ellipsis is gone for good. */
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+/* A colour emoji at the row's own size; the emoji stack first so a monochrome symbol font cannot
+   take it over on older Android. */
+#sheet-profile .sp-flag {
+  flex: none;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  font-size: 0.95rem;
+  line-height: 1;
+  letter-spacing: 0;
+}
+/* One tile's worth of the player's own colour, as the MAP draws a hex: a flat vertical edge on the
+   left and right, a point at the top and bottom (web/src/player/hex-tile.ts). The silhouette is an
+   SVG polygon, so it stays crisp at any density; the hairline keeps a pale colour visible on the
+   sheet's own ground.
+   OWNER, 2026-11-02: "i cant see the color hex in profile". It was 13 x 15 (a stamp when it showed
+   at all) and the SVG carried a 0 0 24 24 viewBox while its points are centred on 0, which cropped
+   the tile to its lower-right quadrant. It is now a 23 x 23 box around a -12 -12 24 24 viewBox: at
+   that box the drawn hex is 17.02 x 19.65 CSS px (0.83 x 0.96 of it): taller than the name's own
+   19px line box, so it reads as a hexagon, and small enough that the widest legal name still fits
+   at 320px beside the flag (measured: a 23px box pushed the name row 17px over). */
+#sheet-profile .sp-swatch {
+  flex: none;
+  width: 20.5px;
+  height: 20.5px;
+  overflow: visible;
+}
+#sheet-profile .sp-swatch-face {
+  fill: var(--tile, var(--c-muted));
+  stroke: color-mix(in srgb, var(--c-text) 26%, transparent);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+
+/* ---------- VISITOR MODE (owner, 2026-11-01: "allow to look up other peoples profile on territory")
+   ONE SHEET, TWO MODES, and the mode is a single attribute on the sheet. Own mode is the default and
+   renders exactly the four lines and two records it always did. Visitor mode adds one quiet line —
+   the whole difference in voice — and REMOVES the rows a visitor may not read: the Seeds line, the
+   all-time win line (it includes offline games) and the offline record. The level lives in the name
+   line, in the Territory tile bar's own "LEVEL 22" wording, so it needs no row of its own. */
+#sheet-profile .sp-visitor {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: 0.58rem;
+  line-height: 1.2;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--c-muted);
+}
+#sheet-profile:not([data-mode='visitor']) .sp-visitor {
+  display: none;
+}
+/* Personal head-to-head (v0.84): one quiet scoreline above their games record. */
+#sheet-profile .sp-rivalry {
+  margin: 0.35rem 0 0.55rem;
+  font-family: var(--font-ui);
+  font-size: var(--instrument-label-size, 0.6875rem);
+  line-height: 1.35;
+  letter-spacing: var(--instrument-tracking, 0.08em);
+  text-align: center;
+  color: var(--instrument-muted, var(--c-muted));
+}
+#sheet-profile:not([data-mode='visitor']) .sp-rivalry,
+#sheet-profile .sp-rivalry[hidden] {
+  display: none;
+}
+#sheet-profile[data-mode='visitor'] .sp-row-seeds,
+#sheet-profile[data-mode='visitor'] .sp-row-wins,
+#sheet-profile[data-mode='visitor'] .sp-play-row[data-play-row='offline'] {
+  display: none;
+}
+/* The online row is the first (only) visible row in visitor mode, so it loses the neighbour air it
+   carried as the second row. */
+#sheet-profile[data-mode='visitor'] .sp-play-row[data-play-row='online'] {
+  margin-top: 0;
+  padding-top: 0;
+}
+/* The visitor's level, set as a quiet neighbour of the name. Hidden with the attribute, so own mode
+   keeps the name line it always had (the flag and the colour tile keep their places). */
+#sheet-profile .sp-level {
+  flex: none;
+  font-family: var(--font-ui);
+  font-size: 0.56rem;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  white-space: nowrap;
+}
+#sheet-profile .sp-level[hidden] {
+  display: none;
+}
+/* The visitor's colour hex, beside the swatch: a quiet mono caption, never a new row. */
+#sheet-profile .sp-hex {
+  flex: none;
+  font-family: var(--font-ui);
+  font-size: 0.52rem;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  color: var(--c-muted);
+  white-space: nowrap;
+}
+#sheet-profile .sp-hex[hidden],
+#sheet-profile:not([data-mode='visitor']) .sp-hex {
+  display: none;
+}
+
+/* Short screens (320x568, 360x640): the air comes out first; every row stays at least 44px. */
+@media (max-height: 700px) {
+  #sheet-profile {
+    --sp-pad: 14px;
+    --sp-row: 44px;
+    /* THE HEADER'S OWN BUDGET. At 320px with Large text the row holds the 67.69px mark, the 81px
+       word and the 44px key in 272px, so 20px of header inset left only 7.8px of ink between the
+       mark and the "P". 14px puts the mark's left edge at 28px — still 16.9px clear of the corner
+       arc (the guard's floor) — and widens that ink gap to 13.8px. The 8px of top air is the same
+       corner rule vertically: the mark's corner measures 16.9px from the arc. */
+    --sp-edge: 14px;
+    padding-top: 8px;
+  }
+  #sheet-profile .sp-head {
+    min-height: 44px;
+  }
+  #sheet-profile .sp-head h2 {
+    font-size: 1.18rem;
+  }
+  #sheet-profile {
+    --sp-row-pad: 9px;
+  }
+}
+/* Landscape phones: the same face as a centred dialog (the shared `.sheet` wide rule), with the
+   five rows on one column and the air tightened. */
+@media (max-height: 520px) and (min-width: 560px) {
+  #sheet-profile {
+    --sp-pad: 18px;
+    padding-top: 12px;
+  }
+  #sheet-profile::before {
+    display: none;
+  }
+  #sheet-profile .sp-body {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  #sheet-profile .sp-head {
+    min-height: 44px;
+  }
+  #sheet-profile .sp-head h2 {
+    font-size: 1.2rem;
+  }
+  #sheet-profile {
+    --sp-row-pad: 7px;
+  }
+}
+
+/* One settings row. It used to end on a 1px rule; the rule is gone (owner, 2026-11-02) and the same
+   1px is padding, so every row and every control keeps the line it had. A label on the left and its
+   control on the right are the structure — no line is needed to say "next row". */
 .row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   min-height: 48px;
   gap: 12px;
-  border-bottom: 1px solid var(--c-line);
+  padding-bottom: 1px;
 }
 /* A row must never push one of its options off the sheet (found 2026-10-17: with Large text on,
    "Confirm moves" lost its Never button and "Step guidance" its Off button past the right edge on
@@ -1665,7 +2959,7 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   position: relative;
   cursor: pointer;
   flex: none;
-  transition: background-color 0.15s;
+  transition: background-color var(--ix-open);
 }
 .row input[type='checkbox']::after {
   content: '';
@@ -1676,7 +2970,7 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   height: 22px;
   border-radius: 50%;
   background: var(--c-text);
-  transition: transform 0.15s;
+  transition: transform var(--ix-open);
 }
 .row input[type='checkbox']:checked {
   background: var(--c-accent);
@@ -1707,6 +3001,8 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   background: transparent;
   cursor: pointer;
   font-size: 0.85rem;
+  /* The settings choices are tapped one after another: never arm double-tap zoom here. */
+  touch-action: manipulation;
 }
 .seg-btn.on {
   background: var(--c-text);
@@ -1783,9 +3079,8 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   text-align: left;
   font: inherit;
   cursor: pointer;
-  transition: border-color .16s, background-color .16s, transform .16s;
+  transition: border-color .16s, background-color .16s, transform var(--dur-ack) var(--ease-standard);
 }
-.lab-card:active { transform: scale(.988); }
 .lab-card[aria-pressed="true"] { border-color: color-mix(in srgb, var(--c-text) 60%, transparent); background: color-mix(in srgb, var(--c-text) 11%, var(--c-bg)); }
 .lab-card-number { align-self: start; color: var(--c-muted); font: 600 .72rem/1.4 ui-monospace, SFMono-Regular, monospace; }
 .lab-card-copy strong { display: block; font-size: .88rem; font-weight: 650; }
@@ -1815,10 +3110,8 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
 }
 @media (prefers-reduced-motion: reduce) {
   .lab-chevron, .lab-card { transition: none; }
-  .lab-card:active { transform: none; }
 }
 .reduce-motion .lab-chevron, .reduce-motion .lab-card { transition: none; }
-.reduce-motion .lab-card:active { transform: none; }
 .prose p {
   margin: 10px 0;
 }
@@ -1827,88 +3120,182 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   padding-left: 20px;
   font-size: 0.9rem;
 }
+/* No rule between steps: the numbered list and the extra air do the separation (owner, 2026-11-02). */
 .history li {
-  padding: 4px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--c-line) 60%, transparent);
+  padding: 6px 0;
 }
 
-/* ---------- who-starts lottery ---------- */
-.starter-lottery {
+/* ---------- the pre-game card ritual ---------- */
+/* A static overlay, deliberately cheap: a radial veil (no animated backdrop-filter), one small
+   stack of card backs, two faces placed beside the players' own homes, and the result between them.
+   Every moving property is transform or opacity; the layout is positioned by JS from measured
+   board geometry, so it adapts to any viewport without scaling a fixed composition. */
+.starter-ritual {
+  --ritual-cream: #e8ddc5;
+  --ritual-card-w: clamp(66px, min(22vmin, 17vh), 116px);
+  --ritual-card-h: calc(var(--ritual-card-w) * 1.42);
+  --cw: var(--ritual-card-w);
+  --ch: var(--ritual-card-h);
   position: fixed;
   inset: 0;
   z-index: 14;
-  display: grid;
-  place-items: center;
-  padding: 16px;
-  background: color-mix(in srgb, var(--c-bg) 88%, transparent);
-  backdrop-filter: blur(10px);
-  animation: fade-in 0.35s ease-out;
+  overflow: hidden;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
 }
-.starter-lottery[hidden] { display: none; }
-.lottery-card {
-  width: min(360px, 100%);
-  text-align: center;
-  background: color-mix(in srgb, var(--c-surface) 92%, transparent);
-  border: 1px solid var(--fu-cream-22);
-  border-radius: 18px;
-  padding: 22px 18px 18px;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+.starter-ritual[hidden] { display: none !important; }
+.ritual-veil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 56% 46% at 50% 40%, rgba(232, 221, 197, .06), transparent 70%),
+    radial-gradient(ellipse 120% 100% at 50% 42%, rgba(10, 11, 12, .52) 0%, rgba(10, 11, 12, .8) 62%, rgba(8, 9, 10, .93) 100%);
 }
-.lottery-kicker {
-  margin: 0 0 6px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  font: 650 0.72rem/1 monospace;
-  color: var(--fu-cream-70);
+.ritual-deck-anchor {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--ritual-card-w);
+  height: var(--ritual-card-h);
+  margin: calc(var(--ritual-card-h) / -2) 0 0 calc(var(--ritual-card-w) / -2);
+  transform: scale(var(--ritual-deck-scale, 1));
+  transform-origin: 50% 50%;
+  will-change: transform;
 }
-.lottery-title {
-  margin: 0 0 16px;
-  color: var(--fu-cream);
-  font-size: clamp(1.6rem, 7vw, 2.1rem);
-  line-height: 1.05;
+.ritual-deck {
+  position: absolute;
+  inset: 0;
+  perspective: 900px;
+  border-radius: calc(var(--ritual-card-w) * .075);
+  will-change: transform, opacity;
 }
-.lottery-lanes {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-bottom: 14px;
+.ritual-deck-layer {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border-radius: inherit;
+  will-change: transform, opacity;
 }
-.lottery-lane {
-  border-radius: 12px;
-  padding: 18px 10px;
-  border: 1px solid transparent;
-  opacity: 0.55;
-  transition: opacity 0.25s ease, transform 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+/* The stack's own contact shadow lives on its bottom card, so it never lingers at the centre
+   once the cards have been gathered into the real draw pile. */
+.ritual-deck-layer[data-i='0'] { box-shadow: 0 18px 40px rgba(0, 0, 0, .45); }
+.ritual-deck-layer .card,
+.ritual-face .card {
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--ritual-card-w) * .075);
 }
-.lottery-lane span {
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  font: 700 0.85rem/1 monospace;
+.ritual-deck-layer .card,
+.ritual-face.back .card {
+  display: block;
+  padding: 0;
+  box-shadow: none;
 }
-.lottery-lane.you { background: color-mix(in srgb, #3d7a4a 35%, transparent); color: #b7e0c0; }
-.lottery-lane.bot { background: color-mix(in srgb, #b86a2c 30%, transparent); color: #f0c49a; }
-.starter-lottery[data-winner='you'] .lottery-lane.you,
-.starter-lottery[data-winner='bot'] .lottery-lane.bot {
-  opacity: 1;
-  transform: scale(1.04);
-  border-color: currentColor;
+.ritual-deck-layer .card::after,
+.ritual-face.back .card::after {
+  display: none;
 }
-.starter-lottery[data-spinning='1'] .lottery-lane {
-  animation: lottery-pulse 0.45s ease-in-out infinite alternate;
+/* Dealt cards sit beside their own home. Their position is measured, not guessed. */
+.ritual-slot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--ritual-card-w);
+  height: var(--ritual-card-h);
+  margin: calc(var(--ritual-card-h) / -2) 0 0 calc(var(--ritual-card-w) / -2);
+  perspective: 900px;
 }
-.starter-lottery[data-spinning='1'] .lottery-lane.bot { animation-delay: 0.22s; }
-@keyframes lottery-pulse {
-  from { opacity: 0.35; transform: scale(0.98); }
-  to { opacity: 0.95; transform: scale(1.02); }
+/* Deliberately NO cream ring around the dealt cards (owner direction, 2026-10-23: the ritual drew
+   a white rectangle contour around the cards, and the cards read better without it). The result is
+   carried by the outcome line and by the winner's own depth, never by an outline. The `is-winner`
+   class is still toggled by the choreography; it simply has no ring to turn on. */
+.ritual-card {
+  position: absolute;
+  inset: 0;
+  will-change: transform, opacity;
 }
-.lottery-result {
+/* Two flat faces with their own flip, rather than one nested 3D card: an active animation on a
+   preserve-3d ancestor flattens the subtree in Chromium, which culled the revealed face. Each face
+   is edge-on at the halfway point, so the swap is invisible and nothing depends on backface
+   culling. */
+.ritual-card-inner {
+  position: absolute;
+  inset: 0;
+  perspective: 900px;
+}
+.ritual-face {
+  position: absolute;
+  inset: 0;
+}
+.ritual-face.back { transform: rotateY(0deg); }
+.ritual-face.front { transform: rotateY(-90deg); opacity: 0; }
+.ritual-slot.is-winner .ritual-face.front .card {
+  /* Depth only: the winner sits a little higher than the other card. The 1px cream outline that
+     used to hug it is gone with the ring (owner, 2026-10-23), so no white contour is drawn round a
+     card at any point in the ritual. */
+  box-shadow: 0 20px 40px rgba(0, 0, 0, .52);
+}
+.ritual-slot.is-losing .ritual-card { opacity: .9; }
+.ritual-outcome {
+  position: absolute;
+  left: 50%;
+  top: 56%;
+  width: min(86vw, 520px);
   margin: 0;
-  min-height: 1.2em;
-  color: var(--fu-cream);
-  font-weight: 650;
-  letter-spacing: 0.04em;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  opacity: 0;
+  translate: 0 7px;
+  transition: opacity var(--dur-consequence) ease, translate var(--dur-consequence) ease;
+  pointer-events: none;
+  will-change: transform, opacity;
 }
-.reduce-motion .starter-lottery[data-spinning='1'] .lottery-lane { animation: none; }
+.ritual-outcome.is-shown { opacity: 1; translate: 0 0; }
+.ritual-title {
+  margin: 0;
+  font-family: var(--font-display, 'Besley', Georgia, serif);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -.02em;
+  line-height: 1;
+  font-size: clamp(1.6rem, 5.4vmin, 2.5rem);
+  color: var(--ritual-cream);
+  text-wrap: balance;
+  text-shadow: 0 1px 22px rgba(8, 9, 10, .85), 0 0 2px rgba(8, 9, 10, .6);
+}
+.starter-ritual.is-reduced .ritual-outcome { transition: none; }
+/* The plain kanji, bloomed out of the gathered emblem for one beat. It lives on the body, above the
+   veil, so the overlay's overflow cannot crop it and a perspective here cannot flatten the card
+   flips. Scale is the "toward the screen"; there is no idle loop once the element is removed. */
+.ritual-kanji {
+  position: fixed;
+  z-index: 16;
+  width: min(92vw, 640px);
+  height: auto;
+  aspect-ratio: 2106 / 662;
+  margin: 0;
+  translate: -50% -50%;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  opacity: 0;
+}
+/* Short screens: keep the whole ritual inside the viewport height. */
+@media (max-height: 430px) {
+  .starter-ritual { --ritual-card-w: clamp(56px, min(20vmin, 24vh), 92px); }
+  .ritual-title { font-size: clamp(1.25rem, 5vmin, 1.7rem); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ritual-outcome { transition: none; }
+}
+.reduce-motion .ritual-outcome { transition: none; }
 
 /* ---------- game over ---------- */
 .gameover {
@@ -1971,8 +3358,9 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
 .go-score .dash {
   color: var(--fu-cream-55);
 }
-/* Stat rows: thin cream dividers, not boxed cards. The number is Besley at the left, the label is
-   small tracked Commissioner and the sentence is muted Commissioner. */
+/* Stat rows: NO rules between them (owner, 2026-11-02), not boxed cards either. The number is
+   Besley at the left, the label is small tracked Commissioner and the sentence is muted
+   Commissioner; that size-and-weight step plus the row's own air is the separation. */
 .highlights {
   list-style: none;
   padding: 0;
@@ -1987,13 +3375,9 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   column-gap: 14px;
   align-items: baseline;
   text-align: left;
-  padding: 8px 0;
+  padding: 10px 0;
   border: 0;
-  border-top: 1px solid var(--fu-cream-14);
   border-radius: 0;
-}
-.highlights li:first-child {
-  border-top: 0;
 }
 .gameover .highlights .h-value {
   grid-row: span 2;
@@ -2035,13 +3419,15 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   gap: 8px;
   margin-top: 14px;
 }
-/* Same button system as the menu: quiet cream frame for the rest, and one cream fill (Play again). */
+/* Same button system as the menu: a quiet TONAL plate for the rest, and one cream fill (Play
+   again). NO FRAME (house rule, 2026-11-11: "no border contour frames on buttons please - never"):
+   a key earns its shape from its fill or its tonal step against the surface, never a 1px outline. */
 .gameover .go-buttons .btn {
   min-height: 48px;
   padding: 0 20px;
-  border: 1px solid var(--fu-cream-28);
+  border: 0;
   border-radius: 14px;
-  background: transparent;
+  background: color-mix(in srgb, var(--fu-cream) 7%, transparent);
   box-shadow: none;
   color: var(--fu-cream);
   font-family: var(--font-ui);
@@ -2049,25 +3435,35 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   letter-spacing: 0.02em;
 }
 .gameover .go-buttons .btn.primary {
+  border: 0;
   background: var(--fu-cream);
-  border-color: var(--fu-cream);
   color: var(--fu-ink);
   box-shadow: none;
+}
+/* The replay of the whole match (owner brief, 2026-10-25): a framed row with the game's own line
+   icon, quieter than Play again and a shade more present than the ways out. The icon is drawn, not a
+   glyph, so it reads at the same weight as the label. */
+.gameover .go-buttons .btn.go-replay {
+  gap: 10px;
+  background: color-mix(in srgb, var(--fu-cream) 6%, transparent);
+}
+.gameover .go-buttons .btn.go-replay .i {
+  width: 1.3em;
+  height: 1.3em;
+  color: var(--fu-cream-70, var(--fu-cream));
+  opacity: .9;
 }
 /* The two quiet text rows (the "More" disclosure and Back to menu) take less room than a framed
    button: they are ways OUT, not the way forward, and the height they give back is what keeps the
    card on one phone screen. */
 .gameover .go-buttons .btn.link {
   min-height: 34px;
-  border-color: transparent;
+  border: 0;
   background: transparent;
   box-shadow: none;
   text-decoration: underline;
   text-underline-offset: 3px;
   color: var(--fu-cream-55);
-}
-.gameover .go-buttons .btn:active {
-  transform: translateY(1px);
 }
 .gameover .go-buttons .btn:focus-visible {
   outline: 2px solid var(--fu-cream);
@@ -2292,13 +3688,18 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   gap: 14px;
 }
 .levels-head {
-  display: flex;
+  /* The title sits on the panel's centre line: the back key on the left is balanced by an empty
+     cell of the same width on the right (owner, 2026-10-31: "symmetry"). */
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
   align-items: center;
   gap: 8px;
   margin: 0;
   min-height: 44px;
 }
 .levels-head h2 {
+  grid-column: 2;
+  text-align: center;
   margin: 0;
   font-size: 1.4rem;
   line-height: 1.15;
@@ -2324,10 +3725,7 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   background: var(--c-surface);
   color: var(--c-text);
   cursor: pointer;
-  transition: transform 0.15s, border-color 0.15s;
-}
-.level-tile:active {
-  transform: scale(0.97);
+  transition: transform var(--dur-ack) var(--ease-standard), border-color var(--ix-open);
 }
 .level-tile.on:not(.difficulty-tile) {
   border-color: var(--c-accent);
@@ -2354,10 +3752,7 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   width: 100%;
   text-align: center;
   cursor: pointer;
-  transition: transform 0.15s, border-color 0.15s, background 0.15s, color 0.15s;
-}
-.difficulty-tile:active {
-  transform: translateY(1px);
+  transition: transform var(--dur-ack) var(--ease-standard), border-color var(--ix-open), background var(--ix-open), color var(--ix-open);
 }
 .go-sub {
   margin: 6px 0 0;
@@ -2376,6 +3771,15 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   color: rgba(243, 230, 196, 0.72);
 }
 .go-learned[hidden] { display: none; }
+.go-learned[data-icon]:not([data-icon=''])::before {
+  content: attr(data-icon);
+  display: inline-block;
+  margin-right: 7px;
+  color: #e8c98f;
+  font-size: 14px;
+  letter-spacing: 0;
+  transform: translateY(1px);
+}
 .large-text .go-learned { font-size: 13px; letter-spacing: 0.1em; }
 
 /* ---------- campaign (the primary offline mode) ---------- */
@@ -2426,9 +3830,8 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   text-align: center;
   cursor: pointer;
   font-family: var(--font-ui);
-  transition: transform 0.12s, background-color 0.15s, color 0.15s;
+  transition: transform var(--dur-ack) var(--ease-standard), background-color var(--ix-open), color var(--ix-open);
 }
-.campaign-tile:active { transform: translateY(1px); }
 .campaign-tile:focus-visible { outline: 2px solid var(--fu-cream); outline-offset: 2px; }
 .campaign-tile .ct-num {
   font-size: 1.02rem;
@@ -2437,8 +3840,9 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   letter-spacing: 0.02em;
   color: var(--fu-cream-70);
 }
-/* `.ct-name` was removed with the level names (owner, 2026-10-16: numbers only). The tile is now a
-   single centred number, so the old two-column grid and its second cell are gone with it. */
+/* `.ct-name` was removed from the CAMPAIGN with the level names (owner, 2026-10-16: numbers only),
+   so a campaign tile is a single centred number. It returns ONLY inside Settings → Tutorial, below;
+   the campaign screen still says nothing. */
 .campaign-tile[data-state='current'] .ct-num { color: inherit; }
 .campaign-tile .ct-mark {
   position: absolute;
@@ -2466,11 +3870,60 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   cursor: default;
 }
 .campaign-tile[data-state='locked'] .ct-num { color: var(--fu-cream-28); }
+/* THE TUTORIAL'S LESSON NAMES (owner, 2026-11-01: "in tutorial in settings in level 1-9 give each
+   lesson a short name"). Scoped to Settings → Tutorial: the campaign screen stays numbers-only.
+   The name is a quiet second line inside the same plate — number above, name below, a 2px
+   `row-gap` the only new spacing. The plate keeps its 56px min-height (a 44px target with room to
+   spare) and does not grow: both lines and the 9px padding measure under it at 320px, including
+   Large text (web/e2e/tutorial-names.ts). The side padding drops from 12px to 8px so the longest
+   name stays on ONE line at 320px; the number is centred, so nothing else moves. */
+#sheet-tutorial .campaign-tile { row-gap: 2px; padding-inline: 8px; }
+#sheet-tutorial .campaign-tile .ct-name {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  color: var(--fu-cream-55);
+}
+/* if a state ever reaches this sheet, the name follows the number's ink */
+#sheet-tutorial .campaign-tile[data-state='current'] .ct-name {
+  color: color-mix(in srgb, var(--fu-ink) 62%, transparent);
+}
 .campaign-hint,
 .campaign-progress {
   margin: 0;
   text-align: center;
 }
+
+/* THE LEVEL LIST OPENS ON THE PLAYER'S PLACE (owner, 2026-10-24): the chapters column is the
+   scroller, so the head (Back) and Continue stay put while `orientCampaignList` brings the current
+   level into view. Returning from a finished level therefore always shows where the player is
+   without hiding the way out. */
+html.futasaku-product #campaign { overflow: hidden; }
+html.futasaku-product #campaign .campaign-inner { min-height: 0; max-height: 100dvh; }
+html.futasaku-product #campaign .campaign-chapters {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--fu-cream-22) transparent;
+}
+
+/* Settings → Tutorial: one quiet row that opens the replay picker. It is a button because it does
+   something, but it wears the same row contour as the switches around it. */
+.settings-tutorial {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.settings-tutorial small { margin-left: auto; }
+.settings-tutorial .st-go { color: var(--fu-cream-55); line-height: 1; }
+#tutorial-levels { margin-top: 2px; }
 
 /* Weak-spot buttons: just the icon until switched on. */
 .chip .chip-label {
@@ -2527,6 +3980,25 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
 .fx-mote {
   fill: var(--c-muted);
 }
+/* Beta 0.8: on the board an ash mote is the same soft glow as the dust (never a hard dot) */
+svg.board .fx-mote {
+  fill: var(--fx-dust, var(--c-muted));
+}
+/* Beta 0.8: dust from a Bomb or Blast (a soft gradient glow, effects.ts dust()) */
+.fx-dust {
+  fill: var(--fx-dust, #e8ddc5);
+  pointer-events: none;
+}
+/* Beta 0.8: the light dips under a heavy impact (effects.ts impactDim()): one soft vignette */
+.impact-dim {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 3;
+  /* the whole screen: a soft, even dip with a gentle vignette, never a box edge */
+  background: radial-gradient(ellipse 90% 85% at 50% 50%, rgb(14 15 16 / 0.42) 0%, rgb(14 15 16 / 0.8) 100%);
+}
 /* A snapping vein flashes bright before it goes. */
 .vein.snapping {
   stroke: var(--c-text) !important;
@@ -2567,23 +4039,30 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   background: var(--c-accent);
   color: var(--c-accentInk);
 }
-/* Idle hint: one very quiet pulse on the next control. */
+/* Idle hint: one very quiet pulse on the next control. COMPOSITOR ONLY: the old keyframe animated
+   `filter: brightness()`, which re-rasterised the control (and every card in the hand) every frame.
+   The hand reuses the glow layer it already owns for the turn hand-over, so only an opacity moves. */
 .idle-hint {
   animation: idle-pulse 2.4s ease-in-out 2;
 }
-.hand.idle-hint .card.playable {
-  animation: idle-pulse 2.4s ease-in-out 2;
+.hand.idle-hint .card.playable::before {
+  animation: idle-pulse-glow 2.4s ease-in-out 2;
 }
 .hand.idle-hint {
   animation: none;
 }
 @keyframes idle-pulse {
   50% {
-    filter: brightness(1.18);
+    opacity: 0.82;
+  }
+}
+@keyframes idle-pulse-glow {
+  50% {
+    opacity: 0.55;
   }
 }
 .reduce-motion .idle-hint,
-.reduce-motion .hand.idle-hint .card.playable {
+.reduce-motion .hand.idle-hint .card.playable::before {
   animation: none;
 }
 
@@ -2595,18 +4074,49 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
    Heights: big 56px, normal 44px, compact 36px; the step labels and their "?" are 32px.
    ================================================================= */
 :root {
-  /* Step 7: motion tokens (web/src/logic/motion.ts holds the same values) */
-  --dur-tap: 96ms;
-  --dur-quick: 192ms;
-  --dur-move: 336ms;
-  --dur-moment: 720ms;
-  --ease-out: cubic-bezier(0.2, 0.8, 0.3, 1);
-  --ease-spring: cubic-bezier(0.2, 0.8, 0.3, 1.1);
+  /* Phase 0: two tempo tokens, everything else derived (web/src/logic/motion.ts is the source).
+     ack = the immediate answer, consequence = a physical move. */
+  --dur-ack: 80ms;
+  --dur-consequence: 264ms;
+  --dur-quick: calc(var(--dur-ack) * 2);
+  --dur-moment: calc(var(--dur-consequence) * 2 + var(--dur-ack) / 2);
+  /* Legacy names resolve to the same values. */
+  --dur-tap: var(--dur-ack);
+  --dur-move: var(--dur-consequence);
+  /* One easing family; `linear` is only for continuous marquees and `steps(1)` only for the LED. */
+  --ease-standard: cubic-bezier(0.2, 0.9, 0.2, 1);
+  --ease-settle: cubic-bezier(0.2, 0.9, 0.2, 1.03);
+  --ease-out: var(--ease-standard);
+  --ease-spring: var(--ease-settle);
   --pill: 999px;
   --h-big: 56px;
   --h-btn: 44px;
   --h-compact: 36px;
   --h-tag: 32px;
+  /* INTERFACE MOTION (2026-10-22): the quiet half of the motion language, for the surfaces around
+     the game (sheets, pause face, finish plate, confirmations, overlays). These are deliberately
+     NOT `--dur-*` tokens: `web/src/logic/motion.ts` owns the board's two tempo tokens and a test
+     closes that vocabulary. `web/src/ui/interface-motion.ts` is the source of these numbers and a
+     test keeps this block in sync. A surface becomes present in 150ms with 4px of travel at 99.6%
+     scale; it leaves in 100ms; a press answers in 90ms. */
+  --ix-open: 150ms;
+  --ix-close: 100ms;
+  --ix-press: 90ms;
+  --ix-travel: 4px;
+  --ix-scale: 0.996;
+  --ix-settle: 1.0005;
+  --ix-ease-open: cubic-bezier(0.22, 1, 0.36, 1);
+  --ix-ease-close: cubic-bezier(0.4, 0, 1, 1);
+  /* A WHOLE SCREEN travels further than a sheet (2026-11-02), and its head lands one short beat
+     later. Two extra tokens, no second vocabulary: see `INTERFACE_MOTION.screen` / `.stagger`. */
+  --ix-screen: 10px;
+  --ix-stagger: 50ms;
+  /* THE LIVING MAP'S COLOUR (owner, 2026-11-02: "make it the color of tiles fade in in like 1
+     second or so, and 0.3s when going back to main menu"). These are NOT `open`/`close` stretched:
+     the map's tiles do not appear or move — one opacity track brings their colours up over a
+     second and takes them down over 300ms. See `INTERFACE_MOTION.colourIn` / `.colourOut`. */
+  --ix-colour-in: 1000ms;
+  --ix-colour-out: 300ms;
 }
 .btn,
 .btn.primary,
@@ -2653,6 +4163,14 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   min-height: var(--h-compact);
   border-radius: var(--pill);
   padding: 0 12px;
+}
+/* 0.6 polish: a setting is a choice you tap, so every choice control in the Settings sheet is a
+   real 44px touch target. Scoped to the sheet: the same segmented control on other surfaces keeps
+   its compact 36px size. The row's own 48px minimum already covers the switches and sliders; this
+   raises the segmented buttons (and the sheet's small action buttons) that were 36px. */
+#sheet-settings .seg-btn,
+#sheet-settings .btn.small {
+  min-height: 44px;
 }
 /* A hint in the moves row ("Pick a card to sprout", "Tap a card to throw it") is bold
    text pointing down at the hand, never shaped like a button. */
@@ -2701,18 +4219,11 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--m-rimLight) calc(var(--m-rim, 0.3) * 45%), transparent),
     0 1.5px 2px -1px color-mix(in srgb, #000 70%, transparent);
-  transition: transform 0.08s, box-shadow 0.08s;
+  transition: transform var(--dur-ack) var(--ease-standard), box-shadow var(--dur-ack) var(--ease-standard);
 }
 .btn.link {
   box-shadow: none;
 }
-.btn:active,
-.chip:active,
-.seg-btn:active {
-  transform: translateY(1px);
-  box-shadow: inset 0 1px 2px color-mix(in srgb, #000 55%, transparent);
-}
-
 /* =================================================================
    Board materials: grass-like moss (me), fire (the bot), rock, empty, gold.
    ================================================================= */
@@ -2773,7 +4284,7 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
 .grass-flower.puff {
   fill: #f6f4ec;
   opacity: 0.75;
-  stroke: #ffffff;
+  stroke: #f2ede4;
   stroke-width: 0.6;
   stroke-dasharray: 0.4 0.6;
 }
@@ -2883,7 +4394,7 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
 }
 /* bot veins: glowing fissures in coral-red */
 .veins.bot .vein {
-  stroke: color-mix(in srgb, var(--m-fire) 80%, #fff);
+  stroke: color-mix(in srgb, var(--m-fire) 80%, #f2ede4);
 }
 /* The moss detail turns around its tile's centre (given in the transform itself),
    not around its own box like the rest of a tile's parts. */
@@ -3187,8 +4698,15 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   pointer-events: none;
   opacity: var(--op, 0.2);
 }
+/* Kept after the light tint's removal: the old `.top-glow-tint` halo sat over lit hexes and
+   swallowed the tap meant for the tile beneath it (the lesson lights a tile and the player taps
+   that tile). The board no longer paints that node, but the rule stays so any decoration laid
+   over a hex is inert by construction, not by luck. */
+.top-glow-tint {
+  pointer-events: none;
+}
 .top-glow.glow-in {
-  animation: glow-in 500ms ease-out both;
+  animation: glow-in var(--dur-move) var(--ease-out) both;
 }
 @keyframes glow-in {
   from {
@@ -3255,7 +4773,7 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(100deg, transparent 35%, color-mix(in srgb, currentColor 35%, white) 50%, transparent 65%);
+  background: linear-gradient(100deg, transparent 35%, color-mix(in srgb, currentColor 35%, #f2ede4) 50%, transparent 65%);
   opacity: 0.35;
   transform: translateX(-120%);
   animation: tp-sweep 650ms ease-out forwards;
@@ -3284,8 +4802,8 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
 .edge-wash.you { box-shadow: inset 0 0 26px color-mix(in srgb, var(--c-you) 30%, transparent); }
 .edge-wash.bot { box-shadow: inset 0 0 26px color-mix(in srgb, var(--c-bot) 30%, transparent); }
 /* the header capsule cross-fades between "Your turn" and "Bot's turn" */
-.turn { transition: border-color 300ms ease, background-color 300ms ease; }
-.turn b, .turn small { transition: color 300ms ease; }
+.turn { transition: border-color var(--dur-consequence) ease, background-color var(--dur-consequence) ease; }
+.turn b, .turn small { transition: color var(--dur-consequence) ease; }
 @media (prefers-reduced-motion: reduce) {
   .turn-pill.sweep::after, .turn-pill .tp-dots i { animation: none; }
 }
@@ -3773,14 +5291,16 @@ html[data-layout='side'] .dock-overlays {
 /* lift with a small spring; others stay legible */
 .dock .hand-row > .hand .card {
   transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(var(--dy, 0px)) rotateY(var(--tilt-x, 0deg)) rotateX(var(--tilt-y, 0deg));
-  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.3), opacity 0.2s, filter 0.2s;
+  /* NO `filter` here (documented invariant): the card is the element that lifts, and a filter on an
+     animating node re-rasterises it every frame. The dimmed card below reaches its state with
+     opacity alone. */
+  transition: transform var(--dur-quick) var(--ease-settle), opacity var(--dur-quick) var(--ease-settle), translate var(--dur-quick) var(--ease-settle);
 }
 .dock .hand-row > .hand .card.lifted {
-  transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 18px)) scale(1.04);
+  transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - var(--lift, 18px))) scale(1.04);
 }
 .dock .hand-row > .hand .card.dim {
   opacity: 0.62;
-  filter: saturate(0.6);
 }
 @media (hover: hover) and (pointer: fine) {
   .dock .hand-row > .hand .card:not(.lifted):hover {
@@ -3792,9 +5312,34 @@ html[data-layout='side'] .dock-overlays {
 .dock .hand-row > .hand .card.bloom-hint {
   box-shadow: inset 0 -1.5px 0 rgba(232, 221, 201, 0.45);
   opacity: 1;
-  transition: box-shadow 200ms ease, opacity 200ms ease;
+  transition: box-shadow var(--dur-quick) ease, opacity var(--dur-quick) ease;
 }
 .reduce-motion .dock .hand-row > .hand .card.bloom-hint { transition: none; }
+/* LESSON: the suggested card is genuinely lifted out of the fan — raised above its neighbours,
+   a touch larger, one clean drop shadow and a soft halo for air. translate/scale are independent
+   of the fan's transform, so the arc's rotation, tilt and baseline rhythm are untouched; the card
+   stays the same button (tap to pick, still throwable). The class is dropped as soon as the beat
+   moves on, so no card can stay lifted. */
+.hand .card.tutorial-target-card {
+  translate: 0 -22px;
+  scale: 1.06;
+  z-index: 4;
+  box-shadow:
+    inset 1px 1px 0 color-mix(in srgb, var(--m-rimLight) calc(var(--m-rim, .3) * 60%), transparent),
+    inset -1px -1.5px 0 color-mix(in srgb, #000 calc(var(--m-rim, .3) * 90%), transparent),
+    0 16px 26px -12px color-mix(in srgb, #000 88%, transparent),
+    0 2px 6px -2px color-mix(in srgb, #000 55%, transparent),
+    0 0 20px rgba(233,216,173,.14);
+  transition:
+    transform var(--dur-quick) var(--ease-settle),
+    translate var(--dur-quick) var(--ease-settle),
+    scale var(--dur-quick) var(--ease-settle),
+    box-shadow var(--dur-quick) ease,
+    opacity var(--dur-quick);
+}
+/* Picked for a throw as well: the fan's own lift already raises it; do not double the scale. */
+.hand .card.tutorial-target-card.lifted { translate: 0 -8px; scale: 1; }
+.reduce-motion .hand .card.tutorial-target-card { transition: none; }
 /* Tutorial chapter picker — above the play screen, not inside the hidden menu. */
 #tutorial-chapter-menu {
   position: fixed; inset: 12px; z-index: 60; overflow: auto; padding: 16px;
@@ -3859,8 +5404,8 @@ html[data-layout='stack'] .board-wrap {
   fill-opacity: calc(0.07 + var(--near, 0) * 0.22);
   stroke-width: 1;
   stroke-opacity: calc(0.42 + var(--near, 0) * 0.55);
-  animation: target-in 0.24s ease-out both;
-  transition: fill-opacity 0.12s linear, stroke-opacity 0.12s linear;
+  animation: target-in var(--dur-quick) ease-out both;
+  transition: fill-opacity var(--ix-press) linear, stroke-opacity var(--ix-press) linear;
 }
 .target.kind-strengthen {
   stroke-width: 1.8;
@@ -3923,6 +5468,22 @@ html[data-layout='stack'] .board-wrap {
   stroke-opacity: 0.85;
   animation: ghost-breathe 1.8s ease-in-out infinite;
 }
+/* A hex the player has just painted clicks once, the same small land as a placed tile, then stays
+   still. Kept ghosts do not get .arrive again, and they keep the quiet breathe below. */
+@keyframes ghost-click {
+  from { opacity: 0; transform: scale(0.86); }
+  72% { opacity: 1; transform: scale(1.02); }
+  90% { opacity: 1; transform: translateY(1px) scale(1); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.draw-ghost.arrive {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ghost-click var(--dur-move) var(--ease-spring) both;
+}
+.draw-ghost.arrive .ghost-tile {
+  animation: none;
+}
 .ghost.replaces .ghost-tile {
   fill: color-mix(in srgb, var(--c-you) 55%, var(--c-bot));
   stroke: var(--c-bot);
@@ -3971,7 +5532,9 @@ html[data-layout='stack'] .board-wrap {
   stroke-opacity: 0.6;
 }
 .reduce-motion .ghost .ghost-tile,
-.reduce-motion .draw-ghost .ghost-tile {
+.reduce-motion .draw-ghost .ghost-tile,
+.reduce-motion .draw-ghost.arrive,
+.reduce-motion .draw-ghost.arrive .ghost-tile {
   animation: none;
 }
 .reduce-motion .ghost-vein {
@@ -4003,7 +5566,7 @@ html[data-layout='stack'] .board-wrap {
 }
 .pile[data-layers] .pile-stack,
 .pile[data-layers] .pile-top.card {
-  transition: box-shadow 0.3s;
+  transition: box-shadow var(--dur-consequence);
 }
 .pile[data-layers='0'] .pile-stack {
   opacity: 0.25;
@@ -4209,7 +5772,6 @@ html[data-layout='side'] .dock-overlays {
   --fs-lg: 1.25rem;
   --fs-xl: 1.75rem;
   --press-scale: 0.97;
-  --press-ms: var(--dur-tap);
 }
 .num,
 .score b,
@@ -4219,20 +5781,69 @@ html[data-layout='side'] .dock-overlays {
   font-variant-numeric: lining-nums tabular-nums;
 }
 /* Primary = .btn.primary (one per moment), Secondary = .btn.ghost, Tertiary = .btn.link */
-.btn:active:not(:disabled),
-.seg-btn:active,
-.chip:active,
-.icon-only:active,
-.hand-sort:active {
-  transform: scale(var(--press-scale));
-  transition: transform var(--press-ms) ease-out, box-shadow var(--press-ms) ease-out;
+/* The ONE press implementation. web/src/logic/press.ts paints data-pressed, --press-depth (the
+   shape's compression) and --press-drop (its physical depth in px) on pointerdown (and on
+   Space/Enter), holds while down, and clears on release/leave/blur or after a 10 px drag.
+   No surface declares its own :active transform. The press moves on `translate`/`scale`, not on
+   `transform`, so it composes with the hand's fan rotation and lift instead of replacing them. */
+[data-pressed="true"] {
+  translate: 0 var(--press-drop, 1px);
+  scale: var(--press-depth, var(--press-scale));
+  transition: translate var(--dur-ack) var(--ease-standard), scale var(--dur-ack) var(--ease-standard) !important;
 }
-.reduce-motion .btn:active,
-.reduce-motion .seg-btn:active,
-.reduce-motion .chip:active,
-.reduce-motion .icon-only:active,
-.reduce-motion .hand-sort:active {
-  transform: none;
+/* A hand card presses by its weight (1.5-3 px) and barely compresses: the fan already tilts it. */
+#hand .card[data-pressed="true"] {
+  scale: 0.996;
+}
+/* SVG hexes need an explicit origin so the press shrinks in place; the tone is the SVG's shade. */
+#board [data-pressed="true"] {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0.9;
+}
+/* The pre-baked shadow layer. Its shadow is painted once here; only opacity animates, so no
+   box-shadow/filter is ever recomputed per frame. */
+.press-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: none;
+  box-shadow: inset 0 2px 3px color-mix(in srgb, #000 60%, transparent), inset 0 -1px 0 color-mix(in srgb, #f2ede4 6%, transparent);
+  transition: opacity var(--dur-ack) var(--ease-standard);
+}
+:is(button, [role="button"], .card, .hand-slot, label, summary):has(> .press-shade) {
+  position: relative;
+}
+[data-pressed="true"] > .press-shade {
+  opacity: 1;
+}
+/* Reduce motion: the press is a static inset/tone change — no travel, no shrink, no transition. */
+.reduce-motion [data-pressed="true"] {
+  translate: none;
+  scale: none;
+  transition: none !important;
+}
+.reduce-motion [data-pressed="true"] > .press-shade,
+.reduce-motion .press-shade {
+  transition: none;
+  opacity: 0;
+}
+.reduce-motion [data-pressed="true"] > .press-shade {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-pressed="true"] {
+    translate: none;
+    scale: none;
+    transition: none !important;
+  }
+  [data-pressed="true"] > .press-shade {
+    transition: none;
+    opacity: 1;
+  }
 }
 /* overhaul item 14: the score race, a slim tug-of-war under the header */
 .race {
@@ -4248,7 +5859,7 @@ html[data-layout='side'] .dock-overlays {
   border-radius: 2px;
   background: linear-gradient(90deg, var(--c-you) 0 calc(var(--share, 0.5) * 100%), var(--c-bot) calc(var(--share, 0.5) * 100%) 100%);
   opacity: 0.8;
-  transition: --share 0.6s cubic-bezier(0.34, 1.4, 0.64, 1);
+  transition: --share var(--dur-move) var(--ease-standard);
 }
 .race-fill::after {
   /* the middle mark: who is ahead of level */
@@ -4333,11 +5944,11 @@ html.final-turns .game::after {
   filter: drop-shadow(0 10px 16px color-mix(in srgb, #000 55%, transparent));
 }
 .sun-hi {
-  stop-color: #fff;
+  stop-color: #f2ede4;
   stop-opacity: 0.07;
 }
 .sun-mid {
-  stop-color: #fff;
+  stop-color: #f2ede4;
   stop-opacity: 0;
 }
 .sun-lo {
@@ -4353,11 +5964,11 @@ html.final-turns .game::after {
   stroke-linejoin: round;
 }
 .edge-hi {
-  stop-color: #fff;
+  stop-color: #f2ede4;
   stop-opacity: 0.22;
 }
 .edge-lo {
-  stop-color: #fff;
+  stop-color: #f2ede4;
   stop-opacity: 0;
 }
 .soil-speck {
@@ -4376,7 +5987,10 @@ html.final-turns .game::after {
 .territory-branch {
   fill:none; stroke:#dcf3b7; stroke-width:1.8; stroke-linecap:round;
   stroke-dasharray:13 87; stroke-dashoffset:100; stroke-opacity:0;
-  filter:blur(.8px); animation:territory-heartbeat 10s linear infinite;
+  /* NO `filter: blur()`: the branch animates its dash offset forever, so a blur here re-rasterised
+     the stroke every frame — the same cost the Territory fog and the surrounded-home glow lost. The
+     pulse's own softness comes from its low stroke-opacity and round cap. */
+  animation:territory-heartbeat 10s linear infinite;
 }
 .territory-branch.p1 { stroke:#ffd090; stroke-width:1.55; }
 @keyframes territory-heartbeat {
@@ -4387,7 +6001,7 @@ html.final-turns .game::after {
 }
 .amb-pulse {
   fill: none;
-  stroke: color-mix(in srgb, var(--c-you) 55%, #fff);
+  stroke: color-mix(in srgb, var(--c-you) 55%, #f2ede4);
   stroke-width: 2.4;
   stroke-linecap: round;
   stroke-dasharray: 12 200;
@@ -4413,7 +6027,7 @@ html.final-turns .game::after {
   }
 }
 .amb-glint {
-  fill: #fff;
+  fill: #f2ede4;
   opacity: 0;
   transform-box: fill-box;
   transform-origin: center;
@@ -4512,7 +6126,7 @@ html.final-turns .game::after {
 .l-dim {
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.25s ease;
+  transition: opacity var(--dur-quick) ease;
 }
 .l-dim.on {
   opacity: 1;
@@ -4557,7 +6171,7 @@ html.final-turns .game::after {
 }
 /* Part 2: the cut's impact flash (local, soft-edged, ≤35% white, ≤60ms) */
 .fx-cutflash {
-  fill: #fff;
+  fill: #f2ede4;
   opacity: 0;
   pointer-events: none;
 }
@@ -4594,7 +6208,7 @@ html.final-turns .game::after {
   gap: 8px;
   background: var(--c-bg);
   pointer-events: none; /* never blocks a tap; any tap ends it */
-  transition: opacity 0.3s ease;
+  transition: opacity var(--dur-consequence) ease;
 }
 .splash[hidden] {
   display: none;
@@ -4669,7 +6283,7 @@ html.final-turns .game::after {
 }
 .tr-shine {
   fill: none;
-  stroke: #fff;
+  stroke: #f2ede4;
   stroke-opacity: 0.35;
   stroke-width: 2.5;
   stroke-linecap: round;
@@ -4774,7 +6388,7 @@ html.final-turns .game::after {
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background: radial-gradient(ellipse 70% 55% at 12% 6%, color-mix(in srgb, #fff 6%, transparent), transparent 70%);
+  background: radial-gradient(ellipse 70% 55% at 12% 6%, color-mix(in srgb, #f2ede4 6%, transparent), transparent 70%);
 }
 /* Part 4: the one-time Smoother mode note (bottom of the board, never over the dock) */
 .smoother {
@@ -4852,7 +6466,7 @@ html.final-turns .game::after {
 .hand .card.fruit.fruit-ready {
   border-color: color-mix(in srgb, var(--suit) 80%, var(--c-line));
   box-shadow:
-    inset 1px 1px 0 color-mix(in srgb, var(--m-rimLight, #fff) calc(var(--m-rim, 0.3) * 60%), transparent),
+    inset 1px 1px 0 color-mix(in srgb, var(--m-rimLight, #f2ede4) calc(var(--m-rim, 0.3) * 60%), transparent),
     1px 4px 7px -3px color-mix(in srgb, #000 75%, transparent),
     0 0 10px 1px color-mix(in srgb, var(--suit) 45%, transparent);
 }
@@ -4967,7 +6581,7 @@ html.final-turns .game::after {
   place-items: center;
   cursor: pointer;
   pointer-events: auto;
-  transition: background 0.14s ease-out, color 0.14s ease-out, box-shadow 0.14s ease-out;
+  transition: background var(--ix-open) ease-out, color var(--ix-open) ease-out, box-shadow var(--ix-open) ease-out;
 }
 .ctool::after {
   content: '';
@@ -5082,7 +6696,7 @@ html.final-turns .game::after {
 .dock .pile.ready .pile-card {
   box-shadow: 0 0 18px -4px color-mix(in srgb, var(--c-accent) 60%, transparent);
   transform: translateY(-2px);
-  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2), box-shadow 0.22s ease-out;
+  transition: transform var(--dur-quick) var(--ease-settle), box-shadow var(--dur-quick) ease-out;
   animation: none;
 }
 .dock .pile.ready .pile-stack,
@@ -5187,12 +6801,25 @@ html.final-turns .game::after {
 .lm-seg.on:not(.enemy) {
   stroke-opacity: 0.35;
 }
-.lm-tree .lm-seg.on {
-  filter: drop-shadow(0 0 2.5px var(--c-danger));
-}
-.lm-volcano .lm-seg.on {
-  filter: drop-shadow(0 0 2.5px var(--c-you));
-}
+/* NO PER-FRAME FILTER (owner, 2026-11-02: the surrounded home "looks very plain and almost out of
+   place"). A `drop-shadow` on a segment re-rasterises every frame while the home breathes, which is
+   the exact cost we removed from the Territory fog. The glow is now a SECOND, WIDER, faint stroke on
+   the same path — same soft edge, painted once, and it moves with the compositor. */
+/* The warm edge stays, but ONLY on a home that is not currently trembling. `worried` animates the
+   canopy/sprite with a transform, and a `drop-shadow` on a child of an animating ancestor
+   re-rasterises every frame — the same trap the Territory fog had. In the common danger case the
+   glow is kept; while the home trembles the heavier stroke carries it instead. */
+.landmark.danger:not(.worried) .lm-tree .lm-seg.on { filter: drop-shadow(0 0 2.5px var(--c-danger)); }
+.landmark.danger:not(.worried) .lm-volcano .lm-seg.on { filter: drop-shadow(0 0 2.5px var(--c-you)); }
+/* The constriction: the ring gains weight as the home is hemmed in, so the threat is legible without
+   reading anything. 3 sides -> 5: 2.5px -> 4px. */
+.landmark[data-blocked='4'] .lm-seg { stroke-width: 3.2; }
+.landmark[data-blocked='5'] .lm-seg { stroke-width: 4; }
+.landmark[data-blocked='6'] .lm-seg { stroke-width: 4.6; }
+/* Critical (5 of 6 sides): a slow, deliberate swell — transform only, so it is compositor work. */
+.landmark[data-blocked='5']:not(.strangled) .lm-ring { animation: lm-constrict 1.9s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes lm-constrict { 0%, 100% { transform: scale(1); } 50% { transform: scale(0.972); } }
+.reduce-motion .landmark .lm-ring { animation: none; }
 
 /* idle: the canopy sways a few pixels, a leaf falls now and then; the smoke curls, the crater breathes, an ember pops */
 .landmark.idle.lm-tree .lm-canopy {
@@ -5835,7 +7462,7 @@ html.align-overlay::before {
   position: fixed;
   inset: 0;
   z-index: 110;
-  background: #050606;
+  background: #0e0f10;
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--curtain-out, 240ms) cubic-bezier(.33, 0, .2, 1);
@@ -5847,35 +7474,55 @@ html.align-overlay::before {
   transition: opacity var(--curtain-in, 160ms) cubic-bezier(.4, 0, .67, 1);
 }
 
-/* ---------- the main menu fits a short window (owner, 2026-10-15) ----------
-   On a computer in a normal browser window (bookmarks bar, dock…) the menu used to need ~610px of
-   height, so Tutorial/Settings fell below the fold. On short, wide-ish screens the column now
-   scales with the window's height: smaller logo and wordmark, a tighter rhythm, the beta line on
-   two wider lines, buttons a little shorter (never under 44px). Tall screens are unchanged.
-   Checked by web/e2e/desktop-menu-fit.ts from 1000x460 to 1920x950, with and without Continue. */
-@media (min-width: 600px) and (max-height: 760px) {
+/* ---------- the main menu on a short screen (owner, 2026-10-15, generalised 2026-10-19) ----------
+   A laptop window with browser bars, or a phone in landscape, has little height to spend. Gaps
+   compress first (the column's rhythm and the action stack above), then the logo and wordmark scale
+   down, and only then do the big buttons lose their extra height — never below 44px, and never by
+   hiding an entry or the logo. Tall screens are unchanged.
+   Checked by web/e2e/menu-fit.ts at every supported size. */
+@media (max-height: 760px) {
   #menu .menu-inner {
-    --menu-rhythm: clamp(6px, 1.5dvh, 14px);
-    padding: clamp(10px, 3dvh, 32px) 0;
+    --menu-rhythm: clamp(4px, 1.4dvh, 14px);
+    padding-block: clamp(6px, 1.6dvh, 20px);
   }
+  #menu .title { font-size: clamp(1.8rem, min(8dvh, 10vw), 4.25rem); }
+  /* The 50px key is the owner's fixed rule now (2026-10-21): a short screen compresses the gaps and
+     the wordmark, never the keys. Nothing may override `--menu-key-h`. */
+}
+@media (min-width: 600px) and (max-height: 760px) {
   html.futa04-branding body #menu #logo {
     /* The logo takes whatever height is left once everything else fits: full size on a roomy
-       window, down to a small mark on a very short one. */
-    width: clamp(88px, calc(100dvh - 516px), 240px);
-    margin-bottom: clamp(2px, 1dvh, 16px);
-  }
-  #menu .title { font-size: clamp(2rem, 8dvh, 4.25rem); }
-  #menu #menu-beta {
-    width: min(620px, 100vw - 32px);
-    max-width: none;
-    margin-bottom: clamp(2px, 1dvh, 14px);
+       window, down to a small mark on a very short one — always visible. */
+    width: clamp(72px, calc(100dvh - 516px), 240px);
   }
   #menu .menu-buttons { gap: clamp(5px, 1dvh, 8px); }
-  #menu .menu-buttons .btn.big { min-height: clamp(44px, 7.5dvh, 56px); }
 }
-/* A very short window: the mark would be a smudge, so the wordmark carries the page alone. */
-@media (min-width: 600px) and (max-height: 560px) {
-  html.futa04-branding body #menu #logo { display: none !important; }
+/* A phone on its side (844x390 and similar). The four entries and the beta line keep their 44px
+   taps, so the column's own parts give way: a smaller wordmark (the branding sheet's
+   `html.test-typography-v2 #menu .title` has to be named to be overridden), a tighter beta line and
+   3px steps. Never a hidden entry, never a scroll. */
+@media (max-height: 470px) {
+  #menu .menu-inner {
+    --menu-rhythm: 3px;
+    padding-block: 2px;
+  }
+  #menu .menu-buttons {
+    gap: 3px;
+  }
+  #menu .title,
+  html.test-typography-v2 #menu .title,
+  html.futa04-branding #menu .title {
+    font-size: clamp(1.75rem, 6.2vh, 2.6rem);
+  }
+  #menu-beta {
+    font-size: 0.7rem;
+    line-height: 1.26;
+  }
+}
+
+/* A very narrow phone: the wordmark steps down a touch so nothing runs off the side. */
+@media (max-width: 360px) {
+  #menu .title { font-size: clamp(1.9rem, 10vw, 3.6rem); }
 }
 
 /* My turn starts: a soft light passes over my hand (main.ts glowHand). Each card's glow is drawn
@@ -5912,9 +7559,29 @@ html.futa04-branding[data-layout='side'] .board-wrap {
   margin-bottom: calc(var(--side-air) - 8px);
 }
 html.futa04-branding[data-layout='side'] .dock {
-  /* the dock's rows have fixed heights, so it is lifted as a whole (it sits at the grid's end) */
-  margin-bottom: calc(var(--side-air) - 10px);
+  /* centred on the board's own centre line (the board rises into the header band by the same
+     amount it gives back below, so the grid's middle is the board's middle) */
+  margin-block: 0;
   translate: var(--side-dock-shift, 0px) 0;
+}
+/* DESKTOP QUARTERS (owner, 2026-11-08): two equal halves; the board centred in the left one, the
+   cockpit + hand moved by main.ts centreSideDock onto the bottom-right quarter's middle. */
+html[data-layout='side'][data-quad='1'] .play {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+html[data-layout='side'][data-quad='1'] .board-wrap {
+  /* main.ts centreSideDock: right edge on the screen's middle, equal space above and below */
+  position: relative;
+  left: var(--quad-board-x, 0px);
+  top: var(--quad-board-y, 0px);
+}
+html[data-layout='side'][data-quad='1'] .dock {
+  justify-self: center;
+  width: var(--dock-w, 380px);
+}
+html.futa04-branding[data-layout='side'][data-quad='1'] .dock,
+html.v075.futa04-branding[data-layout='side'][data-quad='1'] .dock {
+  translate: var(--side-dock-shift, 0px) var(--side-dock-shift-y, 0px);
 }
 
 /* ---------- levels 1-10 (lessons) ---------- */
@@ -5933,3 +7600,1638 @@ html.futa04-branding[data-layout='side'] .dock {
 @keyframes lesson-pile-low { 50% { text-shadow: 0 0 3px rgba(255, 200, 90, .4); } }
 .reduce-motion #deck.lesson-pile-low .pile-count { animation: none; }
 @media (prefers-reduced-motion: reduce) { #deck.lesson-pile-low .pile-count { animation: none; } }
+
+/* SETTINGS ARE ESSENTIALS ON THE FUTASAKU CHANNELS (owner, 2026-10-23). main.ts sets the class there;
+   every Settings node marked data-only="classic" (index.html), and the report key the feedback
+   module adds, belong to the classic line only. */
+html.settings-essentials #sheet-settings [data-only="classic"],
+html.settings-essentials #settings-report {
+  display: none !important;
+}
+
+/* =================================================================
+   INTERFACE REFINEMENT (owner direction, 2026-10-22)
+   "The game never leaves the table."
+
+   The board, the cockpit and the cards are the physical object; the surfaces that open over
+   them are parts of the same machine, not pages from another product. This block is the last
+   word on those surfaces, so it can refine the long history above without rewriting it:
+   - one quiet motion vocabulary (web/src/ui/interface-motion.ts), decided in one place;
+   - the pause faceplate, which keeps the board visible behind it;
+   - the finish plate, which sits under the settled board instead of covering it;
+   - one button language: a cream primary, a hairline secondary, a compact utility.
+   ================================================================= */
+
+/* ---------- the shared interface motion ---------- */
+/* A surface that adopted the JS layer (enterSurface/exitSurface) is driven by the Web Animations
+   API with the --ix-* tokens. It must not also inherit an older CSS entrance: two choreographies
+   on one element is exactly the drift this layer exists to stop. */
+.sheet,
+#sheet-menu,
+#sheet-profile,
+#gameover,
+.starter-lottery,
+.install-prompt {
+  animation: none;
+}
+/* Markup-only adoption: a future surface can use this class and get the arrival with no JS. */
+.ix-arrive {
+  animation: ix-arrive var(--ix-open) var(--ix-ease-open) both;
+}
+@keyframes ix-arrive {
+  from {
+    opacity: 0;
+    translate: 0 var(--ix-travel);
+    scale: var(--ix-scale);
+  }
+  70% {
+    opacity: 1;
+    translate: 0 -1px;
+    scale: var(--ix-settle);
+  }
+}
+[data-ix-surface] {
+  will-change: opacity, translate, scale;
+}
+[data-ix-surface][data-ix-state='closed'] {
+  will-change: auto; /* a hidden/closed surface must not hold a compositor layer */
+}
+[data-ix-surface][data-ix-state='closing'],
+.ix-closing {
+  pointer-events: none !important;
+}
+.reduce-motion .ix-arrive,
+.reduce-motion [data-ix-surface] {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ix-arrive,
+  [data-ix-surface] {
+    animation: none;
+  }
+}
+
+/* One press language: the machine answers, then returns. 90ms, a 1.5% compress and a whisper of
+   light change — never a bounce and never a delay. `:active` covers pointer and keyboard alike for
+   native buttons, so the JavaScript `press()` primitive is only for custom controls. */
+.btn,
+.chip,
+.icon-only,
+.gm-lead,
+.gm-act,
+.gm-key,
+.gm-tool,
+.ctool,
+.seg-btn,
+.moves .btn,
+[data-ix-press] {
+  transition:
+    transform var(--ix-press) var(--ix-ease-open),
+    background-color var(--ix-open) var(--ix-ease-open),
+    border-color var(--ix-open) var(--ix-ease-open),
+    color var(--ix-open) var(--ix-ease-open),
+    box-shadow var(--ix-press) var(--ix-ease-open);
+}
+/* Physical key depth belongs to logic/press.ts. Keeping a second :active transform here
+   doubles compression and can reappear after a cancelled scroll gesture. */
+/* A KEY NEVER DIMS ITSELF WITH A `filter` (documented invariant: never a filter on an animating
+   node, and every key animates transform/box-shadow on press). Both answers are compositor/paint
+   only: the pressed key loses 5% opacity (the same read as the old brightness(0.96), whatever its
+   fill), the hovered primary gains a 3.5% white wash over its own background (so cream menu keys
+   and amber action keys both lighten without a colour token of their own). */
+.btn.primary:active:not(:disabled),
+.gm-lead.primary:active:not(:disabled) {
+  opacity: 0.95;
+}
+/* Reduce motion keeps the control's answer (colour/light) but never the movement. */
+.reduce-motion :is(.btn, .chip, .icon-only, .gm-lead, .gm-act, .gm-key, .gm-tool, .ctool, .seg-btn, [data-ix-press]):active {
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.btn, .chip, .icon-only, .gm-lead, .gm-act, .gm-key, .gm-tool, .ctool, .seg-btn, [data-ix-press]):active {
+    transform: none;
+  }
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn.ghost:hover:not(:disabled),
+  .gm-act:hover:not(:disabled),
+  .gm-key:hover:not(:disabled),
+  .gm-tool:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--c-text) 5%, transparent);
+    border-color: color-mix(in srgb, var(--c-line) 90%, var(--c-text));
+  }
+  .btn.primary:hover:not(:disabled) {
+    background-image: linear-gradient(rgba(242, 237, 228, 0.035), rgba(242, 237, 228, 0.035));
+  }
+}
+
+/* Menus are machine keys, not pills: a precise 10px corner, the same top-left light the board
+   uses, and no glow. Icon-only controls stay circular (the cockpit's own shape). */
+.btn,
+.btn.primary,
+.btn.ghost,
+.btn.link,
+.moves .btn {
+  border-radius: 10px;
+}
+.btn.primary {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #f2ede4 34%, transparent),
+    0 1px 0 color-mix(in srgb, #000 45%, transparent);
+}
+.btn.ghost {
+  background: color-mix(in srgb, var(--c-text) 2.5%, transparent);
+  border-color: color-mix(in srgb, var(--c-line) 88%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-text) 7%, transparent);
+}
+/* THE MENU'S KEYS ARE THE PLAY SUBMENU'S DARK GLASS (owner, 2026-11-02: "use the dark glass around
+   buttons similar to sub menu play"). This REPLACES the opaque `--c-bg` fill of 65f4257f
+   ("solid keys over the living map") — that rule is deleted rather than overridden, so there is one
+   statement of the truth. Both menus now wear the SAME material, which is the point: the owner is
+   pointing at the PLAY submenu, so the key has to compute what that submenu's key computes.
+   The property is the `background` SHORTHAND, not `background-color`. `.btn.ghost` (directly above)
+   also uses the shorthand, and a shorthand resets every longhand, so a longhand would be reset by
+   it; the shorthand is the form that wins. `!important` is unnecessary here because the id in the
+   selector outranks `.btn.ghost`.
+   The PLAY key stays cream (`primary`): it is the one key the owner has always kept distinct. */
+#menu .menu-buttons > .btn:not(.primary),
+#play-menu .menu-buttons > .btn:not(.primary) {
+  background: var(--dark-glass);
+  -webkit-backdrop-filter: var(--dark-glass-blur);
+  backdrop-filter: var(--dark-glass-blur);
+}
+
+/* ---------- the pause plate's company ----------
+   Merge (owner, 2026-10-23: "my look, keep their features"): the pause panel's own face is the dark
+   glass at '#sheet-menu' above, over the blurred match (html.game-veiled). What stays from the
+   faceplate pass: the cockpit recedes and the transient chrome hides while paused, the plate has
+   no grab handle, the online clock note, Resign's muted coral, and the Restart confirmation plate. */
+body.paused .hud,
+body.paused .dock {
+  opacity: 0.42;
+  transition: opacity var(--ix-open) var(--ix-ease-open);
+}
+body.paused .edge-wash,
+body.paused #turn-pill,
+body.paused .corner-tools {
+  opacity: 0;
+  transition: opacity var(--ix-close) var(--ix-ease-open);
+}
+#sheet-menu::before,
+.sheet.confirm-sheet::before {
+  display: none;
+}
+#sheet-menu .gm-clock-note {
+  margin: 2px 0 0;
+  text-align: center;
+  font-family: var(--font-ui);
+  font-size: 0.54rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+#sheet-menu #gm-resign:not([hidden]) {
+  color: color-mix(in srgb, var(--c-bot) 72%, var(--c-muted));
+}
+
+/* The pause confirmation (Restart / Keep playing) is a small plate, not a second app. */
+.sheet.confirm-sheet {
+  left: 50%;
+  right: auto;
+  top: auto;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  width: min(400px, calc(100vw - 20px));
+  transform: translateX(-50%);
+  max-height: calc(100dvh - 20px);
+  border: 1px solid color-mix(in srgb, var(--c-line) 90%, transparent);
+  border-radius: 14px;
+  padding: 4px 16px max(14px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--c-surface) 96%, var(--c-bg));
+  box-shadow: 0 26px 60px -40px #000;
+}
+.sheet.confirm-sheet .sheet-body.stack {
+  gap: 10px;
+}
+.sheet.confirm-sheet .btn {
+  min-height: 46px;
+  border-radius: 9px;
+}
+
+
+/* ---------- the finish plate ---------- */
+/* The final board is the result. It stays visible, loses its colour and its cockpit, and the
+   plate rises under it. One hairline, one timed heading reveal, no confetti and no trophy. */
+#gameover {
+  display: grid;
+  place-items: end center;
+  /* The plate rests a finger's width off the bottom edge instead of kissing it (owner review,
+     2026-10-23: the result read as hanging off the screen). The inset is part of the SCREEN's
+     padding, so it can never become the card's own overflow. */
+  padding: max(12px, env(safe-area-inset-top)) 12px max(16px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--c-bg) 46%, transparent);
+}
+#gameover::before {
+  display: none; /* the old radial flourish: a glow is not a result */
+}
+body.result .board-wrap {
+  filter: saturate(0.7) brightness(0.72) contrast(0.98);
+  /* Static, for the same reason as the pause filter: the plate's entrance is the transition. */
+}
+body.result .hud,
+body.result .dock,
+body.result .corner-tools {
+  opacity: 0.34;
+  transition: opacity var(--ix-open) var(--ix-ease-open);
+}
+/* The finish card's ONE disclosure: its detail lines and extra keys used to appear on a hard cut.
+   They now fade in on the shared arrival beat (opacity only: the plate's own height change is
+   layout, and no layout property may be animated here). Reduce motion shows them at once. */
+#gameover [data-go-extra]:not([hidden]) {
+  animation: go-extra-in var(--ix-open) var(--ix-ease-open) both;
+}
+@keyframes go-extra-in {
+  from { opacity: 0; }
+}
+.reduce-motion #gameover [data-go-extra] {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  #gameover [data-go-extra] { animation: none; }
+}
+#gameover .go-card {
+  position: relative;
+  width: min(440px, 100%);
+  max-height: calc(100dvh - 24px);
+  /* The lockup's own air, above and below (owner review, 2026-10-23). The plate used to give the
+     words 20px above and then run straight into a five-key column, so the result read as sitting
+     high inside its own frame. It now takes a little more air above the lockup and a little more
+     between the lockup and the ways out, paid for by the single row of quiet keys below (see
+     `.go-buttons`), so the plate is SHORTER than before while its words sit lower in it. */
+  padding: var(--go-top, 26px) 18px 14px;
+  text-align: left;
+  background: color-mix(in srgb, var(--c-surface) 94%, transparent);
+  border: 1px solid var(--fu-cream-22);
+  border-radius: 16px;
+  box-shadow:
+    0 30px 70px -46px #000,
+    inset 0 1px 0 color-mix(in srgb, var(--fu-cream) 8%, transparent);
+}
+/* The title still arrives on its own beat; the entering hairline that used to draw across the
+   plate's top edge is gone with every other window rule (owner, 2026-11-02). */
+#gameover[data-fresh='1'] .go-title {
+  animation: go-title-in var(--ix-open) var(--ix-ease-open) 60ms both;
+}
+@keyframes go-title-in {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+.reduce-motion #gameover[data-fresh='1'] .go-title {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  #gameover[data-fresh='1'] .go-title {
+    animation: none;
+  }
+}
+
+#gameover .go-title {
+  color: var(--fu-cream);
+  text-align: left;
+  text-transform: uppercase;
+  font-size: clamp(2rem, 9vw, 2.7rem);
+  line-height: 1;
+  letter-spacing: -0.008em;
+}
+/* A campaign win is the level's name over its outcome: LEVEL 12 / COMPLETE. The DOM keeps the
+   pinned sentence ("Level 12 complete") for tests and screen readers; only its shape changes. */
+#gameover .go-title .go-kicker {
+  display: block;
+  margin-bottom: 7px;
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--fu-cream-55);
+}
+#gameover .go-title .go-outcome {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+/* A win takes the warmer cream; a loss stays the same face, one step quieter. Never red. */
+#gameover.won .go-title {
+  color: #f1ddbb;
+}
+#gameover.lost .go-title {
+  color: var(--fu-cream-70);
+}
+#gameover .go-context {
+  margin: 0 0 8px;
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--fu-cream-55);
+}
+#gameover .go-sub {
+  margin: 10px 0 0;
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--fu-cream-55);
+}
+#gameover .go-card.seed-slot #go-seeds {
+  /* The award's own slot, held while a proof is settled (main.ts `settleSeedsForCard`): the number
+     lands in place instead of pushing the score and the keys down. The height is the row's own
+     height, so a visible award and the empty slot occupy the same line. */
+  min-height: 32px;
+}
+/* THE PLANET REPLACED THE TERRITORY KEY (owner brief, 2026-11-11): the card shows the world itself,
+   so the old "Grow tiles in Territory" key and the level-10 explainer paragraphs are gone with it.
+   Nothing here re-adds them; the pane's own CSS lives in `web/src/online/endgame-planet.ts`. */
+
+#gameover .go-score {
+  justify-content: flex-start;
+  gap: 9px;
+  margin: 12px 0 2px;  font-size: clamp(2.2rem, 9vw, 2.9rem);
+  line-height: 1;
+}
+#gameover .go-score .dash {
+  color: var(--fu-cream-28);
+  font-weight: 400;
+}
+#gameover .go-score .bot {
+  color: var(--fu-cream-55);
+}
+#gameover .go-reason {
+  margin: 6px 0 0;
+  max-width: 34ch;
+  color: var(--fu-cream-70);
+  font-size: 0.88rem;
+  line-height: 1.3;
+}
+
+/* ---------- THE DOUBLE HARVEST (surprise, 2026-10-29) ----------
+   One small stamped figure of the final position, the two joined networks in their own inks,
+   centred in the card (the one-line summary beside it was removed, owner 2026-10-30). Static: no
+   loop, no filter, no timer. The one entering beat is the card's own opacity fade, switched off for
+   Reduce motion below. */
+#gameover .go-verdict {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+  margin: 12px 0 0;
+}
+#gameover .go-harvest {
+  flex: 0 0 auto;
+  margin: 0;
+  width: 112px;
+  /* A SQUARE slot: the plate is drawn a 30° round so the reader sits exactly under the opponent
+     (owner, 2026-11-01), which makes its silhouette taller than wide. Sized by width alone it grew
+     7px taller and pushed the card over on a 320×568 phone; a square keeps the height it had before
+     the turn, and the viewBox fits the drawing inside without distorting it. */
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#gameover .go-harvest-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* The plate is drawn a 30° round so the reader sits exactly under the opponent (owner,
+     2026-11-01), which makes this hexagon TALLER than wide where it used to be wider than tall.
+     Capping the height keeps the card's own envelope (it overflowed by 7px at 320×568 without
+     this); the viewBox keeps the drawing undistorted, it simply scales down to fit. */
+  overflow: visible;
+}
+/* The plate: every hex of the board the match was played on, faint enough to sit under the inks. */
+#gameover .go-harvest-svg .hv-plate path {
+  fill: none;
+  stroke: var(--fu-cream-14);
+  stroke-width: 0.7;
+}
+/* The reader's network: solid. The other seat: a lighter tone with a hatch, so the two masses are
+   told apart by pattern and weight as well as by ink — never by colour alone. */
+#gameover .go-harvest-svg .hv-you path {
+  fill: var(--c-you);
+  fill-opacity: 0.9;
+  stroke: var(--c-you);
+  stroke-width: 0.5;
+}
+#gameover .go-harvest-svg .hv-them path {
+  fill: var(--c-bot);
+  fill-opacity: 0.18;
+  stroke: var(--c-bot);
+  stroke-width: 0.9;
+}
+#gameover .go-harvest-svg .hv-hatch path {
+  fill: url(#go-harvest-hatch);
+  stroke: none;
+}
+#gameover .go-harvest-svg pattern line {
+  stroke: var(--c-bot);
+  stroke-opacity: 0.9;
+  stroke-width: 1;
+}
+/* A tile that is not joined to its own home (a board caught mid-turn): an outline, never a fill. */
+#gameover .go-harvest-svg .hv-cutoff {
+  fill: none;
+  stroke: var(--fu-cream-55);
+  stroke-width: 0.9;
+  stroke-dasharray: 1.5 1.5;
+}
+/* The rim of the board: the engraved edge of the stamp, so the ground reads as a shape. */
+#gameover .go-harvest-svg .hv-outline line {
+  stroke: var(--fu-cream-28);
+  stroke-width: 1.3;
+}
+/* The cut line: where the two networks strangle each other. */
+#gameover .go-harvest-svg .hv-frontier line {
+  stroke: var(--c-gold);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+#gameover .go-harvest-svg .hv-home circle {
+  fill: none;
+  stroke: var(--fu-cream);
+  stroke-width: 1.1;
+}
+#gameover .go-harvest-svg .hv-home .hv-home-dot {
+  fill: var(--fu-cream);
+  stroke: none;
+}
+/* A sealed home takes a heavier ring: the shape says it, not just the colour. */
+#gameover .go-harvest-svg .hv-sealed circle {
+  stroke: var(--c-gold);
+  stroke-width: 2;
+}
+#gameover[data-fresh='1'] .go-verdict {
+  animation: go-verdict-in var(--ix-open) var(--ix-ease-open) 120ms both;
+}
+@keyframes go-verdict-in {
+  from {
+    opacity: 0;
+  }
+}
+.reduce-motion #gameover[data-fresh='1'] .go-verdict {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  #gameover[data-fresh='1'] .go-verdict {
+    animation: none;
+  }
+}
+/* The two quiet ways out share ONE line (owner review, 2026-10-23). They were two full-width rows
+   of 44px each, which is what made the plate tall enough for the lockup above to read high: the
+   framed keys keep the plate's width, and "More" / "Back to menu" pair up under them. This is the
+   one place the card's height is bought back, so the plate covers LESS board than before, its
+   lockup sits lower in the frame, and nothing overflows (the card keeps no scroll).
+   A lone quiet key takes the full width again: the disclosure hides itself when it has nothing
+   behind it, and half-width text under full-width keys would read as an orphan. */
+#gameover .go-buttons {
+  gap: 7px;
+  margin-top: var(--go-buttons-gap, 20px);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+/* The row wrappers are layout-transparent on a classic card (`display: contents`), so these read
+   the keys themselves rather than a wrapper: the same column behaviour as before. */
+#gameover[data-anatomy='classic'] .go-buttons .btn:not(.link) {
+  grid-column: 1 / -1;
+}
+#gameover[data-anatomy='classic'] .go-buttons .btn.link {
+  grid-column: span 1;
+}
+/* A lone quiet key takes the full width again (the disclosure hides itself when it has nothing
+   behind it, and half-width text under full-width keys would read as an orphan). */
+#gameover[data-anatomy='classic'] .go-buttons:has(#go-more[hidden]) #go-menu {
+  grid-column: 1 / -1;
+}
+#gameover .go-buttons .btn {
+  min-height: 46px;
+  /* One key across the game (owner, 2026-10-31): the menu's 10px corner, every label uppercase and
+     tracked like PLAY / RESUME, on the card's centre line. */
+  border-radius: 10px;
+  justify-content: center;
+  padding: 0 16px;
+  font-size: 0.86rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+/* The two quiet ways out read as small instrument labels, not underlined prose. */
+#gameover .go-buttons .btn.link {
+  font-size: 0.74rem;
+  letter-spacing: 0.14em;
+  text-decoration: none;
+}
+#gameover .go-buttons .btn.primary {
+  min-height: 50px;
+  justify-content: center;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 0.92rem;
+}
+#gameover .go-buttons .btn.link {
+  min-height: 44px;
+  padding: 0 2px;
+  text-decoration: none;
+  color: var(--fu-cream-55);
+}
+#gameover .go-buttons .btn.link:hover {
+  color: var(--fu-cream);
+}
+/* NO FRAME (house rule, 2026-11-11): a quiet key is a TONAL plate, never an outlined one. */
+#gameover .go-buttons .btn.ghost {
+  border: 0;
+  background: color-mix(in srgb, var(--fu-cream) 7%, transparent);
+}
+
+/* Landscape phones and short desktop windows: the result becomes a two-page spread on one plate —
+   the outcome on the left, the ways forward on the right. The board keeps the top band. */
+@media (max-height: 560px) and (min-width: 560px) {
+  #gameover {
+    place-items: end center;
+    padding: 8px 10px;
+  }
+  #gameover .go-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    column-gap: 20px;
+    align-items: start;
+    width: min(720px, 100%);
+    max-height: calc(100dvh - 16px);
+    padding: 14px 16px 12px;
+  }
+  #gameover .go-summary {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  #gameover .go-buttons {
+    grid-column: 2;
+    grid-row: 1;
+    margin-top: 0;
+  }
+  #gameover .go-break,
+  #gameover .go-moves,
+  #gameover .go-highlights {
+    grid-column: 1 / -1;
+  }
+  #gameover .go-highlights {
+    margin-top: 8px;
+  }
+  #gameover .go-title {
+    font-size: clamp(1.7rem, 4.2vw, 2.2rem);
+  }
+  #gameover .go-score {
+    margin: 6px 0 0;
+    font-size: clamp(1.9rem, 4.6vw, 2.3rem);
+  }
+  #gameover .go-buttons .btn {
+    min-height: 44px;
+  }
+  #gameover .go-buttons .btn.primary {
+    min-height: 48px;
+  }
+  #gameover .go-buttons .btn.link {
+    min-height: 44px;
+  }
+}
+
+/* Short phones (320x568, 360x640): the plate takes less air, never a smaller target. The board
+   keeps a real band of itself above the result. */
+@media (max-height: 660px) {
+  #gameover {
+    /* 8px is the whole budget here (the plate must stay clear of the board), so the plate's own
+       rest is the screen's 8px — it is the one size where the air is spent on the board instead. */
+    padding: 8px 10px 8px;
+  }
+  #gameover .go-card {
+    /* The safe area is the SCREEN's padding now (`#gameover`), so the card does not add it twice. */
+    padding: 14px 14px 10px;
+  }
+  #gameover .go-title {
+    font-size: clamp(1.75rem, 8.4vw, 2.1rem);
+  }
+  #gameover .go-title .go-kicker {
+    margin-bottom: 4px;
+  }
+  #gameover .go-sub {
+    margin-top: 7px;
+  }
+  #gameover .go-score {
+    margin: 8px 0 0;
+    font-size: clamp(2rem, 8.4vw, 2.4rem);
+  }
+  #gameover .go-reason {
+    margin-top: 4px;
+  }
+  /* The verdict pair takes the tightest plate: a smaller stamp, a smaller measure, and no extra
+     air above it. It is still one row, so the card grows by a line, never by a block. */
+  #gameover .go-verdict {
+    gap: 8px;
+    margin-top: 7px;
+  }
+  #gameover .go-harvest {
+    width: 74px;
+  }
+  #gameover .go-buttons {
+    margin-top: 10px;
+    gap: 5px;
+  }
+  #gameover .go-buttons .btn {
+    min-height: 44px;
+  }
+  #gameover .go-buttons .btn.primary {
+    min-height: 48px;
+  }
+  #gameover .go-buttons .btn.link {
+    min-height: 44px;
+  }
+}
+
+/* ======================================================================================
+   THE PLANET CARD (owner brief, 2026-11-11; owner feedback, same day)
+
+   The card's red band is a live view of THE PLANET and the planet is the HERO: the card fills the
+   screen, the words above it are a compact read-out, and every pixel left over goes to the world.
+   Four half-width keys sit under it in two rows of two, in the pause panel's own derived-column
+   grid so a row never leaves an orphaned half key.
+
+   The anatomy is an attribute, not a second card: `data-anatomy="planet"` is set per card by
+   main.ts, so a lesson 1-9 card (and the locked futa04 line) keeps the classic column and its
+   "More" disclosure while both anatomies share this markup.
+
+   ONE GUTTER: `--go-gutter` is the card's own side padding, and the window's chrome (its name, the
+   wallet, the hint and the explainer) sits on exactly that line. One optical axis, no exceptions.
+   ====================================================================================== */
+
+/* THE CARD IS THE SCREEN (owner correction, 2026-11-11: "make sure the whole screen uses entire
+   height of the current display ... the plate is the screen, not a floating card with margins").
+   The screen is a grid whose single item STRETCHES, so the plate takes the dynamic viewport minus
+   only the safe areas and one deliberate 6/8px inset — never a max-height that leaves it short. */
+#gameover[data-anatomy='planet'] {
+  /* The plate's own inset is a TOKEN, so its height can be derived from it below: the viewport minus
+     exactly the air the plate leaves around itself (and the safe areas, whatever they are). */
+  --go-inset-top: 6px;
+  --go-inset-bottom: 8px;
+  place-items: center;
+  padding: max(var(--go-inset-top), env(safe-area-inset-top)) 10px max(var(--go-inset-bottom), env(safe-area-inset-bottom));
+}
+#gameover[data-anatomy='planet'] .go-card {
+  --go-gutter: 14px;
+  /* THE ONE RHYTHM (owner, 2026-11-11: "make the margin between you lost, score, and game info and
+     then planet equal spaces between each other"). ONE value governs every gap between the tiers
+     A (the outcome title) -> B (the score) -> C (the game info line) -> D (the planet window):
+     the card's own column gap and the summary column's gap (and, in the landscape phone's two
+     pages, the grid's row-gap, so the one value governs that shape too). Nothing else in this block
+     sets a vertical margin between those tiers, so they cannot drift. */
+  --go-tier-gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--go-tier-gap);
+  box-sizing: border-box;
+  width: min(440px, 100%);
+  /* THE PLATE IS THE SCREEN (owner correction, 2026-11-11). Its height is the DYNAMIC viewport minus
+     only its own inset and the safe areas — never `height: 100%` of a content-sized grid row (that
+     resolves against the content, which is how the card came out 22px short of the window), and
+     never a `max-height` that leaves it short at a common size. */
+  height: calc(100dvh - max(var(--go-inset-top), env(safe-area-inset-top)) - max(var(--go-inset-bottom), env(safe-area-inset-bottom)));
+  /* The plate IS the screen: the legacy card's own height cap (and its scroll) are for the classic
+     line only, where the words must fit a floating panel. */
+  max-height: none;
+  padding: 14px var(--go-gutter) 12px;
+  text-align: left;
+  overflow: hidden;
+}
+/* THE READ-OUT (owner feedback, 2026-11-11: "top is cramped with logo, you lost, the score etc.",
+   corrected in the same brief: "logo on top right corner not left, just like in game. centered you
+   lost/you win and score closer to it centered").
+
+   One CENTRED optical column, and a corner mark that floats clear of it:
+
+                        [mark]
+                 LEVEL 65            <- kicker, centred
+                 COMPLETE            <- the outcome, centred
+                  18 – 1             <- the score, tight under the title
+             NEXT LEVEL UNLOCKED    <- one quiet note
+
+   The block is a single centred column (kicker / title / score / note), and the mark is the card's
+   own copy of the in-game corner badge, pinned top-right on the card's gutter. The lockup is
+   centred inside the band the planet leaves, so the air above and below it is symmetrical — no
+   element floats in the middle of the card by accident. */
+#gameover[data-anatomy='planet'] .go-card { position: relative; }
+#gameover[data-anatomy='planet'] .go-summary {
+  /* THE READ-OUT NEVER GROWS (owner correction, 2026-11-11: "the planet window stretching to take
+     all the height the header and keys do not need"). The lockup takes only the height its tiers
+     need; every remaining pixel of the plate is the window's. Its tiers are one column on the SAME
+     rhythm as the card (see --go-tier-gap), so a hidden tier leaves no gap behind it. */
+  flex: 0 0 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Starts at its own top edge: with a content-sized band, centring only added half-leading above
+     and below, and that is what made the outcome->score rhythm (12px) differ from score->window
+     (37px). One rhythm, measured. */
+  justify-content: flex-start;
+  gap: var(--go-tier-gap);
+  text-align: center;
+}
+/* NO CENTRED CAP AND NO TOP-LEFT MARK: the corner badge, top-right, on the card's gutter. */
+#gameover[data-anatomy='planet'] #go-brand {
+  position: absolute;
+  top: 14px;
+  right: var(--go-gutter);
+  left: auto;
+  margin: 0;
+  opacity: .8;
+  pointer-events: none;
+}
+/* TIER 1: the level, centred above the outcome. */
+#gameover[data-anatomy='planet'] .go-context {
+  order: 1;
+  /* The kicker is part of the title lockup, NOT a tier: the column gap already put one rhythm step
+     between it and the title, so this pulls that single gap back to the lockup's own 4px. */
+  margin: 0 0 calc(4px - var(--go-tier-gap));
+  padding-left: 0;
+  font-size: 0.56rem;
+  letter-spacing: 0.22em;
+  white-space: nowrap;
+  color: var(--fu-cream-55);
+}
+/* TIER 2: the outcome — the one big word, centred, with real air above it. */
+#gameover[data-anatomy='planet'] .go-title {
+  order: 2;
+  margin: 0;
+  font-size: clamp(1.75rem, 8vw, 2.15rem);
+  line-height: 0.95;
+  text-align: center;
+}
+#gameover[data-anatomy='planet'] .go-title .go-kicker {
+  display: none; /* the level is its own centred line (the context cell) */
+}
+/* TIER 3: the score — a compact read-out, centred and TIGHT to the title (they read as one unit). */
+#gameover[data-anatomy='planet'] .go-score {
+  order: 3;
+  margin: 0;
+  gap: 6px;
+  justify-content: center;
+  font-size: clamp(1.4rem, 4.4vw, 1.6rem);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+#gameover[data-anatomy='planet'] .go-score .dash { font-size: 0.72em; }
+/* TIER 4: the quiet note, centred under the unit. */
+#gameover[data-anatomy='planet'] .go-note {
+  order: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+}
+/* A TIER WITH NOTHING TO SAY TAKES NO RHYTHM STEP (owner, 2026-11-11: "a hidden tier must not leave
+   a double gap"). The note is the game-info tier: when neither its unlock line nor the award is on
+   the card it is not a tier at all, so the column does not put a gap around an empty box. */
+#gameover[data-anatomy='planet'] .go-note:not(:has(> :not([hidden]))) { display: none; }
+#gameover[data-anatomy='planet'] .go-note .go-sub {
+  margin: 0;
+  font-size: 0.55rem;
+  letter-spacing: 0.16em;
+  color: var(--fu-cream-55);
+  text-align: center;
+}
+#gameover[data-anatomy='planet'] .go-note #go-seeds {
+  margin: 0;
+  min-height: 0;
+}
+#gameover[data-anatomy='planet'] .go-learned {
+  order: 5;
+  margin: 0;
+  font-size: 0.7rem;
+  line-height: 1.3;
+  text-align: center;
+}
+/* ONE NOTE ROW: what the win unlocked, and what it paid, on one baseline — never two rows.
+   `display: contents` keeps a classic card's two paragraphs exactly as they were. */
+.go-note { display: contents; }
+
+/* THE WINDOW: all the freed space, cut into the plate. It BLEEDS past the card's padding on the
+   sides and keeps the card's own gutter as its inner inset, so the window's chrome (its name, the
+   wallet, the hint) sits on exactly the vertical axis of the title and the score above it — one
+   optical axis for the whole card. The card clips it, so the plate's own corner shapes the window:
+   one corner family, no double frame, no gap that would make it a thumbnail. */
+#gameover[data-anatomy='planet'] #go-world {
+  /* THE PLANET TAKES THE REMAINDER (owner correction, 2026-11-11: "the planet window stretching to
+     take all the height the header and keys do not need ... on a taller phone the player gets MORE
+     planet, not more padding"). It is the plate's one growing child, so the keys are always the last
+     thing at the thumb and nothing floats in the middle with a gap under it. */
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  /* C -> D: the card's own column gap IS this margin, so the window's top edge lands one rhythm step
+     under the game-info tier. The horizontal bleed past the gutter is what makes it a window cut into
+     the plate rather than an inset thumbnail. */
+  margin: 0 calc(-1 * var(--go-gutter));
+  display: block;
+}
+#gameover[data-anatomy='planet'] #go-world[hidden] { display: none; }
+#gameover[data-anatomy='planet'] .go-world-surface { height: 100%; border-radius: 13px; }
+
+/* THE DETAILS LIVE IN RESULT: on the planet card none of them is painted twice. */
+#gameover[data-anatomy='planet'] #go-reason,
+#gameover[data-anatomy='planet'] #go-verdict,
+#gameover[data-anatomy='planet'] #go-break,
+#gameover[data-anatomy='planet'] #go-moves,
+#gameover[data-anatomy='planet'] #go-highlights,
+#gameover[data-anatomy='planet'] #go-stats,
+#gameover[data-anatomy='planet'] #go-more,
+#gameover[data-anatomy='planet'] #go-share,
+#gameover[data-anatomy='planet'] #go-cut,
+#gameover[data-anatomy='planet'] #go-other,
+#gameover[data-anatomy='planet'] #go-board {
+  display: none;
+}
+
+/* FOUR KEYS, TWO ROWS OF TWO — the pause panel's own derivation: each row's columns come from what
+   is VISIBLE in it (`grid-auto-flow: column` + `grid-auto-columns: 1fr`), so one key fills the row
+   and two split it. No `:has()` decides a width, and a mode without a replay cannot leave a gap. */
+#gameover[data-anatomy='planet'] .go-buttons {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-flow: row;
+  gap: 7px;
+  /* No margin: the plate's column gap places the keys one rhythm step under the window, which is
+     also what anchors them to the thumb when the planet has taken every spare pixel. */
+  margin-top: 0;
+}
+#gameover[data-anatomy='planet'] .go-key-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 7px;
+}
+#gameover[data-anatomy='planet'] .go-key-row:not(:has(> .btn:not([hidden]))) { display: none; }
+/* THE LEAD KEY IS THE RIGHT-HAND KEY OF THE FIRST ROW (owner, 2026-11-11: "'try again' or 'next
+   level' should be on the right not on the left"). The DOM keeps the lead FIRST — its handlers, its
+   focus order and every suite that looks for `#go-rematch` as the first control are untouched — and
+   the GRID puts it in column 2 while RESULT takes column 1. Layout order, not DOM order. */
+#gameover[data-anatomy='planet'] .go-key-row:first-of-type > #go-result { grid-column: 1; }
+#gameover[data-anatomy='planet'] .go-key-row:first-of-type > #go-rematch { grid-column: 2; }
+#gameover[data-anatomy='planet'] .go-buttons .btn {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 8px;
+  border-radius: 10px;
+  /* NO FRAME (house rule, 2026-11-11): the key is a low tonal plate on the card's glass. */
+  border: 0;
+  background: color-mix(in srgb, var(--fu-cream) 7%, transparent);
+  box-shadow: none;
+  justify-content: center;
+  text-align: center;
+  font-family: var(--font-ui);
+  font-size: 0.74rem;
+  font-weight: var(--w-ui-medium, 500);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fu-cream);
+}
+/* The lead key is the only filled one. */
+#gameover[data-anatomy='planet'] .go-buttons .btn.primary {
+  min-height: 46px;
+  border: 0;
+  background: var(--fu-cream);
+  color: var(--fu-ink);
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+}
+/* The way out is a tonal key here, not an underlined word: it is one of the four. Its press and its
+   focus are tone and the shared ring, never a contour. */
+#gameover[data-anatomy='planet'] .go-buttons .btn.link {
+  min-height: 46px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--fu-cream) 7%, transparent);
+  color: var(--fu-cream);
+  font-size: 0.74rem;
+  letter-spacing: 0.1em;
+  text-decoration: none;
+}
+#gameover[data-anatomy='planet'] .go-buttons .btn:active {
+  background: color-mix(in srgb, var(--fu-cream) 13%, transparent);
+}
+#gameover[data-anatomy='planet'] .go-buttons .btn.primary:active { background: color-mix(in srgb, var(--fu-cream) 86%, transparent); }
+#gameover[data-anatomy='planet'] .go-buttons .btn:focus-visible { outline: 2px solid var(--fu-cream); outline-offset: 2px; }
+
+/* CLASSIC CARDS keep their single column, in exactly the order they always had (the row wrappers
+   are layout-transparent there; `order` restores the old sequence around the way out). */
+#gameover[data-anatomy='classic'] .go-key-row { display: contents; }
+#gameover[data-anatomy='classic'] #go-result { display: none; }
+#gameover[data-anatomy='classic'] .go-buttons #go-other { order: 1; }
+#gameover[data-anatomy='classic'] .go-buttons #go-replay { order: 2; }
+#gameover[data-anatomy='classic'] .go-buttons #go-board { order: 3; }
+#gameover[data-anatomy='classic'] .go-buttons #go-more { order: 4; }
+#gameover[data-anatomy='classic'] .go-buttons #go-share { order: 5; }
+#gameover[data-anatomy='classic'] .go-buttons #go-cut { order: 6; }
+#gameover[data-anatomy='classic'] .go-buttons #go-menu { order: 7; }
+#gameover[data-anatomy='classic'] .go-buttons #go-stats { order: 8; }
+
+/* THE SHORT PHONE (320x568, 360x640): the plate takes less air and the keys lose two pixels of
+   height, never a target. The planet keeps everything that is left. */
+@media (max-height: 660px) {
+  #gameover[data-anatomy='planet'] {
+    --go-inset-top: 6px;
+    --go-inset-bottom: 6px;
+  }
+  #gameover[data-anatomy='planet'] .go-card {
+    --go-gutter: 13px;
+    padding: 11px var(--go-gutter) 10px;
+  }
+  /* The rhythm is the same value, tightened once for the short plate: no tier regains a margin of
+     its own here, so A->B, B->C and C->D stay equal at 320x568 and 360x640. */
+  #gameover[data-anatomy='planet'] .go-card { --go-tier-gap: 10px; }
+  #gameover[data-anatomy='planet'] .go-title { font-size: clamp(1.45rem, 7vw, 1.85rem); }
+  #gameover[data-anatomy='planet'] .go-score { font-size: 1.4rem; }
+  #gameover[data-anatomy='planet'] .go-buttons { gap: 6px; }
+  #gameover[data-anatomy='planet'] .go-key-row { gap: 6px; }
+  #gameover[data-anatomy='planet'] .go-buttons .btn,
+  #gameover[data-anatomy='planet'] .go-buttons .btn.primary,
+  #gameover[data-anatomy='planet'] .go-buttons .btn.link { min-height: 46px; }
+  #gameover .go-world-teach {
+    padding: 11px var(--go-gutter, 13px) 9px;
+  }
+  #gameover .go-world-teach-lines { font-size: 0.63rem; }
+}
+
+/* LANDSCAPE PHONE / SHORT WINDOW: one plate, two pages. The LEFT page is the planet and it takes the
+   band above the keys; the RIGHT page holds the read-out CENTRED in that same band and the 2x2 keys
+   anchored to its bottom (the thumb's corner). The plate fills the viewport exactly as the portrait
+   one does.
+   OWNER CORRECTION, 2026-11-11: "landscape mobile - you lost 0 - 25 in the centre not on top - we
+   need to be smarter here". The read-out used to be pinned to the top of the right page, which left
+   a dead band between the words and the keys; it now centres in the space ABOVE the keys. */
+@media (max-height: 560px) and (min-width: 560px) {
+  #gameover[data-anatomy='planet'] {
+    --go-inset-top: 6px;
+    --go-inset-bottom: 6px;
+  }
+  #gameover[data-anatomy='planet'] .go-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    column-gap: 18px;
+    row-gap: var(--go-tier-gap);
+    /* STRETCH, because the shared legacy spread sets `align-items: start` for the classic card's
+       stacked words — a grid item that is not stretched sizes to its content, and the window's
+       100%-tall surface then measured 0px here (that is what ate the globe in landscape). */
+    align-items: stretch;
+    align-content: stretch;
+    width: min(760px, 100%);
+    max-height: none;
+    padding: 12px var(--go-gutter) 12px;
+  }
+  /* THE PLANET IS THE LEFT PAGE, AND IT IS THE PAGE THE READ-OUT IS CENTRED IN (owner correction,
+     2026-11-11: the words "in the centre not on top"). The window takes the row above the keys, so
+     the globe's middle and the read-out's middle land on ONE horizontal band; the short foot the
+     keys leave under it is the plate's own foot, not a floating card's margin. */
+  #gameover[data-anatomy='planet'] #go-world {
+    grid-column: 1;
+    grid-row: 1;
+    margin: 0;
+    height: auto;
+    min-height: 0;
+  }
+  /* THE READ-OUT IS CENTRED IN THE RIGHT PAGE'S BAND ABOVE THE KEYS (row 1), never pinned to its
+     top edge: the group is centred as a block, and its tiers keep the one rhythm. */
+  #gameover[data-anatomy='planet'] .go-summary {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    flex: 0 0 auto;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }
+  #gameover[data-anatomy='planet'] .go-title { font-size: clamp(1.5rem, 5.2vw, 1.9rem); text-align: center; }
+  /* THE KEYS ARE ANCHORED TO THE BOTTOM OF THAT PAGE (the thumb), never centred in it. */
+  #gameover[data-anatomy='planet'] .go-buttons {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: end;
+    margin-top: 0;
+  }
+  /* The corner mark stays the card's TOP-RIGHT corner in the spread too (owner: like in game). */
+  #gameover[data-anatomy='planet'] #go-brand { top: 12px; }
+}
+
+/* NO WIDE/DESKTOP SPREAD (owner review, 2026-11-11: "on your screenshot desktop looks terrible -
+   fix - dont worry about negative space on right and left, have the whole screen in the middle like
+   on mobile"). The rejected two-page rule (`min(1040px, 100%)`, planet page left / words right) is
+   DELETED, not overridden. A wide screen is the phone card, centred: one column capped at the
+   phone's own measure (440px), full viewport height, planet growing, keys at the bottom, and the
+   air either side. There is no second column at any width, and no rule below this one restores it. */
+
+/* ---------- RESULT: the dark-glass window behind the card's second key ---------- */
+/* It sits inside the finish dialog, above the card, because the shared sheet layer is underneath
+   the finish screen (z-index 11 against the card's 12). One plate, one close key, Escape, and the
+   keyboard returns to RESULT. The final board is shown large here: this is where "Board" went. */
+#go-result-pane {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+}
+#go-result-pane[hidden] { display: none; }
+.go-result-scrim {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, #0e0f10 62%, transparent);
+}
+.go-result-sheet {
+  position: relative;
+  width: min(440px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 6px 18px 14px;
+  border-radius: calc(var(--radius) * 2);
+  background: var(--dark-glass);
+  -webkit-backdrop-filter: var(--dark-glass-blur);
+  backdrop-filter: var(--dark-glass-blur);
+  border: 1px solid var(--fu-cream-22);
+  scrollbar-width: thin;
+  scrollbar-color: var(--fu-cream-22) transparent;
+}
+.go-result-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  background: color-mix(in srgb, #0e0f10 78%, transparent);
+}
+.go-result-head h2 {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--fu-cream-70);
+}
+.go-result-head .icon-only {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  translate: 0 -50%;
+}
+.go-result-body { display: grid; gap: 8px; text-align: center; }
+.go-result-outcome {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  line-height: 1.15;
+  color: var(--fu-cream);
+}
+.go-result-score {
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  font-size: 2rem;
+  line-height: 1;
+  color: var(--fu-cream);
+}
+.go-result-score .bot, .go-result-score .dash { color: var(--fu-cream-55); }
+.go-result-reason {
+  margin: 0 auto;
+  max-width: 34ch;
+  font-size: 0.86rem;
+  line-height: 1.35;
+  color: var(--fu-cream-70);
+}
+/* THE FINAL BOARD, LARGE: the same stamped figure, with room to read the two networks. */
+.go-result-board {
+  margin: 2px auto 0;
+  width: min(200px, 58%);
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.go-result-board[hidden] { display: none; }
+.go-result-board .go-harvest-svg { width: 100%; height: 100%; overflow: visible; }
+.go-result-line {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--fu-cream-62);
+}
+.go-result-body .highlights { margin: 2px 0 0; }
+.go-result-body .h-text { font-size: 0.82rem; }
+.go-result-keys {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+.go-result-keys:not(:has(> .btn:not([hidden]))) { display: none; }
+.go-result-keys .btn {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--fu-cream) 7%, transparent);
+  justify-content: center;
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.go-result-keys .btn:active { background: color-mix(in srgb, var(--fu-cream) 13%, transparent); }
+.go-result-keys .btn:focus-visible { outline: 2px solid var(--fu-cream); outline-offset: 2px; }
+@media (max-height: 660px) {
+  .go-result-sheet { padding: 2px 12px 10px; }
+  .go-result-board { width: min(128px, 44%); }
+  .go-result-score { font-size: 1.6rem; }
+}
+@media (max-height: 560px) and (min-width: 560px) {
+  .go-result-sheet { width: min(620px, 100%); }
+  .go-result-body { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); text-align: left; }
+  .go-result-outcome, .go-result-score { grid-column: 2; }
+  .go-result-board { grid-column: 1; grid-row: 1 / span 4; width: 100%; }
+  .go-result-reason, .go-result-line, .go-result-body .highlights { grid-column: 2; text-align: left; }
+  .go-result-keys { grid-column: 1 / -1; }
+}
+
+/* ---------- the PLAY submenu's campaign caption ---------- */
+/* The progression is a caption UNDER the LEVEL <n> entry, never a heading and never a key of its
+   own (owner review, 2026-10-23: on the main menu it read as a separate "CAMPAIGN ... LEVEL 1"
+   mode competing with PLAY). The entry already says the level number, so this line says what the
+   entry cannot: how far through that level's chapter the player is. It is a machine read-out —
+   no frame, no fill, no tab stop — and it takes no motion of its own; only the submenu's surface
+   transition moves it into view. */
+#play-menu .play-readout {
+  /* The column's gap separates entries; the negative step tucks the caption to the key above, so
+     the pair reads as ONE entry while the next entry keeps the column's full rhythm. */
+  margin: -3px 0 0;
+  padding: 0 20px;
+  /* On the key's own centre line: the key's label is centred, so its caption is too (2026-10-31). */
+  text-align: center;
+  /* Readable at arm's length (2026-10-27): it was 0.56rem in the muted grey with 0.2em tracking —
+     about 9px — and read as texture rather than words. Still a quiet caption, one step down from the
+     key label, in the menu's own 62% cream. */
+  color: var(--fu-cream-62, var(--c-muted));
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  line-height: 1.35;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+/* PLAYER STATS in the profile (owner, 2026-10-23): the record against the computer as a compact
+   grid of tiles under the five identity lines — the same neutral digits and small tracked caps. */
+#sheet-profile .sp-play {
+  margin-top: 10px;
+  /* The 12px top pad plus the removed 1px rule: the record starts on exactly the line it did. */
+  padding-top: 13px;
+}
+#sheet-profile .sp-play[hidden] {
+  display: none;
+}
+#sheet-profile .sp-play-title {
+  margin: 0 0 10px;
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--c-muted);
+}
+#sheet-profile .sp-play-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+/* One record per row (owner, 2026-11-01): the row's word runs down its left edge, stretched to the
+   tiles' own height, so OFFLINE and ONLINE read as the label of the row rather than a fifth tile. */
+#sheet-profile .sp-play-row {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
+}
+#sheet-profile .sp-play-row + .sp-play-row {
+  /* The two records are separate facts, and the break is made by air alone (owner, 2026-11-02:
+     no interior rules). The removed 1px moved into the top pad, so the online tiles keep their
+     exact line on the plate. */
+  margin-top: 8px;
+  padding-top: 9px;
+}
+#sheet-profile .sp-play-side {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  /* Bottom-to-top, the way a spine is set: the word ends where the tiles begin. */
+  transform: rotate(180deg);
+  font-family: var(--font-ui);
+  font-size: 0.5rem;
+  line-height: 1;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  white-space: nowrap;
+}
+#sheet-profile .sp-tile {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 60px;
+  /* 9px/5px, not 8px/4px: the removed 1px contour becomes air on every side, so the tile's
+     content box, its line wrapping and the record block's height all stay exactly as they were. */
+  padding: 9px 5px;
+  /* A tile is a block, not a divider: its edge used to be a 1px hairline. It is a neutral fill now
+     (the same 4% ink the pause plate's quiet keys use), so the three facts stay distinct on the
+     glass without drawing six lines across the sheet. */
+  border: 0;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--c-text) 4%, transparent);
+  text-align: center;
+}
+#sheet-profile .sp-tile dd {
+  max-width: 100%;
+  text-align: center;
+  font-size: 1.05rem;
+}
+#sheet-profile .sp-tile dt {
+  font-size: 0.55rem;
+  letter-spacing: 0.12em;
+}
+/* The old "Against the computer, on this device" note is gone on the owner's instruction
+   (2026-11-01): nothing takes its place, so the record ends on the online row. */
+/* Landscape phones: the identity lines and the record sit side by side, so nothing scrolls. */
+@media (max-height: 520px) and (min-width: 560px) {
+  #sheet-profile:has(.sp-play:not([hidden])) {
+    width: min(760px, 100% - 32px);
+  }
+  #sheet-profile:has(.sp-play:not([hidden])) .sp-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+    gap: 20px;
+    max-width: none;
+  }
+  #sheet-profile .sp-play {
+    margin-top: 0;
+    padding-top: 6px;
+  }
+}
+
+/* THE FINISH PLATE ON DARK GLASS (owner, 2026-10-23: the end-of-game menu "kinda lame" — "dark glass
+   with the blurred, darkened game under it"; merge: "my look, keep their features"). The finish
+   plate above keeps its layout, lockup and timed reveal; its surface is the pause panel's glass,
+   and the veil (html.game-veiled) blurs and darkens the match behind it. A win draws one short line
+   of the display's own amber light under the title. */
+html.futasaku-product #gameover {
+  background: color-mix(in srgb, var(--c-bg) 22%, transparent);
+}
+html.futasaku-product #gameover .go-card {
+  background: var(--dark-glass);
+  -webkit-backdrop-filter: var(--dark-glass-blur);
+  backdrop-filter: var(--dark-glass-blur);
+  border-radius: calc(var(--radius) * 2);
+}
+/* The amber rule under a won title is GONE (owner, 2026-10-24: "remove the awkward line that
+   separates whatever's below"). It read as a divider between the lockup and the score, which this
+   plate does not need: the words are already the shape. Nothing replaces it — deleting the rule is
+   the change, so the title's own spacing carries the gap. */
+
+/* EVERY SUBMENU ON DARK GLASS (owner, 2026-10-23: "use glass style on all submenus"). Settings,
+   How to play, What happened, the profile, the Restart and campaign confirmations, the help
+   reference and the install invitation wear the pause panel's glass and float clear of the edges
+   on a phone, as the pause panel does. Whatever screen is behind an open sheet is blurred and
+   darkened (the match by html.game-veiled, a menu screen here), so the sheet reads as the one
+   thing on screen. Product channels only; the classic line keeps its bottom sheets. */
+html.futasaku-product .sheet {
+  background: var(--dark-glass);
+  -webkit-backdrop-filter: var(--dark-glass-blur);
+  backdrop-filter: var(--dark-glass-blur);
+}
+html.futasaku-product .sheet:not(#sheet-menu):not(.confirm-sheet) {
+  left: 10px;
+  right: 10px;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  max-height: calc(100dvh - 20px);
+  /* The corner is the family's, and only the family's (see the "NO FRAME" rule below): a floating
+     plate earns its edge clearance from `left/right/bottom`, never from a second, rounder corner.
+     This rule used to set `calc(var(--radius) * 2)` (32px at the product's 16px radius) and so beat
+     the family rule on specificity, which left every sheet except the pause plate with a corner the
+     pause plate and the challenge card did not share. */
+}
+/* A floating plate is not a bottom sheet: no grab handle. */
+html.futasaku-product .sheet::before {
+  display: none;
+}
+/* Wide screens centre every sheet as a dialog (the shared .sheet rule's own transform): the
+   floating edges give way to that centring there. */
+@media (min-width: 760px) and (min-aspect-ratio: 1/1), (orientation: landscape) and (max-height: 560px) {
+  html.futasaku-product .sheet:not(#sheet-menu):not(.confirm-sheet) {
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    max-height: calc(100dvh - 32px);
+  }
+}
+/* The PLAY submenu and the practice difficulty list are submenus too: their column rests on the
+   same glass plate, so every menu below the main one reads as one family. */
+html.futasaku-product :is(#play-menu, #levels) .levels-inner {
+  padding: 14px 16px 18px;
+  background: var(--dark-glass);
+  -webkit-backdrop-filter: var(--dark-glass-blur);
+  backdrop-filter: var(--dark-glass-blur);
+  border-radius: calc(var(--radius) * 2);
+}
+
+/* NO FRAME AROUND THE GLASS (owner, 2026-10-23: "no frames around the glass ever — no contour
+   thing"). The glass is defined by its blur and its shade alone: no border, no edge highlight, no
+   hairline drawn along its top. This is the last word on every glass surface, so the older rules
+   above (the wide-screen dialog's frame, the finish plate's frame and entering hairline, the
+   confirmation plate's frame) cannot bring one back. */
+html.futasaku-product :is(.sheet, #sheet-menu, #gameover .go-card, #play-menu .levels-inner, #levels .levels-inner) {
+  border: 0;
+  /* Match Intel's own setup (owner, 2026-10-23: "same setup as the in-game Match Intel glass —
+     elegant"): its 15px corner and its soft drop shadow lifting the glass off the table. A shadow
+     is not a frame: nothing is drawn along the edge. */
+  border-radius: 15px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+  color: #f0e9dc;
+}
+/* A sheet's title bar is part of the same glass, not a lighter band on top of it: it stays
+   see-through, and blurs whatever scrolls under it instead of covering it with a solid strip. */
+html.futasaku-product .sheet .sheet-head {
+  background: transparent;
+  -webkit-backdrop-filter: var(--dark-glass-blur);
+  backdrop-filter: var(--dark-glass-blur);
+}
+
+/* ---------- THE INSTALL INVITATION, AS A DIALOG ON THE GLASS ----------
+   Owner, 2026-10-24: "grow futasaku on ur home screen looks so cramped — that can never happen.
+   stretch the dark glass and blur background so it's nice".
+   It was the last bottom sheet in the game, and on a phone it showed why: 4px of air above a
+   title running the full width with the close key laid over the end of it, no measure, and on a
+   tablet it stretched into a 748px strip. It is now a centred plate with room on every side, a
+   readable measure, and the page behind it properly veiled. It wears the same glass family as the
+   pause panel and the challenge card; nothing here is a new surface style, it is the old one
+   finished. Placed after the sheet rules above so it has the last word on this one card. */
+html.futasaku-product #install-prompt {
+  display: grid;
+  place-items: center;
+  padding: max(16px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
+           max(16px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+}
+/* A deeper blur and a darker shade than a sheet's own scrim: this is the one invitation that opens
+   over a finished game, so the glass has to be the only thing in focus. */
+html.futasaku-product #install-prompt > .install-prompt-scrim {
+  background: color-mix(in srgb, var(--c-bg) var(--invite-shade), transparent);
+  -webkit-backdrop-filter: var(--invite-veil);
+  backdrop-filter: var(--invite-veil);
+}
+html.futasaku-product #install-prompt > .install-sheet.sheet {
+  /* STATIC, not fixed: the container grid centres this card, so no viewport anchoring from the
+     bottom-sheet rules can pull it out of place. (Left over from the sheet family, those offsets
+     were the reason the card could hang off the top of a desktop window.) */
+  position: static;
+  /* The wide-screen dialog rule centres a sheet with `left/top: 50%` plus a -50% transform. The
+     grid below already centres this card, so that transform would shift it half its own size up
+     and to the left (a card hanging off the top of a desktop window). Offsets are inert on a static
+     box; the transform is not, so it is named here. */
+  inset: auto;
+  transform: none;
+  width: min(100%, 30rem);
+  max-height: 100%;
+  padding: 24px 24px 20px;
+  border-radius: 18px;
+  /* A plate lifted off the table, not a sheet sliding up: the arrival is the motion layer's
+     (enterSurface in logic/install.ts), so the bottom-sheet keyframe stands down. */
+  animation: none;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.34);
+}
+/* The title is a sentence, not a label: it sits on the card's own left edge like the list under
+   it, and only the close key's width is reserved at the right. Centring a two-line sentence over
+   left-aligned bullets was most of what read as cramped. */
+html.futasaku-product #install-prompt .sheet-head {
+  justify-content: flex-start;
+  padding: 0;
+}
+html.futasaku-product #install-prompt #install-title {
+  flex: 1;
+  min-width: 0;
+  padding: 0 8px 0 0;
+  text-align: left;
+  font-size: clamp(1.15rem, 4.6vw, 1.32rem);
+  line-height: 1.25;
+  /* A two-line sentence must not leave one word stranded on the second line — that orphan was the
+     "cramped" reading more than any measurement was. */
+  text-wrap: balance;
+}
+html.futasaku-product #install-prompt .sheet-head > .icon-only:last-child {
+  position: static;
+  translate: none;
+  flex: none;
+  margin: -6px -8px 0 0;
+}
+/* The body breathes: one gap scale for the list and the keys, and room under the title. */
+html.futasaku-product #install-prompt .sheet-body {
+  gap: 14px;
+  margin-top: 14px;
+}
+html.futasaku-product #install-prompt :is(.install-why, .install-steps) {
+  gap: 10px;
+  padding-left: 1.15rem;
+}
+html.futasaku-product #install-prompt :is(.install-why, .install-steps) li {
+  line-height: 1.45;
+}
+/* Both keys are the card's width: one clear primary, one quiet way out, and the "don't show
+   again" line under them as a text key. A stacked pair reads at a glance; a half-width pair in a
+   narrow measure does not. */
+html.futasaku-product #install-prompt .install-sheet .btn.primary.big,
+html.futasaku-product #install-prompt .install-sheet .btn.ghost {
+  width: 100%;
+}
+/* A short screen has less height than these words need (320x568, 360x640, a phone on its side).
+   The type steps down one size and the rhythm tightens, so the card stays a dialog with air around
+   it instead of filling the whole screen and scrolling. NO words are dropped and no touch target
+   shrinks: only the space between them does. */
+@media (max-height: 700px) {
+  html.futasaku-product #install-prompt > .install-sheet.sheet {
+    padding: 18px 18px 15px;
+  }
+  html.futasaku-product #install-prompt #install-title {
+    font-size: 1.08rem;
+    line-height: 1.22;
+  }
+  html.futasaku-product #install-prompt .sheet-body {
+    margin-top: 10px;
+    gap: 10px;
+  }
+  html.futasaku-product #install-prompt :is(.install-why, .install-steps) {
+    gap: 6px;
+    padding-left: 1rem;
+    font-size: 0.88rem;
+  }
+  html.futasaku-product #install-prompt :is(.install-why, .install-steps) li {
+    line-height: 1.3;
+  }
+}
+/* A phone on its side has less height than the card wants: keep it on the glass and let the body
+   scroll, never clip a key. */
+@media (orientation: landscape) and (max-height: 560px) {
+  html.futasaku-product #install-prompt > .install-sheet.sheet {
+    padding: 16px 18px;
+    max-height: calc(100dvh - 20px);
+    overflow-y: auto;
+  }
+  html.futasaku-product #install-prompt .sheet-body { margin-top: 10px; gap: 10px; }
+}
+
+/* A phone on its side (owner, 2026-10-24: "the tiniest margin above and below the board"): the
+   cards and controls stand on the right, centred, so nothing needs the home bar's strip at the
+   bottom; the board uses it, and keeps the same few pixels above as below. */
+@media (orientation: landscape) and (max-height: 560px) {
+  html.futasaku-product #game.screen {
+    padding-bottom: 0;
+  }
+}
+
+/* ONE TITLE PATTERN (owner, 2026-10-24: "check consistency in fonts used as header/title and
+   text — should always follow the same pattern"). Every title is the serif in normal case
+   ("Paused", "You lost", "Settings", "Territory"); a small section label is the mono in tracked
+   capitals ("SOUND AND FEEL", "LEVEL 12"); reading text is the mono in normal case. These are the
+   titles that had drifted: the finish and the ritual shouted in capitals, and four were set in mono. */
+html.futasaku-product :is(#gameover .go-title, #gameover .go-title .go-outcome, #lottery-title) {
+  text-transform: none;
+  letter-spacing: 0.005em;
+}
+html.futasaku-product :is(#online-world-title, #online-matched-title, .fb-glass h2, .acct-glass h2, .live-glass h2) {
+  font-family: var(--font-display);
+  font-weight: var(--w-display, 700);
+  text-transform: none;
+  letter-spacing: 0.005em;
+  font-size: 1.25rem;
+}
+
+/* CENTRED MENUS (owner, 2026-10-24: "everything should be centered here and in any similar
+   menus"). The finish card: kicker, title, score, reason and every key sit on
+   the card's centre line; the won rule under the title centres with them. */
+html.futasaku-product #gameover .go-card,
+html.futasaku-product #gameover :is(.go-context, .go-title, .go-sub, .go-learned, .go-reason) {
+  text-align: center;
+}
+html.futasaku-product #gameover .go-score { justify-content: center; }
+html.futasaku-product #gameover .go-reason { margin-inline: auto; }
+html.futasaku-product #gameover .go-buttons .btn { justify-content: center; text-align: center; }
+html.futasaku-product #gameover :is(#go-highlights, #go-break, #go-moves, #go-stats) { text-align: center; }
+/* The pause panel's turn line centres in its pill, and every sheet's title sits on the centre
+   line with its close key at the right edge (Settings, Restart, Profile, How to play…). Rows that
+   pair a label with a control (a switch, a choice) keep the label left and the control right:
+   that is a form, not a menu. */
+html.futasaku-product #sheet-menu .gm-turn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  justify-items: center; text-align: center;
+  /* No frame around the turn line (owner, 2026-10-24): the words alone, in their colour. */
+  border: 0; border-radius: 0; background: none; box-shadow: none; padding: 0; min-width: 0;
+}
+html.futasaku-product .sheet .sheet-head { position: sticky; justify-content: center; }
+html.futasaku-product .sheet .sheet-head > h2 { flex: 1; min-width: 0; text-align: center; padding-inline: 44px; }
+html.futasaku-product .sheet .sheet-head > .icon-only:last-child { position: absolute; right: 0; top: 50%; translate: 0 -50%; }
+/* Calm, legible settings glass: a lit key behind the sheet must not become a bright stripe
+   through the comfort controls. Keep the shared frameless surface and its organic shadow. */
+/* The Tutorial sheet opens FROM Settings and gets the same dense glass (2026-10-27): at the shared
+   42% glass the menu's cream PLAY key smeared through as a light band behind the level numbers. */
+html.futasaku-product #sheet-tutorial {
+  background: rgba(8, 10, 10, 0.88);
+}
+html.futasaku-product #sheet-settings {
+  background: rgba(8, 10, 10, 0.88);
+  scrollbar-width: thin;
+  scrollbar-color: var(--fu-cream-22) transparent;
+  scroll-padding-top: 52px;
+}
+html.futasaku-product #sheet-settings .sheet-head {
+  z-index: 2;
+  background: rgba(8, 10, 10, 0.96);
+  min-height: 44px;
+}
+/* A cut row must never read as the whole row (owner, 2026-10-26). The Account group makes the sheet
+   taller than a 320x568 screen, so the bottom edge gets a soft fade and a thin, always-drawn
+   scrollbar. The fade is a sticky child of the scroll container: it covers the last pixels of the
+   viewport and travels out of the way only when the sheet is actually at its end (main.ts sets
+   `data-scroll`). No row is hidden by it — a whole row still scrolls into view. */
+html.futasaku-product #sheet-settings .sheet-fade {
+  position: sticky;
+  bottom: calc(-1 * max(18px, env(safe-area-inset-bottom)));
+  display: block;
+  height: 18px;
+  margin-top: -18px;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(to bottom, rgba(8, 10, 10, 0), rgba(8, 10, 10, 0.72));
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+html.futasaku-product #sheet-settings[data-scroll='1'] .sheet-fade { opacity: 1; }
+/* The thin scrollbar, drawn rather than left to the OS overlay: a visible thumb is the second,
+   unambiguous cue that the plate continues. */
+html.futasaku-product #sheet-settings::-webkit-scrollbar { width: 4px; }
+html.futasaku-product #sheet-settings::-webkit-scrollbar-track { background: transparent; }
+html.futasaku-product #sheet-settings::-webkit-scrollbar-thumb {
+  background: rgba(240, 233, 220, 0.24);
+  border-radius: 2px;
+}
+@media (orientation: portrait) and (max-height: 640px) {
+  /* Short portrait phone: give the rows back the group gaps and headings, never a 44px target. */
+  html.futasaku-product #sheet-settings .sheet-body.stack { gap: 6px; }
+  html.futasaku-product #sheet-settings h3 { margin: 10px 0 4px; }
+}
+/* Spend less space on group gaps when a phone is sideways; never shrink the 44px targets.
+   The sheet remains scrollable for account controls, zoom and exceptionally short windows. */
+@media (orientation: landscape) and (max-height: 560px) {
+  html.futasaku-product #sheet-settings .sheet-body.stack { gap: 0; }
+  html.futasaku-product #sheet-settings h3 { margin: 4px 0 2px; }
+  html.futasaku-product #sheet-settings .row { min-height: 44px; padding-block: 2px; }
+  html.futasaku-product #sheet-settings .thumb-settings-last { margin-top: 0; }
+}
+/* A phone on its side, where the Tutorial row pushed the Hand side pair past the plate's bottom
+   edge (settings-visual, 844x390: content ended 27px below the plate, so the control only existed
+   inside a hidden scroll area). The space comes from the plate's inner padding and one group
+   heading — never from a 44px target. "Phone" labels a group of exactly one row, and that row
+   says "Hand side" itself, so the heading is pure overhead at this height. */
+@media (orientation: landscape) and (max-height: 470px) {
+  html.futasaku-product #sheet-settings {
+    padding-block: 2px max(10px, env(safe-area-inset-bottom));
+  }
+  /* Every row in this sheet already names itself ("Sound", "Large text", "Hand side"), so the
+     group headings are pure overhead at 390px tall. Dropping them is what makes the whole plate
+     fit without a scroll, and it takes nothing from any control. */
+  html.futasaku-product #sheet-settings h3 { display: none; }
+}

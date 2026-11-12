@@ -15,7 +15,12 @@
 import type { Action, Event, Player, RulesConfig, State } from '../../../src/engine/index.js';
 import { scores } from '../../../src/engine/index.js';
 import { hasGrace, spendGrace } from '../grace.js';
-import type { MatchStatus, OnlineGameResult } from '../protocol.js';
+import { prunableMatches } from '../retention.js';
+import type { RetentionRow } from '../retention.js';
+import type { AccountCampaignProgressWire } from '../account-campaign-progress.js';
+import { mergeAccountGuide, type AccountGuideWire } from '../account-guide.js';
+import { furtherAheadWire } from '../account-campaign-progress.js';
+import type { MatchStatus, OfflineCounters, OfflineSummary, OnlineGameResult } from '../protocol.js';
 import type {
   CommitBatchInput,
   CommitInput,
@@ -59,8 +64,11 @@ const rowToPlayer = (row: PgRow): PlayerRecord => ({
   displayName: asNullableString(row.display_name),
   createdAt: asNumber(row.created_at),
   upgradedAt: asNullableNumber(row.upgraded_at),
-  // Migration 0013. `select *` now carries it; writes never touch it, so it survives updates.
+  // Migrations 0013/0016. `select *` now carries them; the game never writes them, so they survive
+  // updates. The two optionals are only written when a harness tags a row at creation.
   isTest: row.is_test === true || row.is_test === 't',
+  testReason: asNullableString(row.test_reason),
+  testOverride: row.test_override === true || row.test_override === 't' ? true : row.test_override === false || row.test_override === 'f' ? false : null,
 });
 
 const rowToMatch = (row: PgRow): MatchRecord => ({
@@ -90,6 +98,9 @@ const rowToMatch = (row: PgRow): MatchRecord => ({
   liveManaged: row.live_since != null || row.live_tail_rev != null || row.live_autoplay_rev != null,
   // Migration 0013. Like the player mapper: read-through only, never written by `persistMatch`.
   isTest: row.is_test === true || row.is_test === 't',
+  // Migration 0014. A historical row predates the column's default only in a read against an
+  // unmigrated database; it is still an ordinary duel.
+  kind: row.kind === 'territory' ? 'territory' : 'duel',
 });
 
 const rowToParticipant = (row: PgRow): Participant => ({
@@ -99,6 +110,35 @@ const rowToParticipant = (row: PgRow): Participant => ({
   joinedAt: asNumber(row.joined_at),
   lastSeenAt: asNumber(row.last_seen_at ?? row.joined_at ?? 0),
 });
+
+/**
+ * ONE aggregate read of a player's offline record (migration 0022). Games, wins and draws are sums
+ * over the player's device rows; `longest_streak` is the MAX of the per-device bests, because a
+ * run on one device is not continued on another and a sum would invent a streak nobody had.
+ * `coalesce` makes a player with no rows read all zeroes, and the `::bigint` cast keeps the sums
+ * exact before they become JS numbers.
+ */
+const readOfflineSummary = async (
+  query: { query(text: string, values?: readonly unknown[]): Promise<PgQueryResult> },
+  playerId: string,
+): Promise<OfflineSummary> => {
+  const { rows } = await query.query(
+    `select coalesce(sum(played), 0)::bigint as games,
+            coalesce(sum(wins), 0)::bigint as wins,
+            coalesce(sum(draws), 0)::bigint as draws,
+            coalesce(max(best_streak), 0)::bigint as longest_streak
+       from offline_stats
+      where player_id = $1`,
+    [playerId],
+  );
+  const row = rows[0] ?? {};
+  return {
+    games: asNumber(row.games ?? 0),
+    wins: asNumber(row.wins ?? 0),
+    draws: asNumber(row.draws ?? 0),
+    longestStreak: asNumber(row.longest_streak ?? 0),
+  };
+};
 
 const rowToMove = (row: PgRow): MoveRecord => ({
   matchId: asString(row.match_id),
@@ -114,6 +154,40 @@ const rowToMove = (row: PgRow): MoveRecord => ({
 const isUniqueViolation = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505';
 
+// ---- replay retention (server/src/retention.ts owns the rule; these are only its two queries) ----
+
+/** EVERY finished match with its participant ids (see `Storage.finishedMatches`). */
+const finishedRows = async (pool: PgPool): Promise<RetentionRow[]> => {
+  const { rows } = await pool.query(
+    `select m.id, m.finished_at,
+            coalesce(array_agg(p.player_id) filter (where p.player_id is not null), '{}') as players
+       from matches m
+       left join match_participants p on p.match_id = m.id
+      where m.status = 'finished' and m.finished_at is not null
+      group by m.id, m.finished_at
+      order by m.finished_at desc`,
+  );
+  return rows.map((row) => ({
+    id: asString(row.id),
+    finishedAt: asNullableNumber(row.finished_at),
+    players: Array.isArray(row.players) ? (row.players as unknown[]).map(asString) : [],
+  }));
+};
+
+/** Delete finished matches by id. Scoped to `status = 'finished'` so a stale id can never take an
+ *  active duel with it; the FK cascade removes the moves and participants. */
+const deleteFinishedRows = async (pool: PgPool, ids: readonly string[]): Promise<number> => {
+  if (ids.length === 0) return 0;
+  const { rows } = await pool.query("delete from matches where id = any($1::uuid[]) and status = 'finished' returning id", [ids]);
+  return rows.length;
+};
+
+/** One retention pass: every finished row, the rule, then the delete. */
+const pruneFinishedMatches = async (pool: PgPool, now: number): Promise<number> => {
+  const rows = await finishedRows(pool);
+  const doomed = prunableMatches(rows, now);
+  return doomed.length ? deleteFinishedRows(pool, doomed) : 0;
+};
 /**
  * True ONLY for a genuine unique violation on `matches.invite_code` — the one failure the service
  * retries with a fresh code. The column's inline `unique` constraint is named
@@ -130,8 +204,8 @@ const INSERT_MATCH_SQL = `insert into matches
   (id, invite_code, rules_version, seed, config, starting_player, status, revision, state, result,
    created_at, updated_at, finished_at, turn_deadline_at, turn_timeout_ms, turn_start_revision,
    turn_start_state, expires_at, open_queue, grace_used_seat0, grace_used_seat1, grace_periods,
-   grace_extension_ms)
- values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`;
+   grace_extension_ms, kind)
+ values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`;
 
 const matchInsertValues = (match: MatchRecord): unknown[] => [
   match.id,
@@ -157,6 +231,7 @@ const matchInsertValues = (match: MatchRecord): unknown[] => [
   match.graceUsed[1],
   match.gracePeriods,
   match.graceExtensionMs,
+  match.kind ?? 'duel',
 ];
 
 /**
@@ -446,9 +521,11 @@ const runCommit = async (client: PgClient, input: {
 
 export const postgresStorage = (pool: PgPool): Storage => ({
   async createPlayer(player: PlayerRecord): Promise<void> {
+    // `is_test` / `test_reason` are written ONLY when the caller supplies them (the automated-harness
+    // creation path); an ordinary guest insert leaves them at their defaults, exactly as before.
     await pool.query(
-      'insert into players (id, kind, display_name, created_at, upgraded_at) values ($1,$2,$3,$4,$5)',
-      [player.id, player.kind, player.displayName, player.createdAt, player.upgradedAt],
+      'insert into players (id, kind, display_name, created_at, upgraded_at, is_test, test_reason) values ($1,$2,$3,$4,$5,$6,$7)',
+      [player.id, player.kind, player.displayName, player.createdAt, player.upgradedAt, player.isTest === true, player.testReason ?? null],
     );
   },
 
@@ -492,6 +569,34 @@ export const postgresStorage = (pool: PgPool): Storage => ({
       if (isInviteCodeCollision(error)) return { ok: false, code: 'DUPLICATE_INVITE_CODE', reason: 'Invite code already exists.' };
       throw error;
     }
+  },
+
+  async createRematch(match: MatchRecord, rematchOf: string, playerId: string, now: number): Promise<{ ok: true } | Fail> {
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      await client.query(INSERT_MATCH_SQL, matchInsertValues(match));
+      // The unique partial index on rematch_of (migration 0015) is the "one rematch per match" rule.
+      await client.query('update matches set rematch_of = $2 where id = $1', [match.id, rematchOf]);
+      await client.query(
+        'insert into match_participants (match_id, player_id, seat, joined_at, last_seen_at) values ($1,$2,0,$3,$3)',
+        [match.id, playerId, now],
+      );
+      await client.query('commit');
+      return { ok: true };
+    } catch (error) {
+      await client.query('rollback').catch(() => undefined);
+      if (isInviteCodeCollision(error)) return { ok: false, code: 'DUPLICATE_INVITE_CODE', reason: 'Invite code already exists.' };
+      if (isUniqueViolation(error)) return { ok: false, code: 'REMATCH_EXISTS', reason: 'A rematch already exists.' };
+      throw error;
+    } finally {
+      client.release?.();
+    }
+  },
+
+  async rematchOf(finishedMatchId: string): Promise<MatchRecord | null> {
+    const { rows } = await pool.query('select * from matches where rematch_of = $1 limit 1', [finishedMatchId]);
+    return rows[0] ? rowToMatch(rows[0]) : null;
   },
 
   async findOpenQueueMatch(playerId: string): Promise<MatchRecord | null> {
@@ -548,7 +653,44 @@ export const postgresStorage = (pool: PgPool): Storage => ({
         [input.now],
       );
 
-      // 1. Already parked? Return the player's own search (a re-tap never creates a second).
+      // 1. RESUME (owner, 2026-11-12: "FIND OPPONENT ... both sat searching and never paired"): a
+      // search that has already become an ACTIVE game is this player's game. Parking again here
+      // left one device polling a brand-new empty match while its opponent sat in the real one. A
+      // game that began as an INVITE is never resumed: an open invite is how a player still meets a
+      // stranger, and one-game-per-pair is scoped to that pair, never global.
+      const resume = await client.query(
+        `select m.*, p.seat as active_seat
+           from matches m
+           join match_participants p on p.match_id = m.id
+          where p.player_id = $1 and m.status = 'active' and m.open_queue = true
+          order by m.updated_at desc
+          limit 1`,
+        [input.playerId],
+      );
+      if (resume.rows[0]) {
+        // A leftover solo search (rows the old behaviour left behind) is a duplicate of a search
+        // that already paired: retire it so no stranger is ever seated in a game nobody watches.
+        await client.query(
+          `delete from matches
+            where id in (
+              select m.id
+                from matches m
+                join match_participants p on p.match_id = m.id
+               where p.player_id = $1 and m.status = 'waiting' and m.open_queue = true
+                 and (select count(*)::int from match_participants p2 where p2.match_id = m.id) = 1)`,
+          [input.playerId],
+        );
+        await client.query('commit');
+        return {
+          ok: true,
+          match: rowToMatch(resume.rows[0]),
+          seat: asNumber(resume.rows[0].active_seat) === 1 ? 1 : 0,
+          paired: true,
+          resumed: true,
+        };
+      }
+
+      // 2. Already parked? Return the player's own search (a re-tap never creates a second).
       const own = await client.query(
         `select m.*, p.seat as my_seat
            from matches m
@@ -564,7 +706,8 @@ export const postgresStorage = (pool: PgPool): Storage => ({
         return { ok: true, match: rowToMatch(own.rows[0]), seat: asNumber(own.rows[0].my_seat) === 1 ? 1 : 0, paired: false };
       }
 
-      // 2. CAP: a player at the per-player limit may not park or accept another match.
+      // 3. CAP, read once: the limit forbids joining a FRESH search or parking (both add an open
+      // match). It never forbids continuing a game the searchers already share (step 4b below).
       const cap = await client.query(
         `select count(*)::int as n
            from matches m
@@ -572,12 +715,9 @@ export const postgresStorage = (pool: PgPool): Storage => ({
           where p.player_id = $1 and m.status <> 'finished'`,
         [input.playerId],
       );
-      if (asNumber(cap.rows[0]?.n ?? 0) >= input.maxOpenMatches) {
-        await client.query('rollback');
-        return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
-      }
+      const atCap = asNumber(cap.rows[0]?.n ?? 0) >= input.maxOpenMatches;
 
-      // 3. Join the oldest waiting open-queue match with one free seat (FIFO), atomically.
+      // 4. Join the oldest waiting open-queue match with one free seat (FIFO), atomically.
       const claim = await client.query(
         `select m.*, p.seat as opener_seat
            from matches m
@@ -586,12 +726,23 @@ export const postgresStorage = (pool: PgPool): Storage => ({
             and m.open_queue = true
             and not exists (select 1 from match_participants p2 where p2.match_id = m.id and p2.player_id = $1)
             and (select count(*)::int from match_participants p3 where p3.match_id = m.id) = 1
+            -- ONE GAME PER PAIR (owner, 2026-11-09): never pair two players who already share an open game.
+            and not exists (
+              select 1 from match_participants mine
+                join match_participants theirs on theirs.match_id = mine.match_id
+                join matches shared on shared.id = mine.match_id
+               where mine.player_id = $1 and theirs.player_id = p.player_id
+                 and shared.status <> 'finished' and shared.id <> m.id)
           order by m.created_at asc
           limit 1
           for update of m skip locked`,
         [input.playerId],
       );
       if (claim.rows[0]) {
+        if (atCap) {
+          await client.query('rollback');
+          return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
+        }
         const row = claim.rows[0];
         const matchId = asString(row.id);
         const seat: Player = asNumber(row.opener_seat) === 0 ? 1 : 0;
@@ -617,7 +768,42 @@ export const postgresStorage = (pool: PgPool): Storage => ({
         return { ok: true, match, seat, paired: true };
       }
 
-      // 4. Nobody is waiting: park the player's search.
+      // 4b. CONTINUE (owner, 2026-11-11): the oldest searcher waiting already shares an open game
+      // with this player. Retire that search (scoped delete, status guard) and hand back their
+      // existing game, touched so the other page finds it at the top of its list.
+      const cont = await client.query(
+        `select m.id as parked_id, shared.id as shared_id, mine.seat as my_seat
+           from matches m
+           join match_participants p on p.match_id = m.id
+           join match_participants theirs on theirs.player_id = p.player_id
+           join match_participants mine on mine.match_id = theirs.match_id and mine.player_id = $1
+           join matches shared on shared.id = theirs.match_id
+          where m.status = 'waiting' and m.open_queue = true
+            and p.player_id <> $1
+            and (select count(*)::int from match_participants p3 where p3.match_id = m.id) = 1
+            and shared.status <> 'finished' and shared.id <> m.id
+          order by m.created_at asc, shared.updated_at desc
+          limit 1
+          for update of m skip locked`,
+        [input.playerId],
+      );
+      if (cont.rows[0]) {
+        const parkedId = asString(cont.rows[0].parked_id);
+        const sharedId = asString(cont.rows[0].shared_id);
+        await client.query("delete from matches where id = $1 and status = 'waiting'", [parkedId]);
+        const touched = await client.query('update matches set updated_at = $2 where id = $1 returning *', [sharedId, input.now]);
+        await client.query('commit');
+        if (touched.rows[0]) {
+          return { ok: true, match: rowToMatch(touched.rows[0]), seat: asNumber(cont.rows[0].my_seat) === 1 ? 1 : 0, paired: true, continued: true };
+        }
+        return { ok: false, code: 'MATCH_FULL', reason: 'The shared game moved on; try again.' };
+      }
+
+      // 5. Nobody is waiting: park the player's search (unless the cap forbids one more open game).
+      if (atCap) {
+        await client.query('rollback');
+        return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
+      }
       try {
         await client.query(INSERT_MATCH_SQL, matchInsertValues({ ...input.parked, openQueue: true }));
       } catch (error) {
@@ -731,6 +917,27 @@ export const postgresStorage = (pool: PgPool): Storage => ({
     }));
   },
 
+  async headToHead(viewerId: string, opponentId: string) {
+    const { rows } = await pool.query(
+      `select count(*)::int as games,
+              count(*) filter (where (m.result->>'winner')::int = me.seat)::int as you_wins,
+              count(*) filter (where (m.result->>'winner')::int = them.seat)::int as them_wins,
+              count(*) filter (where (m.result->>'winner') is null)::int as draws
+         from matches m
+         join match_participants me on me.match_id = m.id and me.player_id = $1
+         join match_participants them on them.match_id = m.id and them.player_id = $2
+        where m.status = 'finished' and m.result is not null`,
+      [viewerId, opponentId],
+    );
+    const row = rows[0]!;
+    return {
+      games: asNumber(row.games),
+      youWins: asNumber(row.you_wins),
+      themWins: asNumber(row.them_wins),
+      draws: asNumber(row.draws),
+    };
+  },
+
   async addParticipant(participant: Participant): Promise<{ ok: true } | Fail> {
     const { rows } = await pool.query('select player_id, seat from match_participants where match_id = $1', [participant.matchId]);
     if (rows.some((r) => asString(r.player_id) === participant.playerId)) {
@@ -797,7 +1004,21 @@ export const postgresStorage = (pool: PgPool): Storage => ({
     return rows.map(rowToMove);
   },
 
-  async applyExpiry(matchId: string, now: number): Promise<MatchRecord | null> {
+  /** ONE statement for every move of every requested match (achievements): never per match. */
+  async movesOfMatches(matchIds: readonly string[]): Promise<MoveRecord[]> {
+    if (matchIds.length === 0) return [];
+    const { rows } = await pool.query(
+      'select * from match_moves where match_id = any($1::uuid[]) order by match_id, revision asc',
+      [matchIds],
+    );
+    return rows.map(rowToMove);
+  },
+
+  async applyExpiry(matchId: string, now: number, known?: MatchRecord): Promise<MatchRecord | null> {
+    // FAST PATH (owner, 2026-11-09: Blitz "responsiveness is really bad"): almost every read finds
+    // nothing to expire. When the caller has just read the row and the decision leaves it as it is,
+    // there is nothing to lock or write, so no transaction (3 database round trips) is opened.
+    if (known && known.id === matchId && expiryDecision(known, now) === known) return copy(known);
     const client = await pool.connect();
     try {
       await client.query('begin');
@@ -901,7 +1122,18 @@ export const postgresStorage = (pool: PgPool): Storage => ({
       await pool.query('delete from players where id = $1', [asString(row.id)]);
       deletedGuests += 1;
     }
-    return { timedOut, expiredWaiting, deletedGuests, graceExtended: graceExtendedIds.length, graceExtendedIds, timedOutIds };
+    // Housekeeping also trims finished matches — never a player's newest ten, and never one younger
+    // than the age floor (server/src/retention.ts owns the rule for both stores).
+    const prunedMatches = await pruneFinishedMatches(pool, now);
+    return { timedOut, expiredWaiting, deletedGuests, graceExtended: graceExtendedIds.length, graceExtendedIds, timedOutIds, prunedMatches };
+  },
+
+  async finishedMatches(): Promise<RetentionRow[]> {
+    return finishedRows(pool);
+  },
+
+  async deleteFinished(ids: readonly string[]): Promise<number> {
+    return deleteFinishedRows(pool, ids);
   },
 
   async hitRateLimit(bucket: string, windowStart: number, max: number): Promise<{ ok: boolean; count: number }> {
@@ -933,6 +1165,129 @@ export const postgresStorage = (pool: PgPool): Storage => ({
     );
     if (!rows[0]) return null;
     return { playerId: asString(rows[0].player_id) };
+  },
+
+  async offlineSummaryOf(playerId: string): Promise<OfflineSummary> {
+    return readOfflineSummary(pool, playerId);
+  },
+
+  /**
+   * A device's cumulative snapshots are stored, never subtracted: `greatest` keeps every counter
+   * monotonic in ONE upsert, so a stale or racing request can repeat progress but not erase it.
+   * The read and the write share a transaction, so the returned aggregate includes this update.
+   */
+  async mergeOfflineStats(playerId: string, counters: OfflineCounters, now: number): Promise<OfflineSummary> {
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      await client.query(
+        `insert into offline_stats(player_id, device_id, played, wins, losses, draws, best_streak, updated_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8)
+         on conflict (player_id, device_id) do update set
+           played = greatest(offline_stats.played, excluded.played),
+           wins = greatest(offline_stats.wins, excluded.wins),
+           losses = greatest(offline_stats.losses, excluded.losses),
+           draws = greatest(offline_stats.draws, excluded.draws),
+           best_streak = greatest(offline_stats.best_streak, excluded.best_streak),
+           updated_at = excluded.updated_at`,
+        [playerId, counters.deviceId, counters.played, counters.wins, counters.losses, counters.draws, counters.bestStreak, now],
+      );
+      const summary = await readOfflineSummary(client, playerId);
+      await client.query('commit');
+      return summary;
+    } catch (error) {
+      await client.query('rollback').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release?.();
+    }
+  },
+
+  async accountCampaignProgressOf(playerId: string): Promise<AccountCampaignProgressWire | null> {
+    const result = await pool.query(
+      `select completed, best from account_campaign_progress where player_id = $1`,
+      [playerId],
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    const completed = Array.isArray(row.completed) ? row.completed.map(String) : [];
+    const best = asJson<AccountCampaignProgressWire['best']>(row.best) ?? {};
+    return { completed, best };
+  },
+
+  async accountGuideOf(playerId: string): Promise<AccountGuideWire | null> {
+    const result = await pool.query(`select seen, games from account_guide where player_id = $1`, [playerId]);
+    const row = result.rows[0];
+    if (!row) return null;
+    const seen = asJson<unknown>(row.seen);
+    return { seen: Array.isArray(seen) ? seen.map(String) : [], games: Number(row.games) || 0 };
+  },
+
+  async mergeAccountGuide(playerId: string, incoming: AccountGuideWire, now: number): Promise<AccountGuideWire> {
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      const existing = await client.query(`select seen, games from account_guide where player_id = $1 for update`, [playerId]);
+      const row = existing.rows[0];
+      const storedSeen = row ? asJson<unknown>(row.seen) : [];
+      const stored: AccountGuideWire = { seen: Array.isArray(storedSeen) ? storedSeen.map(String) : [], games: row ? Number(row.games) || 0 : 0 };
+      const kept = mergeAccountGuide(stored, incoming);
+      await client.query(
+        `insert into account_guide(player_id, seen, games, updated_at)
+         values ($1, $2::jsonb, $3, $4)
+         on conflict (player_id) do update set seen = excluded.seen, games = excluded.games, updated_at = excluded.updated_at`,
+        // JSON text, like every jsonb write here: a raw array would be sent as a Postgres array literal.
+        [playerId, JSON.stringify(kept.seen), kept.games, now],
+      );
+      await client.query('commit');
+      return kept;
+    } catch (error) {
+      await client.query('rollback').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release?.();
+    }
+  },
+
+  async mergeAccountCampaignProgress(
+    playerId: string,
+    incoming: AccountCampaignProgressWire,
+    now: number,
+  ): Promise<AccountCampaignProgressWire> {
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      const existing = await client.query(
+        `select completed, best from account_campaign_progress where player_id = $1 for update`,
+        [playerId],
+      );
+      const row = existing.rows[0];
+      const stored: AccountCampaignProgressWire | null = row
+        ? {
+            completed: Array.isArray(row.completed) ? row.completed.map(String) : [],
+            best: asJson<AccountCampaignProgressWire['best']>(row.best) ?? {},
+          }
+        : null;
+      const kept = stored ? furtherAheadWire(stored, incoming) : incoming;
+      // Always upsert the kept (further-ahead) snapshot so a lagging body cannot become the row.
+      await client.query(
+        `insert into account_campaign_progress(player_id, completed, best, updated_at)
+         values ($1, $2::jsonb, $3::jsonb, $4)
+         on conflict (player_id) do update set
+           completed = excluded.completed,
+           best = excluded.best,
+           updated_at = excluded.updated_at`,
+        // JSON text, like every jsonb write here: a raw array would be sent as a Postgres array literal.
+        [playerId, JSON.stringify(kept.completed), JSON.stringify(kept.best), now],
+      );
+      await client.query('commit');
+      return kept;
+    } catch (error) {
+      await client.query('rollback').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release?.();
+    }
   },
 
   async commitMove(input: CommitInput): Promise<CommitResult> {

@@ -1,6 +1,27 @@
 // first: the release channel (the test copy keeps its own storage)
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
+import { deferEntryButton } from './ui/deferred-entry.js';
+import { confirmedTurn, mountTurnRim } from './player/turn-rim.js';
+import { measureAtRest } from './ui/at-rest.js';
+import { DRAW_PILE_GIVE, DRAW_PILE_GIVE_MS, drawFrames, thudPile } from './ui/feel.js';
+import { mountStartupReveal } from './player/startup.js';
+import { mountMenuZoomLock } from './player/menu-zoom-lock.js';
+import { mountAchievementToast } from './player/achievement-toast.js';
+import { BLITZ_CLOCK_EVENT, blitzDecisionOf } from './logic/blitz-clock-event.js';
+import type { BlitzClockSignal } from './logic/blitz-clock-event.js';
+import type { AchievementToastController } from './player/achievement-toast.js';
+import { mountKeepProgress } from './player/keep-progress.js';
+import type { KeepProgressController } from './player/keep-progress.js';
+import { browserStorage } from '../../server/src/client.js';
+// EXPERIMENTAL Blitz (/test/ only): presentation + wiring; its rules live in logic/blitz.ts.
+import type { BlitzPractice } from './blitz/practice.js';
+import { showLiveStrike } from './ui/live-strike.js';
+import { readAppViewport } from './ui/app-viewport.js';
+import { mountRootFlags } from './ui/root-flags.js';
+import { mountMatchChat } from './online/chat/view.js';
 import { getOnlineSession, isOnlineDuel, setOnlineSession } from './online/duel-runtime.js';
+import { hideLobbySurfaces } from './online/lobby-exit.js';
+import { TURN_REPLAY } from './online/replay-copy.js';
 import { runRematch } from './online/rematch.js';
 // Futasaku in the browser. You (player 1) against the computer. All rules come from the
 // engine in src/engine; this file only draws, animates and listens. The game state
@@ -14,16 +35,28 @@ import { cutLoss } from './analysis.js';
 import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
+import { buildReplay } from './replay/timeline.js';
+import type { ReplayInput, ReplayModel } from './replay/timeline.js';
+import { mountReplay } from './replay/player.js';
+import type { ReplayHandle } from './replay/player.js';
+import type { ReplayPayload } from '../../server/src/protocol.js';
 import { displayEventForPlay } from './player/display-readout.js';
+import { bloomNoRoom } from './logic/bloom-room.js';
+import { throwPileCompletesBloom } from './logic/pile-glow.js';
 import type { DisplayEvent } from './player/display-readout.js';
 import { createTheirsDim, replayedByOpponent } from './player/replay-display.js';
 import { outcomeCue } from './player/outcome-light.js';
 import type { OutcomeLight } from './player/atmosphere.js';
+import { planetSnapshot } from './online/world-planet.js';
 import { gameHighlights } from './logic/highlights.js';
-import { EMPTY_SEL, futa04OneTap, growControls, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, playNowBlast, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
+import { harvestFigure, harvestSvg } from './logic/harvest.js';
+import type { HarvestFigure } from './logic/harvest.js';
+import { EMPTY_SEL, futa04OneTap, growControls, heldMoveWord, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, playNowBlast, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
 import type { Sel } from './logic/interaction.js';
 import { fruitCardState, fruitOffer, hexTapIntent } from './logic/fruitcard.js';
 import { ONBOARDING_LEVELS, guideKey, onboardGuide, revealTierFor } from './logic/onboarding.js';
+// The campaign's suggestion: a slight cream halo on PLAY and LEVEL <n> (menu/suggestion.ts).
+import { installMenuSuggestion } from './menu/suggestion.js';
 import { whyNotTap, placedHexKeys } from './logic/tap-why.js';
 import {
   DESK_IDLE,
@@ -46,6 +79,7 @@ import {
   paintGhost,
   paintMatch,
   paintProblem,
+  paintRetarget,
   paintTap,
   proximity,
   suggestBloom,
@@ -57,14 +91,28 @@ import type { TipId as FirstTip } from './logic/tips.js';
 import { breakdownPart, finalTurns } from './logic/endgame.js';
 import { breakdownOf, raceShare, raceWords } from './logic/race.js';
 import { ambientPlan } from './logic/ambient.js';
-import { REPLAY_SPEED, actorOf, involvedKeys, nudgeToward } from './logic/opponent.js';
+import { REPLAY_BEAT_MS, REPLAY_SPEED, actorOf, involvedKeys, nudgeToward, replayDurationScale } from './logic/opponent.js';
+import { playsThrough } from './logic/play-through.js';
+import { blitzTempoLine, blitzTimeoutAction } from './logic/blitz.js';
+import { impactPlan } from './logic/impact.js';
+import type { ImpactKind } from './logic/impact.js';
+import { extrasOn, guardFrame } from './player/frame-guard.js';
 import { shareCard } from './ui/sharecard.js';
-import { perfStart, perfStep } from './logic/perf.js';
+import { feel, observeLongTasks, perfStart, perfStep } from './logic/perf.js';
+import { dragExceeded, installPress, PRESS_SELECTOR, shouldSkipPress } from './logic/press.js';
+import { attachSchedulerPause, scheduler } from './logic/scheduler.js';
+import { mountHiddenPause } from './ui/hidden-pause.js';
+import { mountViewportGuard } from './ui/viewport-guard.js';
 import { clearTiming, mark as markTiming, timingEnabled, timingLog } from './logic/timing.js';
-import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
+import { DECK_BEAT, SCORE_BEAT, deckMoment, scoreProgress, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
-import { EASE, MOTION } from './logic/motion.js';
+import { EASE, BREATH, MOTION, PINNED, breathAmpStep, breathPeriodOf, breathPhaseOf, motionAllowed } from './logic/motion.js';
+import { boardHasSettled, resultHoldStalled, stepResultBreath } from './logic/result-hold.js';
+import { liftOf, settleOvershootOf, shadowOf, weightOf } from './logic/card-weight.js';
+import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface, INTERFACE_MOTION } from './ui/interface-motion.js';
+import { screenArrival } from './ui/screen-motion.js';
+import type { ScreenName } from './ui/screen-motion.js';
 import { BOARD_MARGIN, HEIGHTS, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setFixedBoardOrient, setSlimHud, THUMB } from './logic/layout.js';
 import type { Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
@@ -72,7 +120,8 @@ import { guideTarget } from './logic/guide.js';
 import { howToReferenceHtml } from './logic/howto-reference.js';
 import { mountInstallPrompt } from './logic/install.js';
 import { mountAppWindowButton } from './logic/app-window.js';
-import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
+import { STATS_KEY, countsTowardRecord, parseStats, recordResult, statsLine } from './logic/stats.js';
+import { PLAY_KEY, parsePlay, recordPlay } from './logic/play-record.js';
 import { botSeed, ladderLevel } from '../../src/bots/levels.js';
 import type { BotLevel, Level } from '../../src/bots/levels.js';
 // LEVEL_INFO is deliberately NOT imported: its names (the classic bot levels' labels) were only
@@ -80,18 +129,31 @@ import type { BotLevel, Level } from '../../src/bots/levels.js';
 // names everywhere on 2026-10-16. The module and its test remain until he decides whether to keep
 // the names for some future surface.
 import {
-  DIFFICULTIES, DIFFICULTY_STEP_KEY, defaultDifficultyForLevel, parseDifficultyStep, stepAfterGame, stepLevelFor,
+  DIFFICULTIES, DIFFICULTY_STEP_KEY, defaultDifficultyForLevel, matchLabel, parseDifficultyStep, stepAfterGame, stepLevelFor,
 } from './logic/difficulty.js';
 import type { DifficultyId } from './logic/difficulty.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
-import { throwPileAction } from './logic/throw-pile.js';
-import { goalReachable, lessonBeat, lessonFor, lessonOpening, suggestMove } from './lessons/lessons.js';
+import { tapAgainPlays, throwFlight, throwPileAction } from './logic/throw-pile.js';
+import { undoIntent } from './logic/undo.js';
+import {
+  goalReachable, lessonAllows, lessonBeat, openingDisplay, lessonFor, lessonIsFree, lessonLocked, lessonOffersBloom, lessonOpening,
+  presentedLessonBeat, suggestMove, LESSONS,
+} from './lessons/lessons.js';
 import type { Beat, Lesson } from './lessons/lessons.js';
-import { scriptedOpponentAction } from './lessons/opponent.js';
+import { FINAL_LESSON } from './lessons/final.js';
+import { lessonOpponentAction } from './lessons/opponent.js';
 import { tapAnswer } from './lessons/answer.js';
-import { litTarget, tapOf } from './lessons/lesson-view.js';
+import { litTarget, litTargetAndQuiet, tapOf } from './lessons/lesson-view.js';
+import { LESSON_BREATH_ID } from './player/lesson-breath.js';
 import { LESSON_META_KEY, decodeLessonMeta, encodeLessonMeta, lessonResumable } from './lessons/lesson-save.js';
+import {
+  LESSON_MASTERY_KEY, LESSON_VERSION, actionKindOf, decodeMastery, displayTier, encodeMastery,
+  helloSeen, recordAction, recordHello,
+} from './lessons/mastery.js';
+import type { ActionKind, LessonTier, Mastery, PowerKind } from './lessons/mastery.js';
+import { createIdleWatch } from './lessons/idle.js';
+import { lessonVoiceFor } from './lessons/lesson-voice.js';
 import { SMALL_HOMES } from './lessons/authored.js';
 import type { Loaded } from './logic/persist.js';
 // Campaign mode (the primary offline experience). Progress and the campaign match save are separate
@@ -101,13 +163,14 @@ import {
   CAMPAIGN_LEVELS,
   campaignLevelById,
   completedCount,
+  dealsRandomly,
   currentLevel,
   isCompleted,
   isUnlocked,
   nextCampaignLevel,
   parseProgress,
-  recordCampaignResult,
   serializeProgress,
+  unlockedThrough,
   CAMPAIGN_PROGRESS_KEY,
 } from '../../src/campaign/index.js';
 import type { CampaignLevel, CampaignProgress } from '../../src/campaign/index.js';
@@ -117,10 +180,25 @@ import {
   campaignEntry,
   decodeCampaignSave,
   encodeCampaignSave,
+  isReplay,
   offlineSaveKey,
   overridesForMatch,
   parseLastMode,
+  progressAfterMatch,
+  resumeOffersPlace,
+  tutorialLevels,
+  TUTORIAL_LEVEL_COUNT,
 } from './logic/campaign.js';
+import type { CampaignMatchKind } from './logic/campaign.js';
+import { fetchServerFeatures, mergeFurtherAheadProgress, readAccountIdentity } from './logic/account-progress.js';
+import { syncAccountCampaignProgress } from './logic/account-campaign-sync.js';
+import {
+  cachedAccountClearsForThisDevice,
+  fetchAccountHighestLevel,
+  forgetAccountClears,
+  loadAccountClears,
+} from './menu/account-clears.js';
+import { dealFor, finishDeal, markMoved, randomDealsEnabled, readRest, refreshRandomDeals, restLeftMs, startDeal, writeRest } from './logic/campaign-deals.js';
 import {
   freeTurnGuide, migrateTutorialProgress, nextTutorialChapter, previousTutorialChapter,
   tutorialAccepts, tutorialChapter, tutorialFeedback, tutorialTrackFor,
@@ -133,7 +211,13 @@ import {
 } from './logic/tutorial-gate.js';
 import type { TutorialGate } from './logic/tutorial-gate.js';
 import { matchIntel, openingPublicDiscard } from './logic/match-intel.js';
-import type { GlassSurface } from './player/glass-surface.js';
+import { discardArrival } from './ui/discard-arrival.js';
+import {setData,setStyle} from './ui/dom-update.js';
+import type { GlassSurface, IntelGuide, IntelTabId } from './player/glass-surface.js';
+import { intelTips, nearestRule, ruleCards } from './logic/intel-guide.js';
+import { cancelStarterRitual, isStarterRitualPlaying, playStarterRitual } from './player/starter-ritual.js';
+import { offlineRitualKey, onlineRitualKey, playsStarterRitual, starterRitualView } from './logic/starter-ritual.js';
+import type { StarterRitualView } from './logic/starter-ritual.js';
 import { previewMove } from './logic/preview.js';
 import { STUCK_MS, hintFor, hintWeight, isRoutineHint } from './logic/hint.js';
 import type { Hint, HintCtx } from './logic/hint.js';
@@ -145,7 +229,9 @@ import { effectBudget, idleTarget, moveTier, pitchLadder, tierBanner } from './l
 import type { Budget, Tier } from './logic/juice.js';
 import { Session } from './logic/session.js';
 import type { Played } from './logic/session.js';
-import { SETTINGS_KEY, EFFECTS, SPEEDS, parseSettings, speedFactor } from './logic/settings.js';
+import { SETTINGS_KEY, EFFECTS, SPEEDS, parseSettings, saveableSettings, speedFactor } from './logic/settings.js';
+import { mountMenuSoundKey } from './player/menu-sound-key.js';
+import { liftBootCover } from './player/boot-cover.js';
 import { LAB_CATEGORIES, LAB_PRESETS, withLabPreset } from './logic/lab-presets.js';
 import type { LabCategory, LabPreset } from './logic/lab-presets.js';
 import { GLOW_SETTINGS } from './logic/topglow.js';
@@ -159,21 +245,25 @@ const look = () => materialLook(settings.palette, settings.materialDetail, setti
 import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
 import { glintSeedStone, setSeedStoneStrength } from './ui/seedstone.js';
-import { paintSeedReward, seedReward } from './ui/seed-reveal.js';
-let DesignView: typeof BoardView = BoardView;
-const branding = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')
-  ? await import('./player/branding.js') : null;
+import { duelSeedsMessage, paintSeedReward, seedReward } from './ui/seed-reveal.js';
+// BOTH boot modules start downloading together. They used to be two top-level awaits in a row, so
+// the second request did not even begin until the first had arrived: two round trips on the critical
+// path before the menu's first layout (measured 2026-11-02 on a throttled phone). Starting the
+// promises first turns that into one wait.
+const brandingLoad = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')
+  ? import('./player/branding.js') : null;
+// V3 art is archived on this branch; always use the default painted board for Futa04.
+const defaultArtLoad = IS_FUTA04 ? import('./ui/defaultArtBoard.js') : null;
+const branding = brandingLoad ? await brandingLoad : null;
 if (branding && (window.matchMedia('(display-mode: standalone)').matches ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true)) {
   document.documentElement.classList.add('home-screen-app');
 }
+// Page-wide screen flags stand in for page-wide :has() rules (ui/root-flags.ts: those restyled the
+// whole page for every element added while a game opened).
+mountRootFlags();
 branding?.mountBranding();
-if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
-  await import('./ui/design-v2.css');
-  DesignView = (await import('./ui/designBoard.js')).DesignBoardView;
-}
-// V3 art is archived on this branch; always use the default painted board for Futa04.
-const defaultArt = IS_FUTA04 ? await import('./ui/defaultArtBoard.js') : null;
+const defaultArt = defaultArtLoad ? await defaultArtLoad : null;
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, heavyShakeFrames, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
@@ -183,10 +273,11 @@ import { fillIcons, ICONS } from './ui/icons.js';
 import { getPixelGrid, setPixelGrid } from './ui/geom.js';
 import { onPhotosReady, photosForOrientation, warmPhotos } from './ui/photo.js';
 import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './logic/orient.js';
-import { Sound, vibrate } from './ui/sound.js';
+import { SOUND_REMOVED, Sound, vibrate } from './ui/sound.js';
+import { RecordedFx } from './ui/recorded.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PILES, RESULT, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL } from '../../src/strings.js';
+import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PAUSE, PLANET, PILES, REPLAY, RESULT, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL, TUTORIAL_REPLAY } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -201,16 +292,38 @@ import type { Beats } from './logic/emptyturn.js';
 // The product menu shows the world map only when this build really has an online endpoint to read
 // it from (the same predicate the lobby uses), so the entry can never open a dead screen.
 import { onlineBuildEnabled } from './online/config.js';
+import { accountsConfiguredInThisBuild, paintEarlyAccountKey, signedInNickname } from './accounts/menu-key.js';
+import { paintBetaLine } from './feedback/beta-line.js';
+import { paintBuildTag } from './feedback/build-tag.js';
 import { queueSeedProof } from './online/seed-rewards.js';
+import { requestTrainingTicket, seedIdentityWarm, settleQueuedSeedsOnBoot, trainingTicketWaitMs, warmSeedIdentity, settleSeedProof } from './online/seed-settle.js';
+import { SEEDS_IDENTITY_UNVERIFIED, SEEDS_NOT_VERIFIED } from './online/seed-icon.js';
+// THE PLANET ON THE FINISH CARD (owner brief, 2026-11-11): the pane itself is built by the lobby
+// (it owns the client and the identity), and this module only paints its one-off teaching band.
+import { type EndgamePlanet } from './online/endgame-planet.js';
+import { settledSeedsMessage } from './ui/seed-reveal.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
+import { installStaleBuildReload } from './logic/stale-build.js';
+import { mountPlanetLockup } from './player/planet-lockup.js';
+import { holdStars, mountSpaceBackdrop, spaceBackdrop } from './player/space-backdrop.js';
+import { backdropHeld, mountBackdropGate, onBackdropChange, refreshBackdropGate } from './ui/render-gate.js';
+// ONE SPACE (0.75): the stars are on screen before anything else mounts (no plain background).
+if (FEATURES.space) mountSpaceBackdrop();
+// THE GATE BEHIND THE GLASS: while a veil is up, nothing behind it animates (measured win; see
+// docs/PERF-THERMAL.md). Mounted before any surface can open.
+mountBackdropGate();
+// The board's ambient life is part of what the veil silences, and it is chosen during a render: a
+// veil's edge re-renders the match so the plan is recomputed (null behind the glass, alive again
+// when it lifts). Never runs outside a match.
+onBackdropChange(() => { if (session && !$('game').hidden) render(); });
+
+// First thing: a page left open across a deploy reloads onto the new build instead of half-breaking.
+installStaleBuildReload();
 
 const HUMAN: Player = 0;
 const BOT: Player = 1;
 if (IS_FUTA04) setFixedBoardOrient('flat');
 const BOOT_PARAMS = new URLSearchParams(location.search);
-// the test copy's DESIGN version (Lab -> DESIGN): the same game, drawn with the V2 illustrated skin
-const DESIGN_MODE = IS_TEST && BOOT_PARAMS.get('design') === '1';
-if (DESIGN_MODE) document.documentElement.classList.add('design-v2');
 
 // ---------- small helpers ----------
 
@@ -239,7 +352,9 @@ const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 // ---------- settings ----------
 
-let settings: Settings = parseSettings(store.get(SETTINGS_KEY), systemReduce());
+// The Futasaku channels keep Settings to the essentials (owner, 2026-10-23); see parseSettings.
+let settings: Settings = parseSettings(store.get(SETTINGS_KEY), systemReduce(), IS_FUTA04);
+if (IS_FUTA04) document.documentElement.classList.add('settings-essentials', 'futasaku-product');
 let stats = parseStats(store.get(STATS_KEY));
 const SEEN_KEY = 'severgrow.seen';
 const SMOOTH_KEY = 'severgrow.smoother';
@@ -248,7 +363,7 @@ let cardPinned = false;
 /** v0.5: first-time tips for Fruit and Strengthen, remembered in the browser. */
 let tipsSeen = parseTips(store.get(TIPS_KEY));
 let tipOpen: FirstTip | null = null;
-const saveSettings = () => store.set(SETTINGS_KEY, JSON.stringify(settings));
+const saveSettings = () => store.set(SETTINGS_KEY, JSON.stringify(saveableSettings(settings)));
 const LAB_BASE_KEY = 'severgrow.lab.base.v1';
 const LAB_ACTIVE_KEY = 'severgrow.lab.active.v1';
 const savedLabBase = store.get(LAB_BASE_KEY);
@@ -258,6 +373,16 @@ let labBaseline: Settings | null = (() => {
     return value && typeof value === 'object' && !Array.isArray(value) ? parseSettings(savedLabBase, systemReduce()) : null;
   } catch { return null; }
 })();
+// The Futasaku channels have no Lab any more (owner, 2026-10-23). A player who left an experiment on
+// gets their own essentials back once, from the setup saved before the experiment.
+if (IS_FUTA04 && labBaseline) {
+  const base = labBaseline;
+  settings = { ...settings, sound: base.sound, vibration: base.vibration, reduceMotion: base.reduceMotion, largeText: base.largeText };
+  labBaseline = null;
+  store.remove(LAB_BASE_KEY);
+  store.remove(LAB_ACTIVE_KEY);
+  store.set(SETTINGS_KEY, JSON.stringify(saveableSettings(settings)));
+}
 let labActiveId = labBaseline ? store.get(LAB_ACTIVE_KEY) : null;
 let labCategory: LabCategory = LAB_PRESETS.find((preset) => preset.id === labActiveId)?.category ?? 'surface';
 // A previous automatic "Smoother mode" could leave this preview on Low effects. Restore
@@ -267,16 +392,24 @@ if (IS_FUTA04 && store.get(SMOOTH_KEY) && settings.effects === 'low') {
   saveSettings();
 }
 /** Animation time scale (0 = no animations). */
-/** overhaul item 19: Replay plays the opponent's turn a little slower */
+/** overhaul item 19: Replay plays the opponent's turn slower than live */
 let replaying = false;
 /** overhaul item 20: after replaying the biggest cut, the result screen comes back */
 let reopenGameOver = false;
-/** Replay speed: 0.75 for the opponent's turn, 0.5 for the biggest cut (Part 2) */
+/**
+ * The replay's PLAYBACK RATE (0.6 = 60% of live speed), and the biggest cut's (half speed). The
+ * rate is turned into a duration multiplier in exactly one place (`replayDurationScale`), because
+ * `timeScale` is a DURATION scale (it multiplies every wait and animation), never a speed.
+ */
 let replaySpeed = REPLAY_SPEED;
+/** True only for the in-game replay of the enemy's turn: it gets a readable beat between actions. */
+let replayBeats = false;
 // Reduce-motion kills movement via motion(); do not also stretch wait timers.
-const timeScale = () => speedFactor(settings.speed) * (replaying ? 1 / replaySpeed : 1);
-/** How much things move (0 when reduce motion is on). */
-const motion = () => (settings.reduceMotion ? 0 : theme().style.motion);
+const timeScale = () => speedFactor(settings.speed) * (replaying ? replayDurationScale(replaySpeed) : 1);
+/** The one motion gate: Reduce motion, or a zero time scale, means no movement. */
+const motionOn = () => motionAllowed(settings.reduceMotion, timeScale());
+/** How much things move (0 when motion is not allowed). */
+const motion = () => (motionOn() ? theme().style.motion : 0);
 /** Sequential grow: gap after each tile's land beat (legacy wave uses this as distance step). */
 const BLOOM_STAGGER_MS = 80;
 // Motion pass (owner, 2026-10-15): slow enough to see, fast enough to feel snappy. Measured with
@@ -284,9 +417,9 @@ const BLOOM_STAGGER_MS = 80;
 // tiles 1270 → ~900ms, strengthen 570 → ~420ms, Blast ≥ 640ms (was 430), turn hand-over 325 →
 // 260ms, the opponent's hidden draw 125 → 200ms (it was a blink).
 /** A multi-tile grow: the next tile starts when the previous one is this far through its pop. */
-const GROW_OVERLAP = 0.6;
+const GROW_OVERLAP = PINNED.growOverlap;
 /** After the last tile of a grow has landed, how long it holds before the next step. */
-const GROW_HOLD_MS = 160;
+const GROW_HOLD_MS = PINNED.growHold;
 const BLAST_MIN_MS = 640;
 const TURN_HANDOVER_MS = 260;
 const OPP_DRAW_MS = 200;
@@ -304,7 +437,7 @@ let revealProgress = 0;
  * The shortest the gate stays shut for a LIVE enemy turn. A turn that grew nothing (a hidden draw
  * and a discard) has almost no steps; without this it would swap the board in one frame.
  */
-const MIN_LIVE_REVEAL_MS = 700;
+const MIN_LIVE_REVEAL_MS = PINNED.liveReveal;
 /** An enemy turn is on screen right now: every input entry point must refuse until it drains. */
 const onlineReveal = (): boolean => isOnlineDuel() && getOnlineSession()?.isRevealing === true;
 /**
@@ -372,7 +505,19 @@ const TUTORIAL_PRAISE_IDS = new Set([
 let log: string[] = [];
 let queue = new AnimQueue({});
 let shownScores: [number, number] = [0, 0];
+/**
+ * The Throw pile exactly as the player has SEEN it. The engine view can already hold the
+ * opponent's discarded card while its card is still in the air; the pile top (and its count)
+ * must only change when that card arrives. `settleStep` advances this on the discard step and
+ * on the final sync, so a skipped/aborted flight still settles on the true pile.
+ */
+let shownDiscard: Card[] = [];
 const hiddenCards = new Set<number>();
+/**
+ * A card thrown while my own move was still being shown (play through): it stays in the hand,
+ * untouchable, until its throw step lifts it out, so it never vanishes and then flies from a gap.
+ */
+let throwHeld: Card | null = null;
 let scars: { key: string; owner: Player; age: number; tile?: Tile }[] = [];
 const removedTiles = new WeakMap<Step, Map<string, Tile>>();
 const outcomeSteps = new WeakMap<Step, { tone: 'good' | 'bad'; strength: number }>();
@@ -393,6 +538,16 @@ let botBusy = false;
 let epoch = 0;
 let pumping = false;
 let cardRects = new Map<number, DOMRect>();
+/** Where the committed throw's ghost was when released (null: use the hand card's own box). */
+let dragThrowFrom: DOMRect | null = null;
+/**
+ * The Throw pile stays swollen while the throw it accepted is still in flight (owner, 2026-10-25).
+ * The class is otherwise driven by the selection, but the selection ends the moment the move
+ * commits — so the flight holds it for its own duration, and the boomerang lands on the rect the
+ * player is actually looking at, not a settled rect it never touched. Cleared on landing,
+ * fast-forward, cancel and a new game.
+ */
+let throwSwellHeld = false;
 
 /**
  * A precise, bounded timeline of the animation pump and every reveal boundary, with a
@@ -413,21 +568,35 @@ window.addEventListener('unhandledrejection', (e) =>
   animLog('window:unhandledrejection', { reason: String((e as PromiseRejectionEvent).reason).slice(0, 300) }),
 );
 
-const sound = new Sound();
+// Sound returns with the owner's own recordings (2026-11-05, web/public/audio/sfx/, ui/recorded.ts).
+const recorded = new RecordedFx();
+const sound = new Sound(SOUND_REMOVED, recorded);
+// The key takes decode while the menu is idle, so even the first tap plays a recording.
+if (typeof window !== 'undefined') {
+  const idle = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+  const warm = () => { if (settings.sound) recorded.warm(); };
+  if (idle) idle(warm, { timeout: 2500 }); else setTimeout(warm, 1200);
+}
 const boardHandlers = { tap: (k: string) => onHexTap(k), inspect: (k: string | null) => onInspect(k), hold: (k: string) => pinCard(k) };
 const boardSvg = $('board') as unknown as SVGSVGElement;
 const board = defaultArt ? new defaultArt.DefaultArtBoardView(boardSvg, boardHandlers)
-  : DESIGN_MODE ? new DesignView(boardSvg, boardHandlers) : new BoardView(boardSvg, boardHandlers);
+  : new BoardView(boardSvg, boardHandlers);
 /** Material pass 2: the "Your turn" / "Bot's turn" pill and its faint edge wash. */
 const pill = new TurnPill($('turn-pill'), $('edge-wash'));
+const publishTurnRim = mountTurnRim(document.body);
+function syncTurnRim() {
+  if ($('game').hidden) publishTurnRim(null, HUMAN);
+  else if (!isOnlineDuel()) publishTurnRim(session?.state ?? null, HUMAN);
+  // Online updates reuse the driver's emitted/HUD snapshot below. No extra legal-move or
+  // perspective work just to paint a turn light; replay frames never overwrite confirmed state.
+}
 const announceTurn = (player: Player, label?: string) => {
   const o = bannerOpts(settings);
-  document.body.dataset.turn = player === HUMAN ? 'you' : 'opponent';
   pill.show(player, o, label);
   const tone = turnTone(player, o);
-  if (tone && settings.sound) sound.turn(tone.notes, tone.gain, tone.ms);
+  if (tone && settings.sound) sound.turnFor(player === HUMAN);
 };
-const { flash, cutFlash, sparks, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles } = createEffects(board, () => timeScale(), () => motion());
+const { flash, cutFlash, flinch, sparks, drift, dust, impactDim, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, throwBoomerang, flyBack, oppDraw, oppThrow, particles } = createEffects(board, () => timeScale(), () => motion());
 
 /** Pause and dim the ambient skin loops (lava, fireflies, sway) so a cut or blast reads. */
 function quietAmbient(on: boolean) {
@@ -446,6 +615,10 @@ function beatHome(p: Player, my: number) {
 const save = () => {
   if (isOnlineDuel()) return; // online matches live on the server + device identity, not the offline save
   if (!session) return;
+  // A Tutorial replay is deliberately UNSAVED (owner, 2026-10-24): it may neither overwrite the
+  // campaign's resume save nor become "the match" a reload resumes. Replaying a lesson can never
+  // move the player's place, so there is nothing here worth keeping.
+  if (tutorialReplay) return;
   const encoded = encodeSave({
     seed: session.state.seed,
     actions: session.log,
@@ -454,6 +627,8 @@ const save = () => {
     base: session.base,
     // The training tier the game came from, so a reloaded game still earns its carry-over.
     ...(gameDifficulty ? { difficulty: gameDifficulty } : {}),
+    // EXPERIMENTAL Blitz: a reload continues the same Blitz match (clock + ladder), not a normal one.
+    ...(blitzMatch ? { blitz: true, ...(blitzMap !== null ? { map: blitzMap } : {}) } : {}),
   });
   // A campaign match saves under its OWN key together with the level it belongs to: the classic
   // offline save is never overwritten by a campaign game, and a campaign match resumes as the level
@@ -484,6 +659,7 @@ function applyTheme() {
   if (lk.textures && !IS_FUTA04) warmPhotos();
   root.classList.toggle('large-text', settings.largeText);
   root.classList.toggle('reduce-motion', settings.reduceMotion);
+  sound.setReduceMotion(settings.reduceMotion);
   // overhaul Part 3: the decorations, all behind one switch (and quiet with Reduce motion)
   root.classList.toggle('eye-candy', settings.eyeCandy);
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolveColors(t).bg);
@@ -571,13 +747,19 @@ function drawTerrarium() {
     <rect x="30" y="112" width="160" height="12" rx="6" class="tr-base"/>
     ${tiles.map(([x, y, f, cls]) => hex(x, y, 9.5, f, cls)).join('')}
     <path d="M86 104 L95 89 L104 104" stroke="${c.you}" stroke-width="2" fill="none" opacity=".7"/>
-    <circle class="tr-spore" cx="80" cy="70" r="1.6" fill="${c.text}"/><circle class="tr-spore d1" cx="130" cy="60" r="1.3" fill="${c.text}"/><circle class="tr-spore d2" cx="105" cy="48" r="1.2" fill="${c.text}"/>
+    <defs><radialGradient id="tr-spore-soft">
+      <stop offset="0%" stop-color="${c.text}" stop-opacity="1"/>
+      <stop offset="42%" stop-color="${c.text}" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="${c.text}" stop-opacity="0"/>
+    </radialGradient></defs>
+    <circle class="tr-spore" cx="80" cy="70" r="2.8" fill="url(#tr-spore-soft)"/><circle class="tr-spore d1" cx="130" cy="60" r="2.3" fill="url(#tr-spore-soft)"/><circle class="tr-spore d2" cx="105" cy="48" r="2.1" fill="url(#tr-spore-soft)"/>
     <path d="M52 40 Q70 28 92 27" class="tr-shine"/>
   </svg>`;
 }
 
 function drawLogo() {
-  if (branding) { branding.drawLogo(); return; }
+  // THE PLANET's menu: the kanji alone, locked to the wordmark's width (player/planet-lockup.ts).
+  if (branding) { branding.drawLogo(FEATURES.planet); if (FEATURES.planet) mountPlanetLockup(); return; }
   drawTerrarium();
   const c = resolveColors(theme());
   $('logo').innerHTML = `<svg viewBox="0 0 120 84" width="132" height="92" aria-hidden="true">
@@ -596,20 +778,76 @@ let openSheet: HTMLElement | null = null;
 /** The screen last shown. Boot finishes after `load` (it awaits async UI mounts), so a late
  *  redundant `showScreen('menu')` must not reset a menu the player has already interacted with. */
 let shownScreen: 'menu' | 'levels' | 'campaign' | 'game' | null = null;
+/** Where the player actually is, doorways included (`shownScreen` cannot say `play`). */
+let route: ScreenName | null = null;
 const TRAINING_REWARD_TICKET_KEY = 'severgrow.seeds.training-ticket.v1';
 let trainingRewardTicketId: string | null = null;
 let seedRewardMessage = '';
+/** The head of each full screen: the row that lands one short beat after the screen's body. */
+const SCREEN_HEAD: Record<'menu' | 'levels' | 'campaign', string> = {
+  menu: '.menu-stack',
+  levels: '.levels-head',
+  campaign: '.levels-head',
+};
+
+/** A full plate does not grow from 99.6% — that is invisible at its size (owner, 2026-11-02). */
+const PLATE_SCALE = 0.985;
+/** The finish card's exit sink: 6px, the ceiling the owner's motion brief allows for a leaving window. */
+const MOTION_SINK = 6;
+
+/**
+ * Arrive a whole screen on the shared beat: the body travels, then its own head follows one stagger
+ * later (owner, 2026-11-02: "if we have existing ones make them more visible and smooth"). Both
+ * calls are the SAME primitives a sheet uses; the direction is the only new decision
+ * (`ui/screen-motion.ts`). Nothing here delays input — an arriving screen is tappable on its first
+ * frame, and the head's delay is pure paint.
+ */
+function arriveScreen(el: HTMLElement, head: Element | null, from: ScreenName | null, to: ScreenName): void {
+  const arrival = screenArrival(from, to, !interfaceMotionAllowed());
+  if (head instanceof HTMLElement) {
+    if (arrival.duration > 0) {
+      resetSurface(head);
+      enterSurface(head, { travel: arrival.head, delay: arrival.stagger, duration: arrival.duration });
+    } else resetSurface(head);
+  }
+  enterSurface(el, { travel: arrival.travel, duration: arrival.duration });
+}
+
 /**
  * The PLAY submenu (product menu only). It is not one of the four screens: it is a doorway that
  * replaces the menu, exactly as the online hub does. Opening anything else closes it.
  */
-function closePlayMenu() {
-  $('play-menu').hidden = true;
+function closePlayMenu(animated = false) {
+  const menu = $('play-menu');
+  const head = menu.querySelector<HTMLElement>(SCREEN_HEAD.levels);
+  if (head) resetSurface(head);
+  if (menu.hidden) {
+    syncBrandMark();
+    return;
+  }
+  if (!animated) {
+    menu.hidden = true;
+    resetSurface(menu);
+    syncBrandMark();
+    return;
+  }
+  // The way back out of PLAY is the menu's arrival seen from behind: the doorway leaves downward
+  // (it came up) while the menu rises under it, so the pair reads as one move, not two.
+  exitSurface(menu, { travel: 6, scale: 0.99, onDone: () => { menu.hidden = true; } });
+  syncBrandMark();
 }
 function openPlayMenu() {
-  $('play-menu').hidden = false;
+  const menu = $('play-menu');
+  menu.hidden = false;
   $('menu').hidden = true;
-  shownScreen = null; // the menu is no longer the screen on show, so it re-renders on return
+  resetSurface($('menu'));
+  arriveScreen(menu, menu.querySelector(SCREEN_HEAD.levels), 'menu', 'play');
+  // The menu is still the screen underneath the submenu. Keeping that fact (rather than nulling
+  // it) lets a redundant late boot `showScreen('menu')` leave the player's open submenu alone.
+  shownScreen = 'menu';
+  route = 'play';
+  syncBrandMark();
+  window.dispatchEvent(new CustomEvent('futasaku:screen', { detail: 'play-menu' }));
 }
 /**
  * One leader per screen (owner direction, 2026-10-15): the ONE action that carries the cream fill,
@@ -620,12 +858,12 @@ function setLead(btn: HTMLElement, lead: boolean) {
   btn.classList.toggle('ghost', !lead);
 }
 /**
- * The saved-game resume on the main menu — "Continue", or the campaign's "Resume" — or hidden when
- * there is nothing to resume. It is recomputed EVERY time the menu is shown and is deliberately NOT
- * inside the "the screen did not change" guard below: the menu is the ONLY way back into a saved
- * match, so a fresh boot, a reload and a return from a submenu must all agree with storage. A miss
- * here would leave a player staring at a menu with no way back into their game (2026-10-15).
- * Returns whether there is anything to continue, for the rest of the menu's own layout.
+ * The saved-game resume — "Continue", or the campaign's "Resume". On the LEGACY channels it is the
+ * main menu's way back into a saved match and is recomputed EVERY time the menu is shown, outside
+ * the "the screen did not change" guard, so a fresh boot, reload and submenu return all agree with
+ * storage. On the PRODUCT channels (owner decision, 2026-10-19) the main menu has NO resume at all:
+ * the player enters the level and is asked there. Returns whether the button is shown, for the rest
+ * of the menu's own layout.
  */
 function syncMenuResume(): boolean {
   const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
@@ -633,37 +871,65 @@ function syncMenuResume(): boolean {
   const resumeCampaign = campaignCanContinue && parseLastMode(store.get(LAST_MODE_KEY)) === 'campaign';
   const resumeClassic = !!saved && saved.state.phase !== 'GAME_OVER' && !resumeCampaign;
   const canContinue = resumeCampaign || resumeClassic;
+  // Owner decision (2026-10-19): NO continue/resume button on the product main menu. A saved match
+  // is offered when the player enters its level from PLAY (see askCampaignStart), never here.
+  const showContinue = canContinue && !FEATURES.campaign;
   const btn = $('menu-continue');
-  btn.hidden = !canContinue;
+  btn.hidden = !showContinue;
   btn.classList.remove('version-btn');
   const continueLabel = resumeCampaign ? CAMPAIGN.resume : resumeClassic && saved!.coach?.tutorial ? 'Continue tutorial' : 'Continue';
   btn.textContent = continueLabel;
   btn.setAttribute('aria-label', continueLabel);
-  return canContinue;
+  return showContinue;
 }
+/**
+ * THE CAMPAIGN'S SUGGESTION (menu/suggestion.ts). Built once at module scope — the same place the
+ * press primitive and the hand's breath are installed — so every later menu pass is one pure read
+ * and one class toggle, with no listener, timer or storage of its own.
+ */
+const menuSuggestion = installMenuSuggestion();
 /**
  * Every control of the product menu that depends only on compile-time channel flags, the saved-game
  * storage and `src/strings.ts` — never the network. Extracted from `showScreen` so boot can lay the
  * menu out in its SYNCHRONOUS prefix (before the first `await`): a first-time tester then sees a way
- * to play with the first paint, not after the async player mounts. LOG IN is deliberately NOT here:
- * it depends on the Google probe and is revealed by the accounts module when that returns.
+ * to play with the first paint, not after the async player mounts. LOG IN is painted here too, from
+ * what the device already knows (owner, 2026-10-22: it used to arrive up to a second after the other
+ * keys); the accounts module re-checks Google in the background and owns the key once it mounts.
  * `canContinue` is the saved-game resume decision (see `syncMenuResume`), passed in so the caller
  * keeps recomputing it on every menu show.
  */
 function layoutMenu(canContinue: boolean) {
   // ---- the product menu (owner direction, 2026-10-15, option 'split') ----
-  // LOG IN at the top, then PLAY, then the world map, Tutorial and Settings. Exactly ONE action
-  // leads on this screen and it is PLAY; Continue (the saved-game resume) is a quiet ghost right
-  // under it.
+  // On the product channels the menu is EXACTLY PLAY, TERRITORY and SETTINGS (owner decision,
+  // 2026-10-19). PLAY is its single leading action. LOG IN, Continue and Tutorial are not part of
+  // it; the legacy channels keep the flat menu they are used to.
   const online = onlineBuildEnabled();
   $('menu-play').hidden = !FEATURES.campaign;
-  $('menu-play').textContent = MENU.play;
+  // The key's word goes into its own node, so the suggestion's halo and the key's own label can
+  // never be wiped by a layout pass.
+  $('menu-play-label').textContent = MENU.play;
   $('menu-play').setAttribute('aria-label', MENU.play);
   $('play-title').textContent = MENU.playTitle;
-  $('menu-login').textContent = MENU.login;
-  $('menu-login').setAttribute('aria-label', MENU.login);
-  $('menu-world').textContent = MENU.world;
+  // The bottom row is a GROUP (owner brief, 2026-10-21): LOG IN (or the player's name) on the left,
+  // Settings on the right. Its spoken name comes from the one strings module.
+  $('menu-foot').setAttribute('aria-label', MENU.footerLabel);
+  paintEarlyAccountKey($('menu-login') as HTMLButtonElement, accountsConfiguredInThisBuild());
+  paintBetaLine(document.getElementById('menu-beta'));
+  void paintBuildTag(document.getElementById('menu-beta'));
+  // The account key's words are owned by the accounts module, not by this layout pass: a signed-out
+  // guest sees MENU.login, a signed-in player sees their NAME, and both are the SAME key (one entry,
+  // one flow, one place). Writing MENU.login here would stomp the name on every return to the menu.
+  // The label of the Territory entry is its own node (owner brief, 2026-10-20): the entry also
+  // carries the player's Seeds and tile counts, painted by web/src/online/lobby-ui.ts from ONE
+  // menu-show read. Writing the button's textContent here would wipe both read-outs, so this pass
+  // writes the label.
+  $('menu-world-label').textContent = MENU.world;
   $('menu-world').setAttribute('aria-label', MENU.world);
+  // THE PLANET (/test/ only): the same entry under its staging name, written into the same node.
+  if (FEATURES.planet) {
+    $('menu-world-label').textContent = PLANET.title;
+    $('menu-world').setAttribute('aria-label', PLANET.menu);
+  }
   // The world map is a TOP-LEVEL entry of this menu, never one of PLAY's children. It appears
   // only when the build has an online endpoint to read the map from.
   $('menu-world').hidden = !(FEATURES.campaign && online);
@@ -671,15 +937,38 @@ function layoutMenu(canContinue: boolean) {
     setLead($('menu-play'), true);
     setLead($('menu-continue'), false);
     setLead($('menu-world'), false);
-    // Inside PLAY exactly one entry leads: Play online, the duel lobby. LEVEL <n> and Training
-    // are the next tier down and the back control is the quietest of all. A build with no online
-    // endpoint has no Play online at all, so the campaign (the primary offline mode) leads.
+    // Inside PLAY exactly one entry leads: LEVEL <n>, the campaign (owner, 2026-10-22). Play online
+    // and Practice match are the next tier down and the back control is the quietest of all.
     const cmp = $('menu-campaign');
     cmp.hidden = false;
     // The entry and the press now come from ONE decision (campaignEntry), so the label can no longer
     // disagree with what opens. With every built level complete there is no next level to name, so
     // the entry opens the chapter list instead of claiming LEVEL <n>.
     const entry = campaignEntry(campaignProgress, campaignResume()?.level ?? null);
+    // The caption UNDER the LEVEL <n> entry in the PLAY submenu (owner review, 2026-10-23). It used
+    // to sit on the main menu as "CAMPAIGN — LEVEL 1", which read as a mode of its own competing with
+    // PLAY. The entry already says the level number, so this line says what the entry cannot: how far
+    // through that level's chapter the player is. It is painted from the SAME `entry` decision, so it
+    // can never describe a different level from the one the entry opens; when the entry opens the
+    // chapter list instead there is no level to describe, so the line stands down rather than being
+    // invented. Read-only, out of the tab order, and silent (aria-live=off in the markup).
+    const target = entry.kind === 'list' ? null : entry.kind === 'ask' ? entry.next : entry.level;
+    // Owner direction (2026-10-23): the caption counts the ten LESSON levels (1-10 are the
+    // tutorial), not the campaign chapter - "lessons" is only true of those. It is shown only while
+    // the entry still opens a lesson; once all ten are won the entry opens level 11, which is not a
+    // lesson, so the line retires itself rather than sitting there as permanent "10 of 10"
+    // furniture describing a word that no longer applies.
+    const readout = $('play-readout');
+    const lessonsDone = LESSONS.filter((l) => campaignProgress.completed.includes(`c1-${String(l.level).padStart(2, '0')}`)).length;
+    const lessonsTotal = LESSONS.length;
+    const stillTeaching = !!target && lessonsDone < lessonsTotal && lessonFor(target.number) !== null;
+    readout.textContent = stillTeaching ? CAMPAIGN.lessonsCompleted(lessonsDone, lessonsTotal) : '';
+    readout.hidden = !stillTeaching;
+    // THE CAMPAIGN'S SUGGESTION (owner, 2026-11-02): the slight cream halo on PLAY and on the LEVEL
+    // key, painted from the SAME record this pass already reads, unioned with any ACCOUNT answer
+    // already on the device. One pure read and two class toggles; it retires itself the moment c1-10
+    // is cleared in either source. No lamps, no count, no animation.
+    menuSuggestion.paint(campaignProgress, accountClears);
     if (entry.kind === 'list') {
       cmp.textContent = MENU.levels;
       cmp.setAttribute('aria-label', MENU.levelsAria);
@@ -689,20 +978,23 @@ function layoutMenu(canContinue: boolean) {
       cmp.setAttribute('aria-label', MENU.levelAria(current));
     }
     $('menu-online').hidden = !online;
-    setLead($('menu-online'), online);
-    setLead(cmp, !online);
+    // LEVEL <n> carries the cream fill inside PLAY (owner, 2026-10-22: "highlight 'level n'
+    // instead" of Play online); Play online is a quiet ghost key like Practice match.
+    setLead($('menu-online'), false);
+    setLead(cmp, true);
     // There is deliberately NO "Levels" entry (owner, 2026-10-16): the player does not get access to
     // the whole list. LEVEL <n> above starts the next level they have NOT completed, and that is the
     // only way in. The list still renders; the finish card's "Back to campaign" is where the campaign
     // hands off to it once no next level is left.
     $('menu-new').textContent = MENU.training;
-    $('menu-new').setAttribute('aria-label', `${MENU.training}. Train against the computer.`);
+    $('menu-new').setAttribute('aria-label', `${MENU.training}. Play against the computer.`);
     setLead($('menu-new'), false);
     $('levels-heading').textContent = MENU.trainingTitle;
   } else {
     // Every other channel keeps the flat menu it is used to: one "Play offline" that opens the
     // picker, and no submenu at all. Untouched, so their own suites need no change.
     $('menu-campaign').hidden = true;
+    $('play-readout').hidden = true;
     $('menu-new').hidden = false;
     $('menu-new').textContent = 'Play offline';
     $('menu-new').setAttribute('aria-label', 'Play offline');
@@ -717,22 +1009,70 @@ function layoutMenu(canContinue: boolean) {
   // The code path is kept intact and the entry still exists on non-campaign channels, so the old
   // guided run can come back by flipping this one line.
   $('menu-tutorial').hidden = FEATURES.campaign;
+  // Continue is HIDDEN on the product channels (owner decision, 2026-10-19): there is NO resume on
+  // the main menu. The player enters the level from PLAY and is asked there (askCampaignStart).
+  // Hidden, not deleted, so the legacy channels keep their Continue; `[hidden]` is display:none,
+  // so it leaves no gap in the button column.
+  $('menu-continue').hidden = FEATURES.campaign || !canContinue;
   // Rename the one tutorial entry from src/strings.ts (single source).
   $('menu-tutorial').textContent = HELP.tutorial;
   $('menu-tutorial').setAttribute('aria-label', HELP.tutorial);
+  // Laid out: every key is now in its final state, so the column may show (style.css).
+  $('menu').dataset.laidOut = '1';
 }
 function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
+  // Any screen that is not the match itself means the ritual's moment is over. This is the last
+  // safety net for a navigation route that bypasses teardown or beginSession.
+  if (name !== 'game') {
+    cancelStarterRitual();
+    // Invalidate a startGame still waiting on the ritual, so it cannot paint into the next screen.
+    startGameGeneration++;
+    pregameHold = false;
+  }
   const same = shownScreen === name;
+  // The doorways (PLAY, the online hub) sit on top of the menu without it changing, so `shownScreen`
+  // cannot say where the player actually is. `route` can: it is what the next move measures its
+  // direction against (owner, 2026-11-02: a forward move and a back move must read differently).
+  const leavingPlay = route === 'play' && name === 'menu' && !$('play-menu').hidden;
+  // A redundant call to show the menu must not tear down the submenu the player has just opened.
+  // (Boot finishes after async mounts and used to reset the screen here; the back key closes it.)
+  if (same && name === 'menu' && !$('play-menu').hidden && !leavingPlay) return;
+  const from = route ?? shownScreen;
   shownScreen = name;
-  closePlayMenu();
+  route = name;
+  closePlayMenu(name === 'menu');
   $('menu').hidden = name !== 'menu';
   $('levels').hidden = name !== 'levels';
   $('campaign').hidden = name !== 'campaign';
   $('game').hidden = name !== 'game';
-  for (const id of ['online-hub', 'online-waiting', 'online-join']) {
-    const el = document.getElementById(id);
-    if (el) el.hidden = true;
+  // EXPERIMENTAL Blitz: leaving the board takes its draining ring and vignette with it, and a
+  // clock that was running must not end a match nobody is looking at.
+  if (name !== 'game') blitz?.sync();
+  // An invitation deferred out of a live match is offered here, now that a menu owns the screen.
+  if (name !== 'game') drainInstallInvite();
+  // A full-screen change gets the same arrival as a surface, EXCEPT the game: the board is the live
+  // object and must never slide or fade under the player's finger. A forward move rises from below,
+  // the way back drops from above, and the screen's own head lands one short beat later. Hiding a
+  // screen resets its surface animation (and its head's), so nothing can finish on a screen the
+  // player has already left.
+  for (const [id, key] of [['menu', 'menu'], ['levels', 'levels'], ['campaign', 'campaign']] as const) {
+    const el = $(id);
+    const head = el.querySelector<HTMLElement>(SCREEN_HEAD[key]);
+    if (name === key) arriveScreen(el, head, from, key);
+    else {
+      resetSurface(el);
+      if (head) resetSurface(head);
+    }
   }
+  // The plate is fixed to the viewport (not inside #game), so leaving the board must take it too.
+  if (name !== 'game') hideLessonPlate();
+  // EVERY lobby screen leaves with any screen change, the Territory map included (owner report,
+  // 2026-10-28: accepting a challenge left the map painted over the duel). This is the safety net:
+  // it knows the same one list the lobby uses, so no entry point — present or future — can leave a
+  // lobby screen stacked on the board. The visible screen's own exit beat is started by
+  // `leaveForMatch()` before this runs, and `hideLobbySurfaces` lets a closing screen finish it.
+  hideLobbySurfaces();
+  window.dispatchEvent(new CustomEvent('futasaku:screen', { detail: name }));
   if (name === 'levels') {
     renderLevelGrid();
   }
@@ -749,8 +1089,11 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
       layoutMenu(canContinue);
     }
   }
-  $('gameover').hidden = true;
+  hideGameOver();
   render();
+  // The seat anchor is placed whenever the map band becomes visible; from then on only a layout
+  // or resize moves it (`applyLayout` schedules it when its key changes).
+  if (name === 'game' && IS_FUTA04) requestAnimationFrame(placeOppSeat);
   if (name === 'menu') window.dispatchEvent(new Event('futasaku:menu'));
 }
 
@@ -773,37 +1116,211 @@ function syncResignMenu() {
   if (btn) btn.hidden = !(isOnlineDuel() && !!onlineResign);
 }
 
+/**
+ * The pause panel's mode word, in the corner plate opposite Settings. It is a read-out, never a
+ * control: the title already says "Paused" (or LEVEL n in a campaign match), so this names the
+ * KIND of match instead of repeating it.
+ */
+function syncMenuMode() {
+  const el = document.getElementById('gm-mode');
+  if (!el) return;
+  // In a campaign the corner names the level itself (the heading no longer does): the player still
+  // knows exactly where they are, without a second level title competing with "Paused".
+  el.textContent = campaignLevel
+    ? CAMPAIGN.levelLabel(campaignLevel.number)
+    : isOnlineDuel() ? PAUSE.duelMode : PAUSE.practiceMode;
+  // A duel's clock does not stop because this plate is open. Say so, in one quiet line.
+  const clock = document.getElementById('gm-clock-note');
+  if (clock) {
+    clock.textContent = PAUSE.clockRuns;
+    clock.hidden = !isOnlineDuel();
+  }
+}
+
+let lessonChromeOn = false;
 /** Keep #hud-menu crisp/tappable for the whole tutorial (gate + focus dim + free play). */
 function syncTutorialChrome() {
-  // The onboarding levels borrow the tutorial's own window and its board band, so the same chrome
-  // class applies: it pads the map between the glass and the cockpit and keeps the menu reachable.
-  const on = !!coach.tutorial || onboardingActive() || (!!lessonActive() && !guidanceOff());
+  // Onboarding still borrows the tutorial window, which pads the map. A lesson must not: its words
+  // sit in the cockpit, and the board stays the size of a normal match.
+  const lessonOn = !!lessonActive() && !guidanceOff();
+  const on = !!coach.tutorial || onboardingActive();
   document.documentElement.classList.toggle('futa04-tutorial', on);
+  document.documentElement.classList.toggle('futa04-lesson', lessonOn);
+  if (lessonOn) {
+    const root = document.documentElement.style;
+    root.removeProperty('--tutorial-pad-top');
+    root.removeProperty('--tutorial-pad-bottom');
+    root.removeProperty('--tutorial-glass-h');
+  }
+  if (!lessonOn) hideLessonPlate();
+  if (lessonChromeOn && !lessonOn) {
+    if (lessonHoldingScore) { lessonHoldingScore = false; smartCockpit?.holdScore?.(false); }
+    else smartCockpit?.led?.(null);
+  }
+  lessonChromeOn = lessonOn;
   syncTutorialMenuExit();
 }
 
-function sheet(id: string | null) {
+/** The control that opened the current sheet, so closing it gives the keyboard back. */
+let sheetOpener: HTMLElement | null = null;
+
+/** Closing (Escape, scrim, Close) returns focus to the control that opened the sheet. */
+function restoreSheetFocus() {
+  const target = sheetOpener;
+  sheetOpener = null;
+  // A sheet chained on top, or the lesson glass, owns focus now. Only a sheet that is actually
+  // painted counts: the install prompt keeps a `.sheet` inside itself while it is hidden.
+  const chained = [...document.querySelectorAll<HTMLElement>('.sheet')].some((el) => !el.hidden && !!el.getClientRects().length);
+  if (chained || glassSurface?.isOpen()) return;
+  // The opener may have gone with the screen it lived on (a campaign sheet, a new game): then
+  // there is nothing honest to focus and the page keeps whatever focus it has.
+  if (target?.isConnected && target.getClientRects().length) target.focus();
+}
+
+/**
+ * A sheet opened ON TOP of another one returns to it when it closes (0.6 polish). Settings can be
+ * opened from the main menu and from the pause panel; closing it must land where the player came
+ * from, with the keyboard on the control they pressed (main menu → main menu, pause → pause).
+ * A stack, because one surface may chain more than once (a report form over Settings, say), and a
+ * root sheet starts a fresh chain.
+ */
+const sheetReturns: { to: string; focus: HTMLElement | null }[] = [];
+
+/** The one opener/closer of a sheet. `sheet()` decides where a close RETURNS before calling this. */
+/**
+ * THE VEIL (owner, 2026-10-23): on the Futasaku channels, while a sheet (the pause panel, or one it
+ * opened) or the finish card is up over a match, the match is blurred and darkened beneath the dark
+ * glass (html.game-veiled in style.css). Called wherever either of them opens or closes.
+ */
+function syncVeil() {
+  const inMatch = !$('game').hidden;
+  const over = !!openSheet || !$('gameover').hidden;
+  document.documentElement.classList.toggle('game-veiled', IS_FUTA04 && inMatch && over);
+  // THE SAME MOMENT STOPS THE WORK BEHIND IT: a backdrop-filter over a moving layer is recomposited
+  // every frame, and the planet's WebGL loop is not reachable from CSS. One call, at the edge only.
+  refreshBackdropGate();
+  syncBrandMark();
+}
+
+/**
+ * WHICH SURFACE OWNS THE MARK (owner, 2026-10-24: "have nearly every page have the logo somewhere"
+ * — but never two on one). Exactly one surface carries it:
+ *   - the main menu: the big logo (#logo);
+ *   - a match or a submenu (and any sheet opened over either): the crisp corner badge
+ *     (#hud-brand), which is app-level and above the veils so pausing can never blur it;
+ *   - the finish plate: its own mark (#go-brand), INSIDE the card at its top-left corner (owner
+ *     feedback, 2026-11-11: "brand mark goes top-left, like in the game"), so the corner stands
+ *     down and the plate never shows two marks;
+ *   - the online hub / waiting / join screens: their existing header mark (#online-brand).
+ * A sheet opened from the MAIN MENU changes nothing: the menu's big logo is still the screen's mark
+ * (the sheet only veils it), so the badge does not appear and the screen never shows two.
+ */
+function syncBrandMark() {
+  if (!branding) return;
+  const online = ['online-hub', 'online-waiting', 'online-join', 'online-world-screen']
+    .some((id) => !!document.getElementById(id) && !document.getElementById(id)!.hidden);
+  const result = !$('gameover').hidden;
+  const inMatch = !$('game').hidden;
+  const submenu = !$('levels').hidden || !$('play-menu').hidden;
+  branding.setBrandMark(!result && !online && (inMatch || submenu));
+}
+
+let sheetExit = 0;
+let closingSheet: HTMLElement | null = null;
+function openSheetNow(id: string | null, wasOpen: boolean) {
   if (id && glassSurface?.isOpen()) {
     glassSurface.hide();
     $('futa04-help-button').setAttribute('aria-expanded','false');
   }
-  if (openSheet) openSheet.hidden = true;
-  openSheet = id ? $(id) : null;
+  // Remember the opener once per chain: opening Settings from the pause menu must still give the
+  // keyboard back to the control that opened the pause menu, not to a button the sheet replaced.
+  if (id && !wasOpen && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+    sheetOpener = document.activeElement;
+  }
+  const previous = openSheet;
+  const next = id ? $(id) : null;
+  openSheet = next;
+  // A DIFFERENT sheet replaces the old one: hide it at once (a fading ghost over the new surface
+  // would be a second, false surface). Only a real close gets the exit choreography.
+  if (next && previous && previous !== next) {
+    resetSurface(previous);
+    previous.hidden = true;
+  }
   // the in-game menu pauses the game; How to play and Settings opened from it keep it paused
   if (id === 'sheet-menu') {
     setPaused(true);
     syncTutorialMenuExit();
     syncResignMenu();
+    syncMenuMode();
     if (FEATURES.slimHeader) fillMenuStatus();
   }
   else if (id === null) setPaused(false);
-  $('scrim').hidden = !openSheet;
-  if (openSheet) {
-    openSheet.hidden = false;
+  syncVeil();
+  if (next) {
+    // A sheet now covers the board: any finger that was on it has stopped meaning anything there
+    // (and on the iPhone its lift may never reach the board): release the map, the tile press and
+    // the painting stroke, so nothing is left half-pressed when the sheet closes.
+    camera?.release();
+    board.releasePress();
+    if (draw.ptr) draw.ptr = null;
+    sheetExit++; // any pending close is now stale
+    if (closingSheet && closingSheet !== next) {
+      resetSurface(closingSheet);
+      closingSheet.hidden = true;
+      closingSheet = null;
+    }
+    closingSheet = null;
+    $('scrim').hidden = false;
+    next.hidden = false;
     if (id === 'sheet-settings') syncSettingsForm();
     if (id === 'sheet-history') renderHistory();
     if (id === 'sheet-howto') renderHowTo();
-    openSheet.querySelector<HTMLElement>('[data-close], button:not([hidden])')?.focus();
+    // The backdrop only changes density; it never travels. The surface becomes present.
+    enterSurface($('scrim'), { travel: 0, scale: 1, duration: 150 });
+    // A PLATE (owner, 2026-10-26: "we worked on animations of opening menus ... not the
+    // settings/paused menu — did we do anything there at all?"). It did animate, and it animates on
+    // every sheet — but the shared open curve (`easeOpen`, cubic-bezier(0.22,1,0.36,1)) is so
+    // front-loaded that ~87% of the movement lands in the first ~50ms: about three frames. On a
+    // compact card like Match Intel that still reads as a breath. On a full-height plate the centre
+    // of the panel barely moves and it covers the very backdrop you would compare it against, so the
+    // eye catches only the fade and the plate looks like it was simply there.
+    // The cure stays inside the one vocabulary (open ≤ 320ms, travel ≤ 16px, scale ≥ 95%): a plate
+    // takes the STRONGEST arrival the tokens allow, so its edges move ~10px a side and the size
+    // change is a clear 1.5% — and, since 2026-11-02, its own head follows one short beat later, so
+    // the eye has a second, ordered event to read instead of one diffuse fade.
+    const plate = !next.classList.contains('confirm-sheet');
+    enterSurface(next, plate ? { travel: INTERFACE_MOTION.screen, scale: PLATE_SCALE } : {});
+    const sheetHead = next.querySelector<HTMLElement>('.sheet-head');
+    if (plate && sheetHead) {
+      resetSurface(sheetHead);
+      enterSurface(sheetHead, { travel: INTERFACE_MOTION.travel, delay: INTERFACE_MOTION.stagger });
+    } else if (sheetHead) resetSurface(sheetHead);
+    next.querySelector<HTMLElement>('[data-close], button:not([hidden])')?.focus();
+  } else if (wasOpen) {
+    // CLOSING. Pause is released NOW (the game resumes and an online clock is never "frozen" by a
+    // fading panel); the plate simply takes 150ms to leave. The node stays inert and untappable
+    // while it fades, then hidden, and focus returns to the control that opened the chain.
+    const token = ++sheetExit;
+    const closing = previous;
+    closingSheet = closing;
+    const scrim = $('scrim');
+    const finishClose = () => {
+      // A stale close must not touch a surface the player has already reopened. (A different
+      // surface replacing it is handled at the OPEN path, which resets and hides the old node.)
+      if (token !== sheetExit) return;
+      if (closing) closing.hidden = true;
+      if (closingSheet === closing) closingSheet = null;
+      scrim.hidden = true;
+      restoreSheetFocus();
+    };
+    const leave = closing ? exitSurface(closing, { travel: Math.round(INTERFACE_MOTION.travel * 1.5), scale: 0.99, onDone: finishClose }) : null;
+    const leaveScrim = exitSurface(scrim, { travel: 0, scale: 1, onDone: () => undefined });
+    // With motion off the surface calls back at once. A scrim that cannot animate only loses its
+    // own fade; it must never shorten the surface's exit.
+    if (!leave) finishClose();
+    else if (!leaveScrim) scrim.hidden = true;
+  } else {
+    $('scrim').hidden = true;
   }
   if (IS_FUTA04) {
     document.documentElement.classList.toggle('futa04-information-blocked', !!openSheet);
@@ -817,6 +1334,37 @@ function sheet(id: string | null) {
       render();
     }
   }
+}
+
+/**
+ * Show `id` (null closes), returning a chained sheet to its opener first. The rule at the door:
+ * while something is open and a DIFFERENT sheet is asked for, remember the one below and the
+ * control that asked for the next one; on close, land back on it and restore that control's focus.
+ */
+function sheet(id: string | null) {
+  if (id === null && openSheet && sheetReturns.length > 0) {
+    const back = sheetReturns.pop()!;
+    openSheetNow(back.to, true);
+    // The opener may have been removed with the screen that held it; focus only a painted control.
+    if (back.focus?.isConnected && back.focus.getClientRects().length) back.focus.focus();
+    return;
+  }
+  if (!openSheet) sheetReturns.length = 0;
+  if (id && openSheet && openSheet.id !== id) {
+    sheetReturns.push({
+      to: openSheet.id,
+      focus: document.activeElement instanceof HTMLElement ? document.activeElement : null,
+    });
+  }
+  openSheetNow(id, !!openSheet);
+}
+
+/** Close the WHOLE chain (a chained confirmation must not hand back to the pause plate when the
+ *  action it confirmed is about to replace the screen). Focus is left to the new screen. */
+function closeAllSheets(): void {
+  sheetReturns.length = 0;
+  sheetOpener = null;
+  openSheetNow(null, !!openSheet);
 }
 
 /** Legacy channels (no glass surface) still show the reference in the old sheet. */
@@ -843,7 +1391,8 @@ const writeDifficultyStep = (id: DifficultyId, level: Level | null) => {
 };
 
 function renderLevelGrid() {
-  $('level-grid').replaceChildren(
+  const grid = $('level-grid');
+  grid.replaceChildren(
     ...DIFFICULTIES.map((tier) => {
       const b = document.createElement('button');
       b.type = 'button';
@@ -852,7 +1401,7 @@ function renderLevelGrid() {
       b.dataset.difficulty = tier.id;
       // Visible label is CAPS via CSS; keep the spoken name title-case.
       const spoken = tier.label.charAt(0) + tier.label.slice(1).toLowerCase();
-      b.setAttribute('aria-label', `${spoken}. Train against the computer at this difficulty.`);
+      b.setAttribute('aria-label', `${spoken}. Play a practice match against the computer at this difficulty.`);
       b.textContent = tier.label;
       b.addEventListener('click', () => {
         sound.unlock();
@@ -870,6 +1419,9 @@ function renderLevelGrid() {
       return b;
     }),
   );
+  // EXPERIMENTAL Blitz (/test/ only): the fourth Practice tier, appended OUTSIDE DIFFICULTIES so the
+  // three training tiers and the menu pinned by their tests are untouched. Off everywhere else.
+  blitz?.appendTile(grid);
 }
 
 // ---------- campaign screen ----------
@@ -883,6 +1435,10 @@ function campaignResume(): { level: CampaignLevel; saved: Loaded<CoachProgress> 
   // A save can only resume a level the record actually opened. A stale or edited save pointing at a
   // level the player has not reached is ignored, so it cannot become a shortcut past the order rule.
   if (!isUnlocked(campaignProgress, level)) return null;
+  // ...and it can only be offered on the player's PLACE (owner, 2026-10-24). A save on a level
+  // behind progress is a replay in progress: offering it here is exactly how a replay of level 1
+  // used to make the campaign "resume" level 1 and strand the player behind their own progress.
+  if (!resumeOffersPlace(campaignProgress, level)) return null;
   const saved = decodeSave<CoachProgress>(raw.match);
   if (!saved || saved.state.phase === 'GAME_OVER') return null;
   return { level, saved };
@@ -961,6 +1517,78 @@ function renderCampaignScreen() {
       return block;
     }),
   );
+  orientCampaignList();
+}
+
+/**
+ * THE LIST OPENS ON THE PLAYER'S PLACE (owner, 2026-10-24). The current tile is painted already;
+ * this brings it into view, so returning from a finished level always shows the level the player is
+ * working on, not the top of chapter I. The chapters column is the scroller on the product screen
+ * (the head's Back and Continue stay put); a channel where the column fits falls back to the screen.
+ */
+function orientCampaignList() {
+  const chapters = $('campaign-chapters');
+  const tile = chapters.querySelector<HTMLElement>('.campaign-tile[data-state="current"]');
+  if (!tile) return;
+  const screen = $('campaign');
+  const scroller = chapters.scrollHeight > chapters.clientHeight + 1 ? chapters : screen;
+  const r = tile.getBoundingClientRect();
+  const box = scroller.getBoundingClientRect();
+  // Centre the tile in the visible column. Reading the rects first forces the layout, so this is
+  // exact even though the list was just rebuilt; the assignment is instant (no animation to outrun).
+  scroller.scrollTop += r.top - box.top - Math.max(0, (box.height - r.height) / 2);
+}
+
+// ---------- the Tutorial (Settings → Tutorial) ----------
+// Owner (2026-10-24): "the first 9 levels are replayable as 'Tutorial' - available in settings -
+// plays the levels 1-9 levels exactly like in campaing." So this is an ENTRY POINT to the same
+// CAMPAIGN_LEVELS, never a parallel copy: the tiles are built from `tutorialLevels()` (references to
+// the campaign's own level objects) and start through the same `startGame` seam with the level's own
+// seed, bot and config. The ONE difference is the flag: a tutorial match writes nothing.
+function renderTutorialSheet() {
+  $('tutorial-title').textContent = TUTORIAL_REPLAY.title;
+  $('tutorial-hint').textContent = TUTORIAL_REPLAY.hint;
+  $('tutorial-levels').replaceChildren(
+    ...tutorialLevels().map((level) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'campaign-tile';
+      b.dataset.level = level.id;
+      const num = document.createElement('span');
+      num.className = 'ct-num';
+      num.textContent = String(level.number).padStart(2, '0');
+      b.append(num);
+      // The lesson's short name (owner, 2026-11-01), from the ONE map in src/strings.ts. It sits
+      // under the number inside the same 56px plate, so the row, the 44px target and the sheet's
+      // shape do not change. Level 10 is the send-off, has no name, and is not in this list.
+      const name = LESSON.names[level.number];
+      if (name) {
+        const label = document.createElement('span');
+        label.className = 'ct-name';
+        label.textContent = name;
+        b.append(label);
+      }
+      b.setAttribute('aria-label', TUTORIAL_REPLAY.levelAria(level.number, name));
+      b.addEventListener('click', () => {
+        sound.unlock();
+        startTutorialLevel(level);
+      });
+      return b;
+    }),
+  );
+}
+
+/**
+ * Opens a campaign level AS A TUTORIAL REPLAY. No unlock check on purpose: the Tutorial is offered
+ * from Settings at any progress, and it cannot move progress in either direction — the record and
+ * the resume save are both left alone (progressAfterMatch / save), so there is nothing to protect
+ * with the campaign's order rule. It is the same level object the campaign plays, untouched.
+ */
+function startTutorialLevel(level: CampaignLevel) {
+  if (level.number < 1 || level.number > TUTORIAL_LEVEL_COUNT) return;
+  closeAllSheets();
+  gameOverDismissed = true;
+  void startGame(level.seed, level.botLevel, null, level, null, true);
 }
 
 /** Fills the Settings sheet's words from src/strings.ts (SETTINGS). The markup carries keys
@@ -972,11 +1600,40 @@ function applySettingsCopy() {
   }
 }
 
+/**
+ * The Settings plate's honest bottom edge (owner, 2026-10-26: at 320x568 the last row was cut
+ * through the middle with no cue). The fade and the visible scrollbar are shown only while there
+ * is something below the fold — never over a sheet that actually fits, and never when the player
+ * has reached the end. `sheet-settings .sheet-fade` in style.css does the painting.
+ */
+let settingsScrollBound = false;
+function syncSettingsScroll(): void {
+  const panel = $('sheet-settings');
+  const body = panel.querySelector<HTMLElement>('.sheet-body');
+  if (!body) return;
+  const more = panel.scrollHeight - panel.clientHeight - panel.scrollTop > 2;
+  panel.dataset.scroll = more ? '1' : '0';
+}
+function bindSettingsScroll(): void {
+  if (settingsScrollBound) return;
+  settingsScrollBound = true;
+  const panel = $('sheet-settings');
+  panel.addEventListener('scroll', syncSettingsScroll, { passive: true });
+  window.addEventListener('resize', syncSettingsScroll, { passive: true });
+  const body = panel.querySelector<HTMLElement>('.sheet-body');
+  if (body && typeof ResizeObserver !== 'undefined') new ResizeObserver(syncSettingsScroll).observe(body);
+}
+
 function syncSettingsForm() {
+  // The Tutorial entry exists only where campaign levels do (the product channels). Hidden, not
+  // removed, so the legacy sheet keeps the shape it has always had.
+  $('settings-tutorial').hidden = !FEATURES.campaign;
   // Phones whose browser cannot vibrate (all iPhones) get an honest label, not a dead switch.
   const vib = document.querySelector<HTMLInputElement>('[data-setting="vibration"]')!;
   vib.disabled = !('vibrate' in navigator);
   $('vibration-label').textContent = vib.disabled ? SETTINGS.vibrationOff : SETTINGS.vibration;
+  // On the Futasaku channels a phone that cannot vibrate does not show the row at all (owner, 2026-10-23).
+  $('vibration-row').hidden = IS_FUTA04 && vib.disabled;
   for (const input of document.querySelectorAll<HTMLInputElement>('[data-setting]')) {
     input.checked = !!settings[input.dataset.setting as keyof Settings];
   }
@@ -1006,6 +1663,8 @@ function syncSettingsForm() {
     settings.confirmPolicy = x;
   });
   renderSettingsLab();
+  bindSettingsScroll();
+  syncSettingsScroll();
 }
 
 /** The Lab edits existing settings only. Every recipe starts from the saved
@@ -1013,7 +1672,7 @@ function syncSettingsForm() {
 function applyLab(preset: LabPreset) {
   if (!labBaseline) {
     labBaseline = { ...settings };
-    store.set(LAB_BASE_KEY, JSON.stringify(labBaseline));
+    store.set(LAB_BASE_KEY, JSON.stringify(saveableSettings(labBaseline)));
   }
   settings = { ...withLabPreset(labBaseline, preset), level: settings.level };
   labActiveId = preset.id;
@@ -1036,6 +1695,7 @@ function finishLabChange() {
   saveSettings();
   sound.enabled = settings.sound;
   sound.setEffects(settings.effects);
+  sound.setReduceMotion(settings.reduceMotion);
   if (settings.sound || settings.music) sound.unlock();
   sound.setMix(settings);
   sound.setMusic(settings.music);
@@ -1123,31 +1783,59 @@ function segmented<T extends string>(id: string, values: readonly T[], current: 
 
 const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_000_000;
 
-function beginSession(state: State, c: CoachProgress | null, log: readonly Action[] = [], base: State | null = null) {
+/**
+ * True while the pre-game ritual owns the screen. The game is already prepared underneath, but its
+ * input and the bot stay shut until the ritual resolves — and the flag is cleared on every exit path.
+ */
+let pregameHold = false;
+/** A new match supersedes an older `startGame` that may still be waiting on the ritual. */
+let startGameGeneration = 0;
+
+function beginSession(state: State, c: CoachProgress | null, log: readonly Action[] = [], base: State | null = null, holdForRitual = false) {
+  turnWasMine = null; // a new game never opens with a hand-off cue
+  // A match started from anywhere supersedes a ritual belonging to an older one.
+  cancelStarterRitual();
+  startGameGeneration++;
+  pregameHold = holdForRitual;
   epoch++;
+  resetLessonRuntime();
+  hideLessonPlate();
+  handSettled = true;
   tutorialTransitionPending = false;
   tutorialDisplayKey = '';
   glassSurface?.hide();
   intelState=null;
   for (const w of [...waiters]) w();
   // A previous match may still be counting its score when New Game is tapped.
-  // Its next animation frame must never write into this match's scoreboard.
-  cancelAnimationFrame(scoreRaf);
-  scoreRaf = 0;
+  // Its next scheduler frame must never write into this match's scoreboard.
+  scoreUnsub?.();
+  scoreUnsub = null;
+  perfUnsub?.();
+  perfUnsub = null;
   for (const id of ['score-you', 'score-bot']) $(id).getAnimations().forEach(animation => animation.cancel());
   pumping = false;
+  // A new match starts with a settled pile, whatever the previous one was doing.
+  releaseThrowSwell();
   session = new Session(state, HUMAN, log, base);
+  bloomPick = [];
+  // A lesson never offers a power before the level that teaches it (Bloom from level 5).
+  { const l = lessonNow && campaignLevel?.number === lessonNow.level ? lessonNow : null; session.allow = l ? (a) => lessonAllows(l, a) : null; }
   finalShown = false;
   lastDeckSeen = -1;
   goCounted = false;
   goSeedSettled = false;
+  goSeedSlot = false;
   goSeedShown = null;
+  // A new game's card must never be painted by the previous game's settle (see settleSeedsForCard).
+  goSeedsSettleRun += 1;
   replaying = false;
   coach = c ? { ...c, choice: 0 } : freshCoach(); // the coach shows only its best move
   queue = new AnimQueue(state.board);
   const v = viewFor(state, HUMAN);
   shownScores = [v.score, v.opponentScore];
+  shownDiscard = [...v.discard];
   hiddenCards.clear();
+  throwHeld = null;
   scars = [];
   inspectKey = null;
   focusKey = null;
@@ -1159,19 +1847,34 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   lastBoard = null;
   showScreen('game');
   smartCockpit?.reset(v.score,v.opponentScore);
+  // The sign opens up as the player plays more games (capped): led-flavour rivalCapFor, led-art.
+  smartCockpit?.personality(stats.played);
   outcomeLight?.reset();
+  // EXPERIMENTAL Blitz: a new match (or a resume) starts its clock clean; a non-Blitz match hides it.
+  blitz?.beginMatch();
   scheduleBot();
 }
 
 
 /** Part 3 G: the opening deal: the hand flies in from the deck, card by card (Eye candy). */
 function dealIn() {
-  if (!settings.eyeCandy || motion() === 0 || timeScale() === 0) return;
+  handSettled = false;
+  if (!settings.eyeCandy || motion() === 0 || timeScale() === 0) { handSettled = true; return; }
   requestAnimationFrame(() => {
     const from = $('deck').getBoundingClientRect();
+    const flying: Animation[] = [];
     document.querySelectorAll<HTMLElement>('#hand .card').forEach((card, i) => {
       const r = card.getBoundingClientRect();
-      anim(card, [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, rotate: '-12deg', opacity: 0 }, { translate: '0 0', rotate: '0deg', opacity: 1 }], { duration: 420 * timeScale(), delay: i * 70 * timeScale(), easing: 'cubic-bezier(.2,.8,.3,1.05)', fill: 'backwards' });
+      const animation = anim(card, [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, opacity: 0 }, { translate: '0 0', opacity: 1 }], { duration: PINNED.humanDraw * timeScale(), delay: i * MOTION.ack * timeScale(), easing: EASE.settle, fill: 'backwards' });
+      if (animation) flying.push(animation);
+    });
+    if (!flying.length) { handSettled = true; if (lessonNow) render(); return; }
+    // The real signal: every deal animation has finished (delay included). The light waits for it.
+    // Only a lesson reads this flag, so only a lesson repaints here: a late repaint in a normal
+    // game could hide the How-to sheet the player is reading.
+    void Promise.all(flying.map((a) => a.finished.catch(() => undefined))).then(() => {
+      handSettled = true;
+      if (lessonNow) render();
     });
   });
 }
@@ -1181,27 +1884,35 @@ function dealIn() {
 let placeTeachingPanel: typeof import('./player/overlay-placement.js').placeTeachingPanel | null = null;
 let futa04Help: ReturnType<typeof import('./player/help.js').mountHelp> | null = null;
 let smartCockpit: ReturnType<typeof import('./player/smart-cockpit.js').mountSmartCockpit> | null = null;
+/** The lesson's live breath on the lit thing (a card, a pile, a key) — see player/lesson-breath.ts. */
+let lessonBreath: ReturnType<typeof import('./player/lesson-breath.js').mountLessonBreath> | null = null;
 let outcomeLight: OutcomeLight | null = null;
 let guideMod: ReturnType<typeof import('./player/guide.js').mountGuide> | null = null;
-let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; tip: (t: string | null, thumbOn: boolean) => void } | null = null;
+/** The in-game guide: "?" in the cockpit, the HOW TO PLAY label, the LED's pointer (player/how-to-guide.ts). */
+let turnGuide: import('./player/turn-guide.js').TurnGuide | null = null;
+let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; cockpit: () => 'left' | 'right'; tip: (t: string | null, thumbOn: boolean) => void } | null = null;
 /** The replay button: hidden in the test copy (its code stays). */
 const REPLAY_BUTTON = FEATURES.replay;
 /** The test copy: the weak-spot corner icons are gone (their signals live on the map and the tile card). */
 if (!FEATURES.weakTools) for (const id of ['tool-weak', 'tool-targets']) document.getElementById(id)?.remove();
-// the test copy: the header keeps only the menu button and the score bar; the scores, the turn
-// and History move into the menu (no player marks there: the colours say who is who)
+// product channels: the header keeps only the menu button and the score bar; the scores, the turn
+// and History move into the pause panel's read-out (no player marks there: the colours say who is who)
 if (FEATURES.slimHeader) {
   setSlimHud(true);
   document.documentElement.classList.add('slim-hud');
-  const body = document.querySelector('#sheet-menu .sheet-body');
-  if (body) {
-    const box = document.createElement('div');
-    box.id = 'gm-status';
-    box.className = 'gm-status';
-    box.innerHTML = '<div class="gm-scores"><span class="gm-you"><small>You</small><b class="num" id="gm-score-you">0</b></span><span class="gm-bot"><b class="num" id="gm-score-bot">0</b><small></small></span></div><div class="gm-turn" id="gm-turn"></div><button id="gm-history" class="btn ghost" type="button">What happened</button>';
-    box.querySelector('.gm-bot small')!.textContent = OPP.label; // the plain word beside a score ("Opponent"), not the possessive
-    body.prepend(box);
-    box.querySelector('#gm-history')!.addEventListener('click', () => sheet('sheet-history'));
+  // The read-out is part of the panel's markup (index.html): reveal it and label the opponent's
+  // side. Nothing is built here, so the panel has ONE author and the legacy channels never see it.
+  const status = document.getElementById('gm-status');
+  if (status) {
+    status.hidden = false;
+    const bot = status.querySelector('.gm-bot small');
+    if (bot) bot.textContent = OPP.label; // the plain word beside a score ("Opponent"), not the possessive
+  }
+  // History is a quiet row of the action column, not a second control inside the read-out.
+  const history = document.getElementById('gm-history');
+  if (history) {
+    history.hidden = false;
+    history.addEventListener('click', () => sheet('sheet-history'));
   }
 }
 /** The test copy's menu: the scores and the turn, as the header used to show them. */
@@ -1213,17 +1924,52 @@ function fillMenuStatus() {
   const turn = $('gm-turn');
   turn.className = `gm-turn ${$('turn').className}`;
   turn.innerHTML = $('turn').innerHTML;
-  // Which level this is, where a paused player looks for it. A normal offline game keeps "Paused".
+  // The copied pill carries the match label ("Level 1") under the turn word. In a campaign the
+  // corner read-out above "Paused" already says it (syncMenuMode runs first), so the plate showed
+  // LEVEL 1 twice. Drop the copy only when it repeats the corner word; a practice match keeps its
+  // difficulty ("Medium"), which the corner ("Practice") does not say.
+  const modeWord = document.getElementById('gm-mode')?.textContent?.trim().toLowerCase() ?? '';
+  const matchWord = turn.querySelector('small');
+  if (matchWord && modeWord && matchWord.textContent?.trim().toLowerCase() === modeWord) matchWord.remove();
+  // Which level this is lives in the corner read-out, not in the heading: the heading anchors the
+  // state (Paused / Match menu), and a campaign level names itself in the mode line. Owner brief,
+  // 2026-10-22: a pause should read as one state, not as a page with a level title.
   const title = document.getElementById('gm-title');
-  if (title) title.textContent = campaignLevel ? CAMPAIGN.levelLabel(campaignLevel.number) : 'Paused';
-  // In a campaign level this button leaves for the level list, and the match is SAVED (Resume brings
-  // it back), so it is not a "New game" and nothing is lost.
-  const leave = document.getElementById('gm-new');
-  if (leave) {
-    const words = campaignLevel ? CAMPAIGN.back : 'New game';
-    leave.textContent = words;
-    leave.setAttribute('aria-label', words);
+  if (title) title.textContent = isOnlineDuel() ? PAUSE.matchTitle : PAUSE.title;
+  const resume = document.getElementById('gm-resume');
+  if (resume) {
+    const words = isOnlineDuel() ? PAUSE.returnToMatch : PAUSE.resume;
+    resume.textContent = words;
+    resume.setAttribute('aria-label', words);
   }
+  // Restart is the current match's own key offline. A server duel cannot be restarted from one
+  // side, so the key is simply absent there; Resign is the honest way out (with its confirm).
+  const restart = document.getElementById('gm-new');
+  if (restart) {
+    const words = campaignLevel ? PAUSE.restartLevel : PAUSE.restartMatch;
+    restart.textContent = words;
+    restart.setAttribute('aria-label', words);
+    restart.hidden = isOnlineDuel() || !!coach.tutorial;
+  }
+  const main = document.getElementById('gm-main');
+  if (main) {
+    main.textContent = PAUSE.mainMenu;
+    // In a real-time duel "Main menu" would be a second, unexplained way to forfeit; the live
+    // module's own "Leave real time" carries that confirm. So the quiet key steps aside there.
+    main.hidden = document.documentElement.classList.contains('live-on');
+  }
+  // The two compact helpers and the lead are painted from the one strings module, so the i18n pass
+  // changes them in one file (the markup carries the no-JS fallback, as every other key does).
+  // They are icon tools: the spoken label is the full name, the word under the icon its short form.
+  const tool = (id: string, label: string, word: string) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.setAttribute('aria-label', label);
+    const w = el.querySelector('.gm-tool-word');
+    if (w) w.textContent = word;
+  };
+  tool('gm-howto', HELP.howToTitle, PAUSE.howToShort);
+  tool('gm-history', PAUSE.history, PAUSE.historyShort);
 }
 /** The thumb layout in use (test copy, phones in portrait), or null. */
 let thumbLayout: Thumb | null = null;
@@ -1244,7 +1990,7 @@ async function mountPlayerEnhancements() {
   const loads: Promise<unknown>[] = [];
   // Card art: start decode before fonts/thumb/camera finish so the crossfade can land early.
   if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')) {
-    void import('./player/cards.js').then((m) => m.preloadCardArt());
+    void import('./player/cards.js').then((m) => m.mountCards());
   }
   if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'test' || __CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')) {
     placeTeachingPanel = (await import('./player/overlay-placement.js')).placeTeachingPanel;
@@ -1303,12 +2049,43 @@ async function mountPlayerEnhancements() {
     loads.push(import('./player/fonts.js').then((f) => f.applyFont('new')));
   }
 
+
+  // Practice Blitz. The channel guard keeps its module out of the futa04 product build entirely.
+  if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'futa05') {
+    loads.push(import('./blitz/practice.js').then((m) => {
+      blitz = m.mountBlitzPractice({
+        store,
+        randomSeed,
+        startMatch: (map) => { void startBlitzMatch(map); },
+        unlock: () => sound.unlock(),
+        state: () => session?.state ?? null,
+        isMatch: () => blitzMatch,
+        busy: () => busy(),
+        hold: () => pregameHold,
+        homeKey: () => board.rootKey(HUMAN),
+        reduceMotion: () => settings.reduceMotion,
+        opponentShowing: () => blocking(),
+        clockHost: () => document.getElementById('smart-panel'),
+        tick: () => sound.press(),
+        onTimeout: () => blitzTimeoutTurn(),
+      });
+      // The Practice grid may already have been painted while this async mount was loading.
+      if (blitz) renderLevelGrid();
+    }));
+  }
+
   await Promise.all(loads);
   if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')) {
-    outcomeLight = (await import('./player/atmosphere.js')).mountAtmosphere();
-    (await import('./player/information.js')).mountInformation();
-    (await import('./player/cards.js')).mountCards();
-    glassSurface = (await import('./player/glass-surface.js')).mountGlassSurface(() => {
+    // Fetch independent presentation modules together; keep their mount order unchanged.
+    const [atmosphere,information,cards,glass,help,cockpit,breath,turnGuideModule] = await Promise.all([
+      import('./player/atmosphere.js'),import('./player/information.js'),import('./player/cards.js'),
+      import('./player/glass-surface.js'),import('./player/help.js'),import('./player/smart-cockpit.js'),
+      import('./player/lesson-breath.js'),import('./player/turn-guide.js'),
+    ]);
+    outcomeLight = atmosphere.mountAtmosphere();
+    information.mountInformation();
+    cards.mountCards();
+    glassSurface = glass.mountGlassSurface(() => {
       $('futa04-help-button').setAttribute('aria-expanded','false');
       $('futa04-help-button').focus();
     });
@@ -1317,8 +2094,32 @@ async function mountPlayerEnhancements() {
       onBlockedTap: tutorialTapAnywhere,
       isPaintDragging: () => !!draw.ptr || draw.shape.length > 0,
     });
-    futa04Help = (await import('./player/help.js')).mountHelp({ sheet, onBulb: toggleMatchIntel });
-    smartCockpit = (await import('./player/smart-cockpit.js')).mountSmartCockpit();
+    // The bulb is Match Intel, always (owner, 2026-11-11: "match intel stays match intel").
+    futa04Help = help.mountHelp({ sheet, onBulb: () => toggleMatchIntel() });
+    // THE TURN GUIDE (owner, 2026-11-11): "?" in the context key for everyone, every turn; pressed, it
+    // lights the rest of the turn one step at a time with the levels' glow — no window, no words.
+    turnGuide = turnGuideModule.mountTurnGuide({
+      position: () => session && !$('game').hidden && session.state.phase !== 'GAME_OVER'
+        ? { view: session.view, legal: myTurn() && !blocking() ? session.legal : [] } : null,
+      selectedCard: () => session?.sel?.card ?? null,
+      // The Tutorial and the levels light their own way; a replay has no moves to guide.
+      busy: () => !!coach.tutorial || !!lessonActive() || onboardingActive() || !!watching,
+      light: (selectors) => {
+        if (!glassSurface) return;
+        if (!selectors.length) { if (glassSurface.mode?.() === 'tutorial' && !coach.tutorial && !lessonActive()) glassSurface.hide(); return; }
+        if (glassSurface.isOpen() && glassSurface.mode?.() === 'intel') { glassSurface.close(); intelState = null; }
+        glassSurface.tutorial('', 0, selectors, {
+          shape: 'hex', outline: true, inCockpit: true, tier: 'guide', stepKey: `turn-guide:${selectors.join(',')}`,
+          reduceMotion: settings.reduceMotion, arrow: false,
+        });
+      },
+      changed: () => { if (session) render(); },
+    });
+    smartCockpit = cockpit.mountSmartCockpit({
+      heldMove: () => session ? heldMoveWord(session.sel, session.view.hand.find((c) => c.id === session!.sel.card)?.suit === null) : null,
+      guide: { available: () => !!turnGuide?.available(), on: () => !!turnGuide?.on(), toggle: () => turnGuide?.toggle(), label: turnGuideModule.TURN_GUIDE_LABEL },
+    });
+    lessonBreath = breath.mountLessonBreath();
     layoutKey = '';
     if (session) render();
   }
@@ -1369,7 +2170,7 @@ function feedCamera(v: View) {
 
 function checkOverlap(v: View) {
   if (!session || !thumbLayout) return;
-  const { w, h } = gameViewport();
+  const { w, h } = readAppViewport();
   const cfg = session.state.config;
   const maxHand = cfg.handSize + 1;
   const side = thumbLayout.side;
@@ -1443,25 +2244,97 @@ function checkOverlap(v: View) {
   }
 }
 
-async function runStarterLottery(opponentStarts: boolean): Promise<void> {
-  const panel = $('starter-lottery');
-  const title = $('lottery-title');
-  const result = $('lottery-result');
-  title.textContent = 'Drawing lots…';
-  result.textContent = '';
-  panel.hidden = false;
-  panel.dataset.spinning = settings.reduceMotion ? '0' : '1';
-  delete panel.dataset.winner;
-  const spinMs = settings.reduceMotion || timeScale() === 0 ? 0 : 900;
-  if (spinMs) await new Promise((r) => setTimeout(r, spinMs));
-  panel.dataset.spinning = '0';
-  panel.dataset.winner = opponentStarts ? 'bot' : 'you';
-  title.textContent = opponentStarts ? `${OPP.label} starts` : 'You start';
-  result.textContent = opponentStarts ? 'Opponent won the draw.' : 'You won the draw.';
-  const holdMs = settings.reduceMotion || timeScale() === 0 ? 200 : 700;
-  await new Promise((r) => setTimeout(r, holdMs));
-  panel.hidden = true;
-  delete panel.dataset.winner;
+/** The real draw pile, measured at the moment of exit, so the deck lands on it rather than on a guess. */
+const drawPileRect = (): DOMRect | null => {
+  const pile = document.querySelector<HTMLElement>('#deck .pile-card') ?? document.getElementById('deck');
+  const rect = pile?.getBoundingClientRect();
+  return rect && rect.width > 1 && rect.height > 1 ? rect : null;
+};
+
+/** The middle hex, as painted. The ritual seats the gathered deck's emblem on this tile. */
+const centerTileRect = (): DOMRect | null => {
+  if (!session) return null;
+  try {
+    const hex = document.querySelector<SVGGraphicsElement>('#board .hex-cell[data-key="0,0"] .hex');
+    // Where the tile will REST once the board's entrance has landed, so the ritual emblem goes
+    // straight to its final place and the board rises into it (owner, 2026-11-09).
+    const rect = measureAtRest(document.getElementById('board-wrap'), () => hex?.getBoundingClientRect());
+    return rect && rect.width > 1 && rect.height > 1 ? rect : null;
+  } catch {
+    return null;
+  }
+};
+
+/** One home tile as painted: the ritual places each dealt card beside its owner's own home. */
+const homeTileRect = (seat: Player): DOMRect | null => {
+  if (!session) return null;
+  try {
+    const key = coordKey(homeCoord(seat, session.state.config));
+    const hex = document.querySelector<SVGGraphicsElement>(`#board .hex-cell[data-key="${key}"] .hex`);
+    const rect = measureAtRest(document.getElementById('board-wrap'), () => hex?.getBoundingClientRect());
+    return rect && rect.width > 1 && rect.height > 1 ? rect : null;
+  } catch {
+    return null;
+  }
+};
+
+/** One entry point for the ritual's presentation everywhere a match begins. */
+async function runStarterRitual(view: StarterRitualView): Promise<void> {
+  await playStarterRitual({
+    view,
+    reduceMotion: settings.reduceMotion,
+    tempo: settings.speed,
+    youLabel: 'You',
+    opponentLabel: OPP.label,
+    deckTarget: drawPileRect,
+    // Display seat 0 is always the local player (moss/tree), online and offline alike.
+    homeRects: () => ({ you: homeTileRect(HUMAN), opponent: homeTileRect(BOT) }),
+    centerTile: centerTileRect,
+    // 0.85: the draw pile thuds as the ritual's deck lands on it.
+    onFiled: () => thudPile($('deck'), 1, motionOn(), INTERFACE_MOTION.easeOpen),
+  });
+}
+
+/**
+ * Cold first visit only: one short, bounded wait for the board art that the first lesson composes.
+ * The pictures are already downloading from the module that draws them while the menu is up, so on
+ * a fast connection this measures 0-3 ms (decode only). Its real job is the slow one: there the cap
+ * bounds the wait and play starts anyway, with the board filling in exactly as it did before. No
+ * spinner, no separate loading screen, no overlay, nothing while the page is hidden. It runs once
+ * per visit and leaves no timer behind.
+ */
+const WARMED_KEY = 'severgrow.board-warmed.v1';
+const FIRST_WARM_CAP_MS = 800;
+let firstWarm: Promise<void> | null = null;
+let warmDiag: { cold: boolean; waitedMs: number } | null = null;
+
+function warmFirstBoard(): Promise<void> {
+  if (warmDiag) return firstWarm ?? Promise.resolve();
+  if (firstWarm) return firstWarm;
+  if (!defaultArt || store.get(WARMED_KEY)) {
+    warmDiag = { cold: false, waitedMs: 0 };
+    return Promise.resolve();
+  }
+  if (document.hidden) {
+    // Nothing runs while the page is hidden: the art still loads, the board takes it as it comes.
+    warmDiag = { cold: true, waitedMs: 0 };
+    return Promise.resolve();
+  }
+  const t0 = performance.now();
+  firstWarm = new Promise<void>((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      warmDiag = { cold: true, waitedMs: Math.round(performance.now() - t0) };
+      store.set(WARMED_KEY, '1');
+      resolve();
+    };
+    const timer = window.setTimeout(finish, FIRST_WARM_CAP_MS);
+    void defaultArt!.boardArtReady.then(finish);
+  });
+  return firstWarm;
 }
 
 async function startGame(
@@ -1480,15 +2353,53 @@ async function startGame(
    * recorded against when the game ends; online never calls this at all, so it stays null there.
    */
   difficulty: DifficultyId | null = null,
+  /**
+   * A TUTORIAL replay (Settings → Tutorial): the SAME campaign level and opening, played without
+   * touching progress or the resume save. Default false, so no other caller can become one.
+   */
+  tutorial = false,
+  /**
+   * EXPERIMENTAL Blitz (/test/ only): the campaign board's config and the map's number, with the
+   * flag being non-null. Null for EVERY other caller, so the ordinary practice / campaign / tutorial
+   * path reads exactly the overrides and base it always did.
+   */
+  blitzStart: { config: CampaignLevel['config']; map: number } | null = null,
 ) {
+  let generation = ++startGameGeneration;
+  // One of the player's games (the guide's HOW TO PLAY label shows in the first few). A watched game,
+  // a tutorial replay and a Blitz game are not the player's own learning games.
+  turnGuide?.reset();
+  // The deal (the owner's card shuffle): a new match, a rematch, a restart.
+  if (settings.sound) sound.shuffle();
+  // The first lesson board on a cold first visit waits (briefly, capped) for its own art. Repeat
+  // visits, the side menu and every non-lesson game skip this entirely.
+  if (campaign) {
+    await warmFirstBoard();
+    if (generation !== startGameGeneration) return;
+  }
+  // Card faces decode while the menu is up. Await them (capped ~2 s) before the deal so mid-game
+  // class flips do not jump the hand art (owner, 2026-11-07). Already-ready = 0 ms, never theater.
+  {
+    const cards = await import('./player/cards.js');
+    await Promise.race([cards.preloadCardArt().catch(() => undefined), new Promise<void>((r) => setTimeout(r, 2000))]);
+    if (generation !== startGameGeneration) return;
+  }
   // A server-issued ticket makes a new Training result verifiable. An offline start stays playable
-  // with its local seed, but cannot claim spendable Seeds without a prior ticket.
+  // with its local seed, but cannot claim spendable Seeds without a prior ticket. Guests are paid
+  // too (owner, 2026-11-08) — the wait must cover minting a guest on a cold Edge, not only a warm
+  // identity's round trip (see TRAINING_TICKET_WAIT_MS).
   let ticketId: string | null = null;
   if (difficulty && onlineBuildEnabled() && !IS_TEST) {
+    // Read before the request starts: 8 s only for a cold guest mint, 3 s once an identity is here.
+    const ticketWaitMs = trainingTicketWaitMs(seedIdentityWarm());
     const ticket = await Promise.race([
-      onlineLobbyCtl?.trainingSeedTicket(level) ?? Promise.resolve(null),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200)),
+      // Issued through the seed module, not the online lobby: a training game started before the
+      // hub had mounted (or after its chunk failed to load) used to begin with no ticket at all,
+      // which meant no proof and no payment for a game the player had already played.
+      requestTrainingTicket(level),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), ticketWaitMs)),
     ]);
+    if (generation !== startGameGeneration) return;
     if (ticket) { seed = ticket.seed; ticketId = ticket.id; }
   }
   trainingRewardTicketId = ticketId;
@@ -1508,38 +2419,88 @@ async function startGame(
   gameLevel = level;
   gameDifficulty = difficulty;
   campaignLevel = campaign;
+  blitzMatch = !!blitzStart;
+  blitzMap = blitzStart?.map ?? null;
+  tutorialReplay = !!campaign && tutorial;
+  // Read the place BEFORE the match can change it (see `campaignReplay`).
+  campaignReplay = !!campaign && isReplay(campaignProgress, campaign);
   lessonNow = campaign ? lessonFor(campaign.number) : null;
   lessonSeen = new Set();
   lessonAnswerText = '';
   lessonShownKey = '';
   if (lessonNow) saveLessonMeta();
   // Campaign first (the only production source of overrides), then the test copy's Lab experiment,
-  // otherwise {} — the classic game's own configuration.
-  const overrides = overridesForMatch(campaign, IS_TEST, IS_TEST && lab ? lab.overrides() : {});
+  // otherwise {} — the classic game's own configuration. A Blitz match names its campaign board
+  // directly (it is NOT a campaign match: no key, no progress, no lesson).
+  const overrides = blitzStart
+    ? blitzStart.config
+    : overridesForMatch(campaign, IS_TEST, IS_TEST && lab ? lab.overrides() : {});
   // Futasaku 0.4 starts from the engine's versioned match setup, so the client and the server
   // verifier agree on who moves first. The classic live channel keeps its historical player-0 start.
-  // Levels 1-10 open from their lesson's authored position (the engine's own cards and board).
+  // Levels 1-8 and 10 open from their lesson's authored position (the engine's own cards and board);
+  // level 9 is a FREE lesson — `lessonOpening` deals the campaign level's own real match.
   const opening = lessonNow ? lessonOpening(lessonNow) : IS_FUTA04 ? newMatch(seed, overrides) : newGame(seed, overrides);
   const opponentStarts = opening.startingPlayer === BOT;
-  if (IS_FUTA04) {
-    showScreen('game');
-    // A campaign level's opening is fixed by its seed, so there is no draw to watch. The guided
-    // levels get straight into the game; every other offline match keeps the lottery courtesy.
-    if (!campaign) await runStarterLottery(opponentStarts);
-  }
   const state: State = opening;
   log = [
     campaign
       ? `${CAMPAIGN.started(campaign.number)}. ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`
-      : `New game against Level ${level}. ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`,
+      : `New ${matchLabel({ campaign: null, difficulty, botLevel: ladderLevel(level) })} practice match. ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`,
   ];
+  // The pre-game ritual is the product's own opening for every match — practice, a campaign level
+  // from 9 on (level 9 is the first real game; the hand-held lessons end at 8), and online. Levels
+  // 1-8 keep their authored openings and skip it. The board/session is prepared BEFORE the ritual so
+  // the player sees the real match behind it and the first legal tap is available the instant it
+  // leaves.
+  const playRitual = playsStarterRitual(IS_FUTA04, campaign?.number ?? null);
   // A campaign match always keeps its opening as the replay base: the save must replay under the
-  // LEVEL's config (its authored board), never under the default config.
-  beginSession(state, null, [], campaign || opponentStarts ? state : null);
+  // LEVEL's config (its authored board), never under the default config. A Blitz match does the same
+  // for its campaign board, so a reload replays the map, not a regenerated default one.
+  beginSession(state, null, [], campaign || opponentStarts || blitzStart ? state : null, playRitual);
+  // A lesson's stage card waits for the ritual below: the ceremony owns the screen until it
+  // resolves, and level 10's send-off is the last beat before the first move. Levels 1-8 have no
+  // ritual, so their stage starts here, exactly as it always has.
+  if (lessonNow && !playRitual) startLessonStage();
+  // beginSession freshens the generation token for THIS match; another entry starting a match now
+  // would supersede it and the checks below would stop this older start from touching that one.
+  generation = startGameGeneration;
+  save();
+  if (playRitual) {
+    const view = starterRitualView(
+      offlineRitualKey(seed),
+      opening.startingPlayer ?? opening.turnPlayer,
+      HUMAN,
+    );
+    try {
+      await runStarterRitual(view);
+    } catch {
+      /* presentation can never hold the match */
+    } finally {
+      if (generation === startGameGeneration) pregameHold = false;
+    }
+    if (generation !== startGameGeneration) return;
+    // The hand has NOT been dealt yet: `dealIn()` below starts it. `beginSession` set
+    // `handSettled = true` (it cannot know a ritual is coming), so without this the send-off would
+    // paint during this render and then sit there while the cards flew in — a beat with the hand
+    // still moving, which is exactly what a lesson must never show. Holding the gate makes the
+    // send-off the last beat before the first move, as intended.
+    handSettled = false;
+    render(); // lift the ritual gate and draw the controls in their real, playable state
+    // Every lesson still opens with its stage card, level 10 included: `lessons-3` pins that
+    // contract for all ten levels, and the ceremony precedes it rather than replacing it.
+    if (lessonNow) startLessonStage();
+  }
   dealIn();
   firstToolTips();
-  save();
   announceTurn(state.turnPlayer);
+  // The bot was held while the cards were on screen; start its clock only now (live's rule), for
+  // THIS match, before the door to the next one is opened.
+  if (playRitual) scheduleBot();
+  // Only then release the restart guard. The flags are released by the new session, not by a timer,
+  // so a double tap can never start two games: a press that arrives while `restarting` is still set
+  // is dropped, and the match it would have replaced has already had its bot scheduled.
+  restarting = false;
+  resultAdvance = false;
 }
 
 /** Opens a campaign level as a fresh, reproducible match. The fixed seed makes the start identical. */
@@ -1548,8 +2509,66 @@ function startCampaignLevel(level: CampaignLevel) {
   // has been won. The tiles already disable locked levels, but a guard here means no future caller
   // (a deep link, a test hook, a stale save) can skip the campaign by starting a level directly.
   if (!isUnlocked(campaignProgress, level)) return showScreen('campaign');
+  const deal = campaignDealFor(level);
+  if (deal === null) return;
   gameOverDismissed = true;
-  void startGame(level.seed, level.botLevel, null, level);
+  void startGame(deal, level.botLevel, null, level);
+}
+
+/**
+ * EXPERIMENTAL BLITZ (/test/ only). Opens one Blitz match on the given campaign board (30-70). The
+ * bot level is the persisted ladder's (9, or 8 after two losses in a row) and the DEAL is a fresh
+ * random one; only the MAP is that campaign level's authored board. It is NOT a campaign match:
+ * `campaign` stays null, so it has no campaign key, no progress and no lesson.
+ */
+async function startBlitzMatch(map: CampaignLevel): Promise<void> {
+  if (!blitz) return;
+  gameOverDismissed = true;
+  await startGame(randomSeed(), blitz.botLevel(), null, null, null, false, { config: map.config, map: map.number });
+}
+
+/**
+ * My Blitz clock ran out (0.82; owner 2026-11-06: "Turn ends, worst card thrown"). The turn ends on its
+ * own — draw if not drawn, stop growing, throw the lowest card (logic/blitz.ts blitzTimeoutAction) —
+ * and the match goes on. Each step is an ordinary auto move, so it animates and saves like any other.
+ */
+function blitzTimeoutTurn(): void {
+  if (!session || !blitz || !blitzMatch || isOnlineDuel()) return;
+  cancelSel();
+  smartCockpit?.event({ message: 'TIME', priority: 80, duration: 1200, mode: 'red' });
+  for (let i = 0; i < 4; i++) {
+    const st = session.state;
+    if (st.phase === 'GAME_OVER' || st.turnPlayer !== HUMAN || st.actor !== HUMAN) break;
+    const a = blitzTimeoutAction(session.view);
+    if (!a) break;
+    humanPlay(a, { auto: true });
+  }
+}
+
+/**
+ * RANDOM DEALS (owner, 2026-11-01): the deal a NEW attempt at a campaign level is played on, or
+ * null when the campaign is resting (five new deals in a row without a move). Levels 11+ shuffle a
+ * fresh deal once the server can check it (`campaignRandomDeals`); lessons keep their one opening.
+ * Resuming a saved match never comes here: it is the same deal, not a new one.
+ */
+function campaignDealFor(level: CampaignLevel): number | null {
+  if (!dealsRandomly(level)) return level.seed;
+  const started = startDeal(readRest(store), Date.now());
+  writeRest(store, started.state);
+  if (!started.allowed) {
+    showCampaignRest();
+    return null;
+  }
+  return dealFor(level, campaignRandomDeals, randomSeed).seed;
+}
+
+/** The quiet rest notice: how long until the campaign deals again. */
+function showCampaignRest() {
+  const minutes = Math.max(1, Math.ceil(restLeftMs(readRest(store), Date.now()) / 60_000));
+  $('rest-title').textContent = CAMPAIGN.restTitle;
+  $('rest-body').textContent = CAMPAIGN.restBody(minutes);
+  $('rest-ok').textContent = CAMPAIGN.restOk;
+  sheet('sheet-rest');
 }
 
 function clearFreePlayBulbNudge() {
@@ -1684,6 +2703,7 @@ function exitTutorial() {
   releaseTutorialLock();
   store.remove(SAVE_KEY);
   coach = freshCoach();
+  releaseThrowSwell();
   session = null;
   showScreen('menu');
   // Drop tutorial query so Back / reload does not re-enter the lock.
@@ -1706,6 +2726,9 @@ function startTutorial(chapter = 0, track = tutorialTrackFor(chapter)) {
   log = ['A small match, played to learn.'];
   gameLevel = 7;
   gameDifficulty = null; // the tutorial is its own match, never one of the training tiers
+  campaignLevel = null; // the guided run is not a campaign level
+  tutorialReplay = false;
+  campaignReplay = false;
   tipOpen = null;
   beginSession(state, { ...freshCoach(), tutorial: { chapter, step: 0, version: TUTORIAL_VERSION, track } }, [], state);
   save();
@@ -1727,10 +2750,10 @@ function startTutorialFromMenu() {
 
 /**
  * The campaign's ONE entry point — the campaign screen's own leading action, and (owner direction,
- * 2026-10-16) where the guided run now hands the player off. It resumes an unfinished campaign match
- * when there is one; otherwise it opens the player's CURRENT level, which is level 1 for a new
- * player and their own level for one who has already progressed. There is deliberately no second way
- * to start a level.
+ * 2026-10-16) where the guided run now hands the player off. With nothing saved it opens the
+ * player's CURRENT level (level 1 for a new player, their own level for one who has progressed).
+ * With an unfinished saved match it ASKS first (owner decision, 2026-10-19), naming the level being
+ * entered. There is deliberately no second way to start a level.
  */
 function enterCampaign() {
   const entry = campaignEntry(campaignProgress, campaignResume()?.level ?? null);
@@ -1738,12 +2761,9 @@ function enterCampaign() {
   // hint and the finished-campaign state the menu cannot show in one line.
   if (entry.kind === 'list') return showScreen('campaign');
   if (entry.kind === 'start') return startCampaignLevel(entry.level);
-  if (entry.kind === 'resume') {
-    const resume = campaignResume();
-    return resume ? continueCampaignMatch(resume) : startCampaignLevel(entry.level);
-  }
-  // The one disagreement possible: a saved match on a different level. Ask, rather than silently
-  // resuming something the label did not name.
+  // ANY saved match asks first (owner decision, 2026-10-19): the player tapped a level, so the
+  // question is about that level — continue it or start it over (or, if the save belongs to a
+  // different level, resume that one or start the next). Nothing resumes silently from here.
   return askCampaignStart(entry.next, entry.saved);
 }
 
@@ -1752,10 +2772,14 @@ let campaignAsk: { next: CampaignLevel; saved: CampaignLevel } | null = null;
 
 function askCampaignStart(next: CampaignLevel, saved: CampaignLevel) {
   campaignAsk = { next, saved };
-  $('csa-title').textContent = CAMPAIGN.askTitle;
+  // Owner decision (2026-10-19): entering a level with an unfinished save always asks. When the
+  // save belongs to THAT level, the two answers are "continue this level" and "start it over";
+  // when it belongs to a different level, they are "resume the saved level" and "start this one".
+  const sameLevel = saved.id === next.id;
+  $('csa-title').textContent = CAMPAIGN.askTitle(saved.number, next.number);
   $('csa-body').textContent = CAMPAIGN.askBody(saved.number, next.number);
-  $('csa-resume').textContent = CAMPAIGN.askResume(saved.number);
-  $('csa-start').textContent = CAMPAIGN.askStart(next.number);
+  $('csa-resume').textContent = sameLevel ? CAMPAIGN.askContinue(saved.number) : CAMPAIGN.askResume(saved.number);
+  $('csa-start').textContent = sameLevel ? CAMPAIGN.askRestart(next.number) : CAMPAIGN.askStart(next.number);
   sheet('sheet-campaign-start');
   // `sheet()` focuses the close control when one exists; here the point of the sheet is the choice,
   // so Resume leads with focus as well as with the primary weight.
@@ -1838,7 +2862,8 @@ function ensureTutorialThrowPhase() {
     if (!session || !coach.tutorial || session.state.phase !== 'ACT' || session.state.actor !== HUMAN) return;
     const end = session.legal.find(a => a.t === 'EndAct');
     if (!end) return;
-    const played = session.play(end, HUMAN);
+    // The app skips a Grow the lesson has no use for; not a move the player made (see Session.play).
+    const played = session.play(end, HUMAN, { auto: true });
     if (played) afterPlay(played, HUMAN, null);
   };
   if (busy()) void idle().then(run);
@@ -2059,10 +3084,13 @@ function continueCampaignMatch(r: { level: CampaignLevel; saved: Loaded<CoachPro
     lab?.watchingChanged(null);
   }
   campaignLevel = r.level;
+  tutorialReplay = false;
+  campaignReplay = isReplay(campaignProgress, r.level);
   gameLevel = r.saved.level;
   gameDifficulty = null; // a campaign level is not a training tier: it never writes a carry-over
   store.set(LAST_MODE_KEY, 'campaign');
   beginSession(r.saved.state, r.saved.coach, r.saved.actions, r.saved.base ?? null);
+  if (lessonNow) startLessonStage();
 }
 
 function continueGame() {
@@ -2095,11 +3123,17 @@ function continueGame() {
   gameLevel = saved.level;
   // A resumed training game keeps its tier, so finishing it still earns the one-game carry-over.
   gameDifficulty = saved.difficulty ?? null;
+  // EXPERIMENTAL Blitz: a resumed Blitz match keeps its 15 s clock and its own ladder. The flag is
+  // inert on every channel the feature is off for, even if a save carried it.
+  blitzMatch = FEATURES.blitz && !!saved.blitz;
+  blitzMap = blitzMatch ? saved.map ?? null : null;
   try {
     const ticket = JSON.parse(store.get(TRAINING_REWARD_TICKET_KEY) ?? 'null') as { seed?: number; id?: string } | null;
     trainingRewardTicketId = gameDifficulty && ticket?.seed === saved.seed && typeof ticket.id === 'string' ? ticket.id : null;
   } catch { trainingRewardTicketId = null; }
   campaignLevel = null; // a resumed classic match is never a campaign match
+  tutorialReplay = false;
+  campaignReplay = false;
   store.set(LAST_MODE_KEY, 'classic');
   beginSession(saved.state, saved.coach, saved.actions, saved.base);
 }
@@ -2133,21 +3167,81 @@ function rememberRemoved(steps: readonly Step[], before: State) {
   }
 }
 
+/**
+ * The restart rest (owner, 2026-11-01) only counts deals the player LEFT without a move of their
+ * own: their first move makes it a real game, and a finished match clears the count. Only a
+ * random-deal campaign level (11+) is counted; the stored record is written only when it changes.
+ */
+function noteCampaignDealPlay(by: Player, after: State) {
+  if (!campaignLevel || tutorialReplay || !dealsRandomly(campaignLevel)) return;
+  const finished = after.phase === 'GAME_OVER';
+  if (by !== HUMAN && !finished) return;
+  const before = readRest(store);
+  const next = finished ? finishDeal(before) : markMoved(before);
+  if (next.abandons !== before.abandons || next.open !== before.open) writeRest(store, next);
+}
+
+/** The deal a campaign win was played on, for its proof: only a random deal names its seed. */
+function campaignDealProof(level: CampaignLevel, state: State): { dealSeed?: number } {
+  return dealsRandomly(level) && state.seed !== level.seed ? { dealSeed: state.seed } : {};
+}
+
 function afterPlay(p: Played, by: Player, advice: Advice | null) {
-  let displayEvent = IS_FUTA04 ? displayEventForPlay(p.before,p.after,p.steps,HUMAN) : null;
+  syncTurnRim();
+  const taught = by === HUMAN ? lessonActive() : null;
+  if (taught) {
+    // Level 6 teaches Surround with ordinary Grow placements until the final one; count those as
+    // the Surround action, or its light could never fade within the lesson.
+    const rawKind = actionKindOf(p.before, p.action, p.after);
+    const kind = rawKind === 'grow' && taught.goals.some((g) => g.t === 'strangle') && lessonTierKind === 'surround'
+      ? 'surround' : rawKind;
+    if (kind) {
+      lessonMastery = recordAction(lessonMastery, kind, {
+        level: taught.level,
+        ...(kind === lessonTierKind ? { tier: lessonTierShown } : {}),
+        newActions: taught.newActions,
+      });
+      saveLessonMastery();
+    }
+    // A correct action ends the moment: the next step starts from zero wrong taps, and a hello
+    // that was on screen has done its job.
+    lessonWrongInStep = 0;
+    lessonEscalated = false;
+    lessonHelloNow = null;
+    clearTimeout(lessonHelloTimer);
+    lessonHelloTimer = 0;
+  }
+  // The sign is the OPPONENT in offline free play (owner, 2026-11-11); online and the teaching levels stay neutral.
+  const voice = !isOnlineDuel() && !coach.tutorial && !lessonActive() && !watching ? 'rival' : 'neutral';
+  // Pictures (explosion, snake, 点) are for real games: never in the teaching levels or a replay.
+  const signArt = !coach.tutorial && !lessonActive() && !watching;
+  let displayEvent = IS_FUTA04 ? displayEventForPlay(p.before,p.after,p.steps,HUMAN,voice,signArt) : null;
   if (displayEvent?.flavour && coach.tutorial && coach.tutorial.chapter<5) {
     const {flavour: _flavour,...quiet}=displayEvent;
     displayEvent=quiet;
   }
   log.unshift(describe(p.before, p.action, p.after, HUMAN));
+  noteCampaignDealPlay(by, p.after);
   if (p.after.phase === 'GAME_OVER' && p.after.result) {
     log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
-    if (p.before.phase !== 'GAME_OVER' && !watching && !coach.tutorial) {
+    const counts = countsTowardRecord({
+      watching: !!watching,
+      tutorial: !!coach.tutorial,
+      campaign: campaignLevel !== null,
+      replay: tutorialReplay || campaignReplay,
+    });
+    if (p.before.phase !== 'GAME_OVER' && counts) {
       stats = recordResult(stats, p.after.result, HUMAN, ladderLevel(gameLevel));
       store.set(STATS_KEY, JSON.stringify(stats));
+      // The offline record just changed. The account panel listens for this and tells the server, so
+      // the same numbers show on the player's other devices (web/src/accounts/mount.ts); signed out,
+      // there is no listener doing anything and this costs one dispatched event.
+      window.dispatchEvent(new Event('futasaku:offline-game'));
       // The install invitation counts EVERY finished game — offline here, online at the finish
       // screen — and never a tutorial step (the guard above already excludes the tutorial).
       noteFinishedForInstall(p.after.result.winner === HUMAN ? 'won' : p.after.result.winner === null ? 'draw' : 'lost');
+      // Player stats in the profile: this game's moves join the record (logic/play-record.ts).
+      store.set(PLAY_KEY, JSON.stringify(recordPlay(parsePlay(store.get(PLAY_KEY)), p.after.history ?? [], HUMAN)));
       // The one-game carry-over, earned by this finished game: a win steps the training tier's next
       // game one bot level UP, a loss one DOWN (and never outside the tier). Anything else clears
       // that tier's pending step. Online duels and campaigns carry a null tier, so they never write.
@@ -2156,36 +3250,61 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
         const outcome = winner === HUMAN ? 'win' : winner === null ? 'draw' : 'loss';
         writeDifficultyStep(gameDifficulty, stepAfterGame(gameDifficulty, ladderLevel(gameLevel), outcome));
       }
+      // EXPERIMENTAL Blitz has its OWN ladder (two losses in a row -> bot 8 until a win), so it is
+      // recorded separately and never through the tier carry-over above (`gameDifficulty` is null).
+      // A normal tier never reaches this line: `blitzMatch` is false, so the key is never touched.
+      if (blitzMatch) {
+        const winner = p.after.result.winner;
+        blitz?.record(winner === HUMAN ? 'win' : winner === null ? 'draw' : 'loss');
+      }
       // Campaign progress: a win unlocks the next level and marks this one completed; a loss
       // removes nothing. Its own record — the classic stats above are never reshaped by it.
+      // A TUTORIAL replay returns the SAME record (progressAfterMatch), so a replay can never
+      // mark a level, unlock anything, or rewrite the record on its way through.
       if (campaignLevel) {
-        campaignProgress = recordCampaignResult(campaignProgress, campaignLevel, {
+        const kind: CampaignMatchKind = tutorialReplay ? 'tutorial' : 'campaign';
+        const after = progressAfterMatch(campaignProgress, kind, campaignLevel, {
           won: p.after.result.winner === HUMAN,
           score: p.after.result.scores[HUMAN],
           turns: p.after.turnNumber,
         });
-        saveCampaignProgress();
+        if (after !== campaignProgress) {
+          // A NEW clear changes the account too. Forget the remembered account answer so the NEXT
+          // open asks once more; this session keeps the device half, which already contains this win,
+          // so the suggestion stays correct without a second request.
+          const advanced = after.completed.length > campaignProgress.completed.length;
+          campaignProgress = after;
+          saveCampaignProgress();
+          if (advanced) {
+            forgetAccountClears(store);
+            keepProgress?.note('level-clear');
+            // Signed-in: push the further-ahead snapshot when the network is up (silent if not).
+            void syncAccountLevel();
+          }
+        }
       }
       if (onlineBuildEnabled() && session) {
-        // Levels 1-10 (lessons) pay no Seeds in this preview: their authored openings cannot be
-        // replayed by the server's verifier, so no proof is sent and the finish card has no Seeds line.
-        const proof = campaignLevel && !lessonNow && p.after.result.winner === HUMAN
-          ? { kind: 'campaign' as const, levelId: campaignLevel.id, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
+        // Levels 1-9 (lessons) pay no Seeds. Level 10, the final lesson, pays 100 once (owner,
+        // 2026-10-24): it is a real game from one authored opening (lessons/final.ts), which the
+        // server replays like a Campaign level, so its win sends a proof under the id `lesson-10`.
+        const finalLessonWon = lessonNow?.level === FINAL_LESSON.level && p.after.result.winner === HUMAN;
+        const proof = finalLessonWon
+          ? { kind: 'campaign' as const, levelId: FINAL_LESSON.id, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
+          : campaignLevel && !lessonNow && !tutorialReplay && p.after.result.winner === HUMAN
+          ? { kind: 'campaign' as const, levelId: campaignLevel.id, ...campaignDealProof(campaignLevel, session.state), actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
           : gameDifficulty && trainingRewardTicketId
             ? { kind: 'training' as const, ticketId: trainingRewardTicketId, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
             : null;
         if (proof) {
           queueSeedProof(store, proof);
-          seedRewardMessage = 'Seeds pending verification';
+          // NOTHING is claimed until the server has answered. The card used to be handed a line
+          // saying the Seeds were "pending verification", and it stayed there for the whole session
+          // when the settle could not run (a hung request, a lobby that never mounted, or a proof
+          // refused with 400). Owner report, 2026-10-25: a card must never rest on a claim nobody
+          // has written a receipt for.
+          seedRewardMessage = '';
           const key = proof.kind === 'campaign' ? `campaign:${proof.levelId}` : `training:${proof.ticketId}`;
-          void onlineLobbyCtl?.syncSeedRewards().then((results) => {
-            const verified = results.find((entry) => entry.key === key)?.reward;
-            if (!verified) return;
-            seedRewardMessage = verified.awarded ? `+${verified.awarded} Seeds` : 'Seed limit reached today';
-            // The reward can land while the finish card is already up: the SAME line repaints in
-            // place (no reflow), and the award gets its one moment here rather than a silent swap.
-            if (!$('gameover').hidden) paintGoSeeds();
-          }).catch(() => { /* The saved proof remains pending for the next menu visit. */ });
+          settleSeedsForCard(key);
         }
       }
     }
@@ -2211,8 +3330,11 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   // the opponent's turn starts: work it out now, so its pace is known when its turn is shown
   if (p.after.phase === 'DRAW' && p.after.turnPlayer === BOT) void planBotTurn(p.after).then((plan) => (botPlan = plan));
   save();
-  if (!p.before.deckFinal && p.after.deckFinal) smartCockpit?.event({message:p.after.deckFinal.remaining === 2 ? 'FINAL TURNS' : 'FINAL TURN',priority:75,duration:1500,mode:'amber'});
-  else if (p.before.deckFinal?.remaining === 2 && p.after.deckFinal?.remaining === 1) smartCockpit?.event({message:'LAST TURN',priority:75,duration:1500,mode:'amber'});
+  // Same rule: the last-turn notices are facts, but a lesson's WAIT line stays the one cue while
+  // the opponent is playing (it comes back as the player's own LAST TURN beat on their turn).
+  const opponentCue = lessonOpponentCueOwnsDisplay();
+  if (!opponentCue && !p.before.deckFinal && p.after.deckFinal) smartCockpit?.event({message:p.after.deckFinal.remaining === 2 ? 'FINAL TURNS' : 'FINAL TURN',priority:75,duration:1500,mode:'amber'});
+  else if (!opponentCue && p.before.deckFinal?.remaining === 2 && p.after.deckFinal?.remaining === 1) smartCockpit?.event({message:'LAST TURN',priority:75,duration:1500,mode:'amber'});
   render();
   void pump();
   scheduleBot();
@@ -2230,19 +3352,45 @@ function noteFinishedForInstall(outcome: 'won' | 'lost' | 'draw', later = false)
     if (taughtLevel > 3) pendingInstallOutcome = outcome;
     return;
   }
-  installPrompt.noteFinished(outcome);
+  noteInstallFinished(outcome);
 }
+/**
+ * Offer the deferred invitation once the player is OUT of a match.
+ *
+ * The deferral exists so the invitation never covers a lesson's win, but a player who closes the
+ * finish card and goes straight into the next level had it open over a LIVE match: the badge stands
+ * down behind that modal (one mark per screen), so the lesson ran with no logo at all and the
+ * invitation covered the board. While a game or its finish card is on screen the outcome is kept,
+ * and `drainInstallInvite` offers it the moment the player is back on a menu.
+ */
 function flushInstallInvite() {
   const outcome = pendingInstallOutcome;
   pendingInstallOutcome = null;
-  if (outcome) window.setTimeout(() => noteFinishedForInstall(outcome, true), 900);
+  if (!outcome) return;
+  window.setTimeout(() => {
+    if (!inPlayableScreen()) { noteFinishedForInstall(outcome, true); return; }
+    pendingInstallOutcome = outcome; // offered by the next drain, on a menu
+  }, 900);
 }
 
-function humanPlay(a: Action) {
+/** True while a match or its result owns the screen — never a place for the invitation. */
+const inPlayableScreen = (): boolean => !$('game').hidden || !$('gameover').hidden;
+
+/** Offers an invitation that was deferred out of a live match, once the player is back on a menu. */
+function drainInstallInvite() {
+  if (!pendingInstallOutcome || inPlayableScreen()) return;
+  flushInstallInvite();
+}
+
+function humanPlay(a: Action, opts: { auto?: boolean; flightFrom?: DOMRect } = {}) {
+  bloomPick = [];
+
+  // Was this throw made from the picked card? Then the Throw pile is swollen right now, and the
+  // swell belongs to the flight, not only to the selection.
+  const fromPickedPile = a.t === 'Discard' && !!session && session.pending?.t === 'Discard' && session.pending.card === a.card;
   // The » step, taken once in a lesson, is taught: from then on the game moves on by itself.
-  if (a.t === 'EndAct' && lessonActive() && (lessonBeatNow?.id === 'end' || lessonBeatNow?.id === 'skip')) store.set(LESSON_DONE_KEY, '1');
   if (isOnlineDuel()) {
-    void humanPlayOnline(a);
+    void humanPlayOnline(a, opts.flightFrom);
     return;
   }
   if (!session || (coach.tutorial && tutorialTransitionPending)) return;
@@ -2254,11 +3402,39 @@ function humanPlay(a: Action) {
     render();
     return;
   }
-  fastForward();
+  // My own move still showing: the new one queues behind it and the animation keeps playing.
+  if (playThrough()) {
+    if (a.t === 'Discard') throwHeld = session.view.hand.find((c) => c.id === a.card) ?? null;
+  } else fastForward();
   const advice = currentAdvice();
   rememberCardRects();
-  const p = session.play(a, HUMAN);
+  let p: Played | null;
+  try {
+    p = session.play(a, HUMAN, opts.auto === undefined ? {} : { auto: opts.auto });
+  } catch (error) {
+    // A five/six-card Bloom's exact tile assignment is validated on demand by `apply`, and a
+    // half-chosen shape can reach here through a preview/commit. Painting must NEVER take the
+    // page down: refuse calmly, keep the painted shape on screen, and say why (same refusal
+    // language a rejected tap uses).
+    console.error('move refused', error);
+    board.shake(settings.reduceMotion);
+    if (settings.sound) sound.illegal();
+    vibrate(settings.vibration, 12);
+    if (a.t === 'Bloom') {
+      draw = { ...draw, msg: "That shape can't be placed" };
+      paintDraw();
+    } else {
+      caption("That move can't be placed", null, 'info');
+    }
+    return;
+  }
   if (!p) return;
+  // The throw is already in the engine and the log; only now does the discard step learn which
+  // flight it gets, and that it may continue from where the released ghost was.
+  if (a.t === 'Discard' && p.steps.some((step) => step.k === 'discard' && step.player === HUMAN)) {
+    if (opts.flightFrom) dragThrowFrom = opts.flightFrom;
+    if (fromPickedPile) holdThrowSwell();
+  }
   inspectKey = null;
   guideGoal = null;
   afterPlay(p, HUMAN, advice);
@@ -2273,10 +3449,11 @@ function humanPlay(a: Action) {
 }
 
 /** Online: Draw commits, Grow drafts locally, Throw sends the batch. */
-async function humanPlayOnline(a: Action) {
+async function humanPlayOnline(a: Action, flightFrom?: DOMRect) {
   const os = getOnlineSession();
-  if (!os || !session) return;
-  if (os.finished) return;
+  // Same affordance as offline: a throw from the picked card keeps the swollen pile it aimed at.
+  const fromPickedPile = a.t === 'Discard' && !!session && session.pending?.t === 'Discard' && session.pending.card === a.card;
+  if (!os || !session || os.finished) return;
   // THE GATE. The enemy's finished turn is still being shown: nothing may be played, and — just
   // as important — nothing may fast-forward it away. Skipping is the Skip control's job alone.
   if (os.isRevealing) return revealWaitNotice();
@@ -2300,6 +3477,7 @@ async function humanPlayOnline(a: Action) {
       draw = { ...draw, msg: result.message };
       board.shake(settings.reduceMotion);
       if (settings.sound) sound.illegal();
+      vibrate(settings.vibration, 12);
       paintDraw();
       render();
       return;
@@ -2315,15 +3493,21 @@ async function humanPlayOnline(a: Action) {
   syncSessionFromOnline(true);
   if (result.played) {
     // Mid-turn / Draw: animate locally; do not run the bot scheduler.
-    let displayEvent = IS_FUTA04 ? displayEventForPlay(result.played.before, result.played.after, result.played.steps, HUMAN) : null;
+    let displayEvent = IS_FUTA04 ? displayEventForPlay(result.played.before, result.played.after, result.played.steps, HUMAN, 'neutral', true) : null;
     log.unshift(describe(result.played.before, result.played.action, result.played.after, HUMAN));
     markMoment(result.played.steps, result.played.before);
+    if (a.t === 'Discard' && result.played.steps.some((step) => step.k === 'discard' && step.player === HUMAN)) {
+      if (flightFrom) dragThrowFrom = flightFrom;
+      if (fromPickedPile) holdThrowSwell();
+    }
     queue.push(result.played.steps);
     if (displayEvent) smartCockpit?.event(displayEvent);
   }
   if (result.catchUp.length) {
-    replaying = true;
-    replaySpeed = 2;
+    // A confirmed local throw and its aftermath use our normal cadence, like offline.
+    // Only an actual catch-up without a local presentation gets the away replay's 2x speed.
+    replaying = !result.played;
+    replaySpeed = result.played ? REPLAY_SPEED : 2;
     queue.push(result.catchUp);
     armRevealWatchdog(result.catchUp);
   }
@@ -2362,8 +3546,11 @@ function paintOnlineHudFromSession() {
   }
   void import('./online/index.js').then(({ duelUiFromSnapshot, renderDuelHud }) => {
     duelHudPaint = (s) => {
+      if (getOnlineSession()?.driver !== s.driver) return;
       const hud = document.getElementById('duel-hud');
-      const ui = duelUiFromSnapshot(s.driver.snapshot(), s.canUndo, s.isRevealing);
+      const snap = s.driver.snapshot();
+      publishTurnRim($('game').hidden ? null : confirmedTurn(snap), snap.seat);
+      const ui = duelUiFromSnapshot(snap, s.canUndo, s.isRevealing);
       renderDuelHud(hud, ui);
       // The same two words the offline bar reads (You : Opponent) — one source, src/strings.ts.
       const you = document.getElementById('score-you-label');
@@ -2389,9 +3576,10 @@ let quickShow: Beats | null = null;
 const askFor = (st: State) => {
   const taught = lessonActive();
   if (taught) {
+    // A script: the lesson's own opponent, here and in the tests alike (lessonOpponentAction).
+    // Levels 9 and 10 ask the real bot below, the one a level 10 Seeds proof is replayed against.
     if ('script' in taught.opponent) {
-      const action = scriptedOpponentAction(st, taught.opponent.script);
-      if (action) return Promise.resolve(action);
+      return Promise.resolve(lessonOpponentAction(taught, st));
     } else {
       const lvl = taught.opponent.bot;
       return askBot(viewFor(st, BOT), lvl, botSeed(st.seed, lvl, st.turnNumber, st.history?.length ?? 0));
@@ -2419,6 +3607,7 @@ async function planBotTurn(from: State): Promise<BotPlan> {
 
 function scheduleBot() {
   if (isOnlineDuel()) return; // online: no computer opponent
+  if (pregameHold || isStarterRitualPlaying()) return; // the ritual is still the only thing on screen
   if (!session || botBusy || tutorialTransitionPending) return;
   const st = session.state;
   if (st.phase === 'GAME_OVER') return;
@@ -2492,12 +3681,42 @@ let gameLevel: BotLevel = 7;
  * one-game carry-over is recorded against when the game ends.
  */
 let gameDifficulty: DifficultyId | null = null;
+/** The match as the player knows it: its campaign level, or its difficulty (never the bot level). */
+function currentMatchLabel(): string {
+  // EXPERIMENTAL Blitz is its own tier, outside DIFFICULTIES: it is named by the mounted feature.
+  if (blitzMatch) return blitz?.label ?? 'Pro';
+  return matchLabel({ campaign: campaignLevel?.number ?? null, difficulty: gameDifficulty, botLevel: ladderLevel(gameLevel) });
+}
 /**
  * The campaign level of the ACTIVE match, or null for a classic / tutorial match. It is the only
  * production source of match overrides (see `overridesForMatch`), and it is cleared by every other
  * way a match can start, so a campaign board can never leak into a classic or online game.
  */
+/** Quiet achievement line; mounted once after startup. Null only until that mount runs. */
+let achievementToasts: AchievementToastController | null = null;
+let keepProgress: KeepProgressController | null = null;
 let campaignLevel: CampaignLevel | null = null;
+/**
+ * EXPERIMENTAL Blitz (/test/ only, Practice): the mounted tier, or null when the feature is off.
+ * `blitzMatch` says the ACTIVE offline match is a Blitz one (it gets the 15 s clock and its own
+ * ladder); `blitzMap` is the campaign level number whose board it plays, for the result line and
+ * the test hook. Every other way a match starts clears both.
+ */
+let blitz: BlitzPractice | null = null;
+let blitzMatch = false;
+let blitzMap: number | null = null;
+/**
+ * True while the match on screen is a TUTORIAL replay (Settings → Tutorial, owner 2026-10-24): the
+ * same campaign level, played inertly. It never writes the progress record or the resume save, and
+ * its finish card returns to the Tutorial. Every other way a match starts clears it.
+ */
+let tutorialReplay = false;
+/**
+ * True when the ACTIVE campaign match is a replay: a level already behind the player's place when it
+ * was started. Read once, at match start, because the result moves the place: after a normal clear
+ * the finished level is behind it too, and the finish card must still say "Next level".
+ */
+let campaignReplay = false;
 /** The lesson of the campaign level on screen (levels 1-10), or null. Set with `campaignLevel`. */
 let lessonNow: Lesson | null = null;
 /** The explanations already read in this level (saved beside the level's match). */
@@ -2509,19 +3728,180 @@ let lessonAnswerTimer = 0;
 /** Counts every answer given (tests: a new answer, not one still on screen). */
 let lessonAnswerSeq = 0;
 let lessonIdle = false;
-let lessonIdleTimer = 0;
+/** The step the idle count was last started for (history length and phase of my turn). */
+let lessonIdleStep = '';
+/** 0 = no idle step, 1 = 6 s WHISPER, 2 = 12 s GUIDE, 3 = 20 s light guide. */
+let lessonIdleStage: 0 | 1 | 2 | 3 = 0;
+/** Two wrong taps on this same step raise the tier for this moment only. */
+let lessonWrongInStep = 0;
+let lessonEscalated = false;
+/** The tier and action last painted, so a completed action spends the right spotlight budget. */
+let lessonTierShown: LessonTier = 'silent';
+let lessonTierKind: ActionKind | null = null;
+let lessonShownBeatId = '';
+/** A power hello currently on screen: kept visible until the next action, then never again. */
+let lessonHelloNow: PowerKind | null = null;
+let lessonHelloTimer = 0;
+/** Per-action counts, keyed to the lesson version. */
+let lessonMastery: Mastery = decodeMastery(store.get(LESSON_MASTERY_KEY), LESSON_VERSION);
+let lessonPowerSeen = new Set<PowerKind>(lessonMastery.hellos);
+/** The short stage intro before the board accepts a move. */
+let lessonStageUntil = 0;
+let lessonStageTimer = 0;
+/** True when the opening hand has stopped moving (the first light waits for it). */
+let handSettled = true;
 /** When the explanation on screen appeared: a tap in its first moments is not "tap anywhere". */
 let lessonExplainAt = 0;
+/**
+ * How long a lesson explanation must stay up before a dismissing tap may take it away (owner,
+ * 2026-10-21: "make sure the window can't be skipped for 3s — always shows for at least 3s").
+ * It applies to DISMISSAL only: a tap on the lit target is a MOVE and still acts on the first tap.
+ */
+const LESSON_READ_MS = 3000;
+/**
+ * How many times a tap was refused by the reading floor. Each refusal is acknowledged on screen (see
+ * `lessonAckFloor`), and the count is exposed to the tests so "every tap did something or was
+ * answered" can include a refusal that pulsed the caption.
+ */
+let lessonFloorAcks = 0;
+
+/** Acknowledge a tap the reading floor refused: one quiet pulse of the caption, never words. */
+function lessonAckFloor() {
+  lessonFloorAcks++;
+  if (settings.reduceMotion) return;
+  const plate = document.getElementById('lesson-plate');
+  // A pulse on the caption itself: it says the tap landed, and that the sentence is staying. No
+  // layout, no new CSS, and reduce-motion opts out.
+  plate?.animate?.(
+    [{ opacity: 1 }, { opacity: 0.55 }, { opacity: 1 }],
+    { duration: 220, easing: 'ease-out' },
+  );
+}
 let lessonHoldingScore = false;
 let lessonExplainId = '';
+/** The lesson's box explains; the cockpit display carries the action (levels 1-10 only). */
+/**
+ * The player has tapped » once in a lesson, so the first end-of-turn is theirs (never auto-skipped
+ * before they have seen the "tap »" line). The key keeps its old name: devices already taught stay
+ * taught.
+ */
+/** Only » is left this Grow and auto-skip is on: autoAdvance ends it without a tap. */
+function lessonEndsByItself(): boolean {
+  return !!session && session.view.phase === 'ACT' && myTurn()
+    && skipPlan(session.legal, session.view.hand.length, settings.autoSkip).kind === 'auto';
+}
+const lessonIdleWatch = createIdleWatch((stage) => {
+  lessonIdleStage = stage;
+  lessonIdle = stage > 0;
+  lessonShownKey = '';
+  if (lessonActive() && myTurn() && !busy() && !lessonStageActive()) render();
+});
 /** The level 4+ finish waits to invite an install until the finish card is closed. */
 let pendingInstallOutcome: 'won' | 'lost' | 'draw' | null = null;
-/** The » step has been spelled out once on this device (then it is one word). */
-const LESSON_DONE_KEY = 'severgrow.lesson.doneTaught.v1';
-const lessonDoneTaught = () => store.get(LESSON_DONE_KEY) === '1';
 /** The campaign progress record (level 1 open; a win unlocks the next; a loss removes nothing). */
 let campaignProgress: CampaignProgress = parseProgress(store.get(CAMPAIGN_PROGRESS_KEY));
 const saveCampaignProgress = () => store.set(CAMPAIGN_PROGRESS_KEY, serializeProgress(campaignProgress));
+/**
+ * An ACCOUNT's place lives on the server (owner report, 2026-10-25: level 35 on the phone, level 1
+ * on the desktop). Campaign progress is still device-local for a guest; for a signed-in account one
+ * authenticated read of the account's verified clears both RAISES this device's record to match and
+ * settles the menu's campaign suggestion (the union of device and account). It never lowers the
+ * record, never runs for a guest, and a failed read leaves everything exactly as it was with no
+ * error shown. The reconciliation itself is pure and unit-tested (`reconcileProgress`).
+ *
+ * The cached answer is read synchronously HERE, before the first menu paint, so a returning player
+ * whose account has finished the ten never sees the suggestion flash on from an empty device record.
+ * With no cache, the device record paints first and the network answer refines it when it arrives.
+ */
+let accountClears: readonly number[] | null = cachedAccountClearsForThisDevice(store);
+// A returning signed-in device may still hold a stale progress record while the cached account
+// answer is already on disk: raise before the first menu paint, not only after the async fetch.
+{
+  const raised = mergeFurtherAheadProgress(campaignProgress, accountClears);
+  if (raised !== campaignProgress) {
+    campaignProgress = raised;
+    saveCampaignProgress();
+  }
+}
+/**
+ * Whether this server can check a random campaign deal (owner, 2026-11-01). Remembered on the device,
+ * so offline play keeps the last answer; asked once at boot. Until the server says yes, levels 11+
+ * keep their fixed deal, so no win can be refused and no Seeds can be lost.
+ */
+let campaignRandomDeals = randomDealsEnabled(store);
+async function syncRandomDeals(): Promise<void> {
+  if (!FEATURES.campaign || !onlineBuildEnabled()) return;
+  campaignRandomDeals = await refreshRandomDeals(store, fetchServerFeatures);
+}
+
+/**
+ * THE ONE ACCOUNT READ (owner brief, 2026-11-01). Signed-in only, at most once per player per page
+ * session, and cached on the device. The answer serves BOTH consumers: it raises the local record
+ * (the existing account-place rule) and it is the account half of the menu's suggestion. A
+ * failure/absence is silent and leaves the device record exactly as it is.
+ *
+ * The answer is the account's FURTHEST verified Campaign level (`campaignHighestLevel`, one indexed
+ * `max` over its campaign receipts) — never `campaign_clears`, which only holds reward-proof rows.
+ * Levels unlock in order, so `levelsFromHighest` turns that one number into the cleared chapter-1
+ * levels the suggestion unions.
+ */
+async function syncAccountLevel(opts: { fresh?: boolean } = {}): Promise<void> {
+  if (!FEATURES.campaign || !onlineBuildEnabled()) return;
+  const beforeProgress = campaignProgress;
+  const beforeClears = accountClears;
+  const result = await loadAccountClears({
+    ...(opts.fresh ? { fresh: true } : {}),
+    storage: store,
+    fetchHighest: fetchAccountHighestLevel,
+  });
+  let highest: number | null | undefined;
+  if (result.status === 'signed-out') {
+    accountClears = null;
+    highest = null;
+  } else if (result.status === 'ok') {
+    accountClears = result.levels;
+    highest = result.highest;
+    const after = mergeFurtherAheadProgress(campaignProgress, result.levels);
+    if (after !== campaignProgress) {
+      campaignProgress = after;
+      saveCampaignProgress();
+    }
+  } else {
+    highest = undefined;
+  }
+  // Further-ahead snapshot sync (migration 0023): pull account progress, merge, push when local wins.
+  // Silent on older servers / failures; never blocks a duel or a level.
+  const synced = await syncAccountCampaignProgress({
+    storage: store,
+    local: campaignProgress,
+    serverHighest: highest ?? (accountClears && accountClears.length > 0 ? accountClears[accountClears.length - 1]! : null),
+  });
+  if (synced.localChanged) {
+    campaignProgress = synced.progress;
+    saveCampaignProgress();
+  }
+  if (accountClears === beforeClears && campaignProgress === beforeProgress) return;
+  // The menu's LEVEL <n> entry and the suggestion are painted from progress; repaint in place so a
+  // boot that was already showing level 1 now names the account's real level, without a reload.
+  if (shownScreen === 'menu') layoutMenu(syncMenuResume());
+  else if (shownScreen === 'campaign') renderCampaignScreen();
+  else if (shownScreen === 'levels') renderLevelGrid();
+}
+// A sign-in finishes by reloading (the accounts module's own flow), so boot covers it; this event is
+// the belt-and-braces path if that flow ever stops reloading.
+window.addEventListener('futasaku:identity', () => { void syncAccountLevel(); });
+// Every device knows the highest level (owner, 2026-11-08: "on some devices im at level 59 and some
+// other 60"): ask the account again on start and whenever the app comes back to the foreground (a
+// home-screen app is resumed, not restarted), at most once a minute. The level only ever goes up.
+const ACCOUNT_RECHECK_MS = 60_000;
+let accountCheckedAt = 0;
+const recheckAccountLevel = (): void => {
+  const now = Date.now();
+  if (now - accountCheckedAt < ACCOUNT_RECHECK_MS) return;
+  accountCheckedAt = now;
+  void syncAccountLevel({ fresh: true });
+};
+document.addEventListener('visibilitychange', () => { if (!document.hidden) recheckAccountLevel(); });
 let lastBoard: unknown = null;
 let lastOverlay = '';
 let coachWhyOpen = false;
@@ -2546,6 +3926,10 @@ const wait = (ms: number, my = epoch) =>
 // Step 7: the pause menu. While it is open the opponent's moves and the animations wait
 // (the step in progress finishes; the next one starts after "Back to the game").
 let paused = false;
+/** True while a Restart is being handed to startGame, so a double tap cannot start two matches. */
+let restarting = false;
+/** True while a result's leading action is opening the next match, so it cannot advance twice. */
+let resultAdvance = false;
 /** v0.7: the list of Bloom choices is open (when there are two or more) */
 let bloomMenu = false;
 let unpauseWaiters: (() => void)[] = [];
@@ -2554,6 +3938,7 @@ function setPaused(on: boolean) {
   if (paused === on) return;
   paused = on;
   document.body.classList.toggle('paused', on);
+  syncBreathHold();
   if (!on) {
     const w = unpauseWaiters;
     unpauseWaiters = [];
@@ -2568,20 +3953,39 @@ const flushIdle = () => {
   for (const r of w) r();
 };
 
+/** Hold the swollen Throw pile for the flight its selection started. */
+function holdThrowSwell(): void {
+  if (!IS_FUTA04) return;
+  throwSwellHeld = true;
+  document.getElementById('discard')?.classList.add('futa04-throw-target');
+}
+
+/** Let the Throw pile settle again. Safe to call anywhere, any number of times. */
+function releaseThrowSwell(): void {
+  throwSwellHeld = false;
+  document.getElementById('discard')?.classList.remove('futa04-throw-target');
+}
+
 /** Shows everything still queued at once and stops running effects. */
 function fastForward() {
   if (queue.pending === 0 && !pumping) return;
   animLog('fast-forward', { pending: queue.pending, pumping, epoch });
   disarmRevealWatchdog();
   epoch++;
+  // A skipped flight never plays the boomerang; forget its take-off with the animations it belonged to.
+  dragThrowFrom = null;
+  throwHeld = null;
+  releaseThrowSwell();
   replaying = false;
   liveReveal = false;
   quietAmbient(false);
   board.focus(null);
   for (const w of [...waiters]) w();
-  // Finish our own one-off effects (never the endless CSS decorations like the root pulse).
+  // Finish our own one-off effects (never the endless CSS decorations like the root pulse, and
+  // never the lesson's lit breath, which must outlive the move it sits on).
   for (const a of document.getAnimations()) {
     if (typeof CSSAnimation !== 'undefined' && a instanceof CSSAnimation) continue;
+    if (a.id === LESSON_BREATH_ID) continue;
     const t = a.effect instanceof KeyframeEffect ? a.effect.target : null;
     if (!(t instanceof Element) || !t.closest('.l-fx, .l-tiles, .l-veins, .flyer, #board-wrap, #hand, .hud')) continue;
     try {
@@ -2613,12 +4017,18 @@ function settleStep(s: Step, animated: boolean) {
   revealProgress++; // one step really landed: the reveal watchdog must not treat this as a stall
   markTiming('tile', { k: s.k, animated });
   const displayEvent = displaySteps.get(s);
-  if (displayEvent && animated) smartCockpit?.event(displayEvent);
+  // A bot move's play fact must not replace a lesson's steady WAIT cue (see the helper).
+  if (displayEvent && animated && !lessonOpponentCueOwnsDisplay()) smartCockpit?.event(displayEvent);
   displaySteps.delete(s);
   const cue = outcomeSteps.get(s);
   if (cue && animated) outcomeLight?.pulse(cue.tone, cue.strength);
   outcomeSteps.delete(s);
   if (s.k === 'draw' && s.card) hiddenCards.delete(s.card.id);
+  // The Throw pile advances on the discard's arrival (and the closing sync catches up a skipped
+  // flight to the true pile), never on the render that starts the throw.
+  if (s.k === 'discard') shownDiscard = discardArrival(shownDiscard, s.card);
+  if (s.k === 'draw' && s.from === 'discard') shownDiscard = shownDiscard.slice(0, -1);
+  if (s.k === 'sync' && session) shownDiscard = [...session.view.discard];
   if (s.k === 'sever' || s.k === 'remove' || s.k === 'megaBomb') {
     // Futa04: cut-off tiles leave no scar / remnant art — board shows live tiles only.
     if (!IS_FUTA04) {
@@ -2653,10 +4063,10 @@ let skippedFrom: State | null = null;
  */
 function autoAdvance() {
   // The tutorial's free turn plays like a real game: once only "end" is left it goes on to Throw.
-  if (!session || (coach.tutorial && !tutorialFreePlayActive()) || !myTurn() || busy() || session.view.phase !== 'ACT') return;
+  if (!session || (coach.tutorial && !tutorialFreePlayActive()) || !myTurn() || blocking() || session.view.phase !== 'ACT') return;
   if (session.state === skippedFrom) return;
-  // Levels 1-10: the first time, the player taps » themselves (so they know it is there).
-  if (lessonActive() && !guidanceOff() && !lessonDoneTaught()) return;
+  // Levels 1-10: an explanation on screen is read first; dismissing it redraws and comes back here.
+  if (lessonActive() && lessonBeatNow?.explain) return;
   if (skipPlan(session.legal, session.view.hand.length, settings.autoSkip).kind !== 'auto') return;
   const end = session.legal.find((a) => a.t === 'EndAct');
   if (!end) return;
@@ -2666,7 +4076,12 @@ function autoAdvance() {
     note({ t: 'empty', at: Date.now() });
     caption(NOTHING_TO_PLAY, null, 'info');
   }
-  humanPlay(end);
+  // `auto`: like the board tap that skips an optional Bloom, this EndAct is the APP's own move to
+  // Throw, not one the player made. Without the flag it became its own undo stop, so the first
+  // Undo after a Grow returned to the position AFTER that Grow (and the `skippedFrom` guard then
+  // stopped the auto-skip re-firing), which is exactly the owner's "Undo did nothing" report —
+  // still present on any turn where nothing but EndAct is left.
+  humanPlay(end, { auto: true });
 }
 
 // ---------- the juice budget ----------
@@ -2703,7 +4118,7 @@ async function anticipate(m: Moment, f: number, my: number) {
 async function impact(m: Moment, f: number, my: number) {
   const b = m.budget;
   if (b.shake > 0 && !IS_FUTA04) anim($('board-wrap'), shakeFrames(b.shake * motion()), { duration: 320 * Math.max(f, 0.5) });
-  if (b.thud) sound.thud();
+  if (b.thud) sound.thud(m.tier === 'severe' ? 0.72 : 1);
   if (b.vibrate) vibrate(settings.vibration, b.vibrate);
   if (m.banner && m.first) banner(m.banner, 'big');
   if (b.hitStopMs > 0) await wait(b.hitStopMs * Math.max(f, 0.5), my);
@@ -2714,22 +4129,38 @@ async function impact(m: Moment, f: number, my: number) {
  * seconds in a row, effects drop to Low (once per device) and a one-time note offers to undo it.
  */
 let perf = perfStart();
-let perfRaf = 0;
+let perfUnsub: (() => void) | null = null;
+let quietPerf = perfStart();
+let quietUnsub: (() => void) | null = null;
 function watchFrames() {
-  if (IS_FUTA04) return; // no automatic effect downgrade or interruption in Futasaku 0.4
-  if (perfRaf || perf.done || settings.effects === 'low' || store.get(SMOOTH_KEY)) return;
+  // Futasaku: no note and no saved downgrade. Only a phone that REALLY struggles quietly loses the
+  // decorative extras for this visit (player/frame-guard.ts, owner 2026-11-06).
+  if (IS_FUTA04) {
+    if (quietUnsub || !extrasOn() || settings.effects === 'low') return;
+    let last = performance.now();
+    quietUnsub = scheduler.subscribe(({ now }) => {
+      quietPerf = guardFrame(quietPerf, now - last);
+      last = now;
+      // (the slow time carries over to the next animation: only frames that play moves are judged)
+      if (!extrasOn() || !busy()) {
+        quietUnsub?.();
+        quietUnsub = null;
+      }
+    });
+    return;
+  }
+  if (perfUnsub || perf.done || settings.effects === 'low' || store.get(SMOOTH_KEY)) return;
   let last = performance.now();
-  const tick = (t: number) => {
-    const r = perfStep(perf, t - last);
+  perfUnsub = scheduler.subscribe(({ now }) => {
+    const r = perfStep(perf, now - last);
     perf = r.state;
-    last = t;
-    if (r.drop) {
-      perfRaf = 0;
-      return smootherMode();
+    last = now;
+    if (r.drop || !busy()) {
+      perfUnsub?.();
+      perfUnsub = null;
+      if (r.drop) smootherMode();
     }
-    perfRaf = busy() ? requestAnimationFrame(tick) : 0;
-  };
-  perfRaf = requestAnimationFrame(tick);
+  });
 }
 function smootherMode() {
   const before = settings.effects;
@@ -2769,6 +4200,25 @@ function smootherMode() {
  */
 let pumpRun = 0;
 let pumpWanted = false;
+/**
+ * The step the pump is playing right now (null between steps). The result gate needs it because a
+ * step can take its queue slot before its animation ends (a single-tile grow applies its slot at
+ * the START of the 336 ms pop), so an empty queue does not mean the board has settled.
+ */
+let currentStep: Step | null = null;
+/** True while the in-game replay holds the display sign (released on the same drain). */
+let replaySignHeld = false;
+/**
+ * Steps that are an enemy ACTION: the in-game replay separates these with a quiet beat.
+ *
+ * A DRAW is deliberately NOT one (owner, 2026-11-12: the card dealt to the opponent at the end of a
+ * replayed turn took too long and held up the hand-over). A draw is housekeeping, not something to
+ * read: the quiet beat before it bought nothing and cost 160 ms at the very moment input reopens.
+ * The deal keeps its own short beat (PINNED.oppDeal).
+ */
+const replayActionStep = (s: Step): boolean =>
+  s.k === 'grow' || s.k === 'sever' || s.k === 'remove' || s.k === 'strengthen'
+  || s.k === 'fruit' || s.k === 'megaBomb' || s.k === 'discard';
 async function pump() {
   if (pumping) {
     pumpWanted = true;
@@ -2778,7 +4228,10 @@ async function pump() {
   pumping = true;
   const run = ++pumpRun;
   const my = epoch;
+  /** Actions already played in THIS pump: the first needs no leading beat. */
+  let actionsPlayed = 0;
   animLog('pump:enter', { pending: queue.pending, epoch: my });
+  holdStars(true);
   watchFrames();
   try {
     for (;;) {
@@ -2793,8 +4246,21 @@ async function pump() {
           return;
         }
         const step = queue.peek()!;
+        // A readable beat BETWEEN the enemy's actions (in-game replay only): a Bloom or a Blast
+        // is one thing, then the next. Reduce motion and Speed off add nothing (motionOn()).
+        if (replayBeats && !liveReveal && actionsPlayed > 0 && motionOn() && replayActionStep(step)) {
+          await wait(REPLAY_BEAT_MS * Math.max(speedFactor(settings.speed), 0.35), my);
+          if (my !== epoch) return;
+        }
         const stepStarted = performance.now();
-        await playStep(step, my);
+        // Published to the result gate: the board is still changing until this returns.
+        currentStep = step;
+        try {
+          await playStep(step, my);
+        } finally {
+          currentStep = null;
+        }
+        if (replayActionStep(step)) actionsPlayed += 1;
         // Read-only timing for the motion audit (web/e2e/motion-audit.ts): what played, for how long.
         animLog('step', { k: step.k, ms: Math.round(performance.now() - stepStarted), n: step.k === 'grow' ? step.tiles.length : step.k === 'sever' || step.k === 'remove' ? step.keys.length : step.k === 'megaBomb' ? step.destroyed.length : 0, who: 'player' in step ? step.player : -1 });
       }
@@ -2821,8 +4287,15 @@ async function pump() {
   } finally {
     if (pumpRun === run) {
       pumping = false;
+      holdStars(false);
+      currentStep = null;
       liveReveal = false;
       replaying = false;
+      replayBeats = false;
+      if (replaySignHeld) {
+        replaySignHeld = false;
+        smartCockpit?.led(null);
+      }
       board.focus(null);
       animLog('pump:leave', {
         epoch: my,
@@ -2832,9 +4305,12 @@ async function pump() {
       });
       // The opponent's turn has fully played out (or was skipped): the player may act now.
       markTiming('replay:end', { queued: queue.pending });
+      // The "not yours" dim belongs to the REPLAY, whichever mode started it (online reveal or the
+      // in-game Replay of the bot's turn). `clear()` is idempotent, so an offline pump that never
+      // dimmed costs nothing — and a begun dim can never outlive its replay.
+      theirsDim.clear();
       if (getOnlineSession()) {
         getOnlineSession()!.endReveal();
-        theirsDim.clear();
         markTiming('input:open', { revealing: false });
         paintOnlineHudFromSession();
       }
@@ -3013,6 +4489,24 @@ function glowHand(ms: number): void {
   });
 }
 
+/** Beta 0.8: the effect settings a heavy impact is planned with (logic/impact.ts). */
+const impactOptions = () => ({ effects: settings.effects, reduceMotion: settings.reduceMotion || motion() === 0, extras: extrasOn() });
+
+/**
+ * Beta 0.8: the one heavy impact Bomb and Blast share: the board sinks a fraction and settles back
+ * (the `scale` property, so it composes with the shake's `transform` and the opponent lean's
+ * `translate`), Blast alone shakes, the light dips once, and a few specks of dust lift and settle.
+ */
+function heavyImpact(kind: ImpactKind, key: string, size: number, f: number) {
+  const ip = impactPlan(kind, size, impactOptions());
+  const wrap = $('board-wrap');
+  const body = ip.bodyMs * Math.max(f, 0.5);
+  if (ip.settle > 0) anim(wrap, [{ scale: '1' }, { scale: String(1 - ip.settle), offset: 0.2 }, { scale: String(1 + ip.settle * 0.12), offset: 0.58 }, { scale: '1' }], { duration: body, easing: EASE.out });
+  if (ip.shakePx > 0) anim(wrap, heavyShakeFrames(ip.shakePx), { duration: MOTION.moment * Math.max(f, 0.5), easing: EASE.out });
+  if (ip.dim > 0) impactDim(ip.dim, body);
+  if (ip.dust > 0) dust(key, ip.dust, f, (session?.state.turnNumber ?? 0) * 31 + key.length);
+}
+
 async function playStep(step: Step, my: number) {
   if (stallInject) {
     const pending = stallInject;
@@ -3020,11 +4514,12 @@ async function playStep(step: Step, my: number) {
     await pending;
     if (my !== epoch) return;
   }
-  const f = timeScale();
   const m = motion();
   // Overhaul item 19: the opponent's actions: the rest of the board dims a little, and the
   // view leans 1.5% toward the action (none with Reduce motion)
   const actor = actorOf(step);
+  // Beta 0.8: the opponent's moves have the same weight as mine, about 10% slower to follow.
+  const f = timeScale() * (actor === BOT ? PINNED.opponentPace : 1);
   const involved = involvedKeys(step);
   if (actor === BOT && involved.length) {
     board.focus(involved);
@@ -3043,12 +4538,16 @@ async function playStep(step: Step, my: number) {
   };
   switch (step.k) {
     case 'draw': {
+      // Measure the departing top before show() exposes the next card (or empties the pile).
+      const sourcePile = step.from === 'deck' ? $('deck') : $('discard');
+      const source = sourcePile.querySelector<HTMLElement>('.pile-card') ?? sourcePile;
+      const sourceRect = source.getBoundingClientRect();
       if (!show()) return;
       if (step.player === HUMAN && step.card) {
         const hp = hapticFor('draw', settings);
         if (hp) vibrate(true, hp as number | number[]);
         const to = document.querySelector<HTMLElement>(`#hand [data-card="${step.card.id}"]`);
-        const from = ((step.from === 'deck' ? $('deck') : $('discard')).querySelector<HTMLElement>('.pile-card') ?? (step.from === 'deck' ? $('deck') : $('discard'))).getBoundingClientRect();
+        const from = sourceRect;
         if (to) {
           const r = to.getBoundingClientRect();
           const dx = from.left + from.width / 2 - r.left - r.width / 2;
@@ -3056,20 +4555,32 @@ async function playStep(step: Step, my: number) {
           // Draw: out of the pile and into the hand with a 4% scale overshoot, then rest.
           const frames = IS_FUTA04
             ? m === 0 ? [{ opacity: 0 }, { opacity: 1 }]
-              : [{ translate: `${dx}px ${dy}px`, scale: `${(from.height / Math.max(r.height, 1)).toFixed(2)}`, opacity: 1 },
-                 { translate: `${(dx * .42).toFixed(1)}px ${(dy * .42 - 14).toFixed(1)}px`, scale: '.96', opacity: 1, offset:.5 },
-                 { translate: '0 0', scale: '1.04', opacity: 1, offset:.8 },
-                 { translate: '0 0', scale: '1', opacity: 1 }]
+              // 0.85: out of the pile tilted, unwinding into the hand (ui/feel.ts).
+              : drawFrames(dx, dy, from.height / Math.max(r.height, 1))
             : m === 0 ? [{ opacity: 0 }, { opacity: 1 }] : [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, scale: '0.7', rotate: '-8deg', opacity: 0.3 }, { translate: `${(from.left - r.left) * 0.45}px ${(from.top - r.top) * 0.45 - 46 * m}px`, scale: '0.95', rotate: '4deg', opacity: 1, offset: 0.55 }, { translate: '0 0', scale: '1', rotate: '0deg', opacity: 1 }];
-          anim(to, frames, { duration: (IS_FUTA04 ? 396 : 420) * f, fill:'backwards', easing: IS_FUTA04 ? EASE.spring : 'cubic-bezier(.3,.7,.3,1)' });
+          anim(to, frames, { duration: (IS_FUTA04 ? PINNED.humanDraw : 420) * f, fill:'backwards', easing: IS_FUTA04 ? EASE.spring : 'cubic-bezier(.3,.7,.3,1)' });
+          // 0.85: the pile gives a little as it lets the card go.
+          if (IS_FUTA04 && m > 0) (step.from === 'deck' ? $('deck') : $('discard')).animate(DRAW_PILE_GIVE, { duration: DRAW_PILE_GIVE_MS * f, easing: EASE.out });
         }
-        sound.draw();
-        await wait((IS_FUTA04 ? 396 : 240) * f, my);
+        sound.draw(step.from !== 'deck');
+        await wait((IS_FUTA04 ? PINNED.humanDraw : 240) * f, my);
       } else {
-        flyBack($('deck'), document.querySelector<HTMLElement>('.score.bot')!, f);
-        // The enemy's hidden draw: their card is private, so the deck flyer is the only cue.
-        // A live reveal gives it a beat of its own instead of a blink.
-        await wait(liveReveal ? 260 * f : quickShow ? quickShow.show.draw : OPP_DRAW_MS * f, my);
+        // The opponent's draw: a card back leaves its actual pile and settles on their seat. The
+        // card stays face down; the seat is an anchor placed on layout, so nothing is measured
+        // inside a frame. Keep the old deck-to-score cue as a fallback for a page without the
+        // flight layer (the material lab).
+        const seat = oppSeat();
+        const ms = seat ? oppDraw(sourceRect, seat, f, !!quickShow) : 0;
+        // 0.85: the pile gives as it lets the opponent's card go too (one rule for both seats).
+        if (seat && IS_FUTA04 && m > 0 && !quickShow) sourcePile.animate(DRAW_PILE_GIVE, { duration: DRAW_PILE_GIVE_MS * f, easing: EASE.out });
+        if (seat) {
+          if (settings.sound) sound.rustle();
+          await wait(ms, my);
+        } else {
+          flyBack(sourcePile, document.querySelector<HTMLElement>('.score.bot')!, f);
+          // A live reveal gives it a beat of its own instead of a blink.
+          await wait(liveReveal ? 260 * f : quickShow ? quickShow.show.draw : OPP_DRAW_MS * f, my);
+        }
       }
       return;
     }
@@ -3096,7 +4607,7 @@ async function playStep(step: Step, my: number) {
           queue.placeGrowTile(by, t);
           revealProgress++; // a tile really landed: the reveal watchdog must not treat this as a stall
           renderRevealTile();
-          if (bloom) sound.bloomTile(i);
+          if (bloom) sound.bloomTile(i, step.tiles.length, by === HUMAN);
           const d = hexDistance(home, parseKey(t.key));
           if (d < anchorDist) { anchorDist = d; anchor = t.key; }
           const tileEl = board.tile(t.key);
@@ -3120,14 +4631,14 @@ async function playStep(step: Step, my: number) {
           }
           const str = t.strength ?? 1;
           const maxRank = session?.state.config.maxRank ?? 9;
-          if (st.heavy) sound.placeTop(str, maxRank, 0);
-          else sound.place(str, maxRank, 0);
+          if (st.heavy) sound.placeTop(str, maxRank, 0, by === HUMAN);
+          else sound.place(str, maxRank, 0, by === HUMAN);
           if (session?.state.terrain[t.key] === 'rich') sound.chime(0.08);
           const hp = hapticFor(st.heavy ? 'placeTop' : 'place', settings);
           if (hp && by === HUMAN) vibrate(true, hp as number | number[]);
           // Motion pass (2026-10-15): the next tile starts while this one is ~60% landed, so a
           // Bloom reads as one wave of distinct pops instead of a slow count (3 tiles: 1.27s → ~0.9s).
-          await wait(i + 1 < step.tiles.length ? GROW_OVERLAP * MOTION.move * f : MOTION.move * f, my);
+          await wait(i + 1 < step.tiles.length ? (bloom ? PINNED.bloomGap : GROW_OVERLAP) * MOTION.move * f : MOTION.move * f, my);
         }
         if (bloom && anchor && m > 0 && !b.fadeOnly) flash(anchor, f, false);
         if (b.float && by === HUMAN) floatText(`+${step.tiles.length}`, step.tiles[Math.floor(step.tiles.length / 2)]!.key, 'good', f);
@@ -3183,13 +4694,13 @@ async function playStep(step: Step, my: number) {
         if (!bloom) {
           const str = t.strength ?? 1;
           const maxRank = session?.state.config.maxRank ?? 9;
-          if (st.heavy) sound.placeTop(str, maxRank, delay / 1000);
-          else sound.place(str, maxRank, delay / 1000);
+          if (st.heavy) sound.placeTop(str, maxRank, delay / 1000, by === HUMAN);
+          else sound.place(str, maxRank, delay / 1000, by === HUMAN);
         }
         if (session?.state.terrain[t.key] === 'rich') sound.chime(delay / 1000 + 0.08);
       });
       if (bloom && anchor && m > 0 && !b.fadeOnly) flash(anchor, f, false);
-      if (bloom) sound.bloom();
+      if (bloom) sound.bloom(step.tiles.length, by === HUMAN, stagger / Math.max(f, 0.01));
       if (settings.eyeCandy && by === HUMAN && m > 0 && b.particles > 0) {
         const homeKeys = sporesHome(step.tiles.map((t) => t.key), board.rootKey(HUMAN));
         if (homeKeys.length) setTimeout(() => stream(homeKeys.map((s) => s.from), board.rootKey(HUMAN), f, Math.min(6, homeKeys.length + 2)), last + 380 * f);
@@ -3226,38 +4737,45 @@ async function playStep(step: Step, my: number) {
       // one dark pulse from the target, sized to the destroyed set (opacity ≤0.4, duration quick)
       let lastRing = 0;
       for (const key of step.destroyed) lastRing = Math.max(lastRing, hexDistance(parseKey(key), center));
-      flash(step.target, f, false, { dark: true, ms: MOTION.quick * 1.25 * f, radius: Math.min(4.4, lastRing + 1.15) });
-      if (settings.sound) sound.megaBomb();
-      if (mine) vibrate(settings.vibration, 22);
-      // Blast: lowkey but heavy — the board thuds like something solid landed.
-      if (m > 0 && step.destroyed.length >= 1) {
-        const amp = IS_FUTA04 ? Math.min(6.5, 3.5 + step.destroyed.length * 0.35) : 3;
-        anim($('board-wrap'), IS_FUTA04 ? heavyShakeFrames(amp) : shakeFrames(3), {
-          duration: (IS_FUTA04 ? MOTION.moment : MOTION.move) * Math.max(f, 0.5),
-          easing: EASE.out,
-        });
-      }
-      // destroyed tiles punch inward at their own centre, staggered by ring
+      // Beta 0.8 (owner, 2026-11-06: "slow down big blasts ... put some heaviness on bomb and blast"):
+      // one heavy impact (logic/impact.ts), then the tiles fall a ring at a time, slower for bigger Blasts.
+      const ip = impactPlan('blast', step.destroyed.length, impactOptions());
+      const fallStart = IS_FUTA04 ? ip.hitStopMs : 0;
+      const ringMs = IS_FUTA04 ? PINNED.blastRing : 36;
+      const hold = Math.max(BLAST_MIN_MS, Math.min(IS_FUTA04 ? PINNED.blastMax : 840, fallStart + lastRing * ringMs + MOTION.move * 1.15 + (IS_FUTA04 ? 120 : 0))) * f;
+      if (IS_FUTA04 && !mine) showLiveStrike(board.fx, step, hold, m === 0);
+      else flash(step.target, f, false, { dark: true, ms: MOTION.quick * 1.25 * f, radius: Math.min(4.4, lastRing + 1.15) });
+      if (settings.sound) sound.megaBomb(mine);
+      if (mine) vibrate(settings.vibration, IS_FUTA04 ? ip.buzzMs : 22);
+      if (IS_FUTA04) heavyImpact('blast', step.target, step.destroyed.length, f);
+      else if (m > 0 && step.destroyed.length >= 1) anim($('board-wrap'), shakeFrames(3), { duration: MOTION.move * Math.max(f, 0.5), easing: EASE.out });
+      // destroyed tiles punch inward at their own centre, staggered by ring (after the impact's freeze)
       for (const key of step.destroyed) {
         const ringN = hexDistance(parseKey(key), center);
-        const delay = Math.min(ringN * 36, 480) * f;
+        const delay = (fallStart + Math.min(ringN * ringMs, 900)) * f;
         anim(board.tile(key), [
           { transform: 'scale(1)', opacity: 1 },
           { transform: 'scale(0.68)', opacity: 1, offset: 0.5 },
           { transform: 'scale(0)', opacity: 0.45 },
         ], { duration: MOTION.move * 1.1 * f, delay, easing: EASE.out, transformOrigin: 'center', fill: 'forwards' } as KeyframeAnimationOptions);
-        drift(key, delay + MOTION.move * 0.4 * f, f, IS_FUTA04 ? 2 : 1);
+        // one soft ash mote per tile (Beta 0.8: was three; the impact's dust carries the rest)
+        drift(key, delay + MOTION.move * 0.4 * f, f, IS_FUTA04 ? 0 : 1);
       }
       // Blast is the heaviest move: it holds the screen long enough to register (at least 640ms)
       // even when it only clears one ring, which used to be gone in ~430ms.
-      await wait(Math.max(BLAST_MIN_MS, Math.min(840, lastRing * 36 + MOTION.move * 1.15)) * f, my);
+      // The PLANNED hold, published for the motion suite (a diagnostic, like every animLog mark).
+      // Tests used to tax the wall clock to the end of the busy gate, which also counts this
+      // runner's frame and pump-wake latency; the plan is what the product actually intends.
+      animLog('megaBomb:hold', { ms: Math.round(hold), ring: lastRing });
+      await wait(hold, my);
       quietAmbient(false);
       show();
       return;
     }
     case 'remove': {
-      for (const k of step.keys) anim(board.tile(k), [{ opacity: 1 }, { opacity: 0 }], { duration: 300 * f, fill: 'forwards' });
-      await wait(320 * f, my);
+      // Rot sinks into the tile. Fruit has its own burst; this is only the quiet disappearance.
+      for (const k of step.keys) anim(board.tile(k), [{ transform: 'scale(1)', transformOrigin: 'center', opacity: 1 }, { transform: 'scale(0.86)', transformOrigin: 'center', opacity: 0 }], { duration: MOTION.move * f, easing: EASE.out, fill: 'forwards' });
+      await wait(MOTION.move * f, my);
       show();
       return;
     }
@@ -3301,22 +4819,42 @@ async function playStep(step: Step, my: number) {
       const mine = step.player === HUMAN;
       const tileEl = board.tile(step.target);
       const to = tileEl?.getBoundingClientRect();
-      const from = mine ? cardRects.get(step.card.id) : document.querySelector<HTMLElement>('.score.bot')!.getBoundingClientRect();
-      if (from && to && m > 0) {
-        flyCard(step.card, from, to, f * (mine ? 1 : 1.2));
-        await wait(380 * f, my);
+      // Mine flies from my hand. Theirs has the same body as their throw: the Bomb turns face up on
+      // their seat, holds a beat and arcs down onto the tile at card-to-tile size. (It used to fly
+      // from their score pill, which the product header hides: a 0x0 box blew the card up ~37x.)
+      const seat = mine ? null : oppSeat();
+      // land on the hex itself (the tile's group can include art spilling past it, which made the
+      // card grow as it came down): the card settles INTO the hex, smaller than it was on the seat
+      const hex = document.querySelector(`#board .hex-cell[data-key="${step.target}"] > path.hex`) ?? tileEl;
+      if (seat && hex) {
+        const ms = oppThrow(step.card, seat, hex, f, !!quickShow);
+        await wait(ms, my);
+      } else {
+        const from = mine ? cardRects.get(step.card.id) : undefined;
+        if (from && to && m > 0) {
+          flyCard(step.card, from, to, f);
+          await wait(380 * f, my);
+        }
       }
       await anticipate(mo, f, my);
+      // the card has just flown onto the tile: the strike adds the glow, not a second Bomb card
+      if (IS_FUTA04 && !mine && my === epoch) showLiveStrike(board.fx, step, (MOTION.move + MOTION.quick) * f, m === 0, { cards: false });
       // the pod swells (a plain fade with Reduce motion)
       anim(tileEl, m === 0 || b.fadeOnly ? [{ opacity: 1 }, { opacity: 0.85 }] : [{ transform: 'scale(1)' }, { transform: `scale(${1 + 0.14 * m})`, offset: 0.7 }, { transform: `scale(${1 + 0.1 * m})` }], { duration: 300 * f, fill: 'forwards', easing: 'ease-out', transformOrigin: 'center' } as KeyframeAnimationOptions);
       await wait(300 * f, my);
       // the burst: spores puff out, a soft thud
       if (b.particles > 0) sparks(step.target, mine ? 'you' : 'bot', 0, f, Math.max(6, Math.round(b.particles / (mine ? 2 : 3))));
-      flash(step.target, f, false);
-      if (settings.sound) sound.fruit();
+      if (!IS_FUTA04 || mine) flash(step.target, f, false);
+      if (settings.sound) sound.fruit(mine);
       {
         const hp = hapticFor('throw', settings);
         if (hp && mine) vibrate(true, hp as number | number[]);
+      }
+      // Beta 0.8: the Bomb lands heavy: the board settles, the light dips, a little dust; the pod
+      // holds a beat (the freeze) before it goes.
+      if (IS_FUTA04) {
+        heavyImpact('bomb', step.target, 1, f);
+        await wait(impactPlan('bomb', 1, impactOptions()).hitStopMs * f, my);
       }
       anim(tileEl, m === 0 || b.fadeOnly ? [{ opacity: 0.85 }, { opacity: 0 }] : [{ opacity: 1, transform: `scale(${1 + 0.1 * m})` }, { opacity: 0, transform: `scale(${1 + 0.35 * m})` }], { duration: 260 * f, fill: 'forwards', easing: 'ease-in', transformOrigin: 'center' } as KeyframeAnimationOptions);
       if (mine && b.banner) banner(FRUIT.banner, 'big');
@@ -3328,21 +4866,110 @@ async function playStep(step: Step, my: number) {
       return;
     }
     case 'discard': {
-      // The opponent's card is represented by the pile update; its old flight crossed the
-      // player's board and felt like a card thrown at the camera.
-      const from = step.player === HUMAN ? cardRects.get(step.card.id) : null;
-      if (from) {
-        flyCard(step.card, from, ($('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard')).getBoundingClientRect(), f);
-        const source = document.querySelector<HTMLElement>(`#hand [data-card="${step.card.id}"]`);
-        if (source) source.style.visibility = 'hidden';
-      }
-      if (step.player === HUMAN) {
-        const hp = hapticFor('throw', settings);
-        if (hp) vibrate(true, hp as number | number[]);
-      }
+      // My card flies from my hand. The opponent's card has a body of its own: it turns face up
+      // on their seat, holds for a beat and arcs into the Throw pile.
+      //
+      // THE PILE TOP CHANGES ON ARRIVAL (owner, 2026-10-20: "after throwing card ... it somewhat
+      // flashes the previous card again even new card was just placed"). The flight ends with a
+      // fade; if the pile only advanced after that fade, the fade uncovered the OLD top for a
+      // moment between the card leaving and the pile repainting. So both flights hand the pile
+      // over at their landing stop — before the fade — and the same card then fades over itself.
       const cap = captionFor(step, HUMAN);
       if (cap) caption(cap, null, 'info');
-      await wait(quickShow && step.player === BOT ? quickShow.show.discard : IS_FUTA04 && from ? 396 * f : 320 * f, my);
+      // Exactly once, and idempotent: show()/settleStep writes the same value at the step's end.
+      const land = () => {
+        if (my !== epoch || !session) return;
+        shownDiscard = discardArrival(shownDiscard, step.card);
+        paintDiscardTop();
+      };
+      if (step.player === HUMAN) {
+        // EVERY human throw gets the boomerang (owner, 2026-10-25): the swipe up, the drop on the
+        // pile and the tap on the pile. It replaced the old fly-to-pile for only the swipe, which
+        // is why the owner never saw it — he throws with the pile.
+        //
+        // A committed drag continues from the released ghost's box, never snapping back to the
+        // hand for one frame. A pile tap has no release box, so it takes off from the card's hand
+        // box: same flourish, different start. The box is consumed with the step.
+        let from = cardRects.get(step.card.id);
+        // a card held back while my move played through leaves the hand now, from where it rests
+        if (throwHeld?.id === step.card.id) {
+          throwHeld = null;
+          const rest = document.querySelector<HTMLElement>(`#hand [data-card="${step.card.id}"]`);
+          if (rest) from = rest.getBoundingClientRect();
+        }
+        if (dragThrowFrom) {
+          from = dragThrowFrom;
+          dragThrowFrom = null;
+        }
+        const flight = IS_FUTA04 ? throwFlight(motionOn()) : 'ordinary';
+        let caughtHaptic = false;
+        if (from) {
+          const to = ($('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard')).getBoundingClientRect();
+          const source = document.querySelector<HTMLElement>(`#hand [data-card="${step.card.id}"]`);
+          if (source) source.style.visibility = 'hidden';
+          if (flight === 'boomerang') {
+            // Settle over my home: the card visits the board as if it were about to be placed.
+            let point = board.screenPoint(board.rootKey(HUMAN));
+            if (!point.x && !point.y) {
+              const r = $('board-wrap').getBoundingClientRect();
+              point = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+            }
+            // The flight is the card's own beat (`BOOMERANG.total` = PINNED.boomerang); the STEP
+            // waits it out. The boomerang used to total 624 ms at interface speed and this await
+            // followed it, so every human throw held the step 634 ms instead of ~406 ms (+228 ms).
+            // `max()` is a floor for the flight, never a reason to stretch the beat: the unit test
+            // pins the flight inside the wait, and `futa04-motion` measures the step itself.
+            // 2026-11-08: the boomerang has its own beat (PINNED.boomerang) and the step waits it out:
+            // a throw ends the turn and my own animation never blocks my input (0.8), so the only
+            // thing that waits is the opponent's turn. 2026-11-12: the flick is shorter (500 -> 420),
+            // so the wait is 420 ms at Normal speed. The pile thuds at the catch.
+            const pileEl = $('discard');
+            const catchAndThud = () => {
+              land();
+              thudPile(pileEl, f, motionOn(), INTERFACE_MOTION.easeOpen);
+              // 0.85: felt at the catch, in sync with the thud (it used to buzz after the fade).
+              const hp = hapticFor('throw', settings);
+              if (hp) vibrate(true, hp as number | number[]);
+              caughtHaptic = true;
+            };
+            const flightMs = throwBoomerang(step.card, from, point, to, f, catchAndThud);
+            await wait(Math.max(PINNED.throw * f, flightMs), my);
+          } else if (flight === 'ordinary') {
+            flyCard(step.card, from, to, f, land);
+            await wait(IS_FUTA04 ? PINNED.throw * f : 320 * f, my);
+          } else {
+            // Reduce motion / Speed off: no lift, no spin, no flyer — the card is simply on the pile.
+            land();
+            await wait(0, my);
+          }
+        } else {
+          await wait(320 * f, my);
+        }
+        // The flight is home: let the target settle. The held swell was part of the rect the
+        // boomerang just landed on, so releasing it here cannot pull the landing out from under
+        // the card.
+        releaseThrowSwell();
+        if (!caughtHaptic) {
+          const hp = hapticFor('throw', settings);
+          if (hp) vibrate(true, hp as number | number[]);
+        }
+      } else {
+        const seat = oppSeat();
+        if (seat) {
+          if (settings.sound) sound.rustle();
+          const ms = oppThrow(step.card, seat, $('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard'), f, !!quickShow, () => {
+            land();
+            // 0.85: the same pile thud as my catch.
+            thudPile($('discard'), f, motionOn() && !quickShow, INTERFACE_MOTION.easeOpen);
+          });
+          await wait(ms, my);
+          if (my !== epoch) return;
+          if (settings.sound) sound.throw();
+        } else {
+          // No flight layer (the material lab): keep the old pile-only beat.
+          await wait(quickShow ? quickShow.show.discard : 320 * f, my);
+        }
+      }
       show();
       return;
     }
@@ -3444,6 +5071,7 @@ function showBreakdown(p: Player) {
     ...b.lines.map((t) => Object.assign(document.createElement('span'), { textContent: t })),
   );
   pop.hidden = false;
+  enterSurface(pop);
 }
 
 let lastAmbBoard: State['board'] | null = null;
@@ -3472,7 +5100,7 @@ async function playCut(c: CutInput, first: boolean, _chain: number, f: number, m
   for (const s of plan.stages) {
     switch (s.name) {
       case 'anticipation': {
-        // Only Big and Huge lean the camera; small and medium cuts never move it.
+        // Only Big and Huge lean the camera into the beat; Severe keeps its weight for the impact.
         if (plan.tier === 'big' || plan.tier === 'huge') anim(wrap, [{ scale: '1' }, { scale: '0.99' }, { scale: '1' }], { duration: s.dur + 80 * f, easing: 'ease-in-out', transformOrigin: origin } as KeyframeAnimationOptions);
         // the doomed links brighten and shorten a little toward the cut origin
         const doomed = board.veinsTouching(keys);
@@ -3483,10 +5111,14 @@ async function playCut(c: CutInput, first: boolean, _chain: number, f: number, m
         if (doomed.length) setTimeout(() => doomed.forEach((v) => v.classList.remove('straining')), s.dur + 60);
         break;
       }
-      case 'flash':
-        at(s.at, () => cutFlash(c.origin, plan.flash.ms, plan.flash.alpha, plan.flash.radius,
-          c.keys.find(key=>hexDistance(parseKey(key),parseKey(c.origin))===1)));
+      case 'flash': {
+        // the torn edge: the links that snapped. A Severe cut flashes the whole seam, so its
+        // weight reads along the cut and not just at one hex.
+        const seam = c.keys.filter((key) => hexDistance(parseKey(key), parseKey(c.origin)) === 1);
+        const edge = plan.tier === 'severe' ? seam : seam.slice(0, 1);
+        at(s.at, () => cutFlash(c.origin, plan.flash.ms, plan.flash.alpha, plan.flash.radius, edge));
         break;
+      }
       case 'zoom':
         at(s.at, () => anim(wrap, [{ scale: '1' }, { scale: String(plan.zoom), offset: 0.35 }, { scale: '1' }], { duration: s.dur * 2, easing: EASE.out, transformOrigin: origin } as KeyframeAnimationOptions));
         break;
@@ -3502,9 +5134,22 @@ async function playCut(c: CutInput, first: boolean, _chain: number, f: number, m
         at(s.at, () => {
           // one cut family, recognisable at every size; losing tiles uses the duller, lower cutMe
           const cue: 'cutSmall' | 'cutMedium' | 'cutBig' | 'cutHuge' | 'cutMe' = c.mine ? 'cutMe'
-            : plan.tier === 'huge' ? 'cutHuge' : plan.tier === 'big' ? 'cutBig' : plan.tier === 'medium' ? 'cutMedium' : 'cutSmall';
+            : plan.tier === 'huge' ? 'cutHuge' : plan.tier === 'big' ? 'cutBig' : plan.tier === 'severe' ? 'cutMedium' : 'cutSmall';
           sound[cue]();
           if (plan.shakePx > 0) anim(wrap, shakeFrames(plan.shakePx), { duration: MOTION.move * Math.max(f, 0.5), easing: EASE.out });
+          // Severe: the tiles that survive beside the tear flinch toward it and dim a touch.
+          if (plan.tier === 'severe' && plan.shakePx > 0) {
+            const cutKeys = new Set(c.keys);
+            const neighbours = new Set<string>();
+            for (const key of c.keys) {
+              for (const nb of allNeighbors(parseKey(key))) {
+                const k = coordKey(nb);
+                const tile = queue.board[k];
+                if (tile && !tile.root && !cutKeys.has(k)) neighbours.add(k);
+              }
+            }
+            for (const k of neighbours) flinch(k, c.origin, s.dur);
+          }
           const hp = plan.haptic && hapticFor(plan.haptic, settings);
           if (hp && !quiet) vibrate(true, hp as number | number[]);
         });
@@ -3548,6 +5193,14 @@ async function playCut(c: CutInput, first: boolean, _chain: number, f: number, m
     anim(tileEl, frames, { duration: t.dur, delay: t.at, fill: 'forwards', easing: EASE.out, transformOrigin: 'center' } as KeyframeAnimationOptions);
     if (plan.motes) drift(t.key, t.at + t.dur * 0.5, f, plan.motes);
   }
+  // the chain reaction: as each ring of their tiles starts to fall, one pop a step higher (and a
+  // light tick once the cut's own buzz is over); logic/cut.ts decides when, and when not
+  if (!quiet) for (const pop of plan.pops) at(pop.at, () => {
+    animLog('cascade', { step: pop.step, buzz: pop.buzz });
+    sound.cascadePop(pop.step);
+    const hp = pop.buzz && hapticFor('cascade', settings);
+    if (hp) vibrate(true, hp as number);
+  });
   // after the wave: a faint scar on the cut edge for ~400ms (not on Futa04 — no leftovers)
   if (plan.scar && !IS_FUTA04) at(Math.max(0, ...plan.tiles.map((t) => t.at + t.dur)), () => scar(c.keys, f));
   await wait(plan.total, my);
@@ -3558,41 +5211,61 @@ async function playCut(c: CutInput, first: boolean, _chain: number, f: number, m
 let goCounted = false;
 /** the Seeds award's one moment plays once per game (a later re-render repaints it still) */
 let goSeedSettled = false;
+/** A proof is being settled for THIS card: hold the award's slot so the number lands without a jump. */
+let goSeedSlot = false;
 /** the reward message the card's seed line is currently showing (null until this game paints it) */
 let goSeedShown: string | null = null;
+/**
+ * Which settle the card is waiting on. A new game (or a newer settle) bumps it, so an answer that
+ * arrives late can never paint itself onto a card that is no longer about that game.
+ */
+let goSeedsSettleRun = 0;
 
 /** the final-turns banner shows once per game */
 let finalShown = false;
 /** the final-turns cue plays once, when the endgame shade comes on */
 let finalSoundOn = false;
 
-let scoreRaf = 0;
+let scoreUnsub: (() => void) | null = null;
 function countScores(to: [number, number]) {
   const target: [number, number] = [to[HUMAN], to[BOT]];
   const start: [number, number] = [...shownScores];
   if (start[0] === target[0] && start[1] === target[1]) return;
   const t0 = performance.now();
-  const dur = 600 * Math.max(timeScale(), 0.3);
-  cancelAnimationFrame(scoreRaf);
-  const tick = (t: number) => {
-    const k = Math.min(1, (t - t0) / dur);
+  const dur = SCORE_BEAT.countMs * Math.max(timeScale(), 0.3);
+  scoreUnsub?.();
+  scoreUnsub = scheduler.subscribe(({ now }) => {
+    const k = scoreProgress((now - t0) / dur);
     shownScores = [Math.round(start[0] + (target[0] - start[0]) * k), Math.round(start[1] + (target[1] - start[1]) * k)];
     $('score-you').textContent = String(shownScores[0]);
     $('score-bot').textContent = String(shownScores[1]);
     setRace(shownScores);
-    if (k < 1) scoreRaf = requestAnimationFrame(tick);
-  };
-  scoreRaf = requestAnimationFrame(tick);
-  // A fast tick, then a tiny bounce on the final number.
-  const bounce: Keyframe[] = [{ transform: 'scale(1)' }, { transform: 'scale(1.28)', offset: 0.45 }, { transform: 'scale(0.96)', offset: 0.75 }, { transform: 'scale(1)' }];
-  if (target[0] !== start[0]) anim($('score-you'), bounce, { duration: 360, delay: dur });
-  if (target[1] !== start[1]) anim($('score-bot'), bounce, { duration: 360, delay: dur });
+    if (k >= 1) {
+      scoreUnsub?.();
+      scoreUnsub = null;
+    }
+  });
+  // The digits have arrived: one small click on the number that changed, not a bounce.
+  const pop: Keyframe[] = [{ transform: 'scale(1)' }, { transform: `scale(${SCORE_BEAT.popScale})`, offset: 0.55 }, { transform: 'scale(1)' }];
+  if (target[0] !== start[0]) anim($('score-you'), pop, { duration: SCORE_BEAT.popMs, delay: dur, easing: EASE.settle });
+  if (target[1] !== start[1]) anim($('score-bot'), pop, { duration: SCORE_BEAT.popMs, delay: dur, easing: EASE.settle });
 }
 
 // ---------- rendering ----------
 
 const busy = () => queue.pending > 0 || pumping;
+/**
+ * PLAY THROUGH (owner, 2026-11-06, logic/play-through.ts): only my own move is still being shown,
+ * so my input stays live and the animation keeps playing (offline games; the tutorial and the
+ * lessons keep their taught pace, and online moves keep the server's reveal rules).
+ */
+const playThrough = () => busy() && !isOnlineDuel() && !coach.tutorial && !lessonActive() && myTurn() && playsThrough(queue.steps(), currentStep, HUMAN);
+/** An opponent's step (theirs, not mine) is still being shown. */
+const opponentShowing = () => busy() && !playsThrough(queue.steps(), currentStep, HUMAN);
+/** An animation that must finish (or be skipped) before the player acts: anything but my own move. */
+const blocking = () => busy() && !playThrough();
 const myTurn = () => {
+  if (pregameHold || isStarterRitualPlaying()) return false;
   if (isOnlineDuel()) return !!getOnlineSession()?.myTurn && !getOnlineSession()?.finished;
   return !!session && session.state.actor === HUMAN && session.state.phase !== 'GAME_OVER';
 };
@@ -3618,6 +5291,13 @@ const syncSessionFromOnline = (resetSelection = false) => {
   session = new Session(os.state, HUMAN, [...os.log], os.base);
   if (keptSel) session.sel = keptSel;
   if (keptPreset) session.preset(keptPreset);
+  // A catch-up that is about to replay (its steps are still pending) owns the Throw pile: keep
+  // the shown one until its discard step lands. An ordinary sync can catch the pile up now.
+  const replayQueued = (os.driver.pendingEvents?.().length ?? 0) > 0;
+  if (!os.isRevealing && !replayQueued) shownDiscard = [...session.view.discard];
+  // Every local mirror of the online state is rebuilt here (after a snapshot, a move, or a
+  // take-back), which is exactly when the Replay question may have a new answer. One cached read.
+  refreshOnlineTurnReplay();
 };
 
 /** Futa04's idle prompt yields for every active move, including Bloom painting without a card. */
@@ -3627,14 +5307,14 @@ function updateFuta04MoveActive() {
   document.documentElement.classList.toggle('futa04-move-active', active);
   // Free-play bulb nudge stops the moment a real move starts.
   if (active) clearFreePlayBulbNudge();
-  document.documentElement.dataset.futa04Bloom = String(!!session?.sel.kind?.startsWith('bloom-'));
+  setData(document.documentElement,'futa04Bloom',String(!!session?.sel.kind?.startsWith('bloom-')));
   const grew = !!session && myTurn() && !!grewThisTurn();
   const bloomReady = !!session && myTurn() && session.view.phase === 'ACT'
     && session.legal.some(a => a.t === 'Bloom' || a.t === 'MegaBomb');
-  document.documentElement.dataset.futa04Grew = String(grew);
-  document.documentElement.dataset.futa04BloomReady = String(bloomReady);
-  document.documentElement.dataset.futa04Waiting = String(myTurn() && !busy() && !watching);
-  document.documentElement.dataset.futa04Turn = String(session?.state.turnNumber ?? '');
+  setData(document.documentElement,'futa04Grew',String(grew));
+  setData(document.documentElement,'futa04BloomReady',String(bloomReady));
+  setData(document.documentElement,'futa04Waiting',String(myTurn() && !busy() && !watching));
+  setData(document.documentElement,'futa04Turn',String(session?.state.turnNumber ?? ''));
 }
 
 // ---------- idle hint ----------
@@ -3687,18 +5367,81 @@ function renderRevealTile(): void {
   noteRenderCost('tile', performance.now() - t0);
 }
 
+/**
+ * Turn hand-off (owner, 2026-10-24): the turn returns with one restrained cockpit pulse
+ * and the existing YOUR TURN display. No screen-wide effect or extra label. Not in lessons or the tutorial (they say it in
+ * words); with reduced motion the display word alone carries it.
+ */
+let turnWasMine: boolean | null = null;
+function cueTurnHandOff(v: View): void {
+  if (busy()) return; // the opponent's turn is still being shown
+  const was = turnWasMine;
+  turnWasMine = v.turnPlayer === HUMAN && !v.result;
+  if (was !== false || !turnWasMine || !IS_FUTA04 || lessonActive() || coach.tutorial) return;
+  smartCockpit?.event({ message: 'YOUR TURN', priority: 20, duration: 1300, mode: 'green', pulse: true });
+
+}
+
+/** A Bloom's cards all lift as one: the height of a middle card. */
+const BLOOM_LIFT_WEIGHT = 0.5;
+
+// The Replay control's own words (offline, unchanged): same sentences the product has always used.
+const REPLAY_TIP = `Replay ${OPP.theirs} last turn`;
+const REPLAY_NONE = `Nothing to replay yet: ${OPP.the} hasn't moved`;
+
+/**
+ * Is there an opponent turn the Replay control may offer?
+ *
+ * Offline the session simply kept the bot's turns. Online there is no such record, so the
+ * `OnlineSession` answers from a reconstruction of the last turn that was PROVED against the live
+ * board (`prepareOpponentTurnReplay`, called where a snapshot lands — never from here, so a render
+ * can never become a fetch). It also stays quiet while a catch-up is still showing, because the
+ * board on screen is not yet the live one.
+ */
+const canReplayLastTurn = (): boolean =>
+  isOnlineDuel() ? getOnlineSession()?.canReplayOpponentTurn === true : session?.canReplayOpponent === true;
+
+/**
+ * Why the slot cannot offer Replay: the one honest distinction the online path needs. Offline
+ * keeps exactly the words it always had.
+ */
+const noReplayTip = (): string =>
+  isOnlineDuel() && getOnlineSession()?.turnReplayReason === 'unverified' ? TURN_REPLAY.unverified : REPLAY_NONE;
+
+/**
+ * Ask the online session to answer "is their last turn replayable?" for the state that just
+ * landed, and repaint when the answer arrives. The session caches the answer per match + revision +
+ * board, so this is one read per snapshot — never a read per render.
+ */
+function refreshOnlineTurnReplay(): void {
+  const os = getOnlineSession();
+  if (!os) return;
+  void os.prepareOpponentTurnReplay().then(
+    () => {
+      if (getOnlineSession() !== os) return; // the match was torn down meanwhile
+      render();
+    },
+    () => undefined,
+  );
+}
+
 function render() {
+  syncTurnRim();
+  turnGuide?.update();
   const t0 = performance.now();
   applyLayout();
   // A new layout (or a game screen not drawn yet): place the cockpit once it can be measured.
   if (sideDockStale && IS_FUTA04) requestAnimationFrame(() => sideDockStale && centreSideDock());
   syncGlow();
   updateFuta04MoveActive();
-  if (!session || $('game').hidden) return;
+  if (!session || $('game').hidden) {
+    blitz?.sync();
+    return;
+  }
   armIdle();
   const v = session.view;
   const advice = myTurn() && !busy() ? currentAdvice() : null;
-  document.documentElement.style.setProperty('--anim', String(timeScale()));
+  setStyle(document.documentElement,'--anim',String(timeScale()));
   renderHud();
   const combo = drawCombo();
   if (!combo && (draw.shape.length || draw.desk.phase === 'live' || draw.msg)) draw = { ...DRAW0 };
@@ -3720,7 +5463,7 @@ function render() {
   if (FEATURES.smartCamera && camera) {
     // what I am working on: the map (a card picked, painting, the opponent's turn) or the cards
     const mapFocus = !myTurn() || busy() || draw.shape.length > 0 || !!draw.ptr || session.sel.card !== null || session.sel.hex !== null;
-    document.documentElement.dataset.focus = mapFocus ? 'map' : 'cards';
+    setData(document.documentElement,'focus',mapFocus?'map':'cards');
     feedCamera(v);
   }
   if (FEATURES.phoneLayout && thumbLayout) checkOverlap(v);
@@ -3730,12 +5473,17 @@ function render() {
     // the step, from the game's own state: whose turn it is and the phase
     const st = session.state;
     const over = st.phase === 'GAME_OVER';
-    const step = over || watching ? null : st.actor !== HUMAN ? 'opp' : st.phase === 'DRAW' ? 'draw' : st.phase === 'DISCARD' ? 'throw' : 'grow';
+    // Still 'opp' while the opponent's move is being SHOWN (owner, 2026-11-09: their thrown card
+    // "lands between the piles"): my Draw step widens and slides the piles, so switching early
+    // moved the Throw pile out from under their card in flight. It turns to Draw once it lands.
+    const step = over || watching ? null : st.actor !== HUMAN || opponentShowing() ? 'opp' : st.phase === 'DRAW' ? 'draw' : st.phase === 'DISCARD' ? 'throw' : 'grow';
     guideMod.update({ step, turn: st.turnNumber, picked: session.sel.card !== null });
   }
   renderCoach(advice);
   renderOnboardingGuide(v);
   renderGameOver();
+  // EXPERIMENTAL Blitz: one cheap check per paint (arm on my turn, stop when the turn passes).
+  blitz?.sync();
   renderGuide(advice);
   renderFirstTip(v);
   updateFuta04Help();
@@ -3743,12 +5491,14 @@ function render() {
   syncTutorialChrome();
   renderTutorial();
   syncFreePlayBulbNudge();
+  cueTurnHandOff(v);
   if (glassSurface?.isOpen()) {
     if (tutorialFreePlayActive() && glassSurface.mode?.() === 'guidance') {
       glassSurface.guidance(freePlayGuidanceLine());
     } else if (intelState !== session.state && glassSurface.mode?.() === 'intel') {
       intelState = session.state;
-      glassSurface.intel(matchIntel(v, session.state.history ?? [], openingPublicDiscard(session.state, session.base)));
+      const model = intelModel()!;
+      glassSurface.intel(model.data, { guide: model.guide });
     }
   }
   if (!IS_FUTA04 && placeTeachingPanel && thumbLayout) {
@@ -3758,7 +5508,7 @@ function render() {
       placeTeachingPanel?.($('coach'), keys);
     });
   }
-  if (myTurn() && !busy() && v.phase === 'ACT' && !autoQueued) {
+  if (myTurn() && !blocking() && v.phase === 'ACT' && !autoQueued) {
     autoQueued = true;
     setTimeout(() => {
       autoQueued = false;
@@ -3808,6 +5558,14 @@ function guidanceOff(): boolean {
  * other. Guidance is derived from the live position (logic/onboarding.ts), never scripted.
  */
 function onboardingActive(): boolean {
+  // AN ONLINE DUEL IS NEVER A LESSON (owner, 2026-10-21). The two gates differ in where they read
+  // their state: `lessonActive` matches `campaignLevel` against the level whose script is loaded,
+  // but this one only asks "campaign level <= 10", and `campaignLevel` is NOT cleared when an
+  // online match starts. So a player who had reached, say, level 5 and then opened an online duel
+  // still looked like a beginner here: onboarding came back on, which adds the `futa04-tutorial`
+  // class (the padded "tutorial window" that shrinks the map) and explains Bloom again mid-duel.
+  // Guard on the mode itself, exactly as `lessonActive` does, so no stale campaign state can leak.
+  if (isOnlineDuel()) return false;
   if (lessonActive()) return false;
   return FEATURES.guidance && !guidanceOff() && !coach.tutorial && !!campaignLevel
     && campaignLevel.number <= ONBOARDING_LEVELS && !!session && !watching;
@@ -3852,9 +5610,88 @@ function lessonActive(): Lesson | null {
   return lessonNow;
 }
 
+/**
+ * While a lesson's opponent plays, the lesson's live status line ("WAIT") owns the display.
+ *
+ * A bot move's own play fact (`OPP +3`, `CUT-2`, `+2` for its Bloom) is board feedback, not a
+ * second instruction: it used to overwrite the WAIT line, and because the lesson's paint key had
+ * not changed it was never put back, so the sign sat silent for the rest of their turn. One steady
+ * cue is the rule (the same one the lesson's other action lines follow). The result still speaks:
+ * that event is handled by the finish path after `phase === 'GAME_OVER'`, which this excludes.
+ */
+function lessonOpponentCueOwnsDisplay(): boolean {
+  return !!lessonActive() && !!session && session.state.actor !== HUMAN && session.state.phase !== 'GAME_OVER';
+}
+
+/** Levels 1-4 never show a Bloom in any form: no button, no glow, no bracket, no gold pile. */
+function bloomsShown(): boolean {
+  const l = lessonActive();
+  return !l || lessonOffersBloom(l);
+}
+
 function saveLessonMeta() {
   if (!lessonNow) return;
+  // A tutorial replay never writes the campaign lesson notes: which explanations the player has
+  // already read belongs to the level they are actually working on (owner, 2026-10-24).
+  if (tutorialReplay) return;
   store.set(LESSON_META_KEY, encodeLessonMeta({ level: lessonNow.level, version: lessonNow.version, seen: [...lessonSeen] }));
+}
+
+function saveLessonMastery() {
+  // ...and neither does it touch the mastery record the campaign lessons read for their pace.
+  if (tutorialReplay) return;
+  store.set(LESSON_MASTERY_KEY, encodeMastery(lessonMastery));
+  lessonPowerSeen = new Set(lessonMastery.hellos);
+}
+
+/** A new level starts with its own runtime state; the learned counts persist across levels. */
+function resetLessonRuntime() {
+  lessonIdle = false;
+  lessonIdleStage = 0;
+  lessonIdleWatch.stop();
+  lessonWrongInStep = 0;
+  lessonEscalated = false;
+  lessonTierShown = 'silent';
+  lessonTierKind = null;
+  lessonShownBeatId = '';
+  lessonHelloNow = null;
+  clearTimeout(lessonHelloTimer);
+  lessonHelloTimer = 0;
+  lessonStageUntil = 0;
+  clearTimeout(lessonStageTimer);
+  lessonStageTimer = 0;
+}
+
+/** ~1.2 s: the level number and name, skippable by a tap; the board is not live yet. */
+function startLessonStage() {
+  if (!lessonNow || !campaignLevel) return;
+  lessonStageUntil = performance.now() + 1200;
+  lessonShownKey = '';
+  clearTimeout(lessonStageTimer);
+  lessonStageTimer = window.setTimeout(() => {
+    lessonStageUntil = 0;
+    lessonStageTimer = 0;
+    lessonShownKey = '';
+    render();
+    // The safety net starts when the board becomes live, not during the intro.
+    lessonArmIdle();
+  }, 1200);
+  render();
+}
+
+function lessonStageActive(): boolean {
+  return !!lessonNow && performance.now() < lessonStageUntil;
+}
+
+function skipLessonStage(): boolean {
+  if (!lessonStageActive()) return false;
+  lessonStageUntil = 0;
+  clearTimeout(lessonStageTimer);
+  lessonStageTimer = 0;
+  lessonShownKey = '';
+  render();
+  lessonArmIdle();
+  return true;
 }
 
 /** A Bloom or a Blast is being placed: its tiles are the next touch. */
@@ -3868,12 +5705,16 @@ function lessonPlacing(): 'bloom' | 'blast' | null {
 
 function lessonCtx() {
   const pending = session?.pending;
+  // Keep the hello currently on screen visible until the next action, even though it is already
+  // remembered; every other render is silent about it.
+  const powerSeen = new Set(lessonPowerSeen);
+  if (lessonHelloNow) powerSeen.delete(lessonHelloNow);
   return {
     card: session?.sel.card ?? null,
     placing: lessonPlacing(),
     throwPending: pending?.t === 'Discard' ? pending.card : null,
     seen: lessonSeen as ReadonlySet<string>,
-    doneTaught: lessonDoneTaught(),
+    powerSeen: powerSeen as ReadonlySet<PowerKind>,
   };
 }
 
@@ -3886,23 +5727,65 @@ function lessonMarkSeen(id: string) {
   render();
 }
 
-/** Quiet for 6s on my turn: the pointer bobs harder, and "Show me" appears. Any input resets it. */
-function lessonArmIdle() {
-  clearTimeout(lessonIdleTimer);
-  if (lessonIdle) {
-    lessonIdle = false;
-    lessonShownKey = '';
+/**
+ * The same, for the tap that is ALSO the move. The seen set is updated at once (so the game's own
+ * render already drops the sentence), but the repaint waits until the gesture has been delivered:
+ * a render inside pointerdown would replace the tapped card or pile before the game reads it, and
+ * the move would be lost. So: flush on the click that ends this gesture, never before.
+ */
+let lessonSeenFlush = 0;
+function lessonMarkSeenAfterTap(id: string) {
+  if (!lessonSeen.has(id)) {
+    lessonSeen.add(id);
+    saveLessonMeta();
   }
-  if (!lessonActive()) return;
-  lessonIdleTimer = window.setTimeout(() => {
-    if (!lessonActive() || !myTurn() || busy()) return;
-    lessonIdle = true;
-    lessonShownKey = '';
+  lessonShownKey = '';
+  if (lessonSeenFlush) return;
+  const flush = () => {
+    if (!lessonSeenFlush) return;
+    window.clearTimeout(lessonSeenFlush);
+    lessonSeenFlush = 0;
+    document.removeEventListener('pointerup', after, true);
+    document.removeEventListener('pointercancel', after, true);
+    document.removeEventListener('click', after, true);
     render();
-  }, 6000);
+  };
+  const after = () => {
+    if (!lessonSeenFlush) return;
+    // Next task, so the game's own click handler has already run on the node we must not replace.
+    window.setTimeout(flush, 0);
+  };
+  document.addEventListener('pointerup', after, true);
+  document.addEventListener('pointercancel', after, true);
+  document.addEventListener('click', after, true);
+  // A gesture that never ends (a cancelled pointer, a keyboard activation) still closes the box.
+  lessonSeenFlush = window.setTimeout(flush, 600);
 }
 
-/** One short answer to a tap: in the glass (or the LED with hints off), a ring at the spot. */
+/**
+ * The safety net: 6 s WHISPER, 12 s GUIDE, 20 s the light guide. Any input resets all three. The
+ * watch reports the stage; render turns it into at least that tier for the current move.
+ */
+function lessonArmIdle() {
+  if (lessonIdle) {
+    lessonIdle = false;
+    lessonIdleStage = 0;
+    lessonShownKey = '';
+  }
+  if (!lessonActive()) { lessonIdleWatch.stop(); return; }
+  lessonIdleWatch.reset();
+}
+
+/** A second wrong tap on this step raises the tier until the step changes or a move is made. */
+function lessonWrongTap() {
+  lessonWrongInStep++;
+  if (lessonWrongInStep < 2 || lessonEscalated) return;
+  lessonEscalated = true;
+  lessonShownKey = '';
+  render();
+}
+
+/** One short answer to a tap: on the display (never in the info box), a ring at the spot. */
 function lessonSay(text: string, x: number | null, y: number | null) {
   lessonAnswerSeq++;
   if (x !== null && y !== null && !settings.reduceMotion) {
@@ -3914,10 +5797,6 @@ function lessonSay(text: string, x: number | null, y: number | null) {
     document.body.append(ring);
     window.setTimeout(() => ring.remove(), 650);
   }
-  if (guidanceOff() || !glassSurface) {
-    smartCockpit?.event({ message: text.toUpperCase(), priority: 40, duration: 1800 });
-    return;
-  }
   lessonAnswerText = text;
   lessonShownKey = '';
   clearTimeout(lessonAnswerTimer);
@@ -3926,27 +5805,78 @@ function lessonSay(text: string, x: number | null, y: number | null) {
     lessonShownKey = '';
     render();
   }, 2200);
+  // Priority 40 clears the lesson's quiet mode, so an answer is always read.
+  smartCockpit?.event({ message: text.toUpperCase(), priority: 40, duration: 1800 });
   render();
 }
 
 /**
  * Every tap during a lesson is read once, before the game sees it. An explanation moves on with a
- * tap anywhere. A tap that cannot do anything gets its answer. In levels 1-3 (locked) a tap that is
- * not the lit one does not reach the game at all; from level 4 on the game takes every legal tap
- * (a different legal move is the player's choice) and only the answer is added.
+ * tap anywhere — and a tap ON the lit thing both reads the sentence and performs the move on the
+ * same gesture (owner, 2026-10-20: "the first tap with this window open - if tapped on the
+ * highlighted item works first time - no double taps needed"). A tap that cannot do anything gets
+ * its answer. In levels 1-3 (locked) a tap that is not the lit one does not reach the game at all;
+ * from level 4 on the game takes every legal tap (a different legal move is the player's choice)
+ * and only the answer is added.
  */
 let lessonVeto = false;
+
+/**
+ * A tap on an explanation's lit thing that would really do something: the lit target itself or one
+ * of its quiet alternatives, and the same answer the game gives on the next tap (no refusal).
+ * A home, a rock or the display that is only being explained is not a move: that tap dismisses.
+ */
+function lessonTapMoves(beat: Beat, target: Element, e: Event, locked: boolean): boolean {
+  if (!session) return false;
+  const selectors = litTargetAndQuiet(beat.lit, SMALL_HOMES).selectors;
+  if (!selectors.length || !target.closest(selectors.join(', '))) return false;
+  const pe = e as PointerEvent;
+  const keyAt = () => (Number.isFinite(pe.clientX) ? board.keyAtClient(pe.clientX, pe.clientY) : null);
+  const tap = tapOf(target as never, keyAt);
+  if (tap.t === 'other') return false;
+  return tapAnswer(session.state, session.sel.card, tap, beat.lit, locked, !!lessonPlacing()) === null;
+}
+
 function lessonDecide(e: Event): boolean {
   const lesson = lessonActive();
   if (!lesson || !session || openSheet || session.state.phase === 'GAME_OVER') return false;
   const target = e.target as Element | null;
   if (!target?.closest?.('#game')) return false;
+  // The caption is pointer-events:none, so a tap over it arrives at the board beneath: nothing
+  // in the lesson's info box can swallow a tap (there are no buttons in it).
   if (target.closest('#hud, #hud-menu, #futasaku-glass, #gameover, .sheet, #scrim')) return false;
   const guided = !guidanceOff();
   const beat = lessonBeatNow;
+  const free = lessonIsFree(lesson);
+  const lockedNow = lessonLocked(lesson, session.state) && guided;
   if (guided && beat?.explain) {
-    // A tap meant for the move that just happened must not swallow the explanation unread.
-    if (performance.now() - lessonExplainAt < 650) return true;
+    // The lit thing is the move: one tap reads the sentence AND plays it. Never the dwell guard
+    // here — that guard exists for a tap meant for the move that just happened, and this tap is
+    // aimed at the thing the lesson is pointing at now.
+    if (lessonTapMoves(beat, target, e, lockedNow)) {
+      lessonMarkSeenAfterTap(beat.id);
+      return false;
+    }
+    // A FREE lesson (level 9) is a real game: its one line must never hold a tap. The sentence
+    // closes AND the same tap reaches the game, so the first Draw is never swallowed by the box.
+    if (free) {
+      lessonMarkSeenAfterTap(beat.id);
+      return false;
+    }
+    // THE READING FLOOR (owner, 2026-10-21): the explanation is up for at least 3 s before a
+    // DISMISSING tap can take it away. Taps that are not a move are swallowed inside that floor, so
+    // a sentence cannot be lost to a stray finger. Deliberately scoped to DISMISSAL only — the lit
+    // target above still plays the move on one tap, because the owner also requires that (making
+    // the lit thing wait would recreate the "my first tap did nothing" bug). The old floor was
+    // 650 ms, which only stopped a tap aimed at the move that had just happened.
+    if (performance.now() - lessonExplainAt < LESSON_READ_MS) {
+      // A refused dismissal must still be ACKNOWLEDGED. A swallowed tap with no feedback is the
+      // "my first tap did nothing" smell the owner reported in the same breath, and the random-tap
+      // robustness check caught it: the tap changed nothing and said nothing. A single quiet pulse
+      // of the caption says "I felt that, the sentence stays a moment" without adding words.
+      lessonAckFloor();
+      return true;
+    }
     lessonMarkSeen(beat.id);
     return true;
   }
@@ -3960,9 +5890,9 @@ function lessonDecide(e: Event): boolean {
   if (!myTurn()) {
     if (tap.t === 'other') return false;
     lessonSay(LESSON.theirTurnNow, x, y);
-    return lesson.locked;
+    return lessonLocked(lesson, session.state);
   }
-  const locked = lesson.locked && guided;
+  const locked = lockedNow;
   if (tap.t === 'other') {
     // A control that is not the lit one (Undo, sort, Bloom) does not react in the locked levels.
     if (locked && target.closest('button') && !(beat?.lit.t === 'bloom' && target.closest('#smart-bloom'))) {
@@ -3971,13 +5901,36 @@ function lessonDecide(e: Event): boolean {
     }
     return false;
   }
-  const answer = tapAnswer(session.state, session.sel.card, tap, guided ? beat?.lit ?? null : null, locked, !!lessonPlacing());
+  // The Throw pile throws the waiting card; with none waiting it would do nothing, so say why.
+  const throwsNothing = tap.t === 'discard' && session.state.phase === 'DISCARD'
+    && !throwPileAction(session.state.phase, session.pending, session.legal);
+  const answer = throwsNothing ? LESSON.pickFirst : tapAnswer(session.state, session.sel.card, tap, guided ? beat?.lit ?? null : null, locked, !!lessonPlacing());
   if (!answer) return false;
   lessonSay(answer, x, y);
+  lessonWrongTap();
   return locked;
 }
 function lessonCapture(e: Event) {
   if (!lessonActive()) return;
+  if (lessonStageActive()) {
+    // A tap skips the intro. The pause menu is the one control that must ALSO act on that tap:
+    // the tutorial gate keeps it reachable for exactly this reason (leaving a level), and eating
+    // the press made it cost two taps. The stage still skips, then the button's own click runs.
+    if (e.type === 'pointerdown' && (e.target as Element | null)?.closest?.('#hud-menu')) {
+      skipLessonStage();
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    if (e.type === 'pointerdown') {
+      lessonVeto = true;
+      skipLessonStage();
+    } else if (e.type === 'click') {
+      lessonVeto = false;
+    }
+    return;
+  }
   lessonArmIdle();
   const stop = () => {
     e.preventDefault();
@@ -4007,83 +5960,513 @@ function syncLessonPile(st: State | null) {
   $('deck').classList.toggle('lesson-pile-low', low);
 }
 
+let lessonPlateTimer = 0;
+
+/**
+ * ONE info box for lessons: a caption floating over the felt. It holds an explanation sentence
+ * only — no title, no mission, no buttons. `pointer-events:none` (CSS) lets every tap through.
+ */
+function lessonPlate(): HTMLElement {
+  let plate = document.getElementById('lesson-plate');
+  if (plate) return plate;
+  plate = document.createElement('div');
+  plate.id = 'lesson-plate';
+  plate.hidden = true;
+  plate.setAttribute('role', 'status');
+  // One box: the sentence, then (on the Bloom lesson only) a small static example inside it.
+  plate.innerHTML = '<p class="lesson-copy"></p><div class="lesson-example" hidden aria-hidden="true"></div>';
+  document.body.append(plate);
+  window.addEventListener('resize', () => placeLessonPlate(), { passive: true });
+  return plate;
+}
+
+/** The owner-approved Bloom example: a set (same number, three suits) and a run (three in order). */
+const BLOOM_EXAMPLE_SET: readonly Card[] = Object.freeze([
+  { id: -501, suit: 0, rank: 3 }, { id: -502, suit: 1, rank: 3 }, { id: -503, suit: 2, rank: 3 },
+]);
+const BLOOM_EXAMPLE_RUN: readonly Card[] = Object.freeze([
+  { id: -511, suit: 0, rank: 3 }, { id: -512, suit: 0, rank: 4 }, { id: -513, suit: 0, rank: 5 },
+]);
+/** The same face the hand draws with, only smaller. No new art. */
+const lessonExampleFace = (c: Card) =>
+  `<span class="card lesson-example-card ${suitClass(c)}" aria-hidden="true">${cardFace(c)}</span>`;
+const lessonExampleRow = (cards: readonly Card[], cls: string) =>
+  `<span class="lesson-example-row ${cls}">${cards.map(lessonExampleFace).join('')}</span>`;
+
+/**
+ * Put the static example under the sentence — never a second overlay, never an animation. The run
+ * row is dropped when the box would grow past a third of the screen, so the map keeps its room.
+ */
+function setLessonExample(kind: 'bloom' | null) {
+  const plate = lessonPlate();
+  const box = plate.querySelector<HTMLElement>('.lesson-example');
+  if (!box) return;
+  const on = kind === 'bloom';
+  box.hidden = !on;
+  if (!on) {
+    box.replaceChildren();
+    delete box.dataset.kind;
+    plate.classList.remove('example-tight');
+    return;
+  }
+  if (box.dataset.kind !== 'bloom') {
+    box.innerHTML = lessonExampleRow(BLOOM_EXAMPLE_SET, 'lesson-example-set')
+      + lessonExampleRow(BLOOM_EXAMPLE_RUN, 'lesson-example-run');
+    box.dataset.kind = 'bloom';
+  }
+  const run = box.querySelector<HTMLElement>('.lesson-example-run');
+  if (run) run.hidden = false;
+  // Fit decides again on every new beat: placeLessonPlate() calls fitLessonExample().
+  plate.classList.remove('example-tight');
+  const budget = Math.min(220, Math.round(innerHeight * 0.34));
+  if (plate.offsetHeight > budget && run) {
+    run.hidden = true; // one compact row still shows the set
+    plate.classList.add('example-tight');
+  }
+}
+
+type PlateEl = HTMLElement & {
+  _avoid?: readonly string[];
+  _lessonBox?: { left: number; right: number; top: number; bottom: number; width: number; height: number };
+};
+type Spot = { l: number; t: number; r: number; b: number };
+
+/** The plate may use this much room at the viewport's side, and this gap from the header. */
+const PLATE_MARGIN = 8;
+const PLATE_GAP = 6;
+const PLATE_MAX_WIDTH = 420;
+/** Controls the caption must never sit on, whatever the light is doing. */
+const PLATE_KEEP_CLEAR = ['#hud', '#hud-menu', '#hud-window', '#hud-brand', '#deck', '#discard', '#hand', '#smart-led', '#smart-bloom-button', '#moves', '#smart-context', '#dock'] as const;
+
+function hideLessonPlate() {
+  const plate = document.getElementById('lesson-plate') as PlateEl | null;
+  if (plate) {
+    plate.hidden = true;
+    delete plate._lessonBox;
+    const example = plate.querySelector<HTMLElement>('.lesson-example');
+    if (example) { example.hidden = true; example.replaceChildren(); delete example.dataset.kind; }
+    plate.classList.remove('example-tight');
+    setLessonRestart(plate, false);
+  }
+  unwatchPlateSettle();
+}
+
+/**
+ * The camera eases after a beat, so a plate placed on the geometry of that instant can be left
+ * beside where the lit thing finally lands. The board's own viewBox is the camera: one observer,
+ * debounced, re-places the plate once the camera stops. It never measures per frame (only after a
+ * quiet spell), leaves nothing behind when the plate hides, and is the event-driven form of the
+ * "correct once the camera has settled" call that has always followed a new sentence.
+ */
+let plateWatch: MutationObserver | null = null;
+let plateSettle = 0;
+function watchPlateSettle() {
+  const svg = document.getElementById('board');
+  if (!svg || plateWatch) return;
+  plateWatch = new MutationObserver(() => {
+    if (plateSettle) clearTimeout(plateSettle);
+    plateSettle = window.setTimeout(() => {
+      plateSettle = 0;
+      const plate = document.getElementById('lesson-plate');
+      if (plate && !(plate as HTMLElement).hidden) placeLessonPlate();
+    }, 120);
+  });
+  plateWatch.observe(svg, { attributes: true, attributeFilter: ['viewBox'] });
+}
+function unwatchPlateSettle() {
+  if (plateSettle) clearTimeout(plateSettle);
+  plateSettle = 0;
+  plateWatch?.disconnect();
+  plateWatch = null;
+}
+
+/** A box for an element that is actually on screen, or null. */
+const plateBox = (el: Element | null): Spot | null => {
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  if (r.width < 4 || r.height < 4) return null;
+  return { l: r.left, t: r.top, r: r.right, b: r.bottom };
+};
+const boxesOverlap = (a: Spot, b: Spot) =>
+  a.l < b.r - 0.5 && a.r > b.l + 0.5 && a.t < b.b - 0.5 && a.b > b.t + 0.5;
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/**
+ * Put the wide caption in an empty gap: under the header, clear of the hexes and of every cockpit
+ * control, and never on the lit thing. Where the map leaves no gap at all (a short phone), take the
+ * gap with the fewest hexes under it — still never on the light, a control, or the header.
+ *
+ * This runs when the words change, on resize and once after the camera settles, never per frame.
+ */
+function placeLessonPlate() {
+  const plate = document.getElementById('lesson-plate') as PlateEl | null;
+  if (!plate || plate.hidden) return;
+  const hud = document.querySelector('#game > .hud');
+  if (!hud) return;
+  const vw = innerWidth;
+  const vh = innerHeight;
+  const sideLayout = document.documentElement.dataset.layout === 'side';
+  // Desktop (owner, 2026-11-11: "make the lesson windows be bigger, adjusting to any screen"): the box
+  // and its words grow with the window in the side layout (1x at 1280x800, up to 1.8x); phones keep 1x.
+  const scale = sideLayout ? Math.max(1, Math.min(1.8, Math.min(vw / 1280, vh / 800) * 1.25)) : 1;
+  plate.style.setProperty('--plate-scale', scale.toFixed(3));
+  const width = Math.round(Math.max(0, Math.min(PLATE_MAX_WIDTH * scale, vw - 2 * PLATE_MARGIN)));
+  plate.style.width = `${width}px`;
+  const h = Math.ceil(plate.offsetHeight);
+
+  const hexes: Spot[] = [];
+  for (const el of document.querySelectorAll('#board .hex-cell')) {
+    const spot = plateBox(el);
+    if (spot) hexes.push(spot);
+  }
+  const lit: Spot[] = [];
+  for (const sel of plate._avoid ?? []) {
+    const spot = plateBox(document.querySelector(sel));
+    if (spot) lit.push(spot);
+  }
+  const controls: Spot[] = [];
+  for (const sel of PLATE_KEEP_CLEAR) {
+    const spot = plateBox(document.querySelector(sel));
+    if (spot) controls.push(spot);
+  }
+  const dock = plateBox(document.getElementById('dock'));
+  const topMin = Math.max(PLATE_MARGIN, Math.round(hud.getBoundingClientRect().bottom + PLATE_GAP));
+  const topMax = Math.max(topMin, Math.min(vh - h - PLATE_MARGIN, (dock ? dock.t - PLATE_GAP : vh) - h));
+  const xMax = Math.max(PLATE_MARGIN, vw - width - PLATE_MARGIN);
+  const centre = Math.round((vw - width) / 2);
+  const xs = [...new Set([clamp(centre, PLATE_MARGIN, xMax), PLATE_MARGIN, xMax])];
+  // The edges of every box define the only vertical intervals worth testing: the plate either sits
+  // above a box or below it, so the candidate tops are exactly those edges (plus the two extremes).
+  const ys = new Set<number>([topMin, topMax]);
+  for (const spot of [...hexes, ...lit, ...controls]) {
+    ys.add(clamp(Math.round(spot.t - h - 2), topMin, topMax));
+    ys.add(clamp(Math.round(spot.b + 2), topMin, topMax));
+  }
+  // Follow the action: a spot's distance from the plate's centre to the nearest lit centre is the
+  // preference, with fewer covered hexes and then centred x breaking a near-tie. Hard rules are
+  // unchanged (the light and every cockpit control are rejected before this). The side layout
+  // (desktop) and a beat with no light keep the old "fewest hexes, then highest" order.
+  const followLit = !sideLayout && lit.length > 0;
+  const distToLit = (x: number, y: number) => {
+    const cx = x + width / 2;
+    const cy = y + h / 2;
+    let d = Infinity;
+    for (const s of lit) d = Math.min(d, Math.hypot(cx - (s.l + s.r) / 2, cy - (s.t + s.b) / 2));
+    return d;
+  };
+  let best: { x: number; y: number; hexes: number; dist: number } | null = null;
+  for (const y of ys) {
+    for (const x of xs) {
+      const r = { l: x, t: y, r: x + width, b: y + h };
+      if (lit.some((s) => boxesOverlap(r, s))) continue;
+      if (controls.some((s) => boxesOverlap(r, s))) continue;
+      const covered = hexes.reduce((n, s) => n + (boxesOverlap(r, s) ? 1 : 0), 0);
+      const dx = Math.abs(x + width / 2 - vw / 2);
+      const dist = followLit ? distToLit(x, y) : 0;
+      if (!best) {
+        best = { x, y, hexes: covered, dist };
+        continue;
+      }
+      const better = followLit
+        ? dist < best.dist - 0.5
+          || (Math.abs(dist - best.dist) <= 0.5
+            && (covered < best.hexes || (covered === best.hexes && dx < Math.abs(best.x + width / 2 - vw / 2))))
+        : covered < best.hexes
+          || (covered === best.hexes && (y < best.y || (y === best.y && dx < Math.abs(best.x + width / 2 - vw / 2))));
+      if (better) best = { x, y, hexes: covered, dist };
+    }
+  }
+  // Desktop (owner, 2026-11-11: "Make it centered with the hand and cockpit - the window with
+  // lessons. And make it centred vertically as well so it's above the cockpit"): the plate's home is
+  // the middle of the cockpit and hand's column, half-way down the free space above the cockpit.
+  // It takes that home whenever the search's hard rules allow it there (never over the light or a
+  // control, and no more unlit hexes than the search's own best).
+  if (sideLayout) {
+    const group = ['#futa04-box', '#hand'].map((sel) => plateBox(document.querySelector(sel))).filter((b): b is Spot => !!b);
+    if (group.length) {
+      const gl = Math.min(...group.map((b) => b.l)), gr = Math.max(...group.map((b) => b.r));
+      const cockpitTop = Math.min(...group.map((b) => b.t));
+      const hx = clamp(Math.round((gl + gr) / 2 - width / 2), PLATE_MARGIN, xMax);
+      const hy = clamp(Math.round(topMin + (cockpitTop - PLATE_GAP - topMin - h) / 2), topMin, Math.max(topMin, cockpitTop - PLATE_GAP - h));
+      const r = { l: hx, t: hy, r: hx + width, b: hy + h };
+      const covered = hexes.reduce((n, sp) => n + (boxesOverlap(r, sp) ? 1 : 0), 0);
+      if (!lit.some((sp) => boxesOverlap(r, sp)) && !controls.some((sp) => boxesOverlap(r, sp)) && (!best || covered <= best.hexes)) {
+        best = { x: hx, y: hy, hexes: covered, dist: 0 };
+      }
+    }
+  }
+  // No free gap at all: never cover the lit target, even if that means sitting over a control or
+  // a few unlit hexes. Above the light first, then below it.
+  const fallbackY = (() => {
+    if (!lit.length) return topMin;
+    const above = Math.min(...lit.map((s) => s.t)) - h - 2;
+    const below = Math.max(...lit.map((s) => s.b)) + 2;
+    if (above >= topMin && above <= topMax) return above;
+    if (below >= topMin && below <= topMax) return below;
+    return clamp(above, topMin, topMax);
+  })();
+  const x = best?.x ?? clamp(centre, PLATE_MARGIN, xMax);
+  const y = best?.y ?? fallbackY;
+  plate.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
+  plate._lessonBox = { left: Math.round(x), top: Math.round(y), right: Math.round(x) + width, bottom: Math.round(y) + h, width, height: h };
+  fitLessonExample();
+}
+
+/**
+ * On a tall phone the caption lives in the free gap, never over a hex. The Bloom example is the
+ * only thing that can make it too tall, so it gives way: the run row goes first ("if it fits"),
+ * then the whole example, and the sentence always stays. Never runs per frame — only when the
+ * words change, on resize and once after the camera settles.
+ */
+let fittingExample = false;
+function fitLessonExample() {
+  if (fittingExample) return;
+  const plate = document.getElementById('lesson-plate') as PlateEl | null;
+  if (!plate || plate.hidden || !plate._lessonBox || innerHeight < 800) return;
+  const example = plate.querySelector<HTMLElement>('.lesson-example');
+  if (!example || example.hidden) return;
+  const covers = () => {
+    const box = plate._lessonBox!;
+    const spot: Spot = { l: box.left, t: box.top, r: box.right, b: box.bottom };
+    for (const el of document.querySelectorAll('#board .hex-cell')) {
+      const hex = plateBox(el);
+      if (hex && boxesOverlap(spot, hex)) return true;
+    }
+    return false;
+  };
+  if (!covers()) return;
+  fittingExample = true;
+  try {
+    const run = example.querySelector<HTMLElement>('.lesson-example-run');
+    if (run && !run.hidden) run.hidden = true;
+    placeLessonPlate();
+    if (covers()) {
+      // No room even for the set: keep the sentence, drop the example's markup entirely, so the
+      // box is exactly what it was before this lesson had an example.
+      example.hidden = true;
+      example.replaceChildren();
+      delete example.dataset.kind;
+      plate.classList.add('example-tight');
+      placeLessonPlate();
+    }
+  } finally {
+    fittingExample = false;
+  }
+}
+
+/**
+ * START AGAIN: the one button the box ever holds, and only while the lesson cannot finish (owner,
+ * 2026-10-22). It exists in the DOM only then, so the box is otherwise information only.
+ */
+function setLessonRestart(plate: HTMLElement, on: boolean) {
+  let btn = plate.querySelector<HTMLButtonElement>('.lesson-restart');
+  if (!on) { btn?.remove(); return; }
+  if (btn) return;
+  btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn primary lesson-restart';
+  btn.textContent = LESSON.startAgain;
+  btn.addEventListener('click', restartStuckLesson);
+  plate.append(btn);
+}
+
+/** The same level from its opening, in place: no menu, no start sheet. */
+function restartStuckLesson() {
+  if (!lessonActive() || !campaignLevel) return;
+  hideLessonPlate();
+  startCampaignLevel(campaignLevel);
+}
+
+/** Put the explanation in the box. `lift` is what the box must never cover (the lit target). */
+function showLessonPlate(text: string, lift: readonly string[], example: 'bloom' | null = null, restart = false) {
+  const plate = lessonPlate();
+  plate.hidden = false;
+  const copy = plate.querySelector<HTMLElement>('.lesson-copy');
+  if (copy && copy.textContent !== text) copy.textContent = text;
+  setLessonExample(example);
+  setLessonRestart(plate, restart);
+  (plate as PlateEl)._avoid = lift;
+  placeLessonPlate();
+  watchPlateSettle();
+  // The camera eases for a moment after a beat. Correct once when it has settled.
+  clearTimeout(lessonPlateTimer);
+  lessonPlateTimer = window.setTimeout(placeLessonPlate, 400);
+}
+
 function renderLessonGuide(): void {
   const lesson = lessonActive()!;
   const st = session!.state;
   const level = lesson.level;
   document.documentElement.dataset.onboard = String(revealTierFor(level));
   document.documentElement.dataset.lesson = String(level);
-  const bulb = $('futa04-help-button');
-  if (revealTierFor(level) === 1) bulb.style.setProperty('filter', 'brightness(0.45) saturate(0.6)', 'important');
-  else bulb.style.removeProperty('filter');
+  const bulb = document.getElementById('futa04-help-button');
+  if (bulb) {
+    if (revealTierFor(level) === 1) bulb.style.setProperty('filter', 'brightness(0.45) saturate(0.6)', 'important');
+    else bulb.style.removeProperty('filter');
+  }
   syncLessonPile(st);
   if (!glassSurface) return;
-  if (guidanceOff() || openSheet || st.phase === 'GAME_OVER') {
+  // The header stays the menu and the logo; the words are chosen below.
+  // `pregameHold`: the Who-starts ceremony owns the screen. A lesson (level 10 onwards, the only
+  // levels that have both) must not paint its window or its light over the cards — the send-off
+  // comes after the ceremony, when the hold is released and this function is repainted.
+  if (pregameHold || guidanceOff() || openSheet || st.phase === 'GAME_OVER') {
     lessonBeatNow = null;
+    lessonBreath?.clear();
+    hideLessonPlate();
     smartCockpit?.quiet?.(false);
+    if (!lessonHoldingScore) smartCockpit?.led?.(null);
     if (lessonShownKey) {
       lessonShownKey = '';
-      hideOnboardingWindow();
+      glassSurface.hide();
     }
+    return;
+  }
+  // The stage intro is a short, quiet beat (~1.2 s, a tap skips it): the board is not live yet and
+  // there is no label — the first explanation takes the box.
+  if (lessonStageActive()) {
+    const stageKey = `stage:${level}`;
+    lessonBeatNow = null;
+    lessonBreath?.clear();
+    if (lessonShownKey !== stageKey) {
+      lessonShownKey = stageKey;
+      glassSurface.hide();
+      hideLessonPlate();
+      smartCockpit?.quiet?.(true);
+      if (!lessonHoldingScore) smartCockpit?.led?.(openingDisplay(lesson, st, lessonSeen));
+    }
+    return;
+  }
+  // The first light waits for the opening hand to stop moving — never a fixed delay.
+  if (!handSettled) {
+    lessonBeatNow = null;
+    lessonBreath?.clear();
+    hideLessonPlate();
+    if (lessonShownKey) {
+      lessonShownKey = '';
+      glassSurface.hide();
+    }
+    // Level 1 welcomes from the first frame, while the opening hand is still being dealt.
+    const opening = openingDisplay(lesson, st, lessonSeen);
+    if (opening) { smartCockpit?.quiet?.(true); smartCockpit?.led?.(opening); }
     return;
   }
   const mine = st.actor === HUMAN && !busy();
   const stuck = mine && !goalReachable(lesson, st);
   let beat: Beat | null = stuck
-    ? { id: 'restart', title: LESSON.restart, line: LESSON.restartLine, lit: { t: 'none' } }
+    ? { id: 'restart', line: LESSON.restartLine, lit: { t: 'none' } }
     : lessonBeat(lesson, st, lessonCtx());
-  // Level 10 plays on its own: its hints wait for a quiet moment.
+  // Every new step of mine starts its own quiet count: idle time spent watching their turn (or
+  // reading the last step) never makes a waiting hint appear at once (owner, 2026-10-24).
+  const stepKey = mine ? `${st.history?.length ?? 0}|${st.phase}` : '';
+  if (stepKey && stepKey !== lessonIdleStep) { lessonIdleStep = stepKey; lessonArmIdle(); }
+  if (!mine) lessonIdleStep = '';
+  // A hint that is not the lesson's own step (and every hint on level 10) waits for a quiet moment.
   if (beat?.idleOnly && !lessonIdle) beat = null;
-  lessonBeatNow = beat;
+  // Nothing is left to do but end the Grow: the game goes on to the Throw by itself (autoAdvance),
+  // so » is never lit for the moment before it does (owner, 2026-10-20).
+  if (beat?.id === 'end' && lessonEndsByItself()) beat = null;
+  if ((beat?.id ?? '') !== lessonShownBeatId) {
+    // A new step: the two-wrong-tap escalation belonged to the old one.
+    lessonWrongInStep = 0;
+    lessonEscalated = false;
+    if (lessonHelloNow && beat?.hello !== lessonHelloNow) lessonHelloNow = null;
+    lessonShownBeatId = beat?.id ?? '';
+  }
+  // A power's hello is a once-ever moment: remember it now, keep it on screen until the move.
+  if (beat?.hello && !helloSeen(lessonMastery, beat.hello)) {
+    lessonHelloNow = beat.hello;
+    lessonMastery = recordHello(lessonMastery, beat.hello);
+    saveLessonMastery();
+    // One short hello, not a second guide: it fades on its own, and is never shown again.
+    clearTimeout(lessonHelloTimer);
+    lessonHelloTimer = window.setTimeout(() => {
+      lessonHelloNow = null;
+      lessonHelloTimer = 0;
+      lessonShownKey = '';
+      render();
+    }, 2600);
+  }
+  const kind = beat?.kind ?? null;
+  let tier: LessonTier = stuck ? 'spotlight'
+    : beat?.explain ? 'spotlight'
+    : beat?.status ? 'guide'
+    : beat?.hello ? 'whisper'
+    : kind ? displayTier({
+      mastery: lessonMastery, kind, level: lesson.level, newActions: lesson.newActions,
+      safety: lessonIdleStage, escalation: lessonEscalated,
+    })
+    : 'silent';
+  const shown = presentedLessonBeat(beat, tier);
+  // A free lesson's live cue always speaks (see `presentedLessonBeat`). Keep its light at least a
+  // whisper, so the thing the cue names is still visibly pointed at; mastery may soften it, never
+  // remove it.
+  if (shown?.always && tier === 'silent') tier = 'whisper';
+  lessonBeatNow = shown;
+  lessonTierShown = tier;
+  lessonTierKind = kind;
   if (beat?.explain && beat.id !== lessonExplainId) { lessonExplainId = beat.id; lessonExplainAt = performance.now(); }
-  // H: while the window speaks, the cockpit's own LED keeps to the score and real results.
-  smartCockpit?.quiet?.(!!beat || !!lessonAnswerText);
-  // The one moment that teaches the score: the sign shows the score itself.
-  const holdScore = beat?.lit.t === 'score';
+  // The box explains; the display says what to do. They never carry the same words, and the box
+  // never holds a title, a mission or a button.
+  const voice = lessonVoiceFor({
+    beat: shown, answer: lessonAnswerText || null, mine, stuck, restartLine: LESSON.restartLine,
+  });
+  // The one moment that teaches the score: the sign shows the score itself — but only when this
+  // beat has no action line. In lessons 1-10 the ACTION always wins the display (owner,
+  // 2026-10-20); the score is what is left when there is nothing to do.
+  const holdScore = shown?.lit.t === 'score' && !voice.display;
   if (holdScore !== lessonHoldingScore) { lessonHoldingScore = holdScore; smartCockpit?.holdScore?.(holdScore); }
-  const key = JSON.stringify([level, beat?.id, beat?.title, beat?.line, beat?.lit, lessonAnswerText, lessonIdle, mine, settings.reduceMotion]);
+  const lit = shown && mine ? litTarget(shown.lit, SMALL_HOMES) : { selectors: [] as string[], shape: 'none' as const };
+  // The lit thing keeps breathing for as long as the beat is live: a card, a pile, a key. A hex
+  // already breathes on the board and the display is its own light, so neither is doubled.
+  lessonBreath?.sync(lit.selectors, lit.shape, !!shown && mine && motionOn() && !settings.reduceMotion);
+  const key = JSON.stringify([
+    level, shown?.id, voice.box, voice.display, shown?.lit, lessonAnswerText, lessonIdle, tier,
+    lessonHelloNow, holdScore, mine, settings.reduceMotion, handSettled,
+  ]);
   if (key === lessonShownKey) return;
   lessonShownKey = key;
-  if (!beat && !lessonAnswerText) {
-    hideOnboardingWindow();
+  // A lesson never lets the cockpit's own one-word step cues (DRAW!/GROW!/THROW!) speak: the
+  // display is driven only by the lesson's action lines.
+  smartCockpit?.quiet?.(true);
+  // A wrong-tap answer owns the sign only on MY turn; while they play, the status cue speaks.
+  if (!holdScore && !(mine && lessonAnswerText)) smartCockpit?.led?.(voice.display);
+  if (!shown && !voice.box) {
+    lessonBeatNow = null;
+    lessonBreath?.clear();
+    hideLessonPlate();
+    glassSurface.hide();
     return;
   }
-  const lit = beat && mine ? litTarget(beat.lit, SMALL_HOMES) : { selectors: [] as string[], shape: 'none' as const };
-  const led = beat?.led && beat.led !== beat.title ? beat.led : null;
-  const title = led ?? beat?.title ?? LESSON.tapLit;
-  const sentence = (t: string) => t.charAt(0) + t.slice(1).toLowerCase();
-  const why = led && beat ? [`${sentence(beat.title)}.`, beat.line].filter(Boolean).join(' ') : beat?.line;
-  const showMe = lessonIdle && !!beat && !beat.explain && lit.selectors.length > 0;
-  glassSurface.tutorial(title, 0, lit.selectors, {
+  if (voice.box) showLessonPlate(voice.box, holdScore ? ['#smart-led', ...lit.selectors] : lit.selectors,
+    level === 5 && shown?.id === '5:intro:bloom-cards' ? 'bloom' : null, voice.restart);
+  else hideLessonPlate();
+  // An explanation with no lit move (the way out of a stuck lesson): the box speaks, the map is
+  // not dimmed and there is nothing to point at.
+  if (!shown) {
+    lessonBreath?.clear();
+    glassSurface.hide();
+    return;
+  }
+  glassSurface.tutorial(voice.display ?? '', 0, lit.selectors, {
     shape: lit.shape,
     lesson: true,
-    stepKey: `lesson:${level}:${beat?.id ?? 'answer'}`,
-    ...(why ? { why } : {}),
-    ...(lessonAnswerText ? { status: lessonAnswerText } : {}),
-    kicker: CAMPAIGN.levelLabel(level),
+    inCockpit: true,
+    tier,
+    noLight: lit.selectors.length === 0,
+    stepKey: `lesson:${level}:${shown.id}`,
     reduceMotion: settings.reduceMotion,
     idleHard: lessonIdle,
     arrow: lit.selectors.length > 0,
-    buttons: {
-      previous: false,
-      next: !!beat && (beat.explain || stuck || showMe),
-      nextLabel: stuck ? LESSON.restart : beat?.explain ? LESSON.next : LESSON.showMe,
-      nextBlink: !!beat?.explain,
-    },
-    handlers: {
-      onNext: () => {
-        if (stuck) return startCampaignLevel(campaignLevel!);
-        if (beat?.explain) return lessonMarkSeen(beat.id);
-        // Show me: the light pulses and the pointer taps harder (nothing is played for you).
-        glassSurface?.nudge();
-      },
-    },
   });
 }
 
 let onboardKey = '';
 function renderOnboardingGuide(v: View) {
   if (lessonActive()) return renderLessonGuide();
+  // Every other screen keeps its own chrome: the plate never shows outside a lesson.
+  hideLessonPlate();
+  lessonBreath?.clear();
   smartCockpit?.quiet?.(false);
   delete document.documentElement.dataset.lesson;
   syncLessonPile(null);
@@ -4148,11 +6531,12 @@ function renderOnboardingGuide(v: View) {
 
 function updateFuta04Help() {
   const free = tutorialFreePlayActive();
-  const unavailable=!session || (!!coach.tutorial && !free) || !!openSheet || session.state.phase==='GAME_OVER';
+  const unavailable=!session || (!!coach.tutorial && !free) || !!openSheet || (session.state.phase==='GAME_OVER'&&!gameOverDismissed);
   futa04Help?.update({ blocked: IS_FUTA04 ? unavailable : unavailable || busy() || !!session?.pending || !!draw.shape.length || cardPinned });
 }
 
 function toggleMatchIntel() {
+  if (blitzMatch) return; // Blitz has no Match Intel (owner, 2026-11-06)
   if (!glassSurface || !session) return;
   if (coach.tutorial && !tutorialFreePlayActive()) return;
   if (tutorialFreePlayActive()) {
@@ -4167,30 +6551,48 @@ function toggleMatchIntel() {
     noteFreePlayBulbInteraction();
     return;
   }
-  openIntel('intel');
+  openIntel(lastIntelTab());
 }
 
 /** Match Intel tab labels, kept in src/strings.ts for a one-line rename. */
-const INTEL_TABS = Object.freeze({ intel: HELP.intelTab, howto: HELP.howToTab });
+const INTEL_TABS = Object.freeze({ now: HELP.nowTab, tips: HELP.tipsTab, rules: HELP.rulesTab });
+/** Match Intel opens on the tab the player used last (owner, 2026-10-24). */
+const INTEL_TAB_KEY = 'severgrow.intel.tab.v1';
+const lastIntelTab = (): IntelTabId => {
+  const saved = store.get(INTEL_TAB_KEY);
+  return saved === 'tips' || saved === 'rules' ? saved : 'now';
+};
 
-/** Open the Match Intel glass on a tab. Tab 1 is public match history, tab 2 the moves reference. */
-function openIntel(tab: 'intel' | 'howto'): void {
+/** Match Intel's content: the public match record, plus this match's tips and the rule cards. */
+function intelModel(): { data: ReturnType<typeof matchIntel>; guide: IntelGuide } | null {
+  if (!session) return null;
+  const v = session.view;
+  const tips = intelTips(v);
+  return {
+    data: matchIntel(v, session.state.history ?? [], openingPublicDiscard(session.state, session.base)),
+    guide: { tips, rules: ruleCards(session.state.config), rule: nearestRule(tips) },
+  };
+}
+
+/** Open the Match Intel glass: Now (the match), Tips (this moment), Rules (the lessons, the full rules). */
+function openIntel(tab: IntelTabId, fullRules = false): void {
   if (!glassSurface || !session) return;
-  const model = matchIntel(session.view,session.state.history ?? [],openingPublicDiscard(session.state,session.base));
-  glassSurface.intel(model, { tab, labels: INTEL_TABS, howToHtml: howToReferenceHtml(session.state.config) });
+  const model = intelModel()!;
+  glassSurface.intel(model.data, { tab, labels: INTEL_TABS, howToHtml: howToReferenceHtml(session.state.config), guide: model.guide, fullRules,
+    onTab: (next) => store.set(INTEL_TAB_KEY, next) });
   intelState=session.state;
   $('futa04-help-button').setAttribute('aria-expanded','true');
   document.querySelector<HTMLElement>('#futasaku-glass .intel-close')?.focus();
 }
 
-/** The pause menu's "How to play" opens the same moves reference: the Match Intel "How to" tab
+/** The pause menu's "How to play" opens the same moves reference: Match Intel's Rules tab, full rules unfolded,
  *  where the glass exists, the legacy sheet during a guided tutorial step (the glass is the
  *  tutorial window then) and on channels without the glass. */
 function openHowToReference(): void {
   if (coach.tutorial && !tutorialFreePlayActive()) { sheet('sheet-howto'); return; }
   if (!session || !glassSurface) { sheet('sheet-howto'); return; }
   sheet(null);
-  openIntel('howto');
+  openIntel('rules', true);
 }
 
 /** The coach's arrow: points at the one thing to tap next for the suggested move. */
@@ -4358,7 +6760,7 @@ function renderHud() {
   const turn = $('turn');
   turn.className = `turn ${over ? 'over' : st.turnPlayer === HUMAN ? 'you' : 'bot'}${thinking ? ' thinking' : ''}`;
   const turnKey = over ? 'over' : `${st.turnPlayer}`;
-  if (turnKey !== lastTurnKey && lastTurnKey !== '' && !settings.reduceMotion && settings.speed !== 'skip') anim(turn, [{ opacity: 0.25 }, { opacity: 1 }], { duration: 280 * Math.max(timeScale(), 0.35), easing: 'ease-out' });
+  if (turnKey !== lastTurnKey && lastTurnKey !== '' && !settings.reduceMotion && settings.speed !== 'skip') anim(turn, [{ opacity: 0.25 }, { opacity: 1 }], { duration: MOTION.quick * Math.max(timeScale(), 0.35), easing: EASE.out });
   lastTurnKey = turnKey;
   // Online the duel strip (directly above) already owns the turn word, and there is no bot level:
   // the pill carries the turn clock only — never a "Level N" that does not exist online.
@@ -4370,7 +6772,7 @@ function renderHud() {
     ? '<b>Game over</b>'
     : isOnlineDuel()
       ? ''
-      : `<b>${st.turnPlayer === HUMAN ? (watching ? `Green turn (Level ${watching.level})` : 'Your turn') : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${ladderLevel(gameLevel)}</small>`;
+      : `<b>${st.turnPlayer === HUMAN ? (watching ? `Green turn (Level ${watching.level})` : 'Your turn') : `${OPP.Label} turn`}</b><small>${currentMatchLabel()}</small>`;
   // The dock's hint line: always there (one fixed row), saying what to do next.
   const hint = dockHint(session.view);
   const hintEl = $('hint');
@@ -4431,23 +6833,6 @@ function safeArea() {
   return { safeTop: px(cs.paddingTop), safeBottom: px(cs.paddingBottom), safeLeft: px(cs.paddingLeft), safeRight: px(cs.paddingRight) };
 }
 
-/** The iPhone Home Screen web view can report a content viewport ending above
- * the physical screen. `screen.height` supplies the missing bottom strip when
- * its width matches this full-screen portrait app. Safari tabs keep their
- * visual viewport, including the browser's own bars. */
-function gameViewport() {
-  const vv = window.visualViewport;
-  const w = Math.round(vv?.width ?? window.innerWidth);
-  const homeScreen = document.documentElement.classList.contains('home-screen-app');
-  const screenFits = homeScreen && w <= 600 && window.innerHeight > w &&
-    Math.abs(window.screen.width - w) <= 2 &&
-    window.screen.height >= window.innerHeight &&
-    window.screen.height - window.innerHeight < window.innerHeight * .16;
-  const h = Math.round(homeScreen
-    ? Math.max(window.innerHeight, screenFits ? window.screen.height : 0)
-    : (vv?.height ?? window.innerHeight));
-  return { w, h };
-}
 
 let firstToolTips: () => void = () => {};
 let layoutKey = '';
@@ -4458,26 +6843,51 @@ function alignDrawPiles() {
   const box = document.getElementById('futa04-box');
   const piles = box?.querySelector<HTMLElement>(':scope > .piles');
   if (!box || !piles) return;
-  if (document.documentElement.dataset.step !== 'draw' || document.documentElement.dataset.thumb === 'left') {
+  if (document.documentElement.dataset.step !== 'draw') {
     drawPileAnchorKey = '';
     piles.style.setProperty('--futa04-draw-shift', '0px');
     return;
   }
   const anchorKey = `${layoutKey}|${session?.state.turnNumber ?? 0}`;
   if (drawPileAnchorKey === anchorKey) return;
-  const handCard = document.querySelector<HTMLElement>('#hand .card');
+  const handCards = [...document.querySelectorAll<HTMLElement>('#hand .card')];
   const actions = document.getElementById('smart-panel') ?? document.getElementById('futa04-actions');
-  if (!handCard) return;
+  if (!handCards.length) return;
   // offsetLeft is layout geometry, so the calculation stays steady while the group animates.
   const baseLeft = box.getBoundingClientRect().left + piles.offsetLeft;
   // Hand sorting uses a FLIP animation on the individual card's `translate`.
   // Its screen rect includes that temporary travel, while the piles must align
   // with the card's resting slot throughout the sort.
-  const travelX = parseFloat(getComputedStyle(handCard).translate);
-  const restingLeft = handCard.getBoundingClientRect().left - (Number.isFinite(travelX) ? travelX : 0);
+  const resting = handCards.map((card) => {
+    const travelX = parseFloat(getComputedStyle(card).translate);
+    const r = card.getBoundingClientRect();
+    const t = Number.isFinite(travelX) ? travelX : 0;
+    return { left: r.left - t, right: r.right - t };
+  });
+  const pileWidth = Math.max(0, ...Array.from(piles.children, el => (el as HTMLElement).offsetWidth));
+  if (document.documentElement.dataset.cockpit === 'left') {
+    // Piles on the RIGHT (the default since 2026-11-11): the mirror of the rule below. The throw
+    // pile's right edge comes to the hand's rightmost card, never over the tools on the left.
+    const restingRight = Math.max(...resting.map(r => r.right));
+    const desired = restingRight - (baseLeft + piles.offsetWidth);
+    const contentLeft = piles.offsetLeft + Math.min(...Array.from(piles.children, el => (el as HTMLElement).offsetLeft));
+    const toolsRight = actions ? actions.offsetLeft + actions.offsetWidth : 0;
+    const room = Math.max(0, contentLeft - pileWidth * .21 - toolsRight - 8);
+    piles.style.setProperty('--futa04-draw-shift', `${-Math.round(Math.max(0, Math.min(-desired, room)))}px`);
+    drawPileAnchorKey = anchorKey;
+    return;
+  }
+  // The LEFTMOST card on screen (a left-hand fan is mirrored, so it is not always the first).
+  const restingLeft = Math.min(...resting.map(r => r.left));
   const desired = restingLeft - baseLeft;
-  const rightLimit = Math.min(window.innerWidth - 8, (actions?.getBoundingClientRect().left ?? window.innerWidth) - 8);
-  const room = Math.max(0, rightLimit - baseLeft - piles.offsetWidth);
+  // Keep this limit in the cockpit's layout coordinates: its entrance transform can make
+  // screen rectangles disagree while the sheet settles. Reserve the ready pile's 1.16 scale
+  // plus its 1.035 breath too; offsetWidth alone never includes that visual overflow.
+  // Grid tracks also transition from Grow's 108px slot to Draw's 128px slot. The custom
+  // property is the settled target, so the first Draw frame cannot cache the smaller width.
+  const drawSlot = parseFloat(getComputedStyle(box).getPropertyValue('--box-piles')) || piles.offsetWidth;
+  const reach = Math.max(drawSlot, piles.offsetWidth) + pileWidth * .21;
+  const room = Math.max(0, (actions?.offsetLeft ?? box.clientWidth) - 8 - piles.offsetLeft - reach);
   piles.style.setProperty('--futa04-draw-shift', `${Math.round(Math.max(0, Math.min(desired, room)))}px`);
   drawPileAnchorKey = anchorKey;
 }
@@ -4488,10 +6898,27 @@ function alignDrawPiles() {
  * size. It only ever moves left, and always keeps clear of the board.
  */
 let sideDockStale = true;
+// The board's entrance (v075-board-rise) scales and lifts it: a measurement taken mid-rise is off by its
+// offset. Place the desktop quarters again once it has landed.
+document.getElementById('board-wrap')?.addEventListener('animationend', (e) => {
+  if ((e as AnimationEvent).animationName === 'v075-board-rise' && document.documentElement.dataset.quad === '1') centreSideDock();
+});
+/** The cockpit's placement, as the CSS reads it. Panels anchored to the cockpit (the match chat)
+ *  re-measure when it changes: a translate does not trigger their ResizeObserver. */
+const cockpitPlacement = (): string => ['--side-dock-shift', '--side-dock-shift-y', '--quad-board-x', '--quad-board-y']
+  .map((n) => document.documentElement.style.getPropertyValue(n)).join('|');
 function centreSideDock(): void {
+  const before = cockpitPlacement();
+  placeCockpit();
+  if (cockpitPlacement() !== before) window.dispatchEvent(new Event('futasaku:cockpit-moved'));
+}
+function placeCockpit(): void {
   const root = document.documentElement;
   if (root.dataset.layout !== 'side') {
     root.style.removeProperty('--side-dock-shift');
+    root.style.removeProperty('--side-dock-shift-y');
+    root.style.removeProperty('--quad-board-x');
+    root.style.removeProperty('--quad-board-y');
     sideDockStale = false;
     return;
   }
@@ -4499,6 +6926,16 @@ function centreSideDock(): void {
   const box = document.getElementById('futa04-box')?.getBoundingClientRect();
   if (!tiles || !box || tiles.width === 0 || box.width === 0) return; // not drawn yet: the next render retries
   sideDockStale = false;
+  if (root.dataset.quad === '1') {
+    // Measure the board where it will REST: its entrance (lift + scale) is jumped to its end for the
+    // reading and put back at once (same frame, nothing is painted in between). Measuring mid-rise
+    // placed it ~16 px too high, then the correction at the end of the rise made it drop.
+    measureAtRest(document.getElementById('board-wrap'), () => placeDesktopQuarters(root));
+    return;
+  }
+  root.style.removeProperty('--side-dock-shift-y');
+  root.style.removeProperty('--quad-board-x');
+  root.style.removeProperty('--quad-board-y');
   const current = parseFloat(root.style.getPropertyValue('--side-dock-shift')) || 0;
   const left = box.left - current; // where the cockpit sits with no shift
   const room = innerWidth - tiles.right;
@@ -4506,11 +6943,99 @@ function centreSideDock(): void {
   const shift = Math.min(0, Math.max(want, tiles.right + 24) - left);
   root.style.setProperty('--side-dock-shift', `${Math.round(shift)}px`);
 }
+/** Desktop quarters: the board's right edge on the middle, equal space above and below; the cockpit
+ *  + hand on the bottom-right quarter's middle (75%, 75%), never off the bottom. */
+function placeDesktopQuarters(root: HTMLElement): void {
+  {
+    const tiles = document.querySelector('#board-wrap .l-base')?.getBoundingClientRect();
+    if (!tiles || tiles.width === 0) return;
+    // DESKTOP QUARTERS (owner, 2026-11-08): the cockpit + hand centred on the bottom-right quarter's
+    // middle (75% across, 75% down), never off the bottom of the screen and never over the board.
+    // The board: its right edge on the screen's middle, the same space above and below it (owner,
+    // 2026-11-08). A relative offset, not translate: the board's entrance animation owns translate.
+    const bx = parseFloat(root.style.getPropertyValue('--quad-board-x')) || 0;
+    const by = parseFloat(root.style.getPropertyValue('--quad-board-y')) || 0;
+    const restRight = tiles.right - bx;
+    const restMidY = tiles.top - by + tiles.height / 2;
+    const boardX = Math.round(innerWidth / 2 - restRight);
+    const boardY = Math.round(innerHeight / 2 - restMidY);
+    root.style.setProperty('--quad-board-x', `${boardX}px`);
+    root.style.setProperty('--quad-board-y', `${boardY}px`);
+    const boardRight = restRight + boardX;
+    const dock = document.querySelector<HTMLElement>('#game .dock')?.getBoundingClientRect();
+    if (!dock || dock.width === 0) return;
+    const sx = parseFloat(root.style.getPropertyValue('--side-dock-shift')) || 0;
+    const sy = parseFloat(root.style.getPropertyValue('--side-dock-shift-y')) || 0;
+    // Centre what the player SEES (owner, 2026-11-09: "move the hand and cockpit ... so it's actually in
+    // the middle of the right half - right now too hugged to the right side"). On wide screens the
+    // dock's box is wider than its content, which sits at its right: centring the box pushed the
+    // cockpit and hand up to 180 px right of the quarter's middle (measured at 1920 wide).
+    const seen = [...document.querySelectorAll<HTMLElement>('#game .dock .pile-card, #smart-panel, #hand .card')]
+      .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);
+    const seenLeft = seen.length ? Math.min(...seen.map((r) => r.left)) : dock.left;
+    const seenRight = seen.length ? Math.max(...seen.map((r) => r.right)) : dock.right;
+    const restX = (seenLeft + seenRight) / 2 - sx; // the visible group's centre with no shift
+    const restTop = dock.top - sy;
+    const wantX = Math.max(innerWidth * 0.75, boardRight + 24 + (seenRight - seenLeft) / 2);
+    // THE HAND'S BOTTOM LINE ON THE BOARD'S (owner, 2026-11-11: "on desktop, make the bottom line of hand
+    // be in line with bottom line of the board"): the lowest card edge sits level with the board's lowest
+    // tile edge, never off the bottom of the screen and never above the top.
+    const cards = [...document.querySelectorAll<HTMLElement>('#hand .card')].map((el) => el.getBoundingClientRect()).filter((r) => r.height > 0);
+    const boardBottom = tiles.top - by + boardY + tiles.height;
+    const handBottomRest = cards.length ? Math.max(...cards.map((r) => r.bottom)) - sy : dock.bottom - sy;
+    const handGap = handBottomRest - restTop; // dock top to the hand's bottom line
+    const wantTop = cards.length
+      ? Math.min(boardBottom - handGap, innerHeight - 12 - dock.height)
+      : Math.min(innerHeight * 0.75 - dock.height / 2, innerHeight - 12 - dock.height);
+    root.style.setProperty('--side-dock-shift', `${Math.round(wantX - restX)}px`);
+    root.style.setProperty('--side-dock-shift-y', `${Math.round(Math.max(wantTop, 8) - restTop)}px`);
+  }
+}
+/**
+ * The opponent's seat: a real, invisible anchor at the top-right of the map band (their side of
+ * the board on both the portrait and the wide layout). It is measured only from layout — the
+ * cached key makes repeated calls from a layout pass free, and no animation frame measures it.
+ */
+let oppSeatCache = '';
+function placeOppSeat(): void {
+  if (!IS_FUTA04) return;
+  const seat = document.getElementById('opp-seat');
+  const wrapEl = document.getElementById('board-wrap');
+  const game = document.getElementById('game');
+  if (!seat || !wrapEl || !game) return;
+  const wrap = wrapEl.getBoundingClientRect();
+  if (wrap.width < 80 || wrap.height < 80) return;
+  const card = document.querySelector<HTMLElement>('#deck .pile-card')?.getBoundingClientRect();
+  const cw = card && card.width > 0 ? card.width : 44;
+  const ch = card && card.height > 0 ? card.height : Math.round(cw * 1.42);
+  const side = document.documentElement.dataset.layout === 'side';
+  // Clear of the header, the map's right edge and (on a wide screen) the cockpit beside it.
+  const left = Math.max(wrap.left + 4, wrap.right - cw - (side ? 18 : 10));
+  const top = Math.max(wrap.top + 6, wrap.top + (side ? 18 : 8));
+  const g = game.getBoundingClientRect();
+  const key = `${g.left},${g.top},${left.toFixed(1)},${top.toFixed(1)},${cw.toFixed(1)},${ch.toFixed(1)}`;
+  if (key === oppSeatCache) return;
+  oppSeatCache = key;
+  Object.assign(seat.style, {
+    left: `${(left - g.left).toFixed(1)}px`,
+    top: `${(top - g.top).toFixed(1)}px`,
+    width: `${cw}px`,
+    height: `${ch}px`,
+  });
+}
+/** The seat, if it has a settled rect. A page that has not laid out yet gets one more try. */
+function oppSeat(): HTMLElement | null {
+  const seat = document.getElementById('opp-seat');
+  if (!seat) return null;
+  if (seat.getBoundingClientRect().width > 1) return seat;
+  placeOppSeat();
+  return seat.getBoundingClientRect().width > 1 ? seat : null;
+}
 /** Sets the layout's sizes as CSS variables; only when the viewport (or board size) changes. */
 function applyLayout() {
-  const { w, h } = gameViewport();
+  const { w, h } = readAppViewport();
   if (document.documentElement.classList.contains('home-screen-app'))
-    document.documentElement.style.setProperty('--futasaku-app-height', `${h}px`);
+    setStyle(document.documentElement,'--futasaku-app-height',`${h}px`);
   const radius = session?.state.config.boardRadius ?? 3;
   // the Lab (test copy): a board of any shape fits by the box around its tiles
   const shapeCfg = session?.state.config;
@@ -4531,6 +7056,8 @@ function applyLayout() {
   if (branding) Object.assign(l, branding.polishLayout(l, { w, h, ...safeArea() }, radius));
   const thumbWas = thumbLayout;
   thumbLayout = l.thumb ?? null;
+  // The cockpit's side on every screen (phone, sideways, desktop): player/thumb.ts cockpit().
+  document.documentElement.dataset.cockpit = thumbMod?.cockpit() ?? 'left';
   if (thumbLayout) {
     document.documentElement.dataset.thumb = thumbLayout.side;
     const r = document.documentElement.style;
@@ -4588,14 +7115,37 @@ function applyLayout() {
   root.setProperty('--cw', px(l.card.w));
   root.setProperty('--slice', px(l.card.slice));
   document.documentElement.dataset.layout = l.mode;
+  // desktop quarters (owner, 2026-11-08): board in the left half, cockpit + hand on the bottom-right quarter
+  if (l.quad) document.documentElement.dataset.quad = '1';
+  else delete document.documentElement.dataset.quad;
   board.svg.setAttribute('preserveAspectRatio', (l.thumb && !tutorialOnEarly) ? 'xMidYMax meet' : 'xMidYMid meet');
   fitHudNames();
   if (IS_FUTA04) requestAnimationFrame(alignDrawPiles);
+  if (IS_FUTA04) requestAnimationFrame(placeOppSeat);
   if (IS_FUTA04) sideDockStale = true;
 
 }
-window.addEventListener('resize', () => applyLayout());
-window.visualViewport?.addEventListener('resize', () => applyLayout());
+/**
+ * iPhone Safari fires resize before it reports the new size when the phone turns (and often no
+ * second event once the size settles), so a layout taken on the event alone could keep the other
+ * orientation's numbers: back in portrait the board stayed squeezed at the bottom (owner report,
+ * 2026-10-24). After any resize the real size is read again a few times while it settles, and
+ * the layout follows whenever it moved. applyLayout is cheap when nothing changed (its key).
+ */
+let settleTimers: number[] = [];
+function layoutSoon() {
+  applyLayout();
+  for (const t of settleTimers) clearTimeout(t);
+  settleTimers = [80, 250, 600, 1200].map((ms) => window.setTimeout(() => {
+    const before = layoutKey;
+    applyLayout();
+    if (layoutKey !== before && session) render();
+  }, ms));
+}
+window.addEventListener('resize', layoutSoon);
+window.addEventListener('orientationchange', layoutSoon);
+window.visualViewport?.addEventListener('resize', layoutSoon);
+screen.orientation?.addEventListener?.('change', layoutSoon);
 
 /**
  * Positioning pass: the score bar keeps "You" and "Opponent" only while both fit their (equal)
@@ -4643,10 +7193,11 @@ function hintCtx(v: View): HintCtx {
     canSprout: session!.legal.some((a) => a.t === 'Sprout'),
     canCombo: session!.legal.some((a) => a.t === 'Bloom'),
     bloomBlocked: (() => {
-      const groups = bloomGroups(v.hand);
+      const groups = bloomsShown() ? bloomGroups(v.hand) : [];
       return groups.length ? Math.min(...groups.map((g) => g.cards.length)) : null;
     })(),
     throwEndsTurn: v.phase === 'DISCARD' && discardEndsTurn(v),
+    throwPicked: pending?.t === 'Discard',
     fruitReady: session!.legal.some((a) => a.t === 'PlayFruit'),
     grew: grewThisTurn(),
   };
@@ -4713,7 +7264,7 @@ function refreshBoardDrag() {
 function renderBoard(v: View, advice: Advice | null) {
   if (!session) return;
   let o: Overlay = { ...NO_OVERLAY, scars: scars.map(({ key, owner, age, tile }) => ({ key, owner, age, tile })), focusKey, fresh: freshKeys() };
-  if (myTurn() && !busy()) {
+  if (myTurn() && !blocking()) {
     const sel = dragSel ?? session.sel;
     const pending = dragSel ? null : session.pending;
     const pv = pending ? previewMove(v, pending) : null;
@@ -4781,26 +7332,30 @@ function renderBoard(v: View, advice: Advice | null) {
     lastBoard = queue.board;
     lastOverlay = key;
   }
-  // Overhaul item 16: ambient life, quiet while moves animate (so cuts read clearly)
-  const ambKey = busy() ? 'busy' : `${settings.effects}|${settings.reduceMotion}`;
+  // Overhaul item 16: ambient life, quiet while moves animate (so cuts read clearly) and while a
+  // veil covers the board. MEASURED (docs/PERF-THERMAL.md): the ambient layer was invalidating SVG
+  // geometry ~120 times a second on the FINISH CARD, where the match behind the card is only a
+  // blurred light — pure heat for pixels no one can see.
+  const ambKey = busy() || backdropHeld() ? 'quiet' : `${settings.effects}|${settings.reduceMotion}`;
   if (queue.board !== lastAmbBoard || ambKey !== lastAmbKey) {
     lastAmbBoard = queue.board;
     lastAmbKey = ambKey;
-    board.ambient(busy() ? null : ambientPlan({ board: queue.board, terrain: v.terrain, config: v.config, me: HUMAN, effects: settings.effects, reduceMotion: settings.reduceMotion }));
+    board.ambient(busy() || backdropHeld() ? null : ambientPlan({ board: queue.board, terrain: v.terrain, config: v.config, me: HUMAN, effects: settings.effects, reduceMotion: settings.reduceMotion }));
   }
   document.getElementById('tool-weak')?.setAttribute('aria-pressed', String(settings.weakSpots));
   document.getElementById('tool-targets')?.setAttribute('aria-pressed', String(showOpps));
   $('tool-skip').hidden = !busy();
   // Positioning pass: the bottom-left slot always holds a tool (Skip while something animates,
   // otherwise Replay, dimmed until there is a turn to replay), so the "?" opposite is never alone
-  const noReplay = !session.canReplayOpponent;
+  const canReplay = canReplayLastTurn();
+  const noReplay = !canReplay;
   $('tool-replay').hidden = busy() || !REPLAY_BUTTON;
   $('tool-replay').classList.toggle('off', noReplay);
   $('tool-replay').setAttribute('aria-disabled', String(noReplay));
-  $('tool-replay').dataset.tip = noReplay ? REPLAY_NONE : REPLAY_TIP;
+  $('tool-replay').dataset.tip = noReplay ? noReplayTip() : REPLAY_TIP;
   // Undo (overhaul item 9): always in the same place; lit with a dot while a move can be taken back
   const undoOk = (isOnlineDuel() ? !!getOnlineSession()?.canUndo : session.canUndo) && !busy();
-  const replayOk = !isOnlineDuel() && !undoOk && !busy() && session.canReplayOpponent;
+  const replayOk = !undoOk && !busy() && canReplay;
   // Positioning pass: Undo always holds its slot (opposite Sort), dimmed and disabled until a move
   // can be taken back, so it appearing never moves anything and Sort is never alone
   $('tool-undo').hidden = false;
@@ -4814,6 +7369,9 @@ function renderBoard(v: View, advice: Advice | null) {
   }
   undoSlot.setAttribute('aria-label', replayOk ? `Replay ${OPP.theirs} last turn` : 'Undo: take back your last move');
   undoSlot.title = replayOk ? `Replay ${OPP.theirs} last turn` : 'Take back your last move (you can until you throw)';
+  // The same slot holds Replay when nothing can be undone: ONLINE its disabled tooltip must say why
+  // (the offline words stay exactly as they were).
+  if (!replayOk && noReplay && !undoOk && isOnlineDuel()) undoSlot.title = noReplayTip();
   // Step 4: the homes (tree, volcano): idle life, a calm worried state and the "sides blocked"
   // ring in danger (or when tapped), smothered or withered after a Strangle. Public information.
   {
@@ -4842,6 +7400,10 @@ function renderBoard(v: View, advice: Advice | null) {
  * of the board as it is actually drawn (the board is centred inside a taller area).
  */
 function placeCorners() {
+  // Product controls live in the cockpit, not the legacy .corner geometry. Measuring the
+  // whole SVG here forced style/layout between the board writes and the hand writes on every
+  // move (confirmed by the 0.81 CPU profile). Its --b-* values have no product consumers.
+  if(IS_FUTA04)return;
   const wrap = $('board-wrap');
   const svg = board.svg;
   const vb = svg.viewBox.baseVal;
@@ -4947,7 +7509,7 @@ function renderControls(v: View, advice: Advice | null) {
   const moves = $('moves');
   moves.replaceChildren();
   $('confirm').hidden = true;
-  if (!myTurn() || busy()) {
+  if (!myTurn() || blocking()) {
     if (session.state.phase === 'GAME_OVER' && !busy() && gameOverDismissed) {
       moves.append(
         button('Results', 'ghost', () => {
@@ -5199,7 +7761,10 @@ function renderFirstTip(v: View) {
     else if (!tipsSeen.fruit && v.hand.some((c) => c.suit === null)) tipOpen = 'fruit';
     else if (!tipsSeen.strengthen && session.sel.card !== null && [...targetKinds(v, session.legal, session.sel).values()].includes('strengthen')) tipOpen = 'strengthen';
   }
-  card.hidden = !tipOpen || (IS_FUTA04 && (!myTurn() || busy() || v.phase !== 'ACT'));
+  // An explicitly opened lesson (the How to sheet) belongs to the player, not to the moment: a
+  // background render must never close it just because it is not their ACT turn right now.
+  const openedByPlayer = IS_FUTA04 && openSheet?.id === 'sheet-futa04-help' && !!tipOpen;
+  card.hidden = !tipOpen || (!openedByPlayer && IS_FUTA04 && (!myTurn() || busy() || v.phase !== 'ACT'));
   if (!tipOpen) return;
   $('first-tip-title').textContent = TIPS[tipOpen].title;
   $('first-tip-text').textContent = TIPS[tipOpen].text;
@@ -5218,7 +7783,8 @@ function scheduleTutorialRoutineThrow(stepKey: string) {
     if (session?.state.phase === 'ACT') {
       const end = session.legal.find(action => action.t === 'EndAct');
       if (end) {
-        const played = session.play(end, HUMAN);
+        // Scripted tutorial beat: the APP throws, so it is not a stop the player can "take back".
+        const played = session.play(end, HUMAN, { auto: true });
         if (played) afterPlay(played, HUMAN, null);
       }
       await idle();
@@ -5232,12 +7798,25 @@ function scheduleTutorialRoutineThrow(stepKey: string) {
 }
 
 /** The single hand card the current tutorial step asks for (before it is picked), or null. */
-/** Levels 1-10: the one card the light points at, so it sits above the fan and alone in the glow. */
+/**
+ * Levels 1-10: the one card the light points at, so it is lifted out of the fan and alone in the
+ * glow. It is read from the live beat (this runs before the lesson render), and it is never lifted
+ * at the SILENT tier — the light is off, so the card rests with the fan.
+ */
 function lessonSingleCardId(): number | null {
   const lesson = lessonActive();
   if (!lesson || !session || guidanceOff() || !myTurn() || busy()) return null;
+  if (!goalReachable(lesson, session.state)) return null;
   const beat = lessonBeat(lesson, session.state, lessonCtx());
-  return beat?.lit.t === 'card' ? beat.lit.id : null;
+  if (beat?.lit.t !== 'card') return null;
+  if (!beat.explain && !beat.hello && !beat.status && beat.kind) {
+    const tier = displayTier({
+      mastery: lessonMastery, kind: beat.kind, level: lesson.level, newActions: lesson.newActions,
+      safety: lessonIdleStage, escalation: lessonEscalated,
+    });
+    if (tier === 'silent') return null;
+  }
+  return beat.lit.id;
 }
 
 function tutorialSingleCardId(): number | null {
@@ -5465,21 +8044,54 @@ function showTip(id: FirstTip) {
   }
 }
 
+/**
+ * Phase 4: the idle breath is CSS-only, but it must not move under a finger. A pointer pressed on
+ * the hand (or a tab that went away, a sheet, a pause) holds it; releasing resumes the same phase.
+ * The lesson's lit breath follows the very same hold, so a hidden tab or a pause freezes it too.
+ */
+let breathPointers = 0;
+function syncBreathHold() {
+  const hold = breathPointers > 0 || document.hidden || paused || !!openSheet || !!$('game').hidden;
+  document.getElementById('hand')?.classList.toggle('breath-hold', hold);
+  lessonBreath?.hold(hold);
+}
+function installHandBreath(hand: HTMLElement) {
+  hand.addEventListener('pointerdown', () => {
+    breathPointers++;
+    syncBreathHold();
+  }, { capture: true, passive: true });
+  const release = () => {
+    if (!breathPointers) return;
+    breathPointers = Math.max(0, breathPointers - 1);
+    syncBreathHold();
+  };
+  window.addEventListener('pointerup', release, { passive: true });
+  window.addEventListener('pointercancel', release, { passive: true });
+  window.addEventListener('blur', () => {
+    breathPointers = 0;
+    syncBreathHold();
+  });
+  document.addEventListener('visibilitychange', syncBreathHold);
+}
+
 function renderHand(v: View, advice: Advice | null) {
   if (!session) return;
+  // A pick toward a Bloom only lives in my own Grow step, and only while it can still bloom.
+  if (bloomPick.length && !(IS_FUTA04 && myTurn() && !blocking() && v.phase === 'ACT' && bloomKindsWith(bloomPick).length)) bloomPick = [];
   const hand = $('hand');
   const sel = session.sel;
-  const legal = myTurn() && !busy() ? session.legal : [];
+  const legal = myTurn() && !blocking() ? session.legal : [];
   const usable = legal.length ? usableCards(v, legal, { ...sel, card: null }) : new Set<number>();
   const picked = new Set(session.pending ? moveCards(session.pending) : []);
   const coachCards = advice && sel.card === null && !session.pending ? new Set(advice.cards) : new Set<number>();
-  const cards = handOrder(v.hand, settings.handSort);
-  const bloomCards = IS_FUTA04 && myTurn() && !busy() ? new Set(sel.kind?.startsWith('bloom-')
+  const held = throwHeld && !v.hand.some((c) => c.id === throwHeld!.id) ? throwHeld : null;
+  const cards = handOrder(held ? [...v.hand, held] : v.hand, settings.handSort);
+  const bloomCards = IS_FUTA04 && myTurn() && !blocking() ? new Set(sel.kind?.startsWith('bloom-')
     ? kindCards(sel.kind) : sel.card === null && sel.kind === null
       ? legal.flatMap(a => a.t === 'Bloom' || a.t === 'MegaBomb' ? a.cards : []) : []) : new Set<number>();
   // overhaul item 3: cards of the same combo share a small bracket under them
-  const combos = comboGroups(v.hand);
-  const showBloomHints = (settings.bloomHints || !!coach.tutorial || IS_TEST) && myTurn() && !busy();
+  const combos = bloomsShown() ? comboGroups(v.hand) : new Map<number, number>();
+  const showBloomHints = (settings.bloomHints || !!coach.tutorial || IS_TEST) && myTurn() && !blocking() && bloomsShown();
   const bloomHintIds = showBloomHints
     ? new Set(bloomHintGroups(v, legal).flat())
     : new Set<number>();
@@ -5493,6 +8105,12 @@ function renderHand(v: View, advice: Advice | null) {
     before.set(Number(b.dataset.card), b.getBoundingClientRect());
   const n = cards.length;
   const spread = Math.min(3.5, 22 / Math.max(n, 1));
+  // Phase 4: the hand only breathes when it is the player's to touch.
+  const breathing = IS_FUTA04 && motionOn() && myTurn() && !busy();
+  hand.classList.toggle('breathing', breathing);
+  syncBreathHold();
+  // Tutorial: the one card a step asks for sits above the fan, so only it shows in the glow.
+  const tutorialCard = tutorialSingleCardId() ?? lessonSingleCardId();
   const existing = new Map([...hand.querySelectorAll<HTMLButtonElement>('[data-card]')].map((b) => [Number(b.dataset.card), b]));
   cards.forEach((c, i) => {
     let b = existing.get(c.id);
@@ -5504,27 +8122,59 @@ function renderHand(v: View, advice: Advice | null) {
       b.innerHTML = cardFace(c);
       b.addEventListener('click', () => onCardTap(c.id));
     }
+    // Phase 1: the card's weight (0 light .. 1 heavy). Drives the press, the lift, the settle,
+    // the sway and the shadow. It never changes the card's box or any action's duration.
+    const weight = weightOf(c.rank);
+    // Picked toward a Bloom, or in the Bloom being painted: every one of its cards is lifted, and
+    // by the same height whatever its number (owner, 2026-10-24: "all of them should be equally
+    // lifted") — a group reads as one choice, not as one card and three stragglers.
+    const inBloom = IS_FUTA04 && (bloomPick.includes(c.id) || (!!sel.kind?.startsWith('bloom-') && !sel.kind.startsWith('bloom-mega-') && kindCards(sel.kind).includes(c.id)));
+    const liftWeight = inBloom ? BLOOM_LIFT_WEIGHT : weight;
+    b.style.setProperty('--weight', weight.toFixed(3));
+    b.style.setProperty('--lift', `${liftOf(liftWeight).toFixed(1)}px`);
+    const shadow = shadowOf(weight);
+    b.style.setProperty('--shadow-y', `${shadow.y.toFixed(1)}px`);
+    b.style.setProperty('--shadow-blur', `${shadow.blur.toFixed(1)}px`);
+    b.style.setProperty('--shadow-alpha', shadow.alpha.toFixed(3));
+    if (i < BREATH.maxCards) {
+      b.style.setProperty('--breath-period', `${breathPeriodOf(c.id)}ms`);
+      b.style.setProperty('--breath-phase', `${breathPhaseOf(c.id)}ms`);
+    }
     const off = i - (n - 1) / 2;
-    const lifted = sel.card === c.id || picked.has(c.id);
+    const lifted = sel.card === c.id || picked.has(c.id) || bloomPick.includes(c.id) || inBloom;
     const playable = legal.length > 0 && usable.has(c.id);
     // v0.6: a Fruit card glows softly when it has a target now; dimmed, it says why (one line)
     const fs = c.suit === null ? fruitCardState(v, legal, c.id) : null;
     const firstFruit = c.suit === null && cards[i - 1]?.suit !== null && i > 0;
-    b.className = `card ${suitClass(c)}${lifted ? ' lifted' : ''}${playable ? ' playable' : ''}${legal.length > 0 && !playable ? ' dim' : ''}${fs?.ready && myTurn() ? ' fruit-ready' : ''}${firstFruit ? ' fruit-gap' : ''}${coachCards.has(c.id) ? ' coach-glow' : ''}`;
-    if (IS_FUTA04) {
-      b.classList.toggle('futa04-bloom-card', bloomCards.has(c.id));
-      b.classList.toggle('futa04-throw-picked', session!.pending?.t === 'Discard' && session!.pending.card === c.id);
-    }
+    // The card's whole class list, written once and only when it changed: rewriting it on every
+    // render (then adding the breath class back) restyled every card each time, even when nothing
+    // changed (measured on online game entry, 2026-11-10).
+    const cls = [
+      'card', suitClass(c),
+      lifted && 'lifted', playable && 'playable', legal.length > 0 && !playable && 'dim',
+      fs?.ready && myTurn() && 'fruit-ready', firstFruit && 'fruit-gap', coachCards.has(c.id) && 'coach-glow',
+      held?.id === c.id && 'throw-held',
+      // One of five baked amplitudes (never a custom property: see hand-breath-a* in style.css).
+      i >= BREATH.maxCards ? 'breath-off' : `breath-a${breathAmpStep(weight)}`,
+      // Picked toward a Bloom, or in the Bloom being painted: the Bloom's own aqua, as on the board.
+      IS_FUTA04 && inBloom && 'futa04-bloom-pick',
+      IS_FUTA04 && bloomCards.has(c.id) && !inBloom && 'futa04-bloom-card',
+      IS_FUTA04 && session!.pending?.t === 'Discard' && session!.pending.card === c.id && 'futa04-throw-picked',
+    ].filter(Boolean).join(' ');
+    if (b.className !== cls) b.className = cls;
+    b.disabled = held?.id === c.id;
     if (fs?.reason && myTurn()) b.title = fs.reason;
     else b.removeAttribute('title');
     if (thumbLayout) {
-      // the test copy's thumb layout: each card on the arc, turned with it; picked: lifted outward
+      // the test copy's thumb layout: each card on the arc, turned with it; picked: lifted outward.
+      // A heavier card comes out a little less (the 22 px sheet lift scaled to the fan's 10 px).
       const p = fanSlots(thumbLayout, n)[i]!;
+      const lift = THUMB.lift * (liftOf(liftWeight) / 22);
       b.style.setProperty('--fx', `${p.x.toFixed(1)}px`);
       b.style.setProperty('--fy', `${p.y.toFixed(1)}px`);
       b.style.setProperty('--rot', `${p.rot.toFixed(2)}deg`);
-      b.style.setProperty('--lx', `${(p.nx * THUMB.lift).toFixed(1)}px`);
-      b.style.setProperty('--ly', `${(p.ny * THUMB.lift).toFixed(1)}px`);
+      b.style.setProperty('--lx', `${(p.nx * lift).toFixed(1)}px`);
+      b.style.setProperty('--ly', `${(p.ny * lift).toFixed(1)}px`);
       // each card's number corner stays visible: right hand, later cards on top; left, earlier
       b.style.zIndex = String(thumbLayout.side === 'left' ? n - i : i + 1);
     } else {
@@ -5533,12 +8183,10 @@ function renderHand(v: View, advice: Advice | null) {
       b.style.setProperty('--dy', `${(off * off * 0.7).toFixed(1)}px`);
     }
     if (IS_FUTA04 && b.classList.contains('futa04-throw-picked')) b.style.zIndex = '100';
-    // Tutorial: the one card a step asks for sits above the fan, so only it shows in the glow.
-    const tutorialCard = tutorialSingleCardId() ?? lessonSingleCardId();
     b.classList.toggle('tutorial-target-card', tutorialCard === c.id);
     if (tutorialCard === c.id) b.style.zIndex = '100';
     b.style.visibility = hiddenCards.has(c.id) ? 'hidden' : '';
-    b.setAttribute('aria-label', `${cardName(c)}${playable ? ', can be played' : ''}${fs?.reason && myTurn() ? `, ${fs.reason}` : ''}${lifted ? ', picked' : ''}${IS_FUTA04 && session!.pending?.t === 'Discard' && session!.pending.card === c.id ? ', tap again to throw and finish your turn' : ''}`);
+    b.setAttribute('aria-label', `${cardName(c)}${playable ? ', can be played' : ''}${fs?.reason && myTurn() ? `, ${fs.reason}` : ''}${lifted ? ', picked' : ''}${IS_FUTA04 && session!.pending?.t === 'Discard' && session!.pending.card === c.id ? ', swipe up or tap the Throw pile to throw it; tap it again to put it down' : ''}`);
     b.setAttribute('aria-pressed', String(lifted));
     const g = combos.get(c.id);
     if (g === undefined) delete b.dataset.combo;
@@ -5548,16 +8196,45 @@ function renderHand(v: View, advice: Advice | null) {
   });
   for (const b of existing.values()) b.remove();
   if (flip) {
-    for (const b of hand.querySelectorAll<HTMLElement>('[data-card]')) {
+    // Phase 4: a change in membership or order settles card by card, outward from the middle,
+    // with a small weight-scaled overshoot. This is the existing FLIP condition, never a
+    // re-render for selection or a phase tick.
+    const settleMs = MOTION.consequence * timeScale();
+    const stagger = (MOTION.ack / 2) * timeScale();
+    const centre = (n - 1) / 2;
+    const settlingCards = [...hand.querySelectorAll<HTMLElement>('[data-card]')];
+    // All final positions before any animation writes: one layout, rather than a flush per card.
+    const settlingRects = settlingCards.map(b => b.getBoundingClientRect());
+    settlingCards.forEach((b, i) => {
       const was = before.get(Number(b.dataset.card));
-      const now = b.getBoundingClientRect();
+      const now = settlingRects[i]!;
       const dx = was === undefined ? 0 : was.left - now.left;
       const dy = was === undefined ? 0 : was.top - now.top;
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) anim(b, [{ translate: `${dx}px ${dy}px` }, { translate: '0 0' }], {
-        duration: (IS_FUTA04 ? 190 : 280) * timeScale(),
-        easing: IS_FUTA04 ? 'cubic-bezier(.2,.72,.2,1)' : 'cubic-bezier(.2,.9,.3,1.25)',
-      });
-    }
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        if (IS_FUTA04) {
+          const weight = Number(b.style.getPropertyValue('--weight')) || 0;
+          const over = settleOvershootOf(weight);
+          const len = Math.hypot(dx, dy) || 1;
+          // Continue a touch past the landing spot, then settle back into the fan.
+          const ox = (-dx / len) * over;
+          const oy = (-dy / len) * over;
+          anim(b, [
+            { translate: `${dx}px ${dy}px` },
+            { translate: `${ox.toFixed(2)}px ${oy.toFixed(2)}px`, offset: 0.74 },
+            { translate: '0 0' },
+          ], {
+            duration: settleMs,
+            delay: Math.min(Math.abs(i - centre), 3) * stagger,
+            easing: EASE.settle,
+          });
+        } else {
+          anim(b, [{ translate: `${dx}px ${dy}px` }, { translate: '0 0' }], {
+            duration: 280 * timeScale(),
+            easing: 'cubic-bezier(.2,.9,.3,1.25)',
+          });
+        }
+      }
+    });
   }
   const sortBtn = $('hand-sort');
   sortBtn.hidden = false;
@@ -5582,9 +8259,13 @@ let lastDeckSeen = -1;
 /** the biggest the piles have been this game (for the stack thickness) */
 let deckFull = 1;
 
-function renderPiles(v: View, advice: Advice | null) {
-  const looks = pileStates(v.phase, myTurn(), busy(), session!.legal);
-  const top = v.discard.at(-1);
+/**
+ * The Throw pile's physical top card and its count — the only two things that change when a
+ * thrown card ARRIVES. Split out so a landing flight can hand them over at the landing stop,
+ * without a whole-page render mid-step (see the discard step).
+ */
+function paintDiscardTop() {
+  const top = shownDiscard.at(-1);
   const t = $('discard-top');
   t.className = `pile-top${top ? ` card ${suitClass(top)}` : ' empty'}`;
   // Keep the physical top card mounted while its identity is unchanged.
@@ -5594,27 +8275,35 @@ function renderPiles(v: View, advice: Advice | null) {
     t.innerHTML = top ? cardFace(top) : '';
     t.dataset.faceKey = faceKey;
   }
+  if (IS_FUTA04) renderPileMeter($('discard-count'), shownDiscard.length);
+  else $('discard-count').textContent = String(shownDiscard.length);
+}
+
+function renderPiles(v: View, advice: Advice | null) {
+  // The product keeps its Throw pile lit in the Throw step (owner, 2026-10-25). Classic copies
+  // pass nothing and keep the old both-piles-dimmed look.
+  const looks = pileStates(v.phase, myTurn(), blocking(), session!.legal, IS_FUTA04);
+  const top = shownDiscard.at(-1);
+  paintDiscardTop();
   if (IS_FUTA04) renderPileMeter($('deck-count'), v.deckCount);
   else $('deck-count').textContent = String(v.deckCount);
   // UX pass: the last few cards: the count turns amber (the game ends when the deck runs out)
   const low = v.deckCount > 0 && v.deckCount <= 5 && v.phase !== 'GAME_OVER';
   $('deck').classList.toggle('low', low);
-  if (IS_FUTA04) renderPileMeter($('discard-count'), v.discard.length);
-  else $('discard-count').textContent = String(v.discard.length);
   // Part 3 C: the last card, and the deck running out, each get a small moment (Eye candy)
   const dm = deckMoment(lastDeckSeen, v.deckCount);
   if (lastDeckSeen >= 0 && dm && settings.eyeCandy && motion() > 0) {
     const df = Math.max(timeScale(), 0.35);
     if (dm === 'last') {
-      anim($('deck'), [{ transform: 'scale(1)' }, { transform: 'scale(1.12) rotate(-3deg)', offset: 0.4 }, { transform: 'scale(1)' }], { duration: 600 * df, easing: 'cubic-bezier(.3,1.5,.5,1)' });
+      anim($('deck'), [{ transform: 'scale(1)' }, { transform: `scale(${DECK_BEAT.lastScale})`, offset: 0.45 }, { transform: 'scale(1)' }], { duration: DECK_BEAT.ms * df, easing: EASE.settle });
       if (settings.sound) sound.chime();
-    } else anim($('deck'), [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0.4, transform: 'scale(0.9) translateY(4px)' }], { duration: 700 * df, easing: 'ease-out' });
+    } else anim($('deck'), [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0.4, transform: 'scale(0.9) translateY(4px)' }], { duration: DECK_BEAT.ms * df, easing: EASE.out });
   }
   lastDeckSeen = v.deckCount;
   // overhaul item 6: the stacks are as thick as the piles are big; the last card stands alone
-  deckFull = Math.max(deckFull, v.deckCount + v.discard.length);
+  deckFull = Math.max(deckFull, v.deckCount + shownDiscard.length);
   $('deck').dataset.layers = String(stackLayers(v.deckCount, deckFull));
-  $('discard').dataset.layers = String(stackLayers(v.discard.length, deckFull));
+  $('discard').dataset.layers = String(stackLayers(shownDiscard.length, deckFull));
   $('deck').dataset.count = pileCountState(v.deckCount);
   $('deck').querySelector('.pile-label')!.textContent = v.deckCount === 1 && v.phase !== 'GAME_OVER' ? PILES.lastCard : PILES.draw;
   // Tap-to-throw: with a throw waiting, the Throw pile takes it (it stays tappable for that alone).
@@ -5624,16 +8313,17 @@ function renderPiles(v: View, advice: Advice | null) {
     b.disabled = !look.enabled && !(id === 'discard' && tossReady);
     b.classList.toggle('ready', look.glow);
     b.classList.toggle('dim', look.dim);
+    // The swell lives on the selection seam (a picked Throw card) and on the flight that follows
+    // it, so a pile never stays swollen after the throw.
+    b.classList.toggle('futa04-throw-target', IS_FUTA04 && id === 'discard' && (tossReady || throwSwellHeld));
     const coachOn = !!advice && advice.action.t === 'Draw' && advice.action.from === id && look.enabled;
     b.classList.toggle('coach-glow', IS_FUTA04 ? false : coachOn);
     $(`${id}-hint`).textContent = look.hint ?? '';
   }
   if (IS_FUTA04) {
-    // A new card combination, regardless of board space. Duplicate faces don't create one.
-    const key = (cards: readonly Card[]) => cards.map(c => `${c.suit}:${c.rank}`).sort().join('|');
-    const before = looks.discard.enabled && top ? new Set(bloomGroups(v.hand).map(g => key(g.cards))) : null;
-    const createsBloom = !!before && !!top && bloomGroups([...v.hand, top]).some(g => !before.has(key(g.cards)));
-    $('discard').classList.toggle('futa04-bloom-draw', looks.discard.enabled && createsBloom);
+    // The one glow rule lives in `logic/pile-glow.ts`, shared with level 9's invariant test.
+    $('discard').classList.toggle('futa04-bloom-draw',
+      looks.discard.enabled && throwPileCompletesBloom(v.hand, top, v.config.expandedBloom !== false) && bloomsShown());
   }
   $('deck').setAttribute('aria-label', `${PILES.draw}: ${plural(v.deckCount, 'card')}.${looks.deck.enabled ? ' Tap to draw.' : ''}`);
   $('discard').setAttribute('aria-label', top ? `${PILES.discard}: ${plural(v.discard.length, 'card')}, ${cardName(top)} on top.${looks.discard.enabled ? ' Tap to take it.' : tossReady ? ' Tap to throw your card.' : ''}` : `${PILES.discard}: empty${tossReady ? '. Tap to throw your card.' : ''}`);
@@ -5698,6 +8388,16 @@ function setGoExtrasOpen(open: boolean) {
   syncGoExtras();
 }
 
+/**
+ * THE PLANET REPLACED THE OLD "GROW TILES" KEY (owner brief, 2026-11-11): the finish card now shows
+ * the world itself, with the Planet page's own grow key inside it, so a separate key to Territory
+ * would be a second door to the same room. Its one job here is the WALLET: when a payout lands
+ * after the card is already up, the pane's balance must be the server's, not the old one.
+ */
+function syncEndgameWallet(): void {
+  if (endgamePlanet) endgamePlanet.refresh();
+}
+
 /** Paints the shared Seeds line empty: a mode that pays no Seeds (a duel) shows no line at all. */
 function clearGoSeeds(): void {
   goSeedShown = null;
@@ -5725,6 +8425,527 @@ function paintGoSeeds(): void {
     scale: Math.max(timeScale(), 0.35),
     tick: (step, last) => { if (settings.sound) sound.seedTick(step, last); },
   });
+  // A real change means the wallet may have moved (an award settling after the card appeared).
+  syncEndgameWallet();
+}
+
+/**
+ * The finish card's Seeds, settled for real (owner report, 2026-10-25).
+ *
+ * The card used to be handed a "pending" line before any receipt existed, from an optional-chained
+ * call into the online lobby. Every failure mode of that shape ended the same way — a claim with no
+ * receipt behind it, left on screen for the whole session:
+ *
+ *   * a fetch that never settles (a backgrounded mobile tab, a captured connection) wedged the
+ *     single-flight entry, so no later proof was ever settled;
+ *   * the lobby module not being mounted yet made the optional chain do nothing at all;
+ *   * a proof refused with HTTP 400 was removed from the queue and then reported as "nothing
+ *     happened", so the Seeds were lost with no word;
+ *   * a pass that had already drained did not cover a proof queued after it started.
+ *
+ * `settleSeedProof` (online/seed-settle.ts) owns those: a bounded deadline, a small retry, and a
+ * fresh pass for anything the previous one could not see. What this function owns is the TRUTH on
+ * the card: an award with its one moment, the calm limit line, an honest refusal, or NOTHING while
+ * it is still unknown. It never writes "pending", and it never guesses a number.
+ */
+function settleSeedsForCard(key: string): void {
+  const run = ++goSeedsSettleRun;
+  // The award's line gets its SLOT now, while the result is still animating in, so the number can
+  // land without pushing the score and the keys down (the jump the owner saw). The slot is empty
+  // until a receipt exists — it never says "pending".
+  goSeedSlot = true;
+  void settleSeedProof(key).then((report) => {
+    // A newer game has started: its card is not this one's to paint.
+    if (run !== goSeedsSettleRun) return;
+    if (report.kind === 'settled') {
+      // `replayed` means this receipt existed already: the line stays empty rather than counting a
+      // second "+N" the wallet never received.
+      seedRewardMessage = settledSeedsMessage(report.reward);
+    } else if (report.kind === 'refused') {
+      // The server will never accept this replay, so those Seeds are gone. Say so, and log why.
+      console.warn('[FUTASAKU] Seeds refused for this game:', key, report.message);
+      seedRewardMessage = SEEDS_NOT_VERIFIED;
+    } else if (report.kind === 'unverified') {
+      // There is no usable identity on this device. The proof is STILL QUEUED (the next pass — a
+      // sign-in, a reload, a recovered guest — pays it), but the card says so instead of staying
+      // silent, which was the old silent deferral loop (owner report, 2026-10-25).
+      console.warn('[FUTASAKU] Seeds could not be settled: no usable identity:', report.message);
+      seedRewardMessage = SEEDS_IDENTITY_UNVERIFIED;
+    } else {
+      // Still unconfirmed and still queued. The card shows NOTHING: the next menu visit (or the
+      // next time this device is online) settles it, and the wallet is the one place it is claimed.
+      seedRewardMessage = '';
+    }
+    // The reward can land while the finish card is already up: the SAME line repaints in place (no
+    // reflow), and the award gets its one moment here rather than a silent swap.
+    if (!$('gameover').hidden) paintGoSeeds();
+  });
+}
+
+/**
+ * The finish plate's arrival (owner brief, 2026-10-22): the board settles and goes quiet, then the
+ * plate becomes present. `wasHidden` is the state transition (not a timer): a re-render of a card
+ * already on screen must not replay the entrance, while a genuinely new result always does.
+ */
+/**
+ * The result owns the screen. A duel can decide itself while a menu is open — the match clock keeps
+ * running, and an opponent may resign or run out of time, so the finish lands on the next render —
+ * and a match can end on the frame a plate is leaving. Either way the plate underneath showed its
+ * header and its Settings key above the result card (owner's 2026-10-23 audit: "PAUSED" and
+ * "Settings" floating over the loss plate at desktop size). So any open sheet is put away FIRST,
+ * at once, and without handing the keyboard to a control the card now covers: the card is the only
+ * surface left. The game is also un-paused, because a finished match is not a paused one.
+ */
+function putAwaySheetsForResult(): void {
+  if (!openSheet && !closingSheet) return;
+  sheetExit++; // any pending close is now stale
+  sheetReturns.length = 0;
+  sheetOpener = null;
+  for (const el of [closingSheet, openSheet]) {
+    if (!el) continue;
+    resetSurface(el);
+    el.hidden = true;
+  }
+  closingSheet = null;
+  openSheet = null;
+  $('scrim').hidden = true;
+  setPaused(false);
+  if (IS_FUTA04) {
+    document.documentElement.classList.remove('futa04-information-blocked');
+    updateFuta04Help();
+  }
+}
+
+function presentResult(go: HTMLElement, wasHidden: boolean): void {
+  putAwaySheetsForResult();
+  // The result covers the board: a finger that was on it is released, as when a sheet opens.
+  camera?.release();
+  board.releasePress();
+  // A game reached its end on this device (once, as the result first appears): the guide's help key
+  // stops treating a signed-in player as new after their first finished game.
+  if (wasHidden) turnGuide?.reset();
+  document.body.classList.add('result');
+  syncVeil();
+  if (!wasHidden) return;
+  go.dataset.fresh = '1';
+  enterSurface(go, { travel: 0, scale: 1, duration: 150 });
+  const card = go.querySelector<HTMLElement>('.go-card');
+  if (card) {
+    // The result plate is the other full-height surface: it takes the same stronger arrival the
+    // sheets do, so the card is a plate landing, not a panel that was simply there. Its own title
+    // keeps the CSS reveal it already owns (`go-title-in`, 60ms later) — one choreography each.
+    resetSurface(card);
+    // The beat was already held on the last tile. The plate rises as soon as it is allowed to.
+    enterSurface(card, { travel: INTERFACE_MOTION.screen, scale: PLATE_SCALE, delay: 0 });
+  }
+  // the end screen is up: the invitation / sign-in prompt may open over it now
+  offerEndOfGamePrompts();
+}
+/** One exit for every path that puts the result away, so the board always comes back to life. */
+/** The planet card belongs to builds that own THE PLANET (0.5) and can actually read the world. */
+const ENDGAME_PLANET = FEATURES.planet && onlineBuildEnabled();
+/** The live pane on the current card; built by the lobby, disposed with the card. */
+let endgamePlanet: EndgamePlanet | null = null;
+/** The RESULT window is up (the planet's paint loop is frozen while it is). */
+let finishResultOpen = false;
+
+/**
+ * THE RESULT WINDOW'S DATA (owner brief, 2026-11-11). The card shows the outcome, the score, the
+ * Seeds and the world; every detail line and the final board live one tap away. Storing the numbers
+ * instead of copying the card's DOM keeps ONE source per line (no duplicate ids, no clones) and lets
+ * the window repaint after a late history fetch without touching the card.
+ */
+type FinishResult = {
+  outcome: string;
+  score: [number, number];
+  reason: string;
+  breakdown: string;
+  moves: string;
+  stats: string;
+  highlights: { title: string; by: Player | null; value: number; text: string }[];
+  harvest: HarvestFigure | null;
+  share: boolean;
+  cut: boolean;
+  difficulty: boolean;
+};
+let finishResult: FinishResult | null = null;
+
+/** Paint one list of highlights into the card's or the result's own list (same row shape). */
+function paintHighlightList(list: HTMLElement, highlights: FinishResult['highlights']): void {
+  list.replaceChildren(
+    ...highlights.map((h) => {
+      const li = document.createElement('li');
+      li.className = h.by === HUMAN ? 'you' : h.by === BOT ? 'bot' : '';
+      li.innerHTML = `<span class="h-value num">${h.value}</span><span class="h-title">${h.title}</span><span class="h-text">${h.text}</span>`;
+      return li;
+    }),
+  );
+}
+
+/** Open RESULT: the final board, the reason and the record line, on the app's dark glass. */
+function openFinishResult(): void {
+  const pane = $('go-result-pane');
+  if (!pane.hidden || !finishResult) return;
+  const m = finishResult;
+  $('go-result-outcome').textContent = m.outcome;
+  $('go-result-score').innerHTML =
+    `<span class="you">${m.score[0]}</span><span class="dash">–</span><span class="bot">${m.score[1]}</span>`;
+  $('go-result-reason').textContent = m.reason;
+  $('go-result-break').textContent = m.breakdown;
+  $('go-result-moves').textContent = m.moves;
+  $('go-result-stats').textContent = m.stats;
+  $('go-result-break').hidden = !m.breakdown;
+  $('go-result-moves').hidden = !m.moves;
+  $('go-result-stats').hidden = !m.stats;
+  paintHighlightList($('go-result-highlights'), m.highlights);
+  const board = $('go-result-board');
+  board.innerHTML = m.harvest ? harvestSvg(m.harvest) : '';
+  board.hidden = !m.harvest;
+  const cut = $('go-result-cut') as HTMLButtonElement;
+  cut.hidden = !m.cut;
+  ($('go-result-share') as HTMLButtonElement).hidden = !m.share;
+  ($('go-result-difficulty') as HTMLButtonElement).hidden = !m.difficulty;
+  const sheet = $('go-result-sheet');
+  pane.hidden = false;
+  finishResultOpen = true;
+  // The planet's own loop stops: nothing behind the glass may keep drawing.
+  endgamePlanet?.freeze(true);
+  $('go-result').setAttribute('aria-expanded', 'true');
+  resetSurface(sheet);
+  enterSurface(sheet, { travel: INTERFACE_MOTION.screen, scale: PLATE_SCALE });
+  $('go-result-close').focus({ preventScroll: true });
+}
+
+/** Close RESULT and give the key back. `instant` skips the exit (the card is going away). */
+function closeFinishResult(instant = false): void {
+  const pane = $('go-result-pane');
+  if (pane.hidden) return;
+  finishResultOpen = false;
+  $('go-result').setAttribute('aria-expanded', 'false');
+  const finish = () => {
+    pane.hidden = true;
+    endgamePlanet?.freeze(false);
+  };
+  const sheet = $('go-result-sheet');
+  if (instant) {
+    resetSurface(sheet);
+    finish();
+    return;
+  }
+  const leave = exitSurface(sheet, { travel: Math.round(INTERFACE_MOTION.travel * 1.5), scale: 0.99, onDone: finish });
+  if (!leave) finish();
+  if (!$('gameover').hidden) $('go-result').focus({ preventScroll: true });
+}
+
+/**
+ * MOUNT / POINT THE PLANET PANE for the card that is on screen. Mounted once per card (the pane is a
+ * WebGL canvas and a network read, not a decoration); a re-render of the same card does nothing.
+ * `teach` is level 10's in-situ explanation, in the window's own foot.
+ */
+function syncEndgamePlanet(show: boolean, teach: boolean): void {
+  const host = document.getElementById('go-world');
+  if (!host) return;
+  host.hidden = !show;
+  if (!show) {
+    endgamePlanet?.dispose();
+    endgamePlanet = null;
+    return;
+  }
+  if (!endgamePlanet) {
+    endgamePlanet = onlineLobbyCtl?.mountEndgamePlanet(host, () => campaignLevel?.number ?? null) ?? null;
+    endgamePlanet?.open();
+  }
+  // Painted after the open, so a cached map cannot reset the foot mid-way.
+  endgamePlanet?.teach(teach);
+}
+
+function hideGameOver(): void {
+  closeFinishResult(true);
+  const go = $('gameover');
+  const wasShown = !go.hidden;
+  // THE WINDOW'S EXIT (owner brief, 2026-11-11): the planet stops its OWN loop first (the fade that
+  // follows must not be painted by a canvas nobody will see), then the surface fades and sinks 6px
+  // on the product's exit beat, and the card goes with it.
+  const pane = endgamePlanet;
+  endgamePlanet = null;
+  pane?.leave();
+  if (wasShown) {
+    const card = go.querySelector<HTMLElement>('.go-card');
+    if (card) card.classList.remove('seed-slot');
+    goSeedSlot = false;
+    const finish = () => {
+      go.hidden = true;
+      resetSurface(go);
+      if (card) resetSurface(card);
+      document.body.classList.remove('result');
+      syncVeil();
+      achievementToasts?.release();
+    };
+    const leave = exitSurface(go, { travel: MOTION_SINK, onDone: finish });
+    // Motion off: the surface calls back at once, so this is the instant path it always was.
+    if (!leave) finish();
+    return;
+  }
+  document.body.classList.remove('result');
+  syncVeil();
+  achievementToasts?.release();
+}
+
+/**
+ * The replay of the whole match (owner brief, 2026-10-25): one tap on the finish card, every mode.
+ *
+ * The player itself is mounted once, on the first use, so the finish card's cost is one lazily-built
+ * overlay rather than a second board renderer in the boot path. Its motion gate is the game's own
+ * (`motionOn`): Reduce motion, or Speed Off, means no crossfade and no settle — the board simply is
+ * the next position, and the pacing is unchanged.
+ */
+let replayPlayer: ReplayHandle | null = null;
+
+/** The model for the match just played offline (campaign, tutorial or practice), or null. */
+function offlineReplayModel(): ReplayModel | null {
+  const st = session;
+  if (!st || !st.log.length) return null;
+  // `session.start` is the exact opening this match was dealt (a lesson's authored position
+  // included), so the replay begins on the board the player actually saw.
+  const opening = st.start;
+  const input: ReplayInput = {
+    seed: opening.seed,
+    config: opening.config,
+    startingPlayer: opening.startingPlayer ?? opening.turnPlayer,
+    base: opening,
+    actions: [...st.log],
+    // The player's own nickname when signed in (an online duel already names both players this way);
+    // a guest stays "You".
+    names: [signedInNickname() ?? REPLAY.you, OPP.label],
+    me: 0,
+  };
+  return buildReplay(input);
+}
+
+/** The model for a finished ONLINE duel, from the server's replay payload. */
+function replayModelFromPayload(payload: ReplayPayload): ReplayModel | null {
+  if (!payload.actions.length) return null;
+  const nameOf = (seat: Player): string =>
+    payload.seats.find((s) => s.seat === seat)?.displayName ?? `Seat ${seat + 1}`;
+  return buildReplay({
+    seed: payload.seed,
+    rulesVersion: payload.rulesVersion,
+    config: payload.config,
+    startingPlayer: payload.startingPlayer,
+    actions: payload.actions,
+    names: [nameOf(0), nameOf(1)],
+    me: payload.seat,
+    result: payload.result
+      ? { winner: payload.result.winner, scores: payload.result.scores, reason: payload.result.reason }
+      : null,
+  });
+}
+
+/** The finish card's replay control is shown only when there is something to watch. */
+function setReplayAvailable(available: boolean): void {
+  const btn = document.getElementById('go-replay');
+  if (!btn) return;
+  btn.hidden = !available;
+  const label = document.getElementById('go-replay-label');
+  if (label) label.textContent = REPLAY.watch;
+  btn.setAttribute('aria-label', REPLAY.watch);
+}
+
+function showReplay(model: ReplayModel): void {
+  if (!replayPlayer) {
+    replayPlayer = mountReplay({
+      theme,
+      look,
+      reduceMotion: () => !motionOn(),
+      onExit: () => {
+        // The finish card was never touched: it is exactly where the player left it.
+        const anchor = document.getElementById('go-replay');
+        if (anchor && !$('gameover').hidden) anchor.focus({ preventScroll: true });
+      },
+    });
+  }
+  replayPlayer.open(model);
+}
+
+/** Open the replay for THIS finish card, in whichever mode the match was played. */
+async function openReplayForFinish(): Promise<void> {
+  if (blitzMatch) return; // Blitz has no Replay (owner, 2026-11-06)
+  const go = $('go-replay');
+  go.setAttribute('aria-busy', 'true');
+  try {
+    const os = isOnlineDuel() ? getOnlineSession() : null;
+    const model = os ? replayModelFromPayload(await os.driver.replay()) : offlineReplayModel();
+    if (model) showReplay(model);
+    else caption(REPLAY.unavailable, null, 'info');
+  } catch {
+    caption(REPLAY.unavailable, null, 'info');
+  } finally {
+    go.removeAttribute('aria-busy');
+  }
+}
+
+/**
+ * Open a PAST duel's replay from the online match list. The lobby owns the identity and the token,
+ * so IT makes the authorised read (`GET /v1/matches/:id/replay`) and hands the payload here.
+ */
+function openPastReplay(payload: ReplayPayload): void {
+  const model = replayModelFromPayload(payload);
+  if (model) showReplay(model);
+  else caption(REPLAY.unavailable, null, 'info');
+}
+
+/**
+ * Paint the outcome without changing its words. A campaign win reads `Level 12 complete` exactly
+ * as before (finish-fit and the screen reader see the same sentence); the two halves are only
+ * wrapped so the eye sees LEVEL 12 over COMPLETE. The space between them is a real text node.
+ */
+function paintGoTitle(text: string, split: boolean): void {
+  const el = $('go-title');
+  const at = split ? text.lastIndexOf(' ') : -1;
+  if (at <= 0) {
+    el.textContent = text;
+    return;
+  }
+  const kicker = document.createElement('span');
+  kicker.className = 'go-kicker';
+  kicker.textContent = text.slice(0, at);
+  const outcome = document.createElement('span');
+  outcome.className = 'go-outcome';
+  outcome.textContent = text.slice(at + 1);
+  el.replaceChildren(kicker, document.createTextNode(' '), outcome);
+}
+
+// ---------- the final move's own gate ----------
+
+/**
+ * THE RESULT WAITS FOR THE MOVE, NOT FOR A CLOCK (owner, 2026-10-25: the losing seat was getting
+ * "you lost" before the winning move landed). The decision itself is pure and unit-tested
+ * (`logic/result-hold.ts`); this is only the safety net around it.
+ *
+ * The net is a STALL timer, never a fixed delay: it measures how long the held board has been
+ * completely still (no step landed, no tile revealed, the queue unchanged). A real finish keeps
+ * landing beats, so it can never be cut short; a lost step — the one case where the plate would
+ * otherwise never arrive — is released after `RESULT_HOLD_STALL_MS`, flushing the board to its true
+ * final position first.
+ */
+let resultHoldWatch = 0;
+let resultHoldSeen = '';
+let resultHoldSince = 0;
+
+const resultHoldSignature = (): string => `${revealProgress}|${queue.pending}|${currentStep?.k ?? '-'}`;
+
+function armResultHold(): void {
+  if (resultHoldWatch) return;
+  resultHoldSeen = resultHoldSignature();
+  resultHoldSince = performance.now();
+  resultHoldWatch = window.setInterval(checkResultHold, 250);
+  animLog('result:hold', { queued: queue.pending, playing: currentStep?.k ?? '-' });
+}
+
+function disarmResultHold(): void {
+  if (!resultHoldWatch) return;
+  clearInterval(resultHoldWatch);
+  resultHoldWatch = 0;
+  resultHoldSeen = '';
+  resultHoldSince = 0;
+}
+
+/**
+ * After a finish that moved the board, hold one beat on the last tile, then let the plate rise.
+ * A timeout, a resignation and a match that was already over do not wait. Reduced motion does not.
+ */
+let resultBreathSaw = false;
+let resultBreathFrom: number | null = null;
+let resultBreathTimer = 0;
+
+function plateMayCover(wanted: boolean, moving: boolean): boolean {
+  const next = stepResultBreath({
+    wanted,
+    moving,
+    reducedMotion: settings.reduceMotion,
+    sawMotion: resultBreathSaw,
+    breathFrom: resultBreathFrom,
+    now: performance.now(),
+  });
+  resultBreathSaw = next.sawMotion;
+  resultBreathFrom = next.breathFrom;
+  if (resultBreathTimer) {
+    window.clearTimeout(resultBreathTimer);
+    resultBreathTimer = 0;
+  }
+  if (next.waitMs !== null) {
+    resultBreathTimer = window.setTimeout(() => {
+      resultBreathTimer = 0;
+      render();
+    }, next.waitMs);
+  }
+  return next.show;
+}
+
+function checkResultHold(): void {
+  const os = getOnlineSession();
+  if (!os?.finished || !$('gameover').hidden) {
+    disarmResultHold();
+    return;
+  }
+  // PAUSED: the player deliberately stopped the board, so silence is not a stall and cutting the
+  // finish short would be wrong — park the clock exactly as the reveal watchdog does.
+  //
+  // `document.hidden` is deliberately NOT parked. A backgrounded tab cannot let the player watch
+  // anything anyway, and parking on it made the hold wait forever for a tab nobody was looking at
+  // (which is what a second tab in a two-seat test always is). The stall window still keeps the
+  // ordinary guarantee: a lost step releases the plate, it is just measured while hidden too.
+  if (paused) {
+    resultHoldSince = performance.now();
+    resultHoldSeen = resultHoldSignature();
+    return;
+  }
+  const seen = resultHoldSignature();
+  if (seen !== resultHoldSeen) {
+    resultHoldSeen = seen;
+    resultHoldSince = performance.now();
+    return;
+  }
+  const quiet = performance.now() - resultHoldSince;
+  if (!resultHoldStalled(quiet)) return;
+  // A held board that has been silent for the whole window cannot settle on its own. Show the
+  // truth (every waiting step applied) and the card, instead of hanging on a lost step.
+  animLog('result:hold-release', { quiet: Math.round(quiet), queued: queue.pending, playing: currentStep?.k ?? '-' });
+  markTiming('result:safety', { quiet: Math.round(quiet) });
+  fastForward();
+  disarmResultHold();
+}
+
+/**
+ * THE FINISH CARD'S STAMP (surprise, 2026-10-29): one small figure of the final position, painted
+ * into the card that already exists — no panel, tab, badge or ornament, nothing behind "More". It is
+ * static: the SVG is one string, and the only motion is the card's own entering fade (the
+ * `.go-verdict` rule in style.css). The one-line summary beside it was removed (owner, 2026-10-30).
+ */
+function paintVerdict(figure: HarvestFigure | null): void {
+  const box = document.getElementById('go-verdict');
+  const fig = document.getElementById('go-harvest');
+  // The RESULT window's own, larger copy. One painter for both, so the stamp can never disagree
+  // with itself (the classic card keeps its small one; the planet card shows the big one).
+  const board = document.getElementById('go-result-board');
+  if (board) {
+    board.innerHTML = figure ? harvestSvg(figure) : '';
+    board.hidden = !figure;
+  }
+  if (!box || !fig) return;
+  if (figure) {
+    fig.innerHTML = harvestSvg(figure);
+    fig.hidden = false;
+  } else {
+    fig.replaceChildren();
+    fig.hidden = true;
+  }
+  box.hidden = !figure;
+}
+
+/** The stamp for a FINISHED offline match: its final board (known even when the event record is not). */
+function offlineVerdict(st: State): HarvestFigure | null {
+  return st.result ? harvestFigure(st.board, st.config, HUMAN, st.terrain) : null;
 }
 
 function renderGameOver() {
@@ -5732,16 +8953,53 @@ function renderGameOver() {
   if (isOnlineDuel()) {
     const os = getOnlineSession();
     const info = os?.finishInfo() ?? null;
-    // A decided match never waits on an animation. This is the symmetry rule the owner asked for:
-    // both devices get the end screen as soon as the finished view lands, one as winner and one as
-    // loser. (The last move's steps may still finish behind the overlay; the board is correct.)
-    const wasHidden = go.hidden;
-    const show = !!info && !gameOverDismissed && !$('game').hidden;
-    go.hidden = !show;
-    if (!show || !info || !os) return;
-    // A duel settles its own wallet server-side and this card has never carried a seed line; clear
-    // the paragraph the three modes SHARE, so an offline award cannot leak onto a duel's result.
+    // THE FINAL MOVE IS SEEN FIRST (owner, 2026-10-25). A decided match still does not go back to
+    // waiting on the clock: this waits on the BOARD, and only while a move is actually changing it.
+    // A timeout or a resignation carries no move at all, so its queue is empty and the card arrives
+    // at once; a reconnecting client that opens an already-finished match has nothing queued either.
+    const wasHidden = !!go.hidden;
+    const wanted = !!info && !gameOverDismissed && !$('game').hidden;
+    // `isPreparingCatchUp` covers the one render that runs INSIDE `consumeCatchUp` (its own
+    // `skipCatchUp()` emit) before the deciding move's steps reach the queue — see duel-session.ts.
+    const settled = wanted && !os?.isPreparingCatchUp && boardHasSettled({
+      waiting: queue.kinds(),
+      playing: currentStep?.k ?? null,
+      reducedMotion: settings.reduceMotion,
+    });
+    // One beat on the last tile once that move has landed. Reduced motion, and the catch-up frame
+    // before the steps exist, are not "moving", so neither of them starts the beat early.
+    const moving = wanted && !os?.isPreparingCatchUp && !settings.reduceMotion && !boardHasSettled({
+      waiting: queue.kinds(),
+      playing: currentStep?.k ?? null,
+      reducedMotion: false,
+    });
+    const breathed = plateMayCover(wanted, moving);
+    // Once the plate is up, a later render of the same match never takes it down (only `wanted`
+    // can: leaving, or the player dismissing it).
+    const show = wanted && (!wasHidden || (settled && breathed));
+    if (!show) {
+      go.hidden = true;
+      document.body.classList.remove('result');
+      syncVeil();
+      if (wanted) armResultHold();
+      else disarmResultHold();
+      return;
+    }
+    disarmResultHold();
+    if (!info || !os) return;
+    go.hidden = false;
+    if (wasHidden) animLog('result:show', { queued: queue.pending, playing: currentStep?.k ?? '-', revision: os.driver.snapshot().revision });
+    presentResult(go, wasHidden);
+    // A duel settles its own wallet server-side, and this paragraph is SHARED by every mode — so it
+    // is reset first, or the previous offline game's "+15 Seeds" would appear on a duel's card.
+    // Then the one honest line: what the server reported this seat was paid (owner, 2026-10-24:
+    // "seeds pending or shit like that"). No payload carries that award yet, so this is silence in
+    // practice — and it must be, because a daily cap pays 0 and a resignation pays nothing, so any
+    // number the client worked out for itself would be a guess. See `duelSeedsMessage`.
     clearGoSeeds();
+    const snapshot = os.driver.snapshot();
+    seedRewardMessage = duelSeedsMessage(snapshot.seeds ?? null);
+    paintGoSeeds();
     // The match's whole public history is one fetch; when it lands, re-render so the highlights are
     // the real ones (offline's are computed from the same event list). Fetched at most once.
     if (!os.historyLoaded && !os.historyLoading) {
@@ -5755,43 +9013,68 @@ function renderGameOver() {
     const draw = info.title === RESULT.draw;
     // Count this ONLINE finish for the install invitation too — an online-only player must reach
     // the trigger. Once per match: the finish screen re-renders, so the match id is the guard.
-    const matchId = os.driver.snapshot().matchId;
+    const matchId = snapshot.matchId;
     if (onlineResultNoted !== matchId) {
       onlineResultNoted = matchId;
-      installPrompt.noteFinished(won ? 'won' : draw ? 'draw' : 'lost');
+      noteInstallFinished(won ? 'won' : draw ? 'draw' : 'lost');
     }
     $('go-title').textContent = info.title;
+    // A duel has no campaign level: its context is the opponent line in #go-sub, never a kicker.
+    $('go-context').textContent = '';
+    $('go-context').hidden = true;
     // Context only — never a repeat of the reason (offline shows the level line here).
     $('go-sub').textContent = info.sub;
     $('go-reason').textContent = info.reason;
     $('go-score').innerHTML = `<span class="you">${info.scores[0]}</span><span class="dash">–</span><span class="bot">${info.scores[1]}</span>`;
+    // THE DOUBLE HARVEST: the duel's final board. A pruned or refused history never withholds it
+    // (owner, 2026-10-30): the position on screen is the match's own final board.
+    const harvest = info.harvest ?? harvestFigure(os.state.board, os.state.config, HUMAN, os.state.terrain);
+    paintVerdict(harvest);
     $('go-break').textContent = info.breakdown;
     $('go-moves').textContent = info.moves ?? '';
     setGoExtra('go-moves', !!info.moves);
-    $('go-highlights').replaceChildren(
-      ...info.highlights.map((h) => {
-        const li = document.createElement('li');
-        li.className = h.by === HUMAN ? 'you' : h.by === BOT ? 'bot' : '';
-        li.innerHTML = `<span class="h-value num">${h.value}</span><span class="h-title">${h.title}</span><span class="h-text">${h.text}</span>`;
-        return li;
-      }),
-    );
+    paintHighlightList($('go-highlights'), info.highlights);
     // The record line counts offline games only — never leak it onto a server match.
     $('go-stats').textContent = '';
     setGoExtra('go-stats', false);
-    // A duel has no offline cut replay to offer.
+    // A duel has no offline cut replay to offer, and no replayable log to review.
     setGoExtra('go-cut', false);
-    // The owner's ask: a REAL rematch leads the finish screen, ahead of the old "back out" that
-    // used to sit in this slot. Back to matches and Menu stay, as secondary ways out
-    // (`bind('go-rematch')` starts the rematch; `bind('go-other')` is Back to matches).
+    // It DOES have a replay of the whole match (owner brief, 2026-10-25), whenever at least one
+    // move was committed — so the one entry sits on the card beside the ways forward.
+    setReplayAvailable(snapshot.revision > 0);
+    // THE FOUR KEYS (owner brief, 2026-11-11): the rematch still leads; the result's details and
+    // the final board sit behind RESULT; the fourth key is the way back to the matches on a duel.
+    // A locked-line card (no planet) keeps its old column and its Back to matches in `go-other`.
+    const anatomy = ENDGAME_PLANET ? 'planet' : 'classic';
+    $('go-board').hidden = anatomy === 'planet';
     $('go-rematch').textContent = ONLINE.rematch;
     $('go-rematch').setAttribute('aria-label', ONLINE.rematch);
     const other = $('go-other');
-    other.hidden = false;
+    other.hidden = anatomy === 'planet';
     other.textContent = ONLINE.backToMatches;
     other.setAttribute('aria-label', ONLINE.backToMatches);
+    const menuKey = $('go-menu');
+    menuKey.textContent = anatomy === 'planet' ? ONLINE.backToMatches : ONLINE.menuButton;
+    menuKey.setAttribute('aria-label', menuKey.textContent);
+    menuKey.dataset.target = anatomy === 'planet' ? 'matches' : 'menu';
     $('go-share').textContent = RESULT.share;
     go.className = `gameover ${won ? 'won' : draw ? 'draw' : 'lost'}`;
+    go.dataset.anatomy = anatomy;
+    $('go-result').hidden = anatomy !== 'planet';
+    finishResult = {
+      outcome: info.title,
+      score: [info.scores[0], info.scores[1]],
+      reason: info.reason,
+      breakdown: info.breakdown,
+      moves: info.moves ?? '',
+      stats: '',
+      highlights: info.highlights,
+      harvest,
+      share: true,
+      cut: false,
+      difficulty: false,
+    };
+    syncEndgamePlanet(anatomy === 'planet', false);
     // A fresh finish starts folded: the card shows the result and the ways forward, nothing else.
     if (wasHidden) setGoExtrasOpen(false);
     else syncGoExtras();
@@ -5800,66 +9083,126 @@ function renderGameOver() {
     return;
   }
   const st = session?.state;
-  const wasHidden = go.hidden;
-  const show = !!st && st.phase === 'GAME_OVER' && !!st.result && !busy() && !gameOverDismissed && !$('game').hidden;
-  if (go.hidden === !show) return;
+  const wasHidden = !!go.hidden;
+  const ready = !!st && st.phase === 'GAME_OVER' && !!st.result && !gameOverDismissed && !$('game').hidden;
+  const moving = ready && busy() && !settings.reduceMotion;
+  const show = ready && !busy() && plateMayCover(ready, moving);
+  if (go.hidden === !show) {
+    if (!show) document.body.classList.remove('result');
+    return;
+  }
   go.hidden = !show;
-  if (!show || !st?.result) return;
+  if (!show || !st?.result) {
+    document.body.classList.remove('result');
+    syncVeil();
+    return;
+  }
+  presentResult(go, wasHidden);
+  // Hold the Seeds line's slot from the card's first frame while a proof settles (see
+  // `settleSeedsForCard`): the award lands IN PLACE instead of pushing the card's content down.
+  go.querySelector<HTMLElement>('.go-card')?.classList.toggle('seed-slot', goSeedSlot);
   const r = st.result;
   const won = r.winner === HUMAN;
   const campaign = campaignLevel;
-  // The next level the win unlocked (null on a loss, and null past the last built level — read from
-  // the level data, never a hardcoded count, so a worker adding levels needs no change here).
-  const next = campaign && won ? nextCampaignLevel(campaign.number) : null;
+  // Which kind of campaign match this was (owner, 2026-10-24): a TUTORIAL replay returns to the
+  // Tutorial it came from; a REPLAY of a level behind the place has no next level to lead to.
+  const tutorial = !!campaign && tutorialReplay;
+  const replay = !!campaign && !tutorial && campaignReplay;
+  // The next level the win unlocked (null on a loss, on a replay, in a tutorial, and past the last
+  // built level — read from the level data, never a hardcoded count, so a worker adding levels
+  // needs no change here).
+  const next = campaign && won && !tutorial && !replay ? nextCampaignLevel(campaign.number) : null;
+  // THE PLANET CARD (owner brief, 2026-11-11): decided here because the header, the pane and the
+  // keys all depend on it, and a lesson 1-9 card keeps the classic column.
+  const taughtEarly = lessonActive();
+  const planetCard = ENDGAME_PLANET && !(taughtEarly && taughtEarly.level !== FINAL_LESSON.level);
+  // "See the board" belongs to the classic card alone: the planet card shows the final position in
+  // RESULT instead (owner brief: Board left the key row).
+  $('go-board').hidden = planetCard;
   $('go-title').textContent = won
-    ? campaign ? CAMPAIGN.levelWon(campaign.number) : RESULT.beatLevel(ladderLevel(gameLevel))
+    ? campaign ? CAMPAIGN.levelWon(campaign.number) : RESULT.won
     : resultTitle(r, HUMAN);
+  // The campaign's own lockup: LEVEL 12 over COMPLETE (same sentence, different shape).
+  if (campaign && won && $('go-title').textContent === CAMPAIGN.levelWon(campaign.number)) {
+    paintGoTitle(CAMPAIGN.levelWon(campaign.number), true);
+  }
+  // A loss keeps the honest outcome words; the level rides above them as context, never as a
+  // second title. A win already names the level, so the context line stays away — except in the
+  // Tutorial, where the win's title is the lesson's own and the line says where the card returns to.
+  const context = document.getElementById('go-context');
+  if (context) {
+    let label = tutorial
+      ? `${TUTORIAL_REPLAY.title} · ${CAMPAIGN.levelLabel(campaign.number)}`
+      : campaign && !won ? CAMPAIGN.levelLabel(campaign.number) : '';
+    // THE PLANET CARD'S TOP ROW (owner feedback, 2026-11-11: "brand mark and the level kicker on one
+    // top row (mark left, LEVEL 65 right)"). The level moves OUT of the title and into that cell, so
+    // the outcome word stands alone as the card's one big line — one level line, never two.
+    if (planetCard && campaign && won) {
+      label = $('go-title').querySelector('.go-kicker')?.textContent ?? CAMPAIGN.levelLabel(campaign.number);
+    }
+    context.textContent = label;
+    context.hidden = label === '';
+  }
   // The subtitle used to name the level ("Level 6 · Branching Out"). The owner removed level and
   // chapter NAMES everywhere (2026-10-16): the title already says which level it was, so naming it
   // again below was repetition, and "Branching Out" tells a player nothing they can use. What is
   // left is the one genuinely useful note — what the win unlocked.
   if (campaign) {
-    const note = next
-      ? CAMPAIGN.unlockedNext()
-      : won && !next ? CAMPAIGN.chapterDone : '';
+    const note = tutorial || replay
+      ? ''
+      : next
+        ? CAMPAIGN.unlockedNext()
+        : won && !next ? CAMPAIGN.chapterDone : '';
     $('go-sub').textContent = note;
     $('go-sub').hidden = note === '';
   } else {
-    // A classic game: nothing to add. The title carries the outcome and the level number.
-    $('go-sub').textContent = '';
-    $('go-sub').hidden = true;
+    // A practice match: which difficulty it was — never the internal opponent level (owner).
+    $('go-sub').textContent = RESULT.practice(currentMatchLabel());
+    $('go-sub').hidden = false;
   }
   // What this level was teaching, said back to the player once they have won it: the "you did it,
   // and here is what you just learned" beat. Only on a guided level, only on a win. Guarded by id:
   // a stale cached shell without the line must not break the finish card.
   // A lesson's finish card says how it was won, in one line (and its title is the lesson's own).
   const taught = lessonActive();
-  if (taught && won) $('go-title').textContent = taught.finish.title;
-  const learned = taught ? (won ? taught.finish.line : '') : campaign && won ? ONBOARD.recap(campaign.number) : '';
+  // A WON lesson says the lesson was learned: `Lesson 3` over `Learned`, the same two-line lockup
+  // a campaign win uses (paintGoTitle splits on the last space). Level 10 keeps its one send-off
+  // line. A LOSS never reaches here: it keeps the honest resultTitle painted above.
+  if (taught && won) paintGoTitle(taught.finish.title, taught.level !== FINAL_LESSON.level);
+  const learned = taught
+    ? (won ? `${LESSON.learned}: ${taught.finish.learned}` : '')
+    : campaign && won ? ONBOARD.recap(campaign.number) : '';
   const learnedEl = document.getElementById('go-learned');
   if (learnedEl) {
     learnedEl.textContent = learned;
+    learnedEl.dataset.icon = taught?.finish.icon ?? '';
     learnedEl.hidden = learned === '';
   }
   // The owner's rule (2026-10-16): after a WON campaign level the first button is "Next level" — the
   // next level starts straight away, with no walk back to the list to pick it. The last built level
-  // has no next, so that same button becomes the honest way out (the level list) rather than a dead
-  // one. A loss and a plain offline game keep the retry/again words they always had. Which one leads
-  // is decided in one pure place (`finishLead`), and the next level is read from the level DATA.
-  const lead = finishLead({ online: false, campaign: !!campaign, won, hasNext: !!next });
-  const leadWord = lead === 'next-level' ? CAMPAIGN.nextLevel : lead === 'back-to-campaign' ? CAMPAIGN.back : won ? 'Play again' : 'Try again';
+  // has no next, and a replay behind the place unlocks nothing, so that slot becomes PLAY AGAIN
+  // (owner brief, 2026-11-11 removed "Back to levels": the player only plays their latest level).
+  // Which one leads is decided in one pure place (`finishLead`); the next level is the level DATA's.
+  const lead = finishLead({ online: false, campaign: !!campaign, won, hasNext: !!next, tutorial, replay });
+  const leadWord = lead === 'next-level' ? CAMPAIGN.nextLevel
+    : lead === 'back-to-tutorial' ? TUTORIAL_REPLAY.back
+    : won ? 'Play again' : 'Try again';
   $('go-rematch').textContent = leadWord;
   $('go-rematch').setAttribute('aria-label', leadWord);
-  // Lessons pay no Seeds in this preview: no Seeds line at all on their finish card.
-  if (taught) seedRewardMessage = '';
+  // Lessons 1-9 pay no Seeds: no Seeds line at all on their finish card. Level 10 pays 100 once, and
+  // its won card now explains THE PLANET over the live map (owner brief, 2026-11-11).
+  if (taught && taught.level !== FINAL_LESSON.level) seedRewardMessage = '';
   paintGoSeeds();
   const other = $('go-other');
-  // On the last level the primary already IS "Back to campaign": one action, not two that do the
-  // same thing (the online rematch keeps its own secondary, untouched).
-  other.hidden = lead === 'back-to-campaign';
-  const otherWord = campaign ? CAMPAIGN.back : 'Change difficulty';
+  // The old "Back to levels" is gone for good. On a classic card the only second way out left is a
+  // practice match's Change difficulty; the planet card carries it inside RESULT instead.
+  const otherWord = 'Change difficulty';
+  other.hidden = !!campaign || ENDGAME_PLANET;
   other.textContent = otherWord;
   other.setAttribute('aria-label', otherWord);
+  $('go-menu').textContent = RESULT.backToMenu;
+  $('go-menu').setAttribute('aria-label', RESULT.backToMenu);
+  $('go-menu').dataset.target = 'menu';
   go.className = `gameover ${r.winner === HUMAN ? 'won' : r.winner === null ? 'draw' : 'lost'}`;
   $('go-score').innerHTML = `<span class="you">${r.scores[HUMAN]}</span><span class="dash">–</span><span class="bot">${r.scores[BOT]}</span>`;
   // overhaul item 20: the final score counts up once, calmly (not with Reduce motion or Speed Off)
@@ -5868,39 +9211,80 @@ function renderGameOver() {
     const els = [$('go-score').querySelector('.you')!, $('go-score').querySelector('.bot')!];
     const to = [r.scores[HUMAN], r.scores[BOT]];
     const t0 = performance.now();
-    const tick = (t: number) => {
-      const k = Math.min(1, (t - t0) / 900);
+    const tick = ({ now }: { now: number }) => {
+      const k = Math.min(1, (now - t0) / 900);
       const e = 1 - (1 - k) ** 3;
       els.forEach((el, i) => (el.textContent = String(Math.round(to[i]! * e))));
-      if (k < 1) requestAnimationFrame(tick);
+      if (k < 1) scheduler.request('result-score', tick);
     };
-    requestAnimationFrame(tick);
+    scheduler.request('result-score', tick);
   }
   setGoExtra('go-cut', !!session?.biggestCut);
+  // Every offline match — practice, campaign and a tutorial replay — can be watched back from its
+  // own log in memory. There is no stored list offline (owner's decision, 2026-10-25).
+  setReplayAvailable(!!session && session.log.length > 0 && !blitzMatch);
   $('go-share').textContent = RESULT.share;
   $('go-reason').textContent = taught ? '' : resultReason(r, HUMAN);
+  // Blitz tempo (owner's idea 3, 0.82): the time left at the end of my turns, one quiet line.
+  {
+    const tempo = blitzMatch ? blitz?.tempo() ?? null : null;
+    let line = document.getElementById('go-tempo');
+    if (tempo && !line) {
+      line = document.createElement('p');
+      line.id = 'go-tempo';
+      line.className = 'muted small num go-tempo';
+      $('go-reason').after(line);
+    }
+    if (line) {
+      line.hidden = !tempo;
+      line.textContent = tempo ? blitzTempoLine(tempo) : '';
+    }
+  }
   if (taught) $('go-sub').hidden = true;
+  // THE DOUBLE HARVEST (surprise, 2026-10-29): this match's final position, stamped as one small
+  // figure. (The one-line summary that sat beside it was removed, owner 2026-10-30.)
+  paintVerdict(offlineVerdict(st));
   // UX pass: what I did with the one-card move
   const moves = moveSummary(st.history ?? [], HUMAN);
   $('go-moves').textContent = moves ?? '';
   setGoExtra('go-moves', !!moves);
-  $('go-break').textContent = RESULT.breakdown(breakdownPart(st, HUMAN), breakdownPart(st, BOT));
-  $('go-stats').textContent = statsLine(stats);
+  const breakdown = RESULT.breakdown(breakdownPart(st, HUMAN), breakdownPart(st, BOT));
+  $('go-break').textContent = breakdown;
+  const record = statsLine(stats);
+  $('go-stats').textContent = record;
   setGoExtra('go-stats', true);
-  $('go-highlights').replaceChildren(
-    ...gameHighlights(st.history ?? [], HUMAN).map((h) => {
-      const li = document.createElement('li');
-      li.className = h.by === HUMAN ? 'you' : h.by === BOT ? 'bot' : '';
-      li.innerHTML = `<span class="h-value num">${h.value}</span><span class="h-title">${h.title}</span><span class="h-text">${h.text}</span>`;
-      return li;
-    }),
-  );
+  const highlights = gameHighlights(st.history ?? [], HUMAN);
+  paintHighlightList($('go-highlights'), highlights);
+  // THE PLANET CARD (owner brief, 2026-11-11): every offline match from level 10 on, practice and
+  // duels show the living world and the four keys; lessons 1-9 (and the locked futa04 line) keep the
+  // classic card, which is why the anatomy is decided per card and not per build alone. `planetCard`
+  // and `go-board` are already settled above, in the header block.
+  go.dataset.anatomy = planetCard ? 'planet' : 'classic';
+  $('go-result').hidden = !planetCard;
+  const reason = taught ? '' : resultReason(r, HUMAN);
+  finishResult = {
+    outcome: $('go-title').textContent ?? '',
+    score: [r.scores[HUMAN], r.scores[BOT]],
+    reason,
+    breakdown,
+    moves: moves ?? '',
+    stats: record,
+    highlights,
+    harvest: offlineVerdict(st),
+    share: true,
+    cut: !!session?.biggestCut,
+    difficulty: !campaign,
+  };
+  // Level 10's teaching, under the live map: the planet explains itself where it is used.
+  syncEndgamePlanet(planetCard, !!taught && taught.level === FINAL_LESSON.level && won);
   // A fresh finish starts folded (see the online branch): the card shows the result and the ways
   // forward, and the details wait behind "More" — that is what keeps it on one phone screen.
   if (wasHidden) setGoExtrasOpen(false);
   else syncGoExtras();
   $('go-rematch').focus();
 }
+
+// ---------- history ----------
 
 function renderHistory() {
   $('history').replaceChildren(
@@ -5921,9 +9305,32 @@ function clearBloomPaintUi() {
   board.ghost(null);
 }
 
+/**
+ * UNDO BRINGS THE LAST EXPLANATION BACK (owner, 2026-10-21: "after closing, clicking undo shows it
+ * again" — and explicitly even if it had already been read). Taking a move back means the player is
+ * about to redo it, so the sentence that taught it is worth re-reading; it is the same beat, so the
+ * words are unchanged.
+ *
+ * Implemented by forgetting that this beat was read: `lessonSeen` is what suppresses it, so removing
+ * the id re-opens the box on the next render. The read clock is reset too, so the fresh showing gets
+ * its own full 3 s floor rather than inheriting an already-expired one.
+ *
+ * Levels 1-3 never reach here: there every non-lit control is refused, so Undo does not undo.
+ */
+function lessonReopenExplanation() {
+  if (!lessonActive() || !lessonExplainId) return;
+  const opened = lessonSeen.delete(lessonExplainId);
+  if (!opened) return;
+  saveLessonMeta();
+  lessonShownKey = '';
+  lessonExplainId = '';
+  lessonExplainAt = 0;
+  render();
+}
+
 /** Takes back the player's last move of this turn (nothing hidden was revealed by it). */
 function undoMove() {
-  if (!session) return;
+  if (!session || blitzMatch) return; // Blitz has no Undo (owner, 2026-11-06)
   note({ t: 'undo', at: Date.now() });
   fastForward();
   const before = session.state.board;
@@ -5933,6 +9340,8 @@ function undoMove() {
     syncSessionFromOnline(true);
     paintOnlineHudFromSession();
   } else if (!session.undo()) return;
+  // An undo inside a lesson re-opens the sentence that taught the move being taken back.
+  lessonReopenExplanation();
   // Overhaul item 9: the move runs backwards (its tiles sink away, cut tiles come back),
   // with a falling sound and a light double tap. The state itself is restored exactly.
   const after = session.state.board;
@@ -5969,7 +9378,11 @@ function undoMove() {
   smartCockpit?.hint('UNDONE');
 }
 
+/** Cards picked toward a Bloom by hand (BLOOM BY HAND in onCardTap); empty when nothing is held. */
+let bloomPick: number[] = [];
+
 function cancelSel() {
+  bloomPick = [];
   clearBloomPaintUi();
   session?.cancel();
   inspectKey = null;
@@ -5979,7 +9392,7 @@ function cancelSel() {
 
 /** A clear choice (one move on the picked spot) plays at once: no Confirm, Undo can take it back. */
 function maybeAutoPlay() {
-  if (!session || !myTurn() || busy()) return;
+  if (!session || !myTurn() || blocking()) return;
   // Futa04 commits a complete card-and-target Sprout, including Strengthen. Blooms finish
   // through the drawing path (a painted shape of any size), so an inferred placement never spends
   // a partly chosen group. A Blast is a whole move at a target like a Sprout: it plays on the tap.
@@ -6006,7 +9419,7 @@ function onCardTap(id: number) {
   if (!session) return;
   // Mid-reveal a tap must not skip the enemy's turn (and must not start mine early).
   if (onlineGateShut()) return revealWaitNotice();
-  if (busy()) fastForward();
+  if (blocking()) fastForward();
   if (!myTurn()) return;
   // Before the draw a card cannot be used yet. It used to be selected silently, so the tap looked
   // broken; now it says why, at the card.
@@ -6020,7 +9433,12 @@ function onCardTap(id: number) {
     const hasCombo = session.legal.some(a => a.t === 'Bloom' || a.t === 'MegaBomb');
     const matchingBlooms = bloomKindsForCard(id);
     const inBloomCard = matchingBlooms.length > 0;
-    const sameAgain = session.sel.card === id;
+    const sameAgain = session.sel.card === id || (bloomPick.length === 1 && bloomPick[0] === id);
+    // NO ROOM (tester report, 2026-10-27): the card is part of a set or run in the hand, but the
+    // board has no room to grow it, so no Bloom is legal and the tap is an ordinary card pick. Say
+    // why on the display instead of leaving the player to read the silence as a bug. Words only:
+    // the tap itself does exactly what it did before.
+    if (!inBloomCard && bloomNoRoom(session.view, session.legal, id) !== null) smartCockpit?.hint('NO ROOM');
     if (grewThisTurn() && hasCombo) {
       // Bloom-related card: first tap stays on Bloom; tapping the same card again
       // (or any non-Bloom card) moves to Throw select → next tap confirms.
@@ -6034,44 +9452,76 @@ function onCardTap(id: number) {
         }
       }
     }
-    // Bloom available: tapping a bloom card (before or after the first grow) opens the map
-    // like the bloom icon — that card is the first painted tile when it is the high end.
-    // One-tile grow of the same card stays available via drag onto a hex.
-    const wantBloom = matchingBlooms.length > 0 || !!session.sel.kind?.startsWith('bloom-');
-    if (wantBloom && matchingBlooms.length === 1) {
-      if (sameAgain && session.sel.kind === matchingBlooms[0]!.kind) {
-        session.cancel();
-        draw = { ...DRAW0 };
-        board.ghost(null);
+    // BLOOM BY HAND (owner, 2026-10-23). A card that can bloom is first only PICKED (lifted, aqua):
+    //   - the same card again: it is played as a plain one-tile Grow;
+    //   - another card that blooms with it: both are held, and the player picks the rest from the
+    //     hand; the moment the picked cards ARE a Bloom, it is time to paint it on the board;
+    //   - while a Bloom is being painted, a card that makes it one longer extends it, a card of
+    //     the Bloom puts it down, and any other card is chosen as usual.
+    const painting = !!session.sel.kind?.startsWith('bloom-') && !session.sel.kind.startsWith('bloom-mega-');
+    const clearPaint = () => { session!.cancel(); draw = { ...DRAW0 }; board.ghost(null); bloomMenu = false; };
+    if (painting) {
+      const group = kindCards(session.sel.kind!);
+      if (group.includes(id)) {
+        clearPaint();
+        bloomPick = [];
         render();
         return;
       }
-      sound.click();
-      beginBloomKind(matchingBlooms[0]!.kind, id);
-      inspectKey = null;
-      smartCockpit?.hint('BLOOM');
-      render();
-      return;
+      const longer = bloomKindsWith([...group, id]).find((k) => kindCards(k.kind).length === group.length + 1);
+      if (longer) {
+        sound.cardSelect();
+        beginBloomKind(longer.kind, group[0] ?? id);
+        smartCockpit?.hint('BLOOM');
+        render();
+        return;
+      }
+      if (inBloomCard) {
+        clearPaint();
+        bloomPick = [id];
+        sound.cardSelect();
+        hintBloomPick();
+        render();
+        return;
+      }
     }
-    // Several Blooms share this card under Bloom intent: open the recipe menu.
-    if (wantBloom && matchingBlooms.length > 1) {
-      sound.click();
-      pickFruit(id);
-      session.sel = { ...session.sel, kind: null, hex: null };
-      draw = { ...DRAW0 };
-      board.ghost(null);
-      bloomMenu = true;
-      inspectKey = null;
+    if (bloomPick.length === 1 && bloomPick[0] === id) {
+      // The second tap on the same card: a plain one-tile Grow (chosen below, as any card is).
+      bloomPick = [];
+    } else if (bloomPick.includes(id)) {
+      bloomPick = bloomPick.filter((x) => x !== id);
+      hintBloomPick();
       render();
       return;
+    } else if (inBloomCard) {
+      const next = [...bloomPick, id];
+      const fits = bloomKindsWith(next);
+      // A card that does not bloom with the ones held starts a fresh pick of its own.
+      bloomPick = fits.length ? next : [id];
+      const exact = fits.length && next.length >= 3 ? fits.find((k) => kindCards(k.kind).length === next.length) : undefined;
+      sound.cardSelect();
+      clearPaint();
+      inspectKey = null;
+      if (exact) {
+        beginBloomKind(exact.kind, sameFaceIn(exact.kind, next[0]!));
+        bloomPick = [];
+        smartCockpit?.hint('BLOOM');
+      } else hintBloomPick();
+      render();
+      return;
+    } else if (bloomPick.length) {
+      // a card that cannot bloom ends the pick and is chosen as usual
+      bloomPick = [];
     }
     // The double-Bomb recipe is entered only through its cockpit control.
     // Picking a Bomb from the hand remains the existing single-card action.
     if (session.sel.kind?.startsWith('bloom-mega-') && session.view.hand.some(c=>c.id===id && c.suit===null)) session.cancel();
   }
-  // the test copy: no Confirm box; tapping a card of the waiting move again places it
-  if (FEATURES.tapAgain && session.pending && (!IS_FUTA04 || (session.pending.t !== 'Bloom' && session.pending.t !== 'Sprout')) && moveCards(session.pending).includes(id)) return humanPlay(session.pending);
-  sound.click();
+  // The classic / test copies: no Confirm box, tapping a card of the waiting move again places it.
+  // The product Throw step is NOT in this path: a second tap on the picked card deselects, and a
+  // card tap never throws (owner, 2026-10-25). Throws are the swipe, the pile drop, or a pile tap.
+  if (FEATURES.tapAgain && session.pending && tapAgainPlays(session.pending, id, IS_FUTA04)) return humanPlay(session.pending);
+  sound.cardSelect();
   pickFruit(id);
   inspectKey = null;
   // a Fruit card with nothing to do says why, in one line
@@ -6079,8 +9529,9 @@ function onCardTap(id: number) {
     const why = fruitCardState(session.view, session.legal, id).reason;
     if (why) caption(why, null, 'info');
   }
-  // Throw step: tapping a card throws it (only the last card asks first, per "Confirm moves").
-  if (session.view.phase === 'DISCARD' && session.pending?.t === 'Discard' && !asksConfirm(session.pending)) return humanPlay(session.pending);
+  // Classic only: tapping a card throws it directly (only the last card asks first, per "Confirm
+  // moves"). The product always selects first and throws by gesture, never by card tap.
+  if (!IS_FUTA04 && session.view.phase === 'DISCARD' && session.pending?.t === 'Discard' && !asksConfirm(session.pending)) return humanPlay(session.pending);
   // A card with just one place to grow picks it at once: one tap plays it (Undo takes it back).
   if (session.sel.card !== null && session.sel.hex === null && (!IS_FUTA04 || session.view.hand.find(c => c.id === session!.sel.card)?.suit !== null)) {
     const only = [...targetHexes(session.view, session.legal, session.sel)];
@@ -6107,7 +9558,7 @@ const finePointer = () => typeof matchMedia === 'function' && matchMedia('(point
 /** The picked Bloom while painting is possible (my Grow step, a Bloom picked), else null. */
 let comboMemo: { state: unknown; sel: unknown; combo: Combo | null } | null = null;
 function drawCombo(): Combo | null {
-  if (!session || !myTurn() || busy() || session.view.phase !== 'ACT') return null;
+  if (!session || !myTurn() || blocking() || session.view.phase !== 'ACT') return null;
   // worked out once per position and selection, not on every pointer move
   if (comboMemo?.state !== session.state || comboMemo.sel !== session.sel) comboMemo = { state: session.state, sel: session.sel, combo: comboFor(session.view, session.legal, session.sel) };
   return comboMemo.combo;
@@ -6131,6 +9582,7 @@ function bloomReverseForCard(combo: Combo, cardId: number | null): boolean {
 function beginBloomKind(kind: string, cardId: number | null = null): boolean {
   if (!session || !kind.startsWith('bloom-') || kind.startsWith('bloom-mega-')) return false;
   bloomMenu = false;
+  bloomPick = [];
   session.preset(null);
   const card = cardId ?? kindCards(kind)[0] ?? null;
   session.sel = { card, hex: null, kind, option: 0 };
@@ -6166,6 +9618,43 @@ function bloomKindsForCard(id: number) {
   );
 }
 
+/** A card's face (suit and number): copies of the same face are interchangeable in a Bloom. */
+const faceOf = (id: number): string => {
+  const c = session?.view.hand.find((x) => x.id === id);
+  return c ? `${c.suit}:${c.rank}` : '';
+};
+
+/** The Bloom recipes that hold every one of these cards (by face, so copies are interchangeable). */
+function bloomKindsWith(ids: readonly number[]) {
+  if (!session) return [];
+  const want = ids.map(faceOf);
+  return moveButtons(session.view, session.legal, EMPTY_SEL, true).filter((k) => {
+    if (!k.kind.startsWith('bloom-') || k.kind.startsWith('bloom-mega-')) return false;
+    const have = kindCards(k.kind).map(faceOf);
+    for (const w of want) {
+      const at = have.indexOf(w);
+      if (at < 0) return false;
+      have.splice(at, 1);
+    }
+    return true;
+  });
+}
+
+/** The card of `kind` with the same face as `id` (the recipe may name another copy of it). */
+function sameFaceIn(kind: string, id: number): number {
+  const cards = kindCards(kind);
+  return cards.includes(id) ? id : cards.find((c) => faceOf(c) === faceOf(id)) ?? cards[0] ?? id;
+}
+
+/** The display counts what is left to pick: "PICK 2 MORE", "PICK 1 MORE" (the shortest Bloom). */
+function hintBloomPick() {
+  if (!bloomPick.length) return;
+  const fits = bloomKindsWith(bloomPick);
+  const shortest = fits.reduce((n, k) => Math.min(n, kindCards(k.kind).length), Infinity);
+  const left = Number.isFinite(shortest) ? shortest - bloomPick.length : 0;
+  if (left > 0) smartCockpit?.hint(`PICK ${left} MORE`);
+}
+
 /** The ghost of the shape being painted right now (null when nothing is painted). */
 function drawGhostNow(c: Combo): DrawGhost | null {
   const v = session!.view;
@@ -6178,20 +9667,27 @@ function paintDraw() {
   updateFuta04MoveActive();
   cancelAnimationFrame(drawFrame);
   drawFrame = requestAnimationFrame(() => {
-    const c = drawCombo();
-    if (!c || !session) return;
-    const g = session.presetMove ? null : drawGhostNow(c);
-    const shape = draw.desk.phase === 'live' ? g?.tiles.map(tile=>tile.key) ?? [] : draw.shape;
-    const blocked = session.presetMove ? [] : [...unavailable(session.view, c, shape, draw.reverse).keys()];
-    board.ghost(g || blocked.length ? {
-      tiles: g?.tiles ?? [],
-      blocked: !!g && !g.action && g.tiles.length === c.n,
-      unavailable: blocked,
-      cursor: focusKey && document.activeElement === $('board') ? focusKey : null,
-    } : null);
-    renderDrawInfo(c, g);
-    // Keep next-hex wells in sync with the painted path (ghost layer alone used to lag).
-    refreshBoardDrag();
+    try {
+      const c = drawCombo();
+      if (!c || !session) return;
+      const g = session.presetMove ? null : drawGhostNow(c);
+      const shape = draw.desk.phase === 'live' ? g?.tiles.map(tile=>tile.key) ?? [] : draw.shape;
+      const blocked = session.presetMove ? [] : [...unavailable(session.view, c, shape, draw.reverse).keys()];
+      board.ghost(g || blocked.length ? {
+        tiles: g?.tiles ?? [],
+        blocked: !!g && !g.action && g.tiles.length === c.n,
+        unavailable: blocked,
+        cursor: focusKey && document.activeElement === $('board') ? focusKey : null,
+      } : null);
+      renderDrawInfo(c, g);
+      // Keep next-hex wells in sync with the painted path (ghost layer alone used to lag).
+      refreshBoardDrag();
+    } catch (error) {
+      // A preview must never take the page down. Drop the ghost and leave the paint state for the
+      // next frame; the commit path has its own calm refusal (see `humanPlay`).
+      console.error('paint preview failed', error);
+      board.ghost(null);
+    }
   });
 }
 
@@ -6418,7 +9914,19 @@ const drawHandlers = {  down(p: Pt, e: PointerEvent) {
       if (next.length > shape.length) {
         drawTick(next.length - 1);
         msg = null;
-      } else if (next.length === shape.length && !shape.includes(k)) msg = unavailable(session!.view, c, shape, draw.reverse).get(k) ?? msg;
+        shape = next;
+        continue;
+      }
+      // Moving onto a hex the path cannot simply extend: if it can legally BE the last tile, the
+      // tentative end follows the finger instead of needing a drag back first (owner, 2026-10-25).
+      // A refused retarget changes nothing, so the shape can never pick up a gap or an illegal end.
+      const retargeted = next.length === shape.length && !shape.includes(k) ? paintRetarget(c, shape, k, draw.reverse) : null;
+      if (retargeted) {
+        shape = retargeted;
+        msg = null;
+        continue;
+      }
+      if (next.length === shape.length && !shape.includes(k)) msg = unavailable(session!.view, c, shape, draw.reverse).get(k) ?? msg;
       shape = next;
     }
     draw = { ...draw, shape, msg };
@@ -6459,6 +9967,7 @@ const drawHandlers = {  down(p: Pt, e: PointerEvent) {
     if (draw.shape.length === c.n) {
       board.shake(settings.reduceMotion);
       if (settings.sound) sound.illegal();
+      vibrate(settings.vibration, 12);
       draw = { ...draw, msg: paintProblem(session!.view, c, draw.shape, draw.reverse) };
     }
     render();
@@ -6476,7 +9985,9 @@ function trySkipBloomToThrow(): boolean {
   if (!session.legal.some(a => a.t === 'Bloom' || a.t === 'MegaBomb')) return false;
   const end = session.legal.find(a => a.t === 'EndAct');
   if (!end) return false;
-  humanPlay(end);
+  // `auto`: this EndAct is the app's own jump to Throw, not a move the player made, so it must not
+  // become an undo stop of its own (see Session.play).
+  humanPlay(end, { auto: true });
   return true;
 }
 
@@ -6590,7 +10101,7 @@ function onHexTap(key: string) {
   if (!session) return;
   // Mid-reveal a tap must not skip the enemy's turn: the board is still changing under it.
   if (onlineGateShut()) return revealWaitNotice();
-  if (busy()) fastForward();
+  if (blocking()) fastForward();
   // Bloom undo / unpick on a hex that is not continuing the paint (still allow the
   // first→last endpoint shortcut used by Futa04 Bloom).
   if (IS_FUTA04 && myTurn() && session.view.phase === 'ACT' && (session.sel.kind?.startsWith('bloom-') || draw.shape.length)) {
@@ -6625,7 +10136,7 @@ function onHexTap(key: string) {
     pinCard(inspectKey === key && cardPinned ? null : key);
     return;
   }
-  sound.click();
+  sound.hexSelect();
   // An opponent tile the picked card cannot take (or any opponent tile with nothing picked)
   // opens its tile card, which offers "Use Fruit card". The picked card stays picked.
   if (session.view.phase === 'ACT' && hexTapIntent(session.view, session.legal, session.sel, key) === 'tilecard') {
@@ -6656,7 +10167,7 @@ function onInspect(key: string | null) {
 /** Futa04 idle touch response. Never select a tile or change the session. */
 function boinkTile(key: string) {
   if (!session?.view.board[key]) return;
-  sound.click();
+  sound.hexSelect();
   if (document.documentElement.classList.contains('reduce-motion') || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const tile = session.view.board[key]?.root
     ? board.homeEls.find(home=>home.dataset.key === key) : board.tile(key);
@@ -6697,7 +10208,7 @@ function useFruitOn(key: string) {
   if (!session) return;
   const offer = fruitOffer(session.view, session.legal, key);
   if (!offer) return;
-  sound.click();
+  sound.cardSelect();
   session.cancel();
   pickFruit(offer.action.card);
   session.tapHex(key);
@@ -6720,8 +10231,6 @@ function pickFruit(id: number) {
 /** The Fruit card the "any strength" note is shown for (the first one picked). */
 let anyNoteCard: number | null = null;
 
-const REPLAY_TIP = `Replay ${OPP.theirs} last turn`;
-const REPLAY_NONE = `Nothing to replay yet: ${OPP.the} hasn't moved`;
 function replayBotTurn() {
   if (!session || busy()) return;
   const turn = session.lastTurnOf(BOT);
@@ -6729,6 +10238,8 @@ function replayBotTurn() {
   session.cancel();
   replaying = true;
   replaySpeed = REPLAY_SPEED;
+  // In-game replay: a readable beat between the enemy's actions.
+  replayBeats = true;
   sound.reset(); // the same steps pick the same variations as the first time
   queue.reset(turn[0]!.before.board);
   const v0 = viewFor(turn[0]!.before, HUMAN);
@@ -6739,9 +10250,74 @@ function replayBotTurn() {
   }
   const v = session.view;
   queue.push([{ k: 'sync', board: session.state.board, scores: [v.score, v.opponentScore] }]);
-  banner(`Replay: ${OPP.Label} turn`, 'bot');
+  // It is a REPLAY, and it is the OPPONENT'S: the product's own display (the LED sign) says so
+  // for the whole turn and its glass dims, the same way an online reveal marks "not ours".
+  // `banner()` is deliberately a no-op on the product channels, so relying on it alone left this
+  // replay with no on-screen label at all. Legacy channels keep the banner they always had.
+  if (IS_FUTA04) {
+    theirsDim.begin();
+    if (smartCockpit) {
+      // `immediate`: the board starts moving on this frame, so the sign must not wait out the
+      // display's dwell behind the step cue already on the glass. MEASURED by removing this flag:
+      // the word then appeared 856 ms into the replay (moving) / 806 ms (Reduce motion), during
+      // which the sign still read "0:1" while the board was already moving. With it: 15 ms / 14 ms.
+      smartCockpit.led('REPLAY', { immediate: true });
+      replaySignHeld = true;
+    }
+  } else {
+    banner(`Replay: ${OPP.Label} turn`, 'bot');
+  }
   render();
   void pump();
+}
+
+/**
+ * The same replay, ONLINE: the opponent's last turn rebuilt from the match's public history.
+ *
+ * It goes through the SAME machinery as offline (`queue.reset(startBoard)` → its steps → a closing
+ * sync onto the live board), so the pace, the beats, Reduce motion / Speed off, Skip and the
+ * product's own REPLAY sign all behave identically. The steps are only ever produced by
+ * `OnlineSession.opponentTurnReplay`, which refuses unless the reconstruction was proved against
+ * the live board — so a wrong position can never be shown and the board always ends where the duel
+ * really is. Nothing here touches the clock, the server, the catch-up gates or the action log.
+ */
+function replayOnlineOpponentTurn() {
+  if (!session || busy()) return;
+  const os = getOnlineSession();
+  const turn = os?.opponentTurnReplay;
+  if (!turn) return;
+  // The live position, read BEFORE anything is queued: this is where the replay must end.
+  const liveBoard = session.state.board;
+  const v = session.view;
+  const liveScores: [number, number] = [v.score, v.opponentScore];
+  session.cancel();
+  replaying = true;
+  replaySpeed = REPLAY_SPEED;
+  replayBeats = true;
+  sound.reset(); // the same steps pick the same variations as the first time
+  queue.reset(turn.startBoard);
+  shownScores = [turn.scores[0], turn.scores[1]];
+  queue.push(turn.steps.filter((s) => s.k !== 'end' && s.k !== 'turn'));
+  // The closing sync: whatever the steps did, the board lands on the TRUE current position.
+  queue.push([{ k: 'sync', board: liveBoard, scores: liveScores }]);
+  if (IS_FUTA04) {
+    theirsDim.begin();
+    if (smartCockpit) {
+      smartCockpit.led('REPLAY', { immediate: true });
+      replaySignHeld = true;
+    }
+  } else {
+    banner(`Replay: ${OPP.Label} turn`, 'bot');
+  }
+  render();
+  void pump();
+}
+
+/** One entry point for the one control: online it is a rebuild, offline it is the kept turns. */
+function replayLastTurn() {
+  if (blitzMatch) return; // Blitz has no Replay (owner, 2026-11-06)
+  if (isOnlineDuel()) replayOnlineOpponentTurn();
+  else replayBotTurn();
 }
 
 const bind = (id: string, fn: () => void) =>
@@ -6758,17 +10334,34 @@ const bind = (id: string, fn: () => void) =>
  * so each keeps its id, its existing handler and its words: the online hub's own click binding, the
  * campaign screen binding, and the training picker below. The legacy channels never see the submenu
  * and keep the flat menu they are used to, so their own tests are untouched.
+ *
+ * The ARRAY IS THE VISUAL ORDER (`append` one by one, in order), so it is also the tab order and the
+ * screen reader's order. Owner decision (2026-10-20): LEVEL is the FIRST entry, above Play online -
+ * the offline campaign is the thing a player opens most, and it leads the column. Since 2026-10-22 it
+ * also carries the cream fill (the one leader inside PLAY); Play online is a quiet ghost key.
  */
-const PLAY_MENU_ENTRIES = ['menu-online', 'menu-campaign', 'menu-new'] as const;
+const PLAY_MENU_ENTRIES = ['menu-campaign', 'menu-online', 'menu-new'] as const;
 if (FEATURES.campaign) {
   const actions = document.getElementById('play-actions');
   if (actions) for (const id of PLAY_MENU_ENTRIES) actions.append($(id));
+  // The chapter caption is a DETAIL of the LEVEL entry, so it is placed directly under it in the
+  // column (moved, not copied). It has no id of its own in the entry list and no handler: it can
+  // never become a fourth destination or enter the tab order.
+  $('menu-campaign').after($('play-readout'));
 }
 
 bind('menu-play', openPlayMenu);
-bind('play-back', () => showScreen('menu'));
+bind('play-back', () => {
+  // The submenu keeps the menu underneath (see openPlayMenu), so returning repaints its own state
+  // explicitly rather than relying on showScreen's "the screen changed" branch. `showScreen` owns
+  // the doorway's exit and the menu's arrival, so the pair is one move.
+  layoutMenu(syncMenuResume());
+  showScreen('menu');
+});
+// Keep a tap made while the optional online module is still mounting; replay it once ready.
+const onlineEntryIntent = deferEntryButton($<HTMLButtonElement>('menu-online'));
 // The hub takes over the whole screen; the submenu must not stay behind it.
-$('menu-online').addEventListener('click', closePlayMenu);
+$('menu-online').addEventListener('click', () => closePlayMenu());
 
 bind('menu-new', () => {
   if (!$('menu-continue').hidden && !window.confirm('Start a new game? The saved game will be lost.')) return;
@@ -6796,8 +10389,9 @@ bind('levels-back', () => showScreen('menu'));
 bind('menu-campaign', () => enterCampaign());
 bind('campaign-back', () => showScreen('menu'));
 bind('campaign-continue', () => enterCampaign());
-// The ask sheet: only reachable when the saved match is a different level from the next one, so
-// both answers are explicit and one tap each. Resume wins the lead: the match exists already.
+// The ask sheet. Since the entry anchors on the PLACE (owner, 2026-10-24), `campaignEntry` only
+// raises it when the saved match IS the place (`next.id === saved.id`); the different-level wording
+// below is kept for a direct caller, not reachable through the entry any more.
 bind('csa-resume', () => {
   campaignAsk = null;
   sheet(null);
@@ -6812,18 +10406,62 @@ bind('csa-start', () => {
 });
 // Overhaul item 11: every button answers a press the same way: a 0.97 press (CSS), a soft
 // tick (Sound) and, with Effects High, a tiny tap (Vibration). Nothing plays before a tap.
+// Sound is a CONSUMER of the phase 0 press seam, never a second primitive: the same pointerdown
+// gets a quiet tick, the lift gets the click, and a drag (a paint, not a tap) gets neither.
+const BUTTON_SELECTOR = '.btn, .ctool, .undo-chip, .seg-btn, .chip, .icon-only, .hand-sort, .level-tile, .world-challenge-chip, .world-challenge-primary, .world-challenge-secondary, .world-claim-button';
+let soundPress: { el: Element; x: number; y: number; id: number; cancelled: boolean } | null = null;
+/** A key: any button-like surface, the planet's and every sheet's included, but not a card or a tile. */
+const anyKey = (el: Element): boolean => !!el.closest(BUTTON_SELECTOR)
+  || (!!el.closest('button, [role="button"]') && !el.closest('.hand-slot, .card, #board, .board, svg'));
+const pressableAt = (target: EventTarget | null): Element | null => {
+  const el = target instanceof Element ? target.closest(PRESS_SELECTOR) : null;
+  return el && !shouldSkipPress(el as unknown as Parameters<typeof shouldSkipPress>[0]) ? el : null;
+};
 document.addEventListener(
   'pointerdown',
   (e) => {
-    const b = (e.target as Element | null)?.closest?.('.btn, .ctool, .undo-chip, .seg-btn, .chip, .icon-only, .hand-sort, .level-tile');
-    if (!b || (b as HTMLButtonElement).disabled) return;
+    const el = pressableAt(e.target);
+    if (!el) return;
     sound.unlock();
-    if (settings.sound) sound.click();
+    // THE KEY'S TWO HALVES (the owner's recordings): press on the finger, release on the lift. A big
+    // key (PLAY, Find match, Create) is one firm clack on the finger instead; a Back key answers on
+    // its lift with the dull click. Cards and hexes answer with their own action's sound.
+    // Every key is one click (owner, 2026-11-05: one sound per kind of button, the planet's keys and
+    // sheets included). Cards and board tiles answer with their own pick instead.
+    if (settings.sound) {
+      if (anyKey(el)) sound.press();
+      else sound.tick();
+    }
+    soundPress = { el, x: e.clientX, y: e.clientY, id: e.pointerId, cancelled: false };
+    const b = el.closest(BUTTON_SELECTOR);
+    if (!b || (b as HTMLButtonElement).disabled) return;
     const hp = hapticFor('press', settings);
     if (hp) vibrate(true, hp as number | number[]);
   },
-  { capture: true },
+  { capture: true, passive: true },
 );
+document.addEventListener(
+  'pointermove',
+  (e) => {
+    if (!soundPress || soundPress.id !== e.pointerId || soundPress.cancelled) return;
+    if (dragExceeded(soundPress.x, soundPress.y, e.clientX, e.clientY)) soundPress.cancelled = true;
+  },
+  { capture: true, passive: true },
+);
+document.addEventListener(
+  'pointerup',
+  (e) => {
+    const p = soundPress;
+    soundPress = null;
+    if (!p || p.cancelled || p.id !== e.pointerId) return;
+    // Lift is the click layer; only button-like surfaces get it. Cards and hexes already click
+    // with their action, so they are not clicked twice.
+    // The lift is silent with the recordings (one click per key); the bare engine still clicks.
+    if (anyKey(p.el) && settings.sound) sound.click();
+  },
+  { capture: true, passive: true },
+);
+document.addEventListener('pointercancel', () => (soundPress = null), { capture: true, passive: true });
 bind('hand-sort', () => {
   settings = { ...settings, handSort: nextSort(settings.handSort) };
   saveSettings();
@@ -6831,10 +10469,8 @@ bind('hand-sort', () => {
 });
 // overhaul item 7: legal hexes brighten softly as the finger or mouse comes near
 {
-  let raf = 0;
   let last: { x: number; y: number } | null = null;
   const glowNear = () => {
-    raf = 0;
     const targets = board.svg.querySelectorAll<SVGPathElement>('.l-over .target');
     if (!targets.length) return;
     const m = board.svg.getScreenCTM();
@@ -6848,13 +10484,14 @@ bind('hand-sort', () => {
   };
   const track = (e: PointerEvent) => {
     last = { x: e.clientX, y: e.clientY };
-    if (!raf) raf = requestAnimationFrame(glowNear);
+    // Several pointer moves in one frame collapse into one job (coalesced, non-urgent).
+    scheduler.request('board-near', glowNear);
   };
   board.svg.addEventListener('pointermove', track);
   board.svg.addEventListener('pointerdown', track);
   board.svg.addEventListener('pointerleave', () => {
     last = null;
-    if (!raf) raf = requestAnimationFrame(glowNear);
+    scheduler.request('board-near', glowNear);
   });
 }
 // desktop: a card tilts a few degrees toward the pointer
@@ -6889,7 +10526,12 @@ $('hand').addEventListener('pointerout', (e) => {
  * stops the session through here, so no route can leave the client believing a duel is still open.
  * The match itself stays on the server: leaving and returning is a resume, never a cancel.
  */
+let activeMatchChat: ReturnType<typeof mountMatchChat> | null = null;
+
 function tearDownOnlineDuel(): void {
+  activeMatchChat?.stop();
+  activeMatchChat = null;
+  cancelStarterRitual();
   getOnlineSession()?.driver.stop();
   setOnlineSession(null);
   onlineResign = null;
@@ -6902,16 +10544,10 @@ function tearDownOnlineDuel(): void {
 
 bind('go-other', () => {
   flushInstallInvite();
-  $('gameover').hidden = true;
-  if (isOnlineDuel()) {
-    // "Back to matches": the same one teardown, then the hub. Hiding #game is the same guard the
-    // rematch uses — a stray resize render must never paint the finished board's overlay here.
-    tearDownOnlineDuel();
-    $('game').hidden = true;
-    void onlineLobbyCtl?.openHub();
-    return;
-  }
-  showScreen(campaignLevel ? 'campaign' : 'levels');
+  hideGameOver();
+  // Classic practice only: the difficulty list. The campaign's "Back to levels" is gone (owner
+  // brief, 2026-11-11), so a campaign card can never reach here.
+  showScreen('levels');
 });
 bind('menu-continue', () => continueGame());
 bind('menu-tutorial', () => {
@@ -6923,6 +10559,10 @@ bind('menu-tutorial', () => {
   startTutorialFromMenu();
 });
 bind('menu-settings', () => sheet('sheet-settings'));
+bind('settings-tutorial', () => {
+  renderTutorialSheet();
+  sheet('sheet-tutorial');
+});
 ($('settings-lab') as HTMLDetailsElement).addEventListener('toggle', () => {
   renderSettingsLab();
   const section = $('settings-lab') as HTMLDetailsElement;
@@ -6935,26 +10575,88 @@ bind('lab-surprise', () => {
   labCategory = preset.category;
   applyLab(preset);
 });
-bind('hud-menu', () => sheet('sheet-menu'));
-bind('hud-history', () => sheet('sheet-history'));
+/**
+ * A finished match has no menu to open. The result card is the screen then, and the HUD keys stay
+ * in the DOM (the top bar is not covered by the card), so a tap used to open "Paused" over the
+ * result — the plate's own header and Settings key painted above the outcome (owner's 2026-10-23
+ * audit). The guard is the finished state itself, so it holds whether the match ended a moment ago
+ * or the player is reading the card a minute later.
+ */
+const matchIsFinished = (): boolean => !$('gameover').hidden;
+bind('hud-menu', () => { if (!matchIsFinished()) sheet('sheet-menu'); });
+bind('hud-history', () => { if (!matchIsFinished()) sheet('sheet-history'); });
 bind('gm-exit-tutorial', () => {
   sheet(null);
   exitTutorial();
 });
 bind('gm-resume', () => sheet(null));
-bind('gm-new', () => {
-  // Leaving a duel never loses it (the server keeps it and it resumes), so no warning is needed.
-  if (isOnlineDuel()) {
-    sheet(null);
-    tearDownOnlineDuel();
-    showScreen('levels');
+/**
+ * Restart (owner brief, 2026-10-22). It resets the match the player is IN, instead of walking them
+ * out to a level list:
+ *   - a lesson (levels 1-10) reopens on its one authored opening; from level 11 a campaign level
+ *     deals a fresh random hand (owner, 2026-11-01), counted by the restart rest (`campaignDealFor`);
+ *   - a practice match restarts its same tier with a fresh deal;
+ *   - a finished match is not pausable, so this only ever runs while a match is in progress.
+ * A confirmation appears only when there is real progress to lose; a fresh turn restarts at once.
+ * The restarting flag is released by `startGame` itself, so two quick taps cannot start two games.
+ */
+function restartHasConsequence(): boolean {
+  if (!session) return false;
+  const st = session.state;
+  return st.turnNumber > 1 || (st.history?.length ?? 0) > 0;
+}
+
+function requestRestart(): void {
+  if (!session || restarting || isOnlineDuel() || $('game').hidden) return;
+  if (!restartHasConsequence()) {
+    void restartCurrentMatch();
     return;
   }
-  // A campaign level is saved as it is played, so leaving it loses nothing and asks nothing.
-  if (!campaignLevel && session && session.state.phase !== 'GAME_OVER' && session.state.turnNumber > 1 && !window.confirm('Start a new game? This one will be lost.')) return;
-  sheet(null);
-  showScreen(campaignLevel ? 'campaign' : 'levels');
-});
+  const campaign = !!campaignLevel;
+  $('restart-title').textContent = campaign ? PAUSE.restartLevelTitle : PAUSE.restartMatchTitle;
+  $('restart-body').textContent = campaign ? PAUSE.restartLevelBody : PAUSE.restartMatchBody;
+  $('restart-confirm').textContent = campaign ? PAUSE.restartLevel : PAUSE.restartMatch;
+  $('restart-cancel').textContent = PAUSE.keepPlaying;
+  sheet('sheet-restart');
+}
+
+async function restartCurrentMatch(): Promise<void> {
+  if (!session || restarting || isOnlineDuel()) return;
+  restarting = true;
+  // Close the plate first (the pause state is released), then take the board back to its opening.
+  closeAllSheets();
+  fastForward();
+  const campaign = campaignLevel;
+  const level = gameLevel;
+  const difficulty = gameDifficulty;
+  if (campaign) {
+    // The same order rule as the campaign's one entry point: a stale/edited save cannot skip ahead.
+    if (!isUnlocked(campaignProgress, campaign)) {
+      restarting = false;
+      showScreen('campaign');
+      return;
+    }
+    const deal = tutorialReplay ? campaign.seed : campaignDealFor(campaign);
+    if (deal === null) {
+      restarting = false;
+      return;
+    }
+    gameOverDismissed = true;
+    await startGame(deal, campaign.botLevel, null, campaign, null, tutorialReplay);
+    return;
+  }
+  // EXPERIMENTAL Blitz: "New game" opens a fresh Blitz match on a new random board, at the
+  // ladder's current bot level. Leaving a match unfinished records nothing.
+  if (blitzMatch && blitz) {
+    await startBlitzMatch(blitz.newMap());
+    return;
+  }
+  await startGame(randomSeed(), level, null, null, difficulty);
+}
+bind('gm-new', () => requestRestart());
+bind('restart-confirm', () => void restartCurrentMatch());
+bind('restart-cancel', () => sheet(null));
+bind('rest-ok', () => sheet(null));
 bind('gm-howto', () => openHowToReference());
 bind('gm-settings', () => sheet('sheet-settings'));
 bind('gm-resign', () => {
@@ -7007,15 +10709,16 @@ bind('first-tip-ok', () => {
 bind('deck', () => {
   // The gate first: a tap on the deck mid-reveal used to skip the replay AND commit a Draw.
   if (onlineGateShut()) return revealWaitNotice();
-  if (busy()) fastForward();
+  if (blocking()) fastForward();
   const a = myTurn() ? session!.legal.find((x) => x.t === 'Draw' && x.from === 'deck') : undefined;
   if (a) humanPlay(a);
 });
 bind('discard', () => {
   if (onlineGateShut()) return revealWaitNotice();
-  if (busy()) fastForward();
-  // The Throw step: a card already picked goes onto the pile (the same move as tapping that card
-  // again). Nothing picked, nothing thrown. Every mode, online too (humanPlay routes it).
+  if (blocking()) fastForward();
+  // The Throw step: the picked card goes onto the pile. This is the third throw gesture (tap the
+  // pile while a card is picked); a tap on the card itself only selects/deselects. Nothing picked,
+  // nothing thrown. Every mode, online too (humanPlay routes it).
   const toss = myTurn() && session ? throwPileAction(session.view.phase, session.pending, session.legal) : null;
   if (toss) return humanPlay(toss);
   const a = myTurn() ? session!.legal.find((x) => x.t === 'Draw' && x.from === 'discard') : undefined;
@@ -7057,33 +10760,28 @@ const dragLayer = mountDragLayer({
       ? document.elementsFromPoint(x, y)
       : [document.elementFromPoint(x, y)].filter((el): el is Element => !!el);
     for (const el of stack) {
-      if (el.closest?.('.drag-ghost, #smart-led-window, #smart-led-spill, #smart-spill')) continue;
+      if (el.closest?.('.drag-ghost, #smart-led-window, #smart-led-bloom, #smart-spill')) continue;
       if (el.closest?.('#hand, #futa04-actions, #smart-context, #smart-bloom, #moves, button, .bloom-options, .bloom-toggle')) return false;
       if (el.closest?.('#discard, #futa04-box')) return true;
     }
     return false;
   },
-  upperBoard: (y) => {
-    // Flick throw: almost the full screen above the action / hand button row.
-    const hand = $('hand').getBoundingClientRect();
-    const actions = document.getElementById('futa04-actions')?.getBoundingClientRect();
-    const floor = Math.min(hand.top, actions?.top ?? hand.top) - 8;
-    return y < floor;
-  },
   bloomReverse: () => draw.reverse,
   setThrowZone: (on) => {
     document.getElementById('futa04-box')?.classList.toggle('drag-throw-zone', on);
   },
-  commit: (a) => {
+  commit: (a, _mode, from) => {
     // A pile tap / drag draws at once. Drag/flick throw commits on release (the gesture is
-    // the confirmation); card taps still use tap-again / Confirm.
+    // the confirmation); card taps still select / deselect.
     if (a.t === 'Draw') {
       vibrate(settings.vibration, 12);
       return humanPlay(a);
     }
     if (IS_FUTA04 && a.t === 'Discard') {
       vibrate(settings.vibration, 12);
-      return humanPlay(a);
+      // Every throw gesture gets the boomerang now (owner, 2026-10-25): the swipe, and the drop on
+      // the pile. `from` is the released ghost's box, so the flight continues where the card was.
+      return humanPlay(a, from ? { flightFrom: from } : {});
     }
     if (asksConfirm(a)) {
       session?.preset(a);
@@ -7092,6 +10790,9 @@ const dragLayer = mountDragLayer({
     }
     humanPlay(a);
   },
+  // A started move shorter than SWIPE_TAP_PX is still a tap: it selects, or deselects the card
+  // the player already picked (never throws — that is what confused testers).
+  tap: (cardId) => onCardTap(cardId),
   openBloom: (cardId, key) => {
     if (!session) return;
     session.cancel();
@@ -7158,7 +10859,7 @@ const dragLayer = mountDragLayer({
     if (hp) vibrate(true, hp as number | number[]);
   },
   reducedMotion: () => settings.reduceMotion || motion() === 0,
-  flyBack: (from, to) => flyBack(from, to, timeScale()),
+  flyBack: (from, to) => flyBack(from, to, timeScale(), true),
 });
 dragLayer.attachHand($('hand'));
 dragLayer.attachDeck($('deck'));
@@ -7188,7 +10889,7 @@ bind('tool-skip', () => {
   pill.skip();
   fastForward();
 });
-bind('tool-replay', () => replayBotTurn());
+bind('tool-replay', () => replayLastTurn());
 // Step 3 item 7: the corner tools' tooltips: hover (mouse), long-press (touch), and once
 // automatically the first time they appear (one at a time, a few seconds each)
 {
@@ -7233,69 +10934,121 @@ bind('tool-replay', () => replayBotTurn());
 }
 bind('tool-undo', () => {
   if (!session) return;
-  // One tap: clear a waiting throw / bloom paint, else take back the last move. No confirm.
-  if (session.pending || session.presetMove) {
+  // ONE PRESS takes back the last move (owner, 2026-10-25: "undo shouldnt need 2 taps"). The
+  // decision is one pure function (logic/undo) because `session.pending` is DERIVED from the pick:
+  // asking it first spent the press clearing the pick, and only the second press reached undo().
+  const online = isOnlineDuel();
+  const intent = undoIntent({
+    // The SAME question the enable line above asks. Online the offline `session` is rebuilt after
+    // every move, so its undo stack is always empty: the draft that can be taken back lives on the
+    // OnlineSession. Reading `session.canUndo` here lit the button but never reached `undoMove()`.
+    canUndo: online ? !!getOnlineSession()?.canUndo : session.canUndo,
+    // A drawn placement waiting for Confirm, or a Bloom being painted: drawn, never played.
+    hasStagedPreview: !!session.presetMove || !!draw.shape.length || draw.desk.phase === 'live' || !!draw.ptr,
+    hasSelection: session.sel.card !== null || session.sel.hex !== null || session.sel.kind !== null,
+    online,
+  });
+  if (intent === 'undo') return undoMove();
+  if (intent === 'cancel') {
     cancelSel();
     smartCockpit?.hint('UNDONE');
     return;
   }
-  if (draw.shape.length || draw.desk.phase === 'live' || draw.ptr) {
-    cancelDraw();
-    return;
-  }
-  // The SAME question the enable line above asks. Online the offline `session` is rebuilt after
-  // every move, so its undo stack is always empty: the draft that can be taken back lives on the
-  // OnlineSession. Reading `session.canUndo` here lit the button but never reached `undoMove()`.
-  const canUndo = isOnlineDuel() ? !!getOnlineSession()?.canUndo : session.canUndo;
-  if (canUndo) undoMove();
-  else if (!isOnlineDuel() && session.canReplayOpponent) replayBotTurn();
+  // `none`: nothing was moved and nothing is waiting. The same slot may be showing Replay — online
+  // too, where the turn is rebuilt from the match's public history instead of the kept turns.
+  if (canReplayLastTurn()) replayLastTurn();
 });
 bind('go-rematch', () => {
+  // One advance per finish card (owner brief, 2026-10-22): the leading key is the largest target on
+  // the screen and is tappable twice in a fast hand. `resultAdvance` is released by the new session
+  // (startGame) or by the rematch promise, never by a guessed timer.
+  if (resultAdvance) return;
+  resultAdvance = true;
   flushInstallInvite();
   if (isOnlineDuel()) {
     // Rematch: the finished session is torn down FIRST (nothing leaks into the new match), then a
     // fresh match is created and the existing invite/share screen is shown. Hiding #game keeps a
     // stray resize render from painting the finished board's overlay over the opaque invite screen.
-    $('gameover').hidden = true;
+    hideGameOver();
     $('game').hidden = true;
+    // The finished duel's id, read BEFORE the teardown clears the session: the server pairs both
+    // players' presses on it (a mutual rematch, 2026-10-22).
+    const finishedMatchId = getOnlineSession()?.driver.snapshot().matchId ?? null;
     void runRematch({
       tearDown: tearDownOnlineDuel,
-      createMatch: () => onlineLobbyCtl?.rematch() ?? Promise.resolve(),
+      createMatch: () => onlineLobbyCtl?.rematch(finishedMatchId) ?? Promise.resolve(),
+    }).finally(() => {
+      resultAdvance = false;
     });
+    return;
+  }
+  // A TUTORIAL replay returns to where it came from: Settings → Tutorial. It must never hand the
+  // player to the campaign's next level (owner, 2026-10-24).
+  if (tutorialReplay) {
+    hideGameOver();
+    resultAdvance = false;
+    showScreen('menu');
+    sheet('sheet-settings');
+    sheet('sheet-tutorial');
     return;
   }
   // A WON campaign level leads with the next one (owner direction, 2026-10-16): the player never
   // walks back to the level list to pick it. The next level comes from the level DATA, so the last
   // built level honestly has none: that same button is then the way out, back to the level list. A
-  // loss, and a plain offline game, restart what was just played — exactly as before.
+  // REPLAY of a level behind the place also has no NEXT to march through — the card's own
+  // `finishLead` says the level list, so this press goes there. A loss, and a plain offline game,
+  // restart what was just played — exactly as before.
   const wonNow = session?.state.phase === 'GAME_OVER' && session.state.result?.winner === HUMAN;
   if (campaignLevel && wonNow) {
-    const next = nextCampaignLevel(campaignLevel.number);
+    const next = campaignReplay ? null : nextCampaignLevel(campaignLevel.number);
     if (next) return startCampaignLevel(next);
-    $('gameover').hidden = true;
-    return showScreen('campaign');
   }
-  // A campaign retry restarts the SAME level from its fixed seed (never a random one).
+  // A campaign retry — and now also the last built level and a replay of an older one (owner brief,
+  // 2026-11-11: no "Back to levels" on the card, so the same level is played again instead) — restarts
+  // the SAME level from its fixed seed (never a random one).
   if (campaignLevel) return startCampaignLevel(campaignLevel);
+  // EXPERIMENTAL Blitz: "Try again"/"Play again" opens the NEXT Blitz match — a new random board,
+  // and the ladder's level as it stands after the game just finished (two losses -> bot 8).
+  if (blitzMatch && blitz) {
+    hideGameOver();
+    resultAdvance = false;
+    void startBlitzMatch(blitz.newMap());
+    return;
+  }
   startGame(randomSeed(), gameLevel);
 });
-// The finish card's ONE disclosure: every detail line and every extra action is behind it.
+// The finish card's ONE disclosure (classic cards only; the planet card's details live in RESULT).
 bind('go-more', () => setGoExtrasOpen(!goExtrasOpen));
 bind('go-board', () => {
+  // CLASSIC CARDS ONLY (the planet card hides this key and shows the board in RESULT).
   gameOverDismissed = true;
+  hideGameOver();
   render();
 });
 bind('go-menu', () => {
-  $('gameover').hidden = true;
+  const toMatches = $('go-menu').dataset.target === 'matches';
+  hideGameOver();
   // Leaving a duel must tear the session down, exactly like Back to matches (the match stays
-  // resumable on the server).
-  if (isOnlineDuel()) tearDownOnlineDuel();
+  // resumable on the server). On the planet card the fourth key IS Back to matches (owner brief,
+  // 2026-11-11); the locked-line card keeps its old Back to menu.
+  if (isOnlineDuel()) {
+    tearDownOnlineDuel();
+    $('game').hidden = true;
+    if (toMatches) { void onlineLobbyCtl?.openHub(); return; }
+  }
   showScreen('menu');
 });
-// Overhaul item 20: replay the game's biggest cut (from the board just before it), then come back here
-bind('go-cut', () => {
+// THE RESULT WINDOW (owner brief, 2026-11-11): the details, the final board and the quiet extras.
+bind('go-result', () => openFinishResult());
+bind('go-result-close', () => closeFinishResult());
+bind('go-result-scrim', () => closeFinishResult());
+// The replay of the whole match (owner brief, 2026-10-25): one tap on the finish card, any mode.
+bind('go-replay', () => void openReplayForFinish());
+/** Overhaul item 20: replay the game's biggest cut (from the board just before it), then come back. */
+function replayBiggestCut(): void {
   const p = session?.biggestCut;
   if (!session || !p || busy()) return;
+  closeFinishResult(true);
   gameOverDismissed = true;
   reopenGameOver = true;
   replaying = true;
@@ -7309,13 +11062,15 @@ bind('go-cut', () => {
   queue.push([{ k: 'sync', board: session.state.board, scores: [v.score, v.opponentScore] }]);
   render();
   void pump();
-});
+}
+bind('go-cut', replayBiggestCut);
+bind('go-result-cut', replayBiggestCut);
 // Overhaul item 20: a picture of the result for the share sheet (or saved); nothing is uploaded.
 // ONLINE builds the card from the online display state, so the button can never be a silent no-op.
-bind('go-share', () => {
-  const onSaved = (r: string) => {
-    if (r === 'saved') $('go-share').textContent = ONLINE.shareSaved;
-  };
+const onShareSaved = (r: string) => {
+  if (r === 'saved') $('go-share').textContent = ONLINE.shareSaved;
+};
+function shareFinishResult(): void {
   const os = isOnlineDuel() ? getOnlineSession() : null;
   if (os) {
     const info = os.finishInfo();
@@ -7331,7 +11086,10 @@ bind('go-share', () => {
       radius: os.state.config.boardRadius,
       cells: os.state.config.board?.cells,
       me: HUMAN,
-    }).then(onSaved);
+      // The card's two names (owner, 2026-11-12): the opponent's real display name, and the
+      // product's own word for this side.
+      names: [ONLINE.scoreYou, info.opponentName ?? ONLINE.opponentFallback],
+    }).then(onShareSaved);
     return;
   }
   const st = session?.state;
@@ -7347,8 +11105,30 @@ bind('go-share', () => {
     radius: st.config.boardRadius,
     cells: st.config.board?.cells,
     me: HUMAN,
-  }).then(onSaved);
+    // Offline: the two sides in the product's own words (no invented player name).
+    names: [ONLINE.scoreYou, OPP.label],
+  }).then(onShareSaved);
+}
+bind('go-share', shareFinishResult);
+bind('go-result-share', shareFinishResult);
+// The classic card's practice way out; the planet card carries the same key inside RESULT.
+// RESULT keeps the keyboard while it is up: Escape closes it, Tab cycles inside its plate.
+$('go-result-pane').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    e.stopPropagation();
+    closeFinishResult();
+    return;
+  }
+  if (e.key !== 'Tab' || !finishResultOpen) return;
+  const keys = [...$('go-result-sheet').querySelectorAll<HTMLElement>('button:not([hidden])')];
+  if (!keys.length) return;
+  const first = keys[0]!, last = keys[keys.length - 1]!;
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 });
+// The classic card's practice way out; the planet card carries the same key inside RESULT.
+bind('go-result-difficulty', () => $('go-other').click());
 
 bind('coach-show', () => {
   // "Show me where": an arrow points at each thing to tap, one step at a time.
@@ -7368,12 +11148,14 @@ bind('test-sound', () => {
   sound.unlock();
   const was = sound.enabled;
   sound.enabled = true;
-  sound.click();
-  sound.chime(0.15);
-  setTimeout(() => sound.snap(), 600);
-  setTimeout(() => sound.fanfare(true), 1300);
-  setTimeout(() => (sound.enabled = was), 2400);
-  $('test-note').textContent = "You should hear a click, a chime, a snap and a short tune. Nothing? Check your phone's silent switch and volume.";
+  // A short tour of the recordings: a key, a tile landing, a Bloom, the win.
+  sound.press();
+  setTimeout(() => sound.click(), 90);
+  setTimeout(() => sound.place(5, 9, 0, true), 450);
+  setTimeout(() => sound.bloom(), 900);
+  setTimeout(() => sound.win(), 1500);
+  setTimeout(() => (sound.enabled = was), 3200);
+  $('test-note').textContent = "You should hear a key, a tile landing, a Bloom and the win. Nothing? Check your phone's silent switch and volume.";
 });
 bind('test-vibration', () => {
   vibrate(true, [60, 60, 120]);
@@ -7390,11 +11172,14 @@ for (const input of document.querySelectorAll<HTMLInputElement>('[data-setting]'
     const k = input.dataset.setting as keyof Settings;
     settings = { ...settings, [k]: input.checked };
     saveSettings();
-    if (k === 'sound') sound.enabled = settings.sound;
+    if (k === 'sound') { sound.enabled = settings.sound; menuSoundKey.refresh(); }
+    // Every switch flicks (the owner's ui.toggle_on / ui.toggle_off), sound itself only when turned on.
+    if (settings.sound) { sound.unlock(); sound.toggle(input.checked); }
     if (k === 'music') {
       sound.unlock();
       sound.setMusic(settings.music);
     }
+    // Turning the Guide back on makes the player "new" again (player/how-to-guide.ts).
     if (k === 'reduceMotion' || k === 'largeText' || k === 'eyeCandy') applyTheme();
     else render();
   });
@@ -7417,8 +11202,10 @@ for (const input of document.querySelectorAll<HTMLInputElement>('[data-volume]')
 // Keyboard: arrows move over the board, Enter picks, Esc cancels or closes; 1-9 pick cards.
 const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 document.addEventListener('keydown', (e) => {
+  if (e.isComposing || e.keyCode === 229) return;
   if (e.key === 'Escape') {
-    if (openSheet) sheet(null);
+    if (finishResultOpen) closeFinishResult();
+    else if (openSheet) sheet(null);
     // Esc skips an animation, but never the enemy's turn: that is the Skip control's job alone.
     else if (onlineReveal()) revealWaitNotice();
     else if (busy()) fastForward();
@@ -7528,6 +11315,16 @@ document.addEventListener(
   },
   { capture: true },
 );
+// Phase 0: the one delegated press primitive and the one frame scheduler.
+installPress();
+// Phase 4: the hand's breath pauses under a finger and in a hidden tab.
+installHandBreath($('hand'));
+attachSchedulerPause($('game'), $('board-wrap'));
+// A hidden tab has nobody looking at it: park every playing animation until it is back.
+mountHiddenPause();
+// iOS can leave the page shifted after its keyboard closes: put it back (viewport-guard.ts).
+mountViewportGuard();
+observeLongTasks();
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Tab' || e.key.startsWith('Arrow')) document.documentElement.classList.add('kbd');
 });
@@ -7541,6 +11338,8 @@ let appReady = false;
   pending: () => session?.pending ?? null,
   /** The live tap selection (the same object offline uses), for interaction tests. */
   sel: () => (session?.sel ? { ...session.sel } : null),
+  /** The Bloom being painted right now (the tentative shape, the same one the ghost paints). */
+  drawShape: () => ({ shape: [...draw.shape], reverse: draw.reverse, msg: draw.msg, desk: draw.desk.phase }),
   /** The legal moves the page is offering right now (display coords), for interaction tests. */
   legal: () => (session ? [...session.legal] : []),
   // Online the source of truth is the OnlineSession's draft, not the offline Session the page
@@ -7564,9 +11363,36 @@ let appReady = false;
     return !!p;
   },
   settings: () => ({ ...settings }),
+  /** THE PLANET (/test/ only): null when the Territory shows the flat map. */
+  planet: () => planetSnapshot(),
+  /** The space backdrop (0.75): whether its stars slide, how often it has redrawn, whether it shows. */
+  space: () => spaceBackdrop()?.snapshot() ?? null,
+  /** The campaign place the page is on, as the menu's LEVEL <n> reads it (tests/screenshots). */
+  campaignLevel: () => currentLevel(campaignProgress).number,
+  /**
+   * EXPERIMENTAL Blitz (/test/ only): null when the feature is off (futa04, the live root, any other
+   * channel). `active` marks the current offline match as a Blitz one, `map` is its campaign board
+   * (30-70), `botLevel` the level this match started at and `nextBotLevel` the ladder's next one.
+   */
+  blitz: () => (blitz ? {
+    active: blitzMatch,
+    map: blitzMap,
+    botLevel: gameLevel,
+    nextBotLevel: blitz.botLevel(),
+    ...blitz.status(),
+  } : null),
   busy: () => busy(),
+  /** Read-only sound diagnostics: the pre-rendered bank's size and the last cues played. */
+  soundBank: () => sound.bankStats(),
+  soundLog: () => [...sound.log()],
+  /** tests only: play a named cue through the real sound gate (never mutates the game) */
+  soundCue: (name: string) => sound.cue(name),
+  /** Test-only feel harness: press latency, frame gaps, long tasks, live animations, RAF jobs. */
+  feel: () => feel(scheduler.subscriberCount()),
   particles: () => ({ alive: particles.alive, peak: particles.peak }),
   world: () => board.worldStats,
+  /** Tests: the cold-first-visit art warm (null before the first lesson board has been asked for). */
+  warm: () => (warmDiag ? { ...warmDiag } : null),
   /** tests: tutorial focus lock */
   tutorialGate: () => tutorialGate ? {
     active: tutorialGate.isActive(),
@@ -7578,7 +11404,16 @@ let appReady = false;
   /** tests: the lesson on screen (levels 1-10): its beat, what is lit, the answer showing */
   lesson: () => {
     const l = lessonActive();
-    return l ? { level: l.level, beat: lessonBeatNow, answer: lessonAnswerText, answers: lessonAnswerSeq, idle: lessonIdle, seen: [...lessonSeen] } : null;
+    return l ? {
+      level: l.level, beat: lessonBeatNow, answer: lessonAnswerText, answers: lessonAnswerSeq,
+      idle: lessonIdle, idleStage: lessonIdleStage, tier: lessonTierShown,
+      /** Tests: when this explanation first appeared — the start of its reading floor (LESSON_READ_MS). */
+      explainAt: lessonExplainAt,
+      /** Tests: taps the reading floor refused, each acknowledged on screen (lessonAckFloor). */
+      floorAcks: lessonFloorAcks,
+      stage: lessonStageActive(), stageLeft: Math.max(0, Math.round(lessonStageUntil - performance.now())),
+      handSettled, shownKey: lessonShownKey, seen: [...lessonSeen], powerSeen: [...lessonPowerSeen],
+    } : null;
   },
   /** tests: the lesson's own suggested move now (what the light would point at) */
   lessonMove: () => {
@@ -7596,11 +11431,13 @@ let appReady = false;
     if (!os) return null;
     const snap = os.driver.snapshot();
     return {
+      matchId: snap.matchId,
       revealing: os.isRevealing,
       live: os.revealIsLive,
       myTurn: os.myTurn,
       /** The SERVER's actor/seat (never the gate): the test that both phones disagree. */
       serverActor: snap.view.actor,
+      serverTurnPlayer: snap.view.turnPlayer,
       serverTurn: snap.status !== 'active' || snap.view.phase === 'GAME_OVER'
         ? 'closed'
         : snap.view.actor === snap.seat
@@ -7620,8 +11457,17 @@ let appReady = false;
       pumping,
       watchdog: revealWatchdog !== 0,
       progress: revealProgress,
+      /** The opponent's last completed turn, if a verified reconstruction of it is ready. */
+      replayTurn: (() => {
+        const t = os.opponentTurnReplay;
+        return t ? { steps: t.steps.length, scores: [...t.scores] } : null;
+      })(),
+      /** Why the Replay slot is (not) offered: ok | no-turn | unverified | pending. */
+      replayReason: os.turnReplayReason,
     };
   },
+  /** Tests only: the board on the screen right now (the AnimQueue's own board, never the state). */
+  shownBoard: () => queue.board,
   /** Tests/diagnostics: the animation pump's timeline (see `animLog`). Never drives the game. */
   animLog: () => animMarks.slice(),
   clearAnimLog: () => {
@@ -7645,6 +11491,19 @@ let appReady = false;
   },
   /** Boot finished: every async UI mount is attached and the first screen is shown. */
   ready: () => appReady,
+  /**
+   * Tests only: the replay player's own clock and frame (never drives it). Null when the replay is
+   * not mounted. `index` is the frame on screen, `total` the whole playback length in ms.
+   */
+  replay: () => replayPlayer?.now() ?? null,
+  /** Tests only: the replay's whole frame plan (times, seats, each frame's board signature). */
+  replayPlan: () => replayPlayer?.plan() ?? null,
+  /**
+   * Tests/screenshots only: one frame of the exported video (a step of its plan), painted by the
+   * recorder's own painter as a PNG data URL. It never drives the replay or starts a recording.
+   */
+  replayVideoFrame: (step = -1) => replayPlayer?.videoFrame(step) ?? null,
+  replayLastVideo: () => replayPlayer?.lastVideo() ?? null,
   /** Tests/screenshots: the install invitation's memory (games counted) and a way to show it. */
   install: () => installPrompt.memory(),
   showInstall: () => installPrompt.showNow(),
@@ -7674,6 +11533,50 @@ fillIcons();
 // The install invitation: a timed prompt after a played game (no menu button any more). The words
 // live in src/strings.ts; the counting rule lives in logic/install-prompt.ts.
 const installPrompt = mountInstallPrompt({ copy: INSTALL, storage: store });
+/**
+ * A game can finish while the page is still booting (a resumed match ended on its first move): the
+ * invitation is mounted at the end of this module, so until then the finish is counted a moment later
+ * instead of throwing (found by web/e2e/blitz.ts, 2026-11-06).
+ */
+function noteInstallFinished(outcome: 'won' | 'lost' | 'draw'): void {
+  // Never mid-game (owner, 2026-11-08): the finish is remembered and offered on the end screen.
+  installOutcomeWaiting = outcome;
+  offerEndOfGamePrompts();
+}
+/** A finish waiting for the end screen before it may open the install invitation. */
+let installOutcomeWaiting: 'won' | 'lost' | 'draw' | null = null;
+let endPromptTimer = 0;
+/** The result card is up: the only place an invitation or a sign-in prompt may open. */
+function endScreenReady(): boolean {
+  const go = document.getElementById('gameover');
+  return !!go && !go.hidden && !$('game').hidden;
+}
+/**
+ * THE END-OF-GAME PROMPTS (owner, 2026-11-08: "never show the open separate window type window mid game -
+ * always at the end game blurring the rest of the screen behind - same for account login when guest").
+ * Once the result card has landed: the install invitation first; the guest's keep-progress only when the
+ * invitation is not open. Both are dialogs over a blurred screen; neither ever opens during play.
+ */
+function offerEndOfGamePrompts(): void {
+  if (!endScreenReady()) return;
+  window.clearTimeout(endPromptTimer);
+  endPromptTimer = window.setTimeout(() => {
+    endPromptTimer = 0;
+    if (!endScreenReady()) return;
+    const waiting = installOutcomeWaiting;
+    if (waiting) {
+      try {
+        installPrompt.noteFinished(waiting);
+        installOutcomeWaiting = null;
+      } catch {
+        // mounted at the end of this module: a finish during boot is offered a moment later
+        window.setTimeout(offerEndOfGamePrompts, 400);
+        return;
+      }
+    }
+    if (!installPrompt.isOpen()) keepProgress?.release();
+  }, 700);
+}
 mountAppWindowButton(INSTALL.desktop.windowButton); // computers: open in its own window / full screen
 // once the photo-like grass and lava are painted (in the background), redraw the board with them
 if (!IS_FUTA04) onPhotosReady(() => {
@@ -7681,6 +11584,25 @@ if (!IS_FUTA04) onPhotosReady(() => {
   if (!busy()) render();
 });
 sound.enabled = settings.sound;
+/**
+ * THE ONE SOUND SWITCH (owner, 2026-11-05: sound off by default, a quiet key in the menu's corner).
+ * The menu key and Settings' switch both come here: save the choice, sync the form, and when sound
+ * turns on, answer with the key click so the player hears it work.
+ */
+function setSound(on: boolean) {
+  settings = { ...settings, sound: on };
+  saveSettings();
+  sound.enabled = on;
+  syncSettingsForm();
+  if (on) {
+    sound.unlock();
+    recorded.warm();
+    sound.press();
+  }
+}
+const menuSoundKey = mountMenuSoundKey({ isOn: () => settings.sound, setSound });
+// The page's first paint is a dark cover (index.html); it lifts once the menu is composed.
+liftBootCover({ reduceMotion: settings.reduceMotion });
 sound.setEffects(settings.effects);
 sound.setMix(settings);
 sound.musicOn = settings.music;
@@ -7700,6 +11622,7 @@ if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test' && params.get('
   for (const id of ['menu', 'levels', 'campaign', 'game']) $(id).hidden = true;
   void import('./lab.js').then((m) => m.showLab(params.get('detail') === 'low' ? 'low' : 'normal', settings.reduceMotion));
 } else if (session) showScreen('game'); // an immediate menu tap may start play while optional UI mounts
+else if (route === 'play') { /* Keep an early PLAY choice while optional UI finishes mounting. */ }
 else if (params.get('tutorial') === '1' || params.get('tutorial') === 'pro') {
   const chapterRaw = Number(params.get('chapter'));
   const chapter = Number.isInteger(chapterRaw) && chapterRaw >= 1 && chapterRaw <= TUTORIAL_CHAPTER_COUNT
@@ -7708,6 +11631,11 @@ else if (params.get('tutorial') === '1' || params.get('tutorial') === 'pro') {
   startTutorial(chapter);
 } else if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed);
 else showScreen('menu');
+// One background read on boot: a signed-in account's place comes from the server (a guest never
+// asks). It repaints the menu if it moves; the first paint is already usable without it.
+// ...then the fresh read: the cached answer painted first, the server's (higher) answer follows.
+void syncAccountLevel().then(() => recheckAccountLevel());
+void syncRandomDeals();
 
 // The main-menu tagline ("GROW · CONNECT · CONQUER") is NOT on the menu — the owner had it removed
 // on 2026-10-14 (it read as clutter under the wordmark). It is not in `web/index.html` at all, so
@@ -7726,11 +11654,17 @@ if (SHOW_MENU_TAGLINE) {
 }
 
 // Phase 4–5: online lobby + duel on the shared board (Draw / draft / Throw / resign).
+// Seeds are NOT here: settling a finished game's proof is `online/seed-settle.ts`, because it must
+// work even when this module has not mounted (owner report, 2026-10-25 — see `settleSeedsForCard`).
 type OnlineLobbyCtl = {
   openHub(): Promise<void>;
-  rematch(): Promise<void>;
-  trainingSeedTicket(level: number): Promise<{ id: string; seed: number } | null>;
-  syncSeedRewards(): Promise<{ key: string; reward: { awarded: number } }[]>;
+  rematch(finishedMatchId?: string | null): Promise<void>;
+  /** The Territory map (the menu's own entry); the finish card's planet pane calls its own mount. */
+  openWorld(from: 'hub' | 'menu'): void;
+  /** THE PLANET ON THE FINISH CARD: built by the lobby, which owns the client and the identity. */
+  mountEndgamePlanet(host: HTMLElement, level: () => number | null): EndgamePlanet | null;
+  /** Leave the lobby for a match: the one transition every entry point uses. */
+  leaveForMatch(): void;
 };
 let onlineLobbyCtl: OnlineLobbyCtl | null = null;
 /** Set while an online duel is open; the pause menu's Resign calls it (one confirm). */
@@ -7751,14 +11685,26 @@ void import('./online/lobby-ui.js').then(async (m) => {
   const leaveOnline = () => tearDownOnlineDuel();
 
   const lobby = m.installOnlineLobby({
+    // The Territory's own-tile level: the SAME number the PLAY entry opens, so the map and the menu
+    // can never disagree about where the player is (owner report, 2026-10-24: "im at level 23 - but
+    // on territory it says im level 11").
+    campaignLevel: () => currentLevel(campaignProgress).number,
+    // Quiet achievement line: Territory feeds done ids after a real achievements read.
+    onAchievementsDone: (doneIds) => achievementToasts?.note(doneIds),
+    // The Territory is part of the same instrument as the board, so its keys speak in the same
+    // voice. It reuses the bank's existing cues; it never ships a second sound system.
+    cue: (name: string) => sound.cue(name),
     showMenu: () => {
       leaveOnline();
       showScreen('menu');
     },
-    // The honest computer fallback: a normal offline game (same engine, same save/Continue). The
-    // parked online search keeps running in the lobby controller and surfaces an "Opponent found"
-    // prompt if someone turns up. A local game is not a server match, so it never counts against
-    // the 10-unfinished-games cap. An in-progress computer game is RESUMED, never overwritten, so
+    // A finished duel's row opens its replay (owner brief, 2026-10-25): the lobby made the
+    // authorised read; the page owns the player.
+    openReplay: (payload) => openPastReplay(payload),
+    // Practice match: a normal offline game (same engine, same save/Continue). The parked online
+    // search keeps running in the lobby controller and surfaces an "Opponent found" prompt if
+    // someone turns up. A local game is not a server match, so it never counts against the
+    // 10-unfinished-games cap. An in-progress computer game is RESUMED, never overwritten, so
     // choosing this offer can never lose the player's local game.
     startComputerGame: () => {
       leaveOnline();
@@ -7766,9 +11712,23 @@ void import('./online/lobby-ui.js').then(async (m) => {
       if (saved && saved.state.phase !== 'GAME_OVER') continueGame();
       else void startGame(randomSeed(), settings.level);
     },
+    // Current level, from the same offer. Resume a saved campaign match with no question; otherwise
+    // start the level the player is on. The classic save is a different key and is left alone.
+    // Not named startCampaignLevel: that function already exists and takes a level.
+    startOfferedLevel: () => {
+      leaveOnline();
+      const saved = campaignResume();
+      if (saved) {
+        continueCampaignMatch(saved);
+        return;
+      }
+      startCampaignLevel(currentLevel(campaignProgress));
+    },
     openDuel: ({ matchId, token, view: player, liveJoin }) => {
       const api = duelApiUrl();
       if (!api) return;
+      // A fresh duel counts as one of the player's games for the guide (reopening one does not).
+      if (player.revision <= 2 && !player.events?.length) turnGuide?.reset();
       leaveOnline();
       // An online duel is never a training tier: its finish must not write a carry-over.
       gameDifficulty = null;
@@ -7777,15 +11737,18 @@ void import('./online/lobby-ui.js').then(async (m) => {
         storage: browserStorage(),
         ...(duelRegion() ? { region: duelRegion()! } : {}),
       });
+      const matchChannel = realtimeChannelFromEnv();
       const driver = createOnlineDriver({
         client,
         token,
         matchId,
         initial: player,
-        channel: realtimeChannelFromEnv(),
-        onChange: () => {
+        channel: matchChannel,
+        onChange: (confirmedSnapshot) => {
           const os = getOnlineSession();
-          if (!os) return;
+          if (!os || os.driver !== driver) return;
+          publishTurnRim($('game').hidden ? null : confirmedTurn(confirmedSnapshot), confirmedSnapshot.seat);
+          activeMatchChat?.update();
           // Both ends of the replay, read BEFORE the display state is rebuilt: the cockpit's
           // read-out for the enemy's turn needs them, exactly as the offline game does. `pending`
           // is captured here too, because `consumeCatchUp` clears the driver's buffer below.
@@ -7814,7 +11777,7 @@ void import('./online/lobby-ui.js').then(async (m) => {
             // live turn AND a catch-up after being away, and never true for the player's own
             // aftermath, which keeps its current, silent-online behaviour).
             if (IS_FUTA04 && replayedByOpponent(pending, os.seat)) {
-              const displayEvent = displayEventForPlay(beforeState, os.state, catchUp, HUMAN);
+              const displayEvent = displayEventForPlay(beforeState, os.state, catchUp, HUMAN, 'neutral', true);
               const cue = outcomeCue(catchUp, HUMAN);
               if (cue) outcomeSteps.set(cue.step, cue);
               if (displayEvent) {
@@ -7860,7 +11823,22 @@ void import('./online/lobby-ui.js').then(async (m) => {
         },
       });
       const os = new OnlineSession(driver);
+      // A Blitz move is shown at once and sent behind it; if the server refuses it, say why and
+      // put the board back on the server's truth (the session already dropped the unsent moves).
+      os.blitzError = (message) => {
+        if (getOnlineSession() !== os) return;
+        caption(message, null, 'info');
+        syncSessionFromOnline(true);
+        render();
+      };
       setOnlineSession(os);
+      activeMatchChat = mountMatchChat({ host: $('game'), header: $('game').querySelector<HTMLElement>('.hud')!, client, token, matchId, channel: matchChannel, snapshot: () => driver.snapshot() });
+      // An online duel is not a campaign match: drop the campaign level so no campaign-only
+      // surface (guidance, the tutorial window, lesson copy) can read a stale one. The save keeps
+      // the campaign's own progress; this is only what THIS match is.
+      campaignLevel = null;
+      tutorialReplay = false;
+      campaignReplay = false;
       syncSessionFromOnline(true);
       if (session) {
         board.setup(session.state.config, session.state.terrain, theme().style, look(), theme().id);
@@ -7898,6 +11876,14 @@ void import('./online/lobby-ui.js').then(async (m) => {
       syncResignMenu();
       // Board first: the duel board is already visible before the lottery. Who starts is said once
       // by that reveal — there is no permanent chip any more.
+      //
+      // ONE DELIBERATE MOMENT (owner, 2026-10-28: "opening a duel from territory is taking you to
+      // that duel in a cool way, small animation or effect"). Every lobby entry point funnels
+      // through here: a match row, a friend joining, a join code, a Territory challenge. The lobby
+      // screen the player is on tears its view down and leaves on the interface's own 100 ms beat;
+      // the board is never animated, it is revealed underneath. `showScreen` then hides every lobby
+      // screen via the same shared list, so even a route that forgets this call cannot stack them.
+      onlineLobbyCtl?.leaveForMatch();
       showScreen('game');
       // The lottery animation is a one-off courtesy. It plays exactly once per player per match,
       // and only at the live-join moment: the waiting creator when the friend joins, or the joiner
@@ -7907,12 +11893,24 @@ void import('./online/lobby-ui.js').then(async (m) => {
       const revealed = hasStarterRevealed(store, matchId);
       if (shouldPlayStarterLottery({ status: player.status, liveJoin, alreadyRevealed: revealed })) {
         markStarterRevealed(store, matchId);
-        const meFirst = (player.startingPlayer ?? player.view.turnPlayer) === player.seat;
+        // The server owns who starts. Both seats key the presentation by the same match id, so they
+        // see the same two cards; each maps them to You / Opponent locally.
+        const starterSeat = player.startingPlayer ?? player.view.turnPlayer;
+        const meFirst = starterSeat === player.seat;
+        const ritual = starterRitualView(onlineRitualKey(matchId), starterSeat, player.seat);
         announceTurn(meFirst ? HUMAN : BOT);
         const play = () => {
           const cur = getOnlineSession();
           if (!cur || cur.driver !== driver || $('game').hidden) return;
-          void runStarterLottery(!meFirst);
+          void runStarterRitual(ritual)
+            .then(() => {
+              const still = getOnlineSession();
+              if (!still || still.driver !== driver || $('game').hidden) return;
+              // The match was prepared underneath; this is the one repaint that unlocks its input.
+              render();
+              paintOnlineHudFromSession();
+            })
+            .catch(() => undefined);
         };
         // "Actually on the screen": if this tab is hidden at the live-join moment, wait for it to
         // come back rather than animating off-screen (the marker is already written, so it plays
@@ -7933,6 +11931,7 @@ void import('./online/lobby-ui.js').then(async (m) => {
     },
   });
   onlineLobbyCtl = lobby;
+  onlineEntryIntent.ready();
   void lobby.handleBootHash();
   // Live duels (test channel; docs/LIVE.md): its own module, mounted with three ways back.
   void import('./online/live/flag.js').then((f) => { if (f.liveDuelsEnabled()) void import('./online/live/mount.js').then((live) => live.mountLive({
@@ -7977,5 +11976,65 @@ if (timingEnabled()) {
 void import('./feedback/mount.js').then((f) => f.mountFeedback()).catch(() => undefined);
 // Accounts: "Continue with Google" (docs/ACCOUNTS.md); shows nothing until Google is on in Supabase.
 void import('./accounts/mount.js').then((a) => a.mountAccounts()).catch(() => undefined);
+// Seeds earned while the settle could not run are QUEUED on this device, not lost. Drain them as
+// soon as the app is up (owner ask, 2026-10-25: "every level of campaign and any other game should
+// pay out seeds immediately"): a player whose proofs were stranded by the old wedge sees the balance
+// right on their next visit, without having to win another game first. Silent and fire-and-forget;
+// a device with nothing queued makes no request at all.
+void settleQueuedSeedsOnBoot();
+// Warm a guest identity early so the next Practice match can get a Seeds ticket without racing a
+// cold guest mint (owner, 2026-11-08: offline guests must be paid so they are encouraged to sign in).
+void warmSeedIdentity();
+mountStartupReveal();
+// The main menu does not zoom (owner, 2026-11-08); every other screen keeps the browser's zoom.
+mountMenuZoomLock();
+const coveredForQuietPrompts = (): boolean => {
+  const over = document.getElementById('gameover');
+  const victory = !!over && !over.hidden;
+  const clock = document.getElementById('blitz-clock');
+  const blitzDecision = document.documentElement.classList.contains('blitz-match')
+    && clock?.dataset.side === 'mine';
+  return victory || blitzDecision;
+};
+achievementToasts = mountAchievementToast({
+  playerId: () => {
+    try {
+      const raw = browserStorage()?.get('severgrow.duel.identity.v1');
+      const id = raw ? JSON.parse(raw) as { playerId?: unknown } : null;
+      return typeof id?.playerId === 'string' ? id.playerId : null;
+    } catch {
+      return null;
+    }
+  },
+  storage: () => browserStorage(),
+  campaignLevel: () => campaignLevel?.number ?? null,
+  clearedThrough: () => Math.max(0, unlockedThrough(campaignProgress) - 1),
+  covered: coveredForQuietPrompts,
+  reduceMotion: () => !interfaceMotionAllowed(),
+});
+keepProgress = mountKeepProgress({
+  storage: () => browserStorage(),
+  kind: () => readAccountIdentity(browserStorage())?.kind ?? null,
+  // Only on the end screen, never during play, and never on top of the install invitation.
+  covered: () => !endScreenReady() || installPrompt.isOpen(),
+  onSignIn: () => {
+    const btn = document.getElementById('menu-login') as HTMLButtonElement | null;
+    btn?.click();
+  },
+  canSignIn: () => !!document.getElementById('menu-login'),
+  reduceMotion: () => !interfaceMotionAllowed(),
+});
+window.addEventListener('futasaku:first-claim', () => keepProgress?.note('first-claim'));
+// When the player's own Blitz decision ends, release the keep-progress line held for it. The clock
+// sends one event per change (the achievement line listens to the same event by itself).
+{
+  let wasBlitzDecision = false;
+  window.addEventListener(BLITZ_CLOCK_EVENT, (event) => {
+    const detail = (event as CustomEvent<BlitzClockSignal>).detail;
+    const mine = !!detail && blitzDecisionOf(detail);
+    if (wasBlitzDecision && !mine) keepProgress?.release();
+    wasBlitzDecision = mine;
+  });
+}
 appReady = true;
 window.dispatchEvent(new Event('severor-ready'));

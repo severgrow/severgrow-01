@@ -20,6 +20,7 @@ import { MatchService } from '../../server/src/service.js';
 import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { DuelClient } from '../../server/src/client.js';
 import { openMenuEntry } from './helpers/menu-nav.js';
+import { expandYourMatches } from './helpers/lobby-matches.js';
 
 const CHROME =
   process.env.PW_CHROMIUM ??
@@ -170,6 +171,7 @@ const openDuel = async (page: Page): Promise<void> => {
   await openMenuEntry(page, 'menu-online', { timeout: 40_000 });
   await page.waitForSelector('#online-hub:not([hidden])', { timeout: 25_000 });
   if (await page.locator('#online-first-ok').isVisible().catch(() => false)) await page.click('#online-first-ok');
+  await expandYourMatches(page);
   const row = page.locator(`#online-matches li[data-match-id="${matchId}"]`);
   await row.waitFor({ state: 'visible', timeout: 25_000 });
   await row.click();

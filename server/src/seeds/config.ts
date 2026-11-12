@@ -1,7 +1,34 @@
+/**
+ * BETA PAYOUT MULTIPLIER (owner, 2026-10-26): "temporarily until i say to revert - lets keep the
+ * same seeds payout system we have already, but make it pay double - twice as much as currently -
+ * so all beta testers are encouraged more to get involved properly in the territory side of the
+ * game. including bonuses and all".
+ *
+ * ONE number, applied at the single decision point (`planSeedReward`), so every paying path moves
+ * together and reverting is this line back to 1: campaign first-clears, chapter bonuses, level 10's
+ * 100, and every duel and training outcome.
+ *
+ * The daily CAP doubles with it. Doubling awards while leaving the cap at 600 would take the
+ * doubling back at the ceiling, and the players who play most are exactly the ones it is meant to
+ * encourage. The COUNT limits (`dailyMatches`, `pairDailyMatches`) are deliberately NOT doubled:
+ * those guard how many matches may pay at all (anti-farming), not how much each pays.
+ *
+ * PRICES ARE UNTOUCHED - a tile still costs 100. A challenge costs NOTHING (owner, 2026-10-29): it
+ * is a tile put at stake, never a Seed payment. That is the whole point: the payout rises and the
+ * price does not, so Territory is reachable sooner.
+ *
+ * Receipts are idempotent and store the amount actually paid, so anything settled before this keeps
+ * its old figure and a replayed clear returns that old figure. Only NEW settlements are doubled.
+ */
+export const BETA_PAYOUT_MULTIPLIER = 2;
+
 /** Economy v1. Only the server decides an award; previously settled entries keep their amount. */
 export const SEED_ECONOMY = Object.freeze({
   version: 1,
   tileCost: 100,
+  /** What selling a tile back returns. Owner, 2026-10-27: "selling your tile for 100 seeds"; then
+   *  2026-11-04: "Replace the selling icon button with 'Sell' and pay 50 seeds for that instead of 100". */
+  tileSaleReturn: 50,
   utcDailyRepeatableCap: 600,
   online: {
     queue: { win: 30, loss: 8, draw: 12, dailyMatches: 20, pairDailyMatches: 5 },
@@ -9,6 +36,24 @@ export const SEED_ECONOMY = Object.freeze({
     training: { win: 10, loss: 3, draw: 0, dailyMatches: 5, pairDailyMatches: 0 },
   },
 } as const);
+
+/**
+ * Territory challenges (docs/TERRITORY-CHALLENGES.md). There is NO Seed price since 2026-10-29: a
+ * challenge is free, and the challenger puts one of their OWN tiles at stake instead
+ * (`server/src/seeds/stake.ts`). The timers below are not economy values: they are the defender's
+ * answer window and the outer bound on a linked duel that never resolves.
+ *
+ * THE ANSWER WINDOW (owner, 2026-11-08): 48 hours for a challenge sent from now on. A row already
+ * waiting keeps the `expires_at` it was given — this constant is read only when a challenge is
+ * created, never to rewrite one. It is not the linked-duel turn clock (`TERRITORY_TURN_TIMEOUT_MS`
+ * in `service.ts`), which stays 24 hours.
+ */
+export const WORLD_CHALLENGE_TTL_MS = 48 * 60 * 60 * 1000;
+export const WORLD_CHALLENGE_STALE_MS = 7 * 24 * 60 * 60 * 1000;
+/** At most this many OPEN outgoing challenges per challenger, and incoming per defender. */
+export const WORLD_CHALLENGE_OPEN_LIMIT = 3;
+/** Rows older than this are no longer listed in a player's outgoing history. */
+export const WORLD_CHALLENGE_LIST_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * The last Campaign level the economy pays for. One constant, because three places must agree: the
@@ -50,3 +95,16 @@ export const campaignLevelOfSourceKey = (sourceKey: string): number | null => {
   const match = /^campaign:c\d+-(\d+)$/.exec(sourceKey);
   return match ? Number(match[1]) : null;
 };
+
+/**
+ * The tutorial's one payment (owner, 2026-10-24): winning level 10, the final lesson, pays 100
+ * Seeds once — exactly one Territory claim. Levels 1-9 teach and pay nothing. Its receipt is
+ * `lesson:10` (one per player, like a Campaign first clear).
+ *
+ * OWNER DECISION (2026-10-25), asked directly and answered: "nah 10th level pays 100 so its all
+ * good". So the amounts `campaignSeedReward` carries for levels 1-9 are NOT to be paid: those
+ * levels are the tutorial, their authored openings are not what the server replays, and level 10's
+ * 100 is the deliberate reward for finishing the teaching. Do not enable a proof for 1-9 to "close
+ * the gap" — that gap is the design.
+ */
+export const LESSON_SEED_REWARD = Object.freeze({ level: 10, seeds: 100 });

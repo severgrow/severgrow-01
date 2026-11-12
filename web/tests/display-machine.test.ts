@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DISPLAY_MIN_DWELL_MS, DisplayMachine, type DisplayFrame } from '../src/player/display-machine.js';
+import { DISPLAY_MIN_DWELL_MS, LESSON_MIN_DWELL_MS, DisplayMachine, type DisplayFrame } from '../src/player/display-machine.js';
 import { ledMessageWidth, ledStaticMessage } from '../src/player/led-cells.js';
 import { FLAVOUR_POOLS, FlavourDeck, flavourGate } from '../src/player/led-flavour.js';
 
@@ -62,6 +62,8 @@ describe('match display state', () => {
     expect(frames.at(-1)?.text).toBe('-7');
     sign.event({ message: 'COMBO READY', priority: 10, duration: 500 });
     expect(frames.at(-1)?.text).toBe('-7'); // lower priority ignored
+    // A play fact holds for its own duration, floored by the display dwell (1 s in normal play;
+    // a LESSON message gets the longer 2 s floor).
     vi.advanceTimersByTime(1300);
     expect(frames.at(-1)).toMatchObject({ text: '4:3', mode: 'score' });
     vi.advanceTimersByTime(2200);
@@ -97,6 +99,21 @@ describe('match display state', () => {
     expect(frames.at(-1)).toMatchObject({ text: 'THROW', mode: 'red' });
   });
 
+  it('paints an immediate hold on the same frame, without waiting out the dwell', () => {
+    // The in-game replay's REPLAY sign (owner, 2026-10-25): the board starts moving on the click
+    // frame, so the sign must be on the glass then — not 852 ms later behind a step cue's dwell.
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('GROW OR SKIP', 27, 12);
+    expect(frames.at(-1)).toMatchObject({ text: '27:12', mode: 'score' });
+    // No time advanced: the score still owns ~1 s of dwell.
+    sign.hold('REPLAY', 'amber', { immediate: true });
+    expect(frames.at(-1)).toMatchObject({ text: 'REPLAY', mode: 'amber' });
+    // A later frame for the same action still keeps its own dwell (the hold is not sticky).
+    sign.release();
+    expect(frames.at(-1)).toMatchObject({ text: 'REPLAY', mode: 'amber' });
+  });
+
   it('keeps idle urgency sticky like tutorial — not cleared by blank beats or the dwell queue', () => {
     const frames: DisplayFrame[] = [];
     const sign = new DisplayMachine(frame => frames.push(frame));
@@ -116,7 +133,7 @@ describe('match display state', () => {
     expect(frames.at(-1)?.text).toBe(urgent);
   });
 
-  it('holds every distinct message at least 1s; the next message queues', () => {
+  it('holds every distinct message at least 1s in normal play; the next message queues', () => {
     const frames: DisplayFrame[] = [];
     const sign = new DisplayMachine(frame => frames.push(frame));
     sign.reset('GROW OR SKIP', 0, 0);
@@ -212,7 +229,7 @@ describe('match display state', () => {
     expect(frames.at(-1)).toMatchObject({ text: '1:0', mode: 'score' });
   });
 
-  it('replaces a SKIP hint with THROW! after the 1s dwell — never leaves SKIP on throw', () => {
+  it('replaces a SKIP hint with THROW! after the dwell — never leaves SKIP on throw', () => {
     const frames: DisplayFrame[] = [];
     const sign = new DisplayMachine(frame => frames.push(frame));
     sign.reset('GROW!', 3, 1);
@@ -222,7 +239,7 @@ describe('match display state', () => {
     expect(frames.at(-1)?.text).toBe('SKIP');
     // EndAct → throw while SKIP is still holding.
     sign.phase('THROW!');
-    expect(frames.at(-1)?.text).toBe('SKIP'); // 1s dwell respected
+    expect(frames.at(-1)?.text).toBe('SKIP'); // dwell respected
     vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
     expect(frames.at(-1)?.text === 'THROW!' || frames.at(-1)?.text === 'THROW').toBe(true);
     // Must not return to SKIP after THROW has landed.
@@ -279,21 +296,28 @@ describe('quiet sign (a lesson message is on screen)', () => {
   beforeEach(() => { vi.useFakeTimers(); vi.stubGlobal('window', globalThis); });
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
-  it('keeps the score and real play facts, and drops its own step words, hints and idle prompts', () => {
+  it('keeps the score and real play facts, drops its own step words and hints, but still wakes on idle', () => {
     const frames: DisplayFrame[] = [];
     const sign = new DisplayMachine(frame => frames.push(frame));
     sign.reset('DRAW!', 1, 0);
     vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
     sign.setQuiet(true);
-    // The word already on the sign finishes its 1s dwell, then the score takes over.
-    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
+    // The word already on the sign finishes its dwell, then the score takes over.
+    vi.advanceTimersByTime(LESSON_MIN_DWELL_MS);
     expect(frames.at(-1)).toMatchObject({ text: '1:0', mode: 'score' });
     const before = frames.length;
     sign.phase('GROW!');
     sign.hint('CANCEL');
     sign.event({ message: 'WAIT', mode: 'red', priority: 20, duration: 1050 });
-    vi.advanceTimersByTime(30000);
-    expect(frames.slice(before).every((f) => f.mode === 'score')).toBe(true);
+    // Quiet drops its own step words and hints...
+    expect(frames.slice(before).every((f) => f.mode !== 'red' || f.text !== 'WAIT')).toBe(true);
+    // ...but an idle player must bring the sign back to life (owner, 2026-10-21: a sign that stayed
+    // dark for a whole level read as broken). It blinks the step word, in amber.
+    vi.advanceTimersByTime(20000);
+    const sleepy = frames.slice(before);
+    expect(sleepy.some((f) => f.alarm === true), 'the idle alarm comes back in a lesson').toBe(true);
+    // The word it blinks is the CURRENT phase (the test moved it to GROW before going idle).
+    expect(sleepy.some((f) => f.text === 'GROW' || f.text === 'GROW!'), 'it blinks the step word').toBe(true);
     // A real result still shows (a play fact, a wrong-tap answer).
     sign.event({ message: '+3', mode: 'green', priority: 40, duration: 950 });
     expect(frames.at(-1)).toMatchObject({ text: '+3' });
@@ -304,6 +328,25 @@ describe('quiet sign (a lesson message is on screen)', () => {
     sign.phase('THROW!');
     vi.advanceTimersByTime(3000);
     expect(frames.some((f, i) => i >= before && isStep(f.text))).toBe(true);
+  });
+
+  it('drops an idle step word the moment the step moves on, as normal play does', () => {
+    // The 3 s reading floor makes the idle wake near-certain before a lesson player acts: DRAW!
+    // starts blinking while they read, they draw, and the sign must not keep saying DRAW!.
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('DRAW!', 1, 0);
+    sign.setQuiet(true);
+    vi.advanceTimersByTime(20000);
+    expect(frames.at(-1)).toMatchObject({ alarm: true });
+    expect(frames.at(-1)?.text.replace(/!$/, '')).toBe('DRAW');
+    sign.phase('GROW!');
+    expect(frames.at(-1)?.text.replace(/!$/, ''), 'the stale DRAW is gone at once').not.toBe('DRAW');
+    expect(frames.at(-1)?.alarm, 'and it no longer blinks').toBeFalsy();
+    // Idle again, and the sign wakes on the CURRENT step.
+    vi.advanceTimersByTime(20000);
+    const woke = frames.filter((f) => f.alarm).at(-1);
+    expect(woke?.text.replace(/!$/, '')).toBe('GROW');
   });
 });
 
@@ -333,5 +376,49 @@ describe('the sign can hold the score (the lesson that teaches it)', () => {
     sign.phase('THROW!');
     vi.advanceTimersByTime(3000);
     expect(frames.some((f) => f.text?.startsWith('THROW'))).toBe(true);
+  });
+});
+
+describe('the lesson action line owns the sign (levels 1-10)', () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.stubGlobal('window', globalThis); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  // Owner, 2026-10-20: "in lessons 1-10 the display must ALWAYS prioritise the ACTION". The score
+  // is only what is left when there is nothing to do, so an action line never queues behind it.
+  it('paints the action line at once, even when the score has just landed', () => {
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('DRAW!', 2, 1);
+    sign.setQuiet(true);
+    vi.advanceTimersByTime(LESSON_MIN_DWELL_MS); // the step word ends and the score lands now
+    expect(frames.at(-1)).toMatchObject({ mode: 'score' });
+    sign.hold('TAP DRAW PILE');
+    expect(frames.at(-1)).toMatchObject({ text: 'TAP DRAW PILE' });
+  });
+
+  it('a lesson message holds 2 s, while normal play keeps 1 s', () => {
+    // Owner (2026-10-20): a teaching line must never change faster than 2 s. Normal play keeps the
+    // 1 s floor, because there the sign is a live scoreboard and a longer floor feels sluggish.
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('DRAW!', 1, 0);
+    sign.setQuiet(true);
+    // 1 s in: the step word is still up, because a lesson waits 2 s.
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
+    expect(frames.at(-1)?.text).toBe('DRAW!');
+    // 2 s in: it has handed over to the score.
+    vi.advanceTimersByTime(LESSON_MIN_DWELL_MS - DISPLAY_MIN_DWELL_MS);
+    expect(frames.at(-1)).toMatchObject({ mode: 'score' });
+  });
+
+  it('outside a lesson a drag word still waits out the dwell — today’s behaviour is untouched', () => {
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('GROW OR SKIP', 2, 1);
+    expect(frames.at(-1)?.text).toBe('2:1');
+    sign.hold('DRAW');
+    expect(frames.at(-1)?.text).toBe('2:1'); // queued behind the score's dwell
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
+    expect(frames.at(-1)?.text).toBe('DRAW');
   });
 });

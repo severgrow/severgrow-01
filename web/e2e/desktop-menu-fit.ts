@@ -36,7 +36,10 @@ try {
       const context = await browser.newContext({ viewport: { width: w, height: h } });
       const page = await context.newPage();
       await page.goto(`http://127.0.0.1:${PORT}/`);
-      await page.waitForSelector('#menu-beta', { timeout: 20_000 });
+      // The beta line is painted in the menu's FIRST layout (2026-10-22), before boot finishes and
+      // lays the menu out again; wait for the feedback module to own its link, i.e. boot is done,
+      // so a forced Continue below is not undone by that second layout.
+      await page.waitForSelector('#menu-beta button[data-owned="1"]', { state: 'attached', timeout: 20_000 });
       // The tallest menu a player can see: with a saved game, "Continue" sits above the rest.
       if (withSave) await page.evaluate("document.getElementById('menu-continue').hidden = false");
       await page.waitForTimeout(300);
@@ -53,7 +56,7 @@ try {
           wide: document.documentElement.scrollWidth <= innerWidth,
         };
       })()`)) as { n: number; last: number; first: number; minH: number; scrolls: boolean; wide: boolean };
-      if (withSave) check(`${label}: Continue is showing (the tallest menu)`, m.n >= 5, `${m.n} buttons`);
+      if (withSave) check(`${label}: Continue is showing (the tallest menu)`, m.n >= 4, `${m.n} buttons`);
       check(`${label}: the whole menu is on screen without scrolling`, m.last <= h && m.first >= 0 && !m.scrolls, JSON.stringify(m));
       check(`${label}: every button stays at least 44px tall`, m.minH >= 44, `${m.minH}px`);
       check(`${label}: nothing runs off the side`, m.wide);

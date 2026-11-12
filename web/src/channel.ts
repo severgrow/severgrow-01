@@ -7,6 +7,23 @@ export const CHANNEL: Channel =
   raw === 'test' || raw === 'futa04' || raw === 'futa-test' || raw === 'futa05' || raw === 'live' ? raw : 'futa04';
 export const IS_TEST = CHANNEL === 'test' || CHANNEL === 'futa-test';
 export const IS_FUTA04 = CHANNEL === 'futa04' || CHANNEL === 'futa-test' || CHANNEL === 'futa05';
+/**
+ * The staging copy at `/test/` (docs/RELEASE-FLOW.md). It is built from the SAME `futa05` source as
+ * the live root and only moved to the `/test/` path afterwards, so the channel alone can never tell
+ * the two apart — the path can, and does. Only the first path segment counts.
+ */
+export const IS_TEST_ROUTE = typeof location !== 'undefined' && /^\/test(\/|$)/.test(location.pathname);
+/**
+ * The game inside the Art Lab's phone frame (futasaku.com/art loads `../?artlab=1&seed=N`): its own
+ * storage (it never touches a player's saves or progress) and no server (online/config.ts).
+ */
+export const IS_ART_FRAME = typeof location !== 'undefined' && /(^|[?&])artlab=1(&|$)/.test(location.search);
+/**
+ * TEST-ONLY: `?flat-territory` keeps the flat Territory map on a planet build, so the browser suites
+ * written for the flat map's own layers (challenge rings, swords, frontier notches) keep proving the
+ * logic underneath THE PLANET. No player link carries it.
+ */
+const FLAT_TERRITORY = typeof location !== 'undefined' && /[?&]flat-territory(?:[=&]|$)/.test(location.search ?? '');
 const modern = IS_TEST || IS_FUTA04;
 export const FEATURES = Object.freeze({
   typography: modern,
@@ -30,6 +47,22 @@ export const FEATURES = Object.freeze({
    * copy (`test`, `futa-test`) keeps the menu it is used to, so its e2e keeps working unchanged.
    */
   campaign: CHANNEL === 'futa04' || CHANNEL === 'futa05',
+  /**
+   * FUTASAKU BLITZ in Practice (owner, 2026-11-06: "it's still a mode in PRACTICE MATCH ... promote to
+   * both live and test"): the whole futa05 game, live root and /test/. The locked futa04 line: never.
+   */
+  blitz: CHANNEL === 'futa05',
+  /**
+   * THE PLANET (owner, 2026-11-04): the Territory window shows its ground as a planet in space,
+   * called THE PLANET, and the planet is the main menu's backdrop. First on the staging copy; then
+   * "When you promote, should THE PLANET go live for everyone?" — "Yes, planet goes live". So it is
+   * the whole futa05 game (it reaches futasaku.com with the next promote); the locked futa04 line
+   * keeps its flat Territory.
+   */
+  planet: CHANNEL === 'futa05' && !FLAT_TERRITORY,
+  /** ONE SPACE (0.75 polish pass, owner 2026-11-04): the planet's sky behind the Play submenu and the
+   *  board, and on the menu until the planet draws. The live game only; futa04 keeps its own room. */
+  space: CHANNEL === 'futa05',
 });
 const isPreviewHost = typeof location !== 'undefined' && (
   location.hostname.endsWith('.chatgpt.site') ||
@@ -44,7 +77,7 @@ const isPreviewHost = typeof location !== 'undefined' && (
  */
 export const IS_PREVIEW_3 = typeof location !== 'undefined' && /^\/3(\/|$)/.test(location.pathname);
 export const STORAGE_PREFIX = CHANNEL === 'futa-test' ? 'futa-test:'
-  : CHANNEL === 'futa05' ? (IS_PREVIEW_3 ? 'futa05-3:' : 'futa05:')
+  : CHANNEL === 'futa05' ? (IS_ART_FRAME ? 'futa05-art:' : IS_TEST_ROUTE ? 'futa05-test:' : IS_PREVIEW_3 ? 'futa05-3:' : 'futa05:')
   : CHANNEL === 'test' ? 'test:'
   : IS_FUTA04 ? (isPreviewHost ? 'futa04:' : 'main2:')
   : '';

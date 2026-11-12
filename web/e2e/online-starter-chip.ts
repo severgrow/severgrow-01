@@ -26,6 +26,7 @@ import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { DuelClient } from '../../server/src/client.js';
 import type { FetchLike } from '../../server/src/client.js';
 import { openMenuEntry, waitMenuEntry } from './helpers/menu-nav.js';
+import { expandYourMatches } from './helpers/lobby-matches.js';
 
 const CHROME =
   process.env.PW_CHROMIUM ??
@@ -138,6 +139,7 @@ const joinDuel = async (page: Page, invite: string): Promise<void> => {
 /** Enter an existing match from the lobby list (a return, never a live join). */
 const reopenFromList = async (page: Page, matchId: string): Promise<void> => {
   await openHub(page);
+  await expandYourMatches(page);
   const row = page.locator(`#online-matches li[data-match-id="${matchId}"]`);
   await row.waitFor({ state: 'visible', timeout: 25_000 });
   await row.click();

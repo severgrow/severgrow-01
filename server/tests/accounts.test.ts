@@ -27,9 +27,9 @@ const fakeAuth = () => {
   };
   /** A fresh access token for this Google user, as Supabase would hand the browser after sign-in. */
   let n = 0;
-  const google = (sub: string, email = `${sub}@gmail.com`, providers = ['google']) => {
+  const google = (sub: string, email = `${sub}@gmail.com`, providers = ['google'], emailConfirmed = false) => {
     const t = `access-token-${sub}-${(n += 1)}-xxxxxxxxxxxx`;
-    users.set(t, { id: sub, email, providers });
+    users.set(t, { id: sub, email, providers, emailConfirmed });
     return t;
   };
   return { auth, google, deleted };
@@ -44,6 +44,7 @@ const setup = (opts: { auth?: AuthProvider | null; limits?: { signInPerIpPerHour
   const accounts = createAccountsRouter({
     links,
     storage,
+    emailEnabled: true,
     auth: opts.auth === undefined ? fake.auth : opts.auth,
     authenticate: (t) => service.authenticate(t),
     now: () => Date.now(),
@@ -248,7 +249,7 @@ describe('supabaseAuthProvider (plain HTTP to Supabase Auth)', () => {
   it('asks Supabase who owns the token (anon key + the user token), and reads the providers', async () => {
     const r = recorder(200, { id: 'u1', email: 'a@gmail.com', app_metadata: { provider: 'google', providers: ['google'] } });
     const p = supabaseAuthProvider({ url: 'https://proj.supabase.co/', anonKey: 'anon', fetch: r.fetch });
-    expect(await p.user('tok')).toEqual({ id: 'u1', email: 'a@gmail.com', providers: ['google'] });
+    expect(await p.user('tok')).toEqual({ id: 'u1', email: 'a@gmail.com', providers: ['google'], emailConfirmed: false });
     expect(r.calls[0]!.url).toBe('https://proj.supabase.co/auth/v1/user');
     expect(r.calls[0]!.init!.headers).toEqual({ apikey: 'anon', authorization: 'Bearer tok' });
   });
@@ -291,5 +292,67 @@ describe('migration 0010_accounts.sql', () => {
     expect(sql).toContain("if exists (select 1 from pg_namespace where nspname = 'cron')");
     expect(sql).toContain("'futasaku-rate-limit-cleanup'");
     expect(sql).toContain('delete from public.rate_limits where window_start <');
+  });
+});
+
+
+describe('verified email accounts share the canonical Supabase identity', () => {
+  it('advertises support only when Supabase is configured', async () => {
+    expect((await setup().call('GET', '/v1/auth/methods', undefined)).json).toMatchObject({ email: true });
+    expect((await setup({ auth: null }).call('GET', '/v1/auth/methods', undefined)).json).toMatchObject({ email: false });
+  });
+  it('upgrades a guest in place and recovers the same matches on a second device', async () => {
+    const t = setup();
+    const { a, matchId } = await t.pair();
+    const access = t.fake.google('email-alice', 'alice@example.com', ['email'], true);
+    const first = await t.call('POST', '/v1/auth/email', { accessToken: access }, a.token);
+    expect(first.json.player?.id).toBe(a.player.id);
+    expect(first.json.outcome).toBe('linked');
+    const second = await t.call('POST', '/v1/auth/email', { accessToken: access });
+    expect(second.json.player?.id).toBe(a.player.id);
+    expect(await t.matchIds(second.json.token!)).toContain(matchId);
+  });
+  it('refuses unconfirmed email, bad tokens and browser supplied confirmation', async () => {
+    const t = setup();
+    for (const accessToken of ['not-a-real-access-token', t.fake.google('unconfirmed', 'a@example.com', ['email'])]) {
+      const r = await t.call('POST', '/v1/auth/email', { accessToken, emailConfirmed: true, email: 'victim@example.com' });
+      expect(r.json.code).toBe('UNAUTHORIZED');
+    }
+    expect(t.links.rows).toHaveLength(0);
+  });
+  it('email and Google for the same Supabase subject cannot split an account', async () => {
+    const t = setup();
+    const google = await t.signIn(t.fake.google('same-user'));
+    const email = await t.call('POST', '/v1/auth/email', { accessToken: t.fake.google('same-user', 'same@gmail.com', ['google','email'], true) });
+    expect(email.json.player?.id).toBe(google.json.player?.id);
+    expect(t.links.rows).toHaveLength(1);
+    const removed = await t.call('POST', '/v1/auth/email/delete', {}, email.json.token!);
+    expect(removed.json.unlinked).toBe(true);
+    expect(t.fake.deleted).toContain('same-user');
+  });
+  it('a different email never takes over a player already linked to another account', async () => {
+    const t = setup();
+    const first = await t.signIn(t.fake.google('first'));
+    const second = await t.call('POST', '/v1/auth/email', { accessToken: t.fake.google('second', 'b@example.com', ['email'], true) }, first.json.token!);
+    expect(second.json.player?.id).not.toBe(first.json.player?.id);
+    expect(t.links.rows).toHaveLength(2);
+  });
+  it('both routes share the same sign-in rate limit', async () => {
+    const t = setup({ limits: { signInPerIpPerHour: 1, unlinkPerPlayerPerHour: 10 } });
+    await t.signIn(t.fake.google('one'));
+    expect((await t.call('POST', '/v1/auth/email', { accessToken: t.fake.google('two','two@example.com',['email'],true) })).json.code).toBe('RATE_LIMITED');
+  });
+});
+
+
+describe('account deletion failures', () => {
+  it('keeps the recovery link and account when Supabase cannot delete the user', async () => {
+    const t=setup();
+    const signed=await t.signIn(t.fake.google('delete-fails'));
+    t.fake.auth.deleteUser=async()=>false;
+    const result=await t.call('POST','/v1/auth/google/delete',{},signed.json.token!);
+    expect(result.status).toBe(500);
+    expect(t.links.rows).toHaveLength(1);
+    expect((await t.service.authenticate(signed.json.token!)).kind).toBe('account');
   });
 });

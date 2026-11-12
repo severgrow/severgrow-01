@@ -1,4 +1,8 @@
-// Accounts — the DOM side, mounted once from main.ts (docs/ACCOUNTS.md). Adds "Continue with Google"
+import { mountSheetViewport } from '../ui/sheet-viewport.js';
+import { authJson } from './email-auth.js';
+import { mountEmailPanel } from './email-panel.js';
+import { enterSurface, exitSurface } from '../ui/interface-motion.js';
+// Accounts — mounted once from main.ts (docs/ACCOUNTS.md and docs/EMAIL-ACCOUNTS.md). Email codes and Google
 // where it helps: a one-time welcome before the first online visit, a line in the online hub for
 // guests, and an Account block in Settings (sign out, delete my account). Offline play never sees
 // any of it. Nothing shows until the Google provider is switched on in Supabase, so this is safe to
@@ -10,7 +14,23 @@ import type { KeyValue } from '../../../server/src/client.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { duelApiUrl, duelRegion } from '../online/config.js';
 import { IDENTITY_STORAGE_KEY } from '../online/identity.js';
+import { DISPLAY_NAME_MAX } from '../../../server/src/display-name.js';
+import { cachedTerritory, readTerritory } from '../online/territory-cache.js';
 import { glassBaseCss } from '../player/glass-surface.js';
+import { installProfileUI, profileColour } from './profile.js';
+import { EMAIL_ON_KEY, GOOGLE_ON_KEY, paintAccountKey } from './menu-key.js';
+import type { ProfileFacts } from './profile.js';
+import { PLAYER_PROFILE_EVENT } from './profile-request.js';
+import type { PlayerProfileRequest } from './profile-request.js';
+import { visitorFacts } from './visitor-profile.js';
+import type { HeadToHead, PublicPlayerProfile } from '../../../server/src/protocol.js';
+import { formatRivalryLine } from '../logic/rivalry.js';
+import type { VisitorFacts } from './profile.js';
+import { STATS_KEY, parseStats } from '../logic/stats.js';
+import { accountRecord, offlineRecord } from '../logic/match-record.js';
+import { DEVICE_KEY, deviceIdFrom, matchesWonEver, newDeviceId, offlineCounters } from '../logic/offline-sync.js';
+import { browserCountry } from '../logic/country.js';
+import type { OfflineSummary } from '../../../server/src/protocol.js';
 import {
   WELCOME_KEY,
   authorizeUrl,
@@ -22,13 +42,15 @@ import {
   isCallbackHash,
   newVerifier,
   readAccount,
+  signInMessage,
   readCallback,
   redirectTarget,
   savePending,
   setFlash,
   setNicknamePrompt,
   takeFlash,
-  takeNicknamePrompt,
+  pendingNicknamePrompt,
+  clearNicknamePrompt,
   takePending,
   writeAccount,
 } from './core.js';
@@ -47,7 +69,7 @@ const G_LOGO = `<svg aria-hidden="true" width="18" height="18" viewBox="0 0 48 4
 
 const CSS = `
 ${glassBaseCss('.acct-glass')}
-.acct-glass { z-index:95; left:50%; top:50%; transform:translate(-50%,-50%); width:min(400px, calc(100vw - 32px));
+.acct-glass { font-size:.8125rem; z-index:95; left:50%; top:50%; transform:translate(-50%,-50%); width:min(400px, calc(100vw - 32px));
   max-height:calc(100dvh - 32px); overflow:auto; padding:18px 16px 16px; background:rgba(8,10,10,.88); display:flex; flex-direction:column; gap:12px; }
 .acct-glass[hidden], .acct-scrim[hidden], .acct-toast[hidden], [data-acct][hidden] { display:none !important; }
 .acct-scrim { position:fixed; inset:0; z-index:94; background:rgba(4,6,5,.5); }
@@ -56,10 +78,15 @@ ${glassBaseCss('.acct-glass')}
 .acct-glass p, .acct-glass li { margin:0; color:#e2d4b4; line-height:1.45; }
 .acct-glass ul { margin:0; padding-left:18px; display:grid; gap:6px; }
 .acct-small { font-size:12px; color:#b7a98a !important; }
+.acct-email-form { display:flex; flex-direction:column; gap:12px; }
+.acct-email-form input { min-height:48px; width:100%; border:1px solid rgba(214,204,177,.28); border-radius:8px; padding:10px 12px; background:rgba(242, 237, 228,.04); color:#f0e9dc; font:inherit; font-size:max(16px,1rem); }
+.acct-email-form input:focus-visible { outline:2px solid #f0e9dc; outline-offset:2px; }
+.acct-email-form .acct-actions { justify-content:space-between; gap:8px; }
+.acct-email-form label { color:var(--instrument-muted); }
 .acct-actions { display:flex; flex-direction:column; gap:8px; }
 .acct-actions.row { flex-direction:row; justify-content:flex-end; flex-wrap:wrap; }
 .acct-btn { min-height:44px; padding:0 16px; border-radius:999px; cursor:pointer; border:1px solid rgba(214,204,177,.28);
-  background:rgba(255,255,255,.04); color:#f0e9dc; font:700 14px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.06em; }
+  background:rgba(242, 237, 228,.04); color:#f0e9dc; font:700 .875rem/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.06em; }
 .acct-btn.danger { border-color:rgba(224,115,92,.6); color:#f2b3a3; }
 .acct-btn.danger.solid { background:#c4553f; border-color:#c4553f; color:#fff6ef; }
 .acct-btn:disabled { opacity:.55; cursor:default; }
@@ -69,8 +96,8 @@ ${glassBaseCss('.acct-glass')}
 .acct-google:hover { background:#1d1d1f; }
 .acct-google:disabled { opacity:.6; cursor:default; }
 .acct-google:focus-visible, .acct-btn:focus-visible, .acct-linkbtn:focus-visible { outline:2px solid #f0e9dc; outline-offset:2px; }
-.acct-linkbtn { align-self:center; min-height:44px; padding:0 8px; border:0; background:none; color:#b7a98a; font:inherit; font-size:13px; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
-.acct-status { min-height:1.3em; font-size:13px; color:#c9e4a8 !important; }
+.acct-linkbtn { align-self:center; min-height:44px; padding:0 8px; border:0; background:none; color:#b7a98a; font:inherit; font-size:.8125rem; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
+.acct-status { min-height:1.3em; font-size:.8125rem; color:#c9e4a8 !important; }
 .acct-status[data-tone='bad'] { color:#e0735c !important; }
 .acct-status:empty { display:none; }
 #acct-hub { display:flex; flex-direction:column; gap:10px; align-items:stretch; text-align:center; }
@@ -79,14 +106,13 @@ ${glassBaseCss('.acct-glass')}
 #acct-settings .acct-who { margin:0; font-weight:700; color:var(--ink, #f0e9dc); }
 #acct-settings p { margin:0; }
 #acct-settings .acct-actions.row { justify-content:flex-start; }
-body.acct-on #online-storage-note { display:none; }
 .acct-toast { position:fixed; z-index:96; left:50%; top:calc(env(safe-area-inset-top, 0px) + 14px); transform:translateX(-50%);
   width:min(420px, calc(100vw - 32px)); box-sizing:border-box; padding:12px 14px; border-radius:14px; background:rgba(8,10,10,.92);
   border:1px solid rgba(214,204,177,.25); color:#f0e9dc; font:400 14px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); text-align:center; }
 .acct-toast[data-tone='bad'] { border-color:rgba(224,115,92,.6); }
 /* The nickname field: dark glass, NO border contour — the fill alone marks it, cream text on focus. */
 .acct-input { min-height:44px; width:100%; box-sizing:border-box; padding:0 14px; border:0; border-radius:12px;
-  background:rgba(255,255,255,.07); color:#f6ecd8; font:600 16px/1.2 var(--font-ui,'Fragment Mono',ui-monospace,monospace); }
+  background:rgba(242, 237, 228,.07); color:#f6ecd8; font:600 max(16px, 1rem)/1.2 var(--font-ui,'Fragment Mono',ui-monospace,monospace); }
 .acct-input::placeholder { color:#8f866f; font-weight:400; }
 .acct-input:focus-visible { outline:2px solid #f0e9dc; outline-offset:1px; }
 `;
@@ -120,22 +146,41 @@ const sheet = (id: string, label: string) => {
   scrim.hidden = panel.hidden = true;
   document.body.append(scrim, panel);
   let onClose: (() => void) | null = null;
+  // A LOCKED sheet asks for something that must be given (a new account's name): the scrim and
+  // Escape do not dismiss it; only the sheet's own action closes it.
+  let locked = false;
+  let trigger: HTMLElement | null = null;
+  const viewport = mountSheetViewport(panel);
   const close = () => {
     if (panel.hidden) return;
-    scrim.hidden = panel.hidden = true;
+    locked = false;
+    scrim.hidden = true;
+    exitSurface(panel, { onDone: () => { panel.hidden = true; } });
     const f = onClose;
     onClose = null;
+    trigger?.focus({ preventScroll: true });
     f?.();
   };
-  scrim.addEventListener('click', close);
+  scrim.addEventListener('click', () => { if (!locked) close(); });
   panel.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') close();
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Escape') { e.stopPropagation(); if (!locked) close(); }
+    if (e.key === 'Tab') {
+      const controls = [...panel.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),a[href]')].filter(e => e.getClientRects().length);
+      const first = controls[0], last = controls.at(-1);
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+    }
   });
   return {
     panel,
-    open: (then?: () => void) => {
+    open: (then?: () => void, options: { locked?: boolean } = {}) => {
+      trigger = document.activeElement as HTMLElement | null;
       onClose = then ?? null;
+      locked = options.locked === true;
       scrim.hidden = panel.hidden = false;
+      viewport();
+      enterSurface(panel);
       (panel.querySelector('button') as HTMLButtonElement | null)?.focus({ preventScroll: true });
     },
     close,
@@ -170,7 +215,7 @@ const apiUrl = (path: string): string | null => {
 const apiRequest = async (method: 'POST' | 'PATCH', path: string, body: unknown, token: string | null): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> => {
   const url = apiUrl(path);
   if (!url) return { ok: false, status: 0, json: {} };
-  const res = await fetch(url, {
+  return authJson(url, {
     method,
     headers: {
       'content-type': 'application/json',
@@ -181,39 +226,65 @@ const apiRequest = async (method: 'POST' | 'PATCH', path: string, body: unknown,
     },
     body: JSON.stringify(body),
   });
-  let json: Record<string, unknown> = {};
-  try {
-    json = (await res.json()) as Record<string, unknown>;
-  } catch {
-    json = {};
-  }
-  return { ok: res.ok, status: res.status, json };
 };
 const apiPost = (path: string, body: unknown, token: string | null) => apiRequest('POST', path, body, token);
+/** Does this identity have any online match at all? null when it cannot be told (offline, error). */
+const hasMatches = async (token: string): Promise<boolean | null> => {
+  const url = apiUrl('/v1/players/me/matches');
+  if (!url) return null;
+  try {
+    const res = await authJson(url, { headers: { accept: 'application/json', authorization: `Bearer ${token}`, 'x-futasaku-client-version': DUEL_CLIENT_VERSION, 'x-futasaku-rules-version': CURRENT_RULES_VERSION } });
+    if (!res.ok) return null;
+    const body = res.json as { matches?: unknown };
+    return Array.isArray(body.matches) ? body.matches.length > 0 : null;
+  } catch {
+    return null;
+  }
+};
 /** PATCH /v1/players/me chooses a display name (server/src/fetch-app.ts). */
 const apiPatch = (path: string, body: unknown, token: string | null) => apiRequest('PATCH', path, body, token);
 
 const SETTINGS_CACHE = 'futasaku.auth.google.v1';
-/** Is "Continue with Google" switched on in the Supabase dashboard? Asked once per session. */
-const probeGoogle = async (supa: { url: string; key: string }): Promise<boolean> => {
+/**
+ * Is "Continue with Google" switched on in the Supabase dashboard? The answer is REMEMBERED on the
+ * device (GOOGLE_ON_KEY) so the menu can paint its account key with the other keys on the next
+ * visit (./menu-key.ts), and it is re-asked in the background once per session so a change in the
+ * dashboard still reaches the device. Only a first visit waits for the network.
+ */
+const probeGoogle = async (settings: ReturnType<typeof authJson>, kv: KeyValue | null): Promise<boolean> => {
+  let askedThisSession = false;
   try {
-    const hit = sessionStorage.getItem(SETTINGS_CACHE);
-    if (hit === '1' || hit === '0') return hit === '1';
+    askedThisSession = sessionStorage.getItem(SETTINGS_CACHE) !== null;
   } catch {
     /* no session storage */
   }
-  try {
-    const res = await fetch(`${supa.url}/auth/v1/settings`, { headers: { apikey: supa.key } });
-    const on = res.ok && googleEnabled(await res.json());
+  const ask = async (): Promise<boolean | null> => {
     try {
-      sessionStorage.setItem(SETTINGS_CACHE, on ? '1' : '0');
+      const res = await settings;
+      if (!res.ok) return null;
+      const on = googleEnabled(res.json);
+      try {
+        sessionStorage.setItem(SETTINGS_CACHE, on ? '1' : '0');
+        kv?.set(GOOGLE_ON_KEY, on ? '1' : '0');
+      } catch {
+        /* fine */
+      }
+      return on;
     } catch {
-      /* fine */
+      return null;
     }
-    return on;
+  };
+  let known: string | null = null;
+  try {
+    known = kv?.get(GOOGLE_ON_KEY) ?? null;
   } catch {
-    return false;
+    known = null;
   }
+  if (known === '1' || known === '0') {
+    if (!askedThisSession) void ask();
+    return known === '1';
+  }
+  return (await ask()) ?? false;
 };
 
 let mounted = false;
@@ -317,6 +388,79 @@ export const mountAccounts = async (): Promise<void> => {
     tryTap();
   };
 
+  // The verified session of a sign-in in progress, for THIS tab only (sessionStorage) and only for
+  // a few minutes: it is what lets a reload mid-hand-over finish the sign-in on the first try.
+  const RESUME_KEY = 'futasaku.auth.resume.v1';
+  const RESUME_MAX_AGE_MS = 5 * 60 * 1000;
+  type Resume = { access: string; returnTo: ReturnTo; at: number };
+  const saveResume = (r: Resume) => { try { sessionStorage.setItem(RESUME_KEY, JSON.stringify(r)); } catch { /* blocked */ } };
+  const dropResume = () => { try { sessionStorage.removeItem(RESUME_KEY); } catch { /* blocked */ } };
+  const readResume = (): Resume | null => {
+    try {
+      const r = JSON.parse(sessionStorage.getItem(RESUME_KEY) ?? 'null') as Partial<Resume> | null;
+      if (!r || typeof r.access !== 'string' || typeof r.at !== 'number') return null;
+      if (Date.now() - r.at > RESUME_MAX_AGE_MS) { dropResume(); return null; }
+      const returnTo: ReturnTo = r.returnTo === 'online' || r.returnTo === 'settings' ? r.returnTo : 'menu';
+      return { access: r.access, returnTo, at: r.at };
+    } catch { return null; }
+  };
+
+  const completeSignIn = async (access: string, provider: 'google' | 'email', returnTo: ReturnTo, active:()=>boolean = ()=>true): Promise<void> => {
+    const checkActive=()=>{if(!active())throw new Error('account-cancelled');};
+    checkActive();
+    let before = readIdentity(kv);
+    // Establish the usual local player before an email upgrade. Even a lost FIRST response then
+    // recovers the same player and its required name step; no second identity system is needed.
+    if (provider === 'email' && !before) {
+      const guest = await apiPost('/v1/guests', {}, null);
+      checkActive();
+      const identity = guest.ok ? identityFromSignIn(guest.json) : null;
+      if (!identity || !writeIdentity(kv, identity)) throw new Error('account-storage-failed');
+      before = identity;
+    }
+    const guestHadMatches = before ? await hasMatches(before.token) : null;
+    checkActive();
+    // FIRST TRY ALWAYS WORKS (owner, 2026-11-11: "sometimes ... I need to log in second time"): a
+    // cold server can fail the Google hand-over once (the player is back from Google, with no form
+    // to retry from). Retry it one time, a moment later, before giving up.
+    const handOver = () => apiPost(`/v1/auth/${provider}`, {accessToken:access}, before?.token ?? null)
+      .catch(() => ({ ok: false, status: 0, json: {} as Record<string, unknown> }));
+    let res = await handOver();
+    checkActive();
+    // Google only: the email form already keeps its code for a visible retry (accounts-email.ts).
+    if (provider === 'google' && !res.ok && res.status !== 401) {
+      await new Promise((r) => setTimeout(r, 1500));
+      checkActive();
+      res = await handOver();
+      checkActive();
+    }
+    const identity = res.ok ? identityFromSignIn(res.json) : null;
+    if (!identity) throw new Error(res.status === 401 ? 'account-session-expired' : 'account-exchange-failed');
+    // Do not reload onto a forgotten identity if browser storage is blocked.
+    if (!writeAccount(kv, {provider,email:typeof res.json.email === 'string'?res.json.email:null,playerId:identity.playerId}) || !writeIdentity(kv,identity))
+      throw new Error('account-storage-failed');
+    window.dispatchEvent(new Event('futasaku:identity'));
+    kv?.set(WELCOME_KEY,'1');
+    if (res.json.outcome === 'created' || res.json.outcome === 'linked' || (before?.kind === 'guest' && before.playerId === identity.playerId)) setNicknamePrompt(kv,identity.playerId);
+    setFlash(kv,{kind:'signed-in',text:signInMessage({outcome:res.json.outcome,name:shownName(identity)??'',beforePlayerId:before?.playerId??null,afterPlayerId:identity.playerId,guestHadMatches}),returnTo});
+    dropResume();
+    // Keep the verified session for a failed exchange's retry. Close it only after success.
+    void authJson(`${supa.url}/auth/v1/logout?scope=local`,{method:'POST',headers:{apikey:supa.key,authorization:`Bearer ${access}`}}).catch(()=>undefined);
+    location.reload();
+  };
+
+  // ---- 0. a sign-in interrupted by a reload: finish it (see saveResume) ----
+  const resumed = readResume();
+  if (resumed && !readCallback(location.search, location.hash)) {
+    try {
+      await completeSignIn(resumed.access, 'google', resumed.returnTo);
+      return;
+    } catch {
+      dropResume();
+      setFlash(kv, { kind: 'failed', text: navigator.onLine ? ACCOUNT.failed : ACCOUNT.offline, returnTo: resumed.returnTo });
+    }
+  }
+
   // ---- 1. coming back from Google (?code=…) ----
   const callback = readCallback(location.search, location.hash);
   if (callback) {
@@ -334,63 +478,62 @@ export const mountAccounts = async (): Promise<void> => {
       try {
         if ('error' in callback) fail(ACCOUNT.failed, { stage: 'callback', error: callback.error });
         else {
-          const ex = await fetch(`${supa.url}/auth/v1/token?grant_type=pkce`, {
+          const ex = await authJson(`${supa.url}/auth/v1/token?grant_type=pkce`, {
             method: 'POST',
             headers: { apikey: supa.key, 'content-type': 'application/json' },
             body: JSON.stringify({ auth_code: callback.code, code_verifier: pending.verifier }),
           });
-          const session = ex.ok ? ((await ex.json()) as { access_token?: unknown }) : null;
+          const session = ex.ok ? (ex.json as { access_token?: unknown }) : null;
           const access = typeof session?.access_token === 'string' ? session.access_token : null;
           if (!access) {
-            const body = ex.ok ? null : await ex.text().catch(() => null);
+            const body = ex.ok ? null : String(ex.status);
             fail(ACCOUNT.failed, { stage: 'token-exchange', status: ex.status, body: body?.slice(0, 300) });
           } else {
-            const before = readIdentity(kv);
-            const res = await apiPost('/v1/auth/google', { accessToken: access }, before?.token ?? null);
-            // Our server has its own token now; the Supabase session is not needed any more.
-            void fetch(`${supa.url}/auth/v1/logout`, { method: 'POST', headers: { apikey: supa.key, authorization: `Bearer ${access}` } }).catch(() => undefined);
-            const identity = res.ok ? identityFromSignIn(res.json) : null;
-            if (!identity) {
-              fail(
-                res.status === 403 || res.status === 404 ? ACCOUNT.unavailable : ACCOUNT.failed,
-                { stage: 'our-server', status: res.status, body: JSON.stringify(res.json).slice(0, 300) },
-              );
-            } else {
-              writeIdentity(kv, identity);
-              writeAccount(kv, { provider: 'google', email: typeof res.json.email === 'string' ? res.json.email : null, playerId: identity.playerId });
-              try {
-                kv?.set(WELCOME_KEY, '1');
-              } catch {
-                /* fine */
-              }
-              const name = shownName(identity) ?? '';
-              const outcome = res.json.outcome;
-              // The sign-in that FORMED this account (a brand-new one, or a guest upgraded in place)
-              // invites the player to choose a name. The step is shown once, right after the reload
-              // below; skipping consumes the invitation. A later sign-in is 'signed-in'/'same'.
-              if (outcome === 'created' || outcome === 'linked') setNicknamePrompt(kv, identity.playerId);
-              const text = outcome === 'linked' ? ACCOUNT.linked(name) : outcome === 'signed-in' && before && before.playerId !== identity.playerId ? ACCOUNT.switched(name) : ACCOUNT.welcomeBack(name);
-              setFlash(kv, { kind: 'signed-in', text, returnTo: pending.returnTo });
-              // Start clean on the new identity: every online screen re-reads it from storage.
-              location.reload();
-              return;
-            }
+            // The code is single-use and already spent: keep the verified session for this tab, so
+            // a reload in the middle of the hand-over (an app update swapping in its files) resumes
+            // the sign-in instead of forgetting it.
+            saveResume({ access, returnTo: pending.returnTo, at: Date.now() });
+            await completeSignIn(access, 'google', pending.returnTo);
+            return;
           }
         }
       } catch {
+        dropResume();
         fail(navigator.onLine ? ACCOUNT.failed : ACCOUNT.offline);
       }
     }
   }
 
-  // ---- 2. is Google switched on? Nothing below shows until it is. ----
-  const available = await probeGoogle(supa);
+  // The main menu's account key (section 4b). Looked up once: the menu's first layout may already have
+  // painted it from the device's memory (./menu-key.ts).
+  const menuLogin = document.getElementById('menu-login') as HTMLButtonElement | null;
+  // ---- 2. Supported sign-in methods (one shared settings request). ----
+  const authSettings = authJson(`${supa.url}/auth/v1/settings`,{headers:{apikey:supa.key}});
+  const [available, emailAvailable] = await Promise.all([
+    probeGoogle(authSettings, kv),
+    (async () => {
+      try {
+        const [server, settings] = await Promise.all([
+          authJson(apiUrl('/v1/auth/methods')!),
+          authSettings,
+        ]);
+        const external = settings.json.external as Record<string,unknown>|undefined;
+        return server.ok && server.json.email === true && settings.ok && external?.email === true;
+      } catch { return false; }
+    })(),
+  ]);
+  try { kv?.set(EMAIL_ON_KEY,emailAvailable?'1':'0'); } catch { /* blocked storage */ }
   const flash = takeFlash(kv);
   if (flash) {
     say(flash.text, flash.kind === 'failed');
     setTimeout(() => go(flash.returnTo), 0);
   }
-  if (!available) return;
+  if (!available && !emailAvailable && !signedIn()) {
+    // The menu may have painted the key early from the device's memory (./menu-key.ts); Google is
+    // off, so take it away rather than leave a key that cannot work.
+    if (menuLogin) { menuLogin.hidden = true; menuLogin.dataset.owned = '1'; }
+    return;
+  }
   document.body.classList.add('acct-on');
 
   const start = async (returnTo: ReturnTo, btn: HTMLButtonElement | null, status: HTMLElement | null) => {
@@ -414,6 +557,21 @@ export const mountAccounts = async (): Promise<void> => {
     location.assign(authorizeUrl(supa.url, redirectTarget(location), await challengeFor(verifier)));
   };
 
+  const emailSheet = sheet('acct-email', ACCOUNT.emailTitle);
+  let emailReturnTo: ReturnTo = 'menu';
+  const emailGoogle = googleButton('email-google'); emailGoogle.hidden=!available;
+  emailGoogle.addEventListener('click',()=>void start(emailReturnTo,emailGoogle,null));
+  const emailPanel = mountEmailPanel(emailSheet.panel,{supabase:supa,alternative:emailGoogle,
+    complete:(access,active)=>completeSignIn(access,'email',emailReturnTo,active),close:()=>emailSheet.close()});
+  const openEmail = (returnTo:ReturnTo) => {
+    welcome.close(); emailReturnTo=returnTo; emailPanel.reset(); emailSheet.open(()=>emailPanel.cancel());
+    emailSheet.panel.querySelector<HTMLInputElement>('input:not([hidden])')?.focus({preventScroll:true});
+  };
+  const emailButton = (returnTo:ReturnTo) => {
+    const b=button('acct-btn',ACCOUNT.continueEmail,`${returnTo}-email`);
+    b.hidden=!emailAvailable; b.addEventListener('click',()=>openEmail(returnTo)); return b;
+  };
+
   const privacyLink = () => {
     const b = button('acct-linkbtn', ACCOUNT.privacy, 'privacy');
     b.addEventListener('click', () => {
@@ -432,11 +590,11 @@ export const mountAccounts = async (): Promise<void> => {
   {
     const status = el('p', 'acct-status');
     status.setAttribute('role', 'status');
-    const g = googleButton('welcome-google');
+    const g = googleButton('welcome-google'); g.hidden=!available;
     const guest = button('acct-btn', ACCOUNT.playAsGuest, 'welcome-guest');
     const actions = el('div', 'acct-actions');
-    actions.append(g, guest);
-    welcome.panel.append(el('h2', '', ACCOUNT.welcomeTitle), el('p', '', ACCOUNT.welcomeBody), actions, status, el('p', 'acct-small', ACCOUNT.welcomeSmall), privacyLink());
+    actions.append(emailButton('online'), g, guest);
+    welcome.panel.append(el('h2', '', ACCOUNT.welcomeTitle), el('p', '', ACCOUNT.welcomeBody), actions, status, privacyLink());
     g.addEventListener('click', () => void start('online', g, status));
     guest.addEventListener('click', () => {
       try {
@@ -473,25 +631,203 @@ export const mountAccounts = async (): Promise<void> => {
   {
     const status = el('p', 'acct-status');
     status.setAttribute('role', 'status');
-    const g = googleButton('hub-google');
-    hub.append(el('p', 'muted small', ACCOUNT.hubGuest), g, status);
+    const g = googleButton('hub-google'); g.hidden=!available;
+    hub.append(el('p', 'muted small', ACCOUNT.hubGuest), emailButton('online'), g, status);
     g.addEventListener('click', () => void start('online', g, status));
     hubHead?.after(hub);
   }
 
-  // ---- 4b. the main menu's LOG IN: the same Google flow, one button, gone once signed in ----
-  // It sits at the TOP of the main menu and reuses `start` and `signedIn` — no second sign-in path,
-  // no second round trip. It returns to the menu (ReturnTo 'menu'), so a fresh sign-in lands back
-  // where the player was, and it is only ever wired here, inside the Google-on branch: with the
-  // provider off it stays hidden and untouched.
-  const menuLogin = document.getElementById('menu-login') as HTMLButtonElement | null;
-  menuLogin?.addEventListener('click', () => void start('menu', menuLogin, null));
+  // ---- 4b. the main menu's account key: LOG IN when signed out, the player's NAME when signed in --
+  // Owner brief (2026-10-21): the menu's bottom row is two keys — this one on the left, Settings on
+  // the right. Signed out it reads LOG IN and starts the one Google flow (`start`, tagged 'menu', so
+  // a fresh sign-in lands back on the menu). Signed in it reads the player's NAME and opens their
+  // profile. It reuses `signedIn` and `shownName`: no second sign-in path, no second identity read.
+  const profile = installProfileUI();
+
+  /**
+   * The profile's facts. Seeds and tiles are the SAME pair the Territory entry shows: the cache is
+   * the lobby's own menu-show read, and an empty cache costs ONE more pair read, never a poll.
+   *
+   * The rest arrives after the sheet is already on screen (owner, 2026-11-01): the offline record is
+   * this device's own counters to begin with, then the account's totals across every device; the
+   * online record comes from the match list the server returns unbounded; the flag is derived on the
+   * device and costs nothing. Nothing here polls, and every read paints as it lands.
+   */
+  /** This device's saved record (the game writes it under the same keys); blocked storage reads as none. */
+  const readLocal = (key: string): string | null => {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  };
+  const writeLocal = (key: string, value: string): void => {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // Blocked storage: the device simply stays anonymous and its offline games stay local.
+    }
+  };
+
+  /** GET with the player's own token; null when the API is absent, offline or unhappy. */
+  const apiGet = async (path: string, token: string): Promise<Record<string, unknown> | null> => {
+    const url = apiUrl(path);
+    if (!url) return null;
+    try {
+      const res = await authJson(url, {
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${token}`,
+          'x-futasaku-client-version': DUEL_CLIENT_VERSION,
+          'x-futasaku-rules-version': CURRENT_RULES_VERSION,
+        },
+      });
+      return res.ok ? (res.json as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  /** This browser's id for itself, minted once. Two devices on one account stay two rows. */
+  const deviceId = (): string => {
+    const known = deviceIdFrom(readLocal(DEVICE_KEY));
+    if (known) return known;
+    const fresh = newDeviceId(Math.random);
+    writeLocal(DEVICE_KEY, fresh);
+    return fresh;
+  };
+
+  /**
+   * Send THIS device's totals and take back the account's aggregate. The POST both writes and reads,
+   * so a device that has played offline needs one request, not two; the counters are cumulative and
+   * the server never lowers them, which makes a repeat safe. A device that has played nothing only
+   * reads, so it does not create an empty row.
+   */
+  const syncOffline = async (token: string, device: string): Promise<OfflineSummary | null> => {
+    const counters = offlineCounters(parseStats(readLocal(STATS_KEY)), device);
+    const body = counters.played > 0
+      ? await apiPost('/v1/players/me/offline', counters, token)
+      : { ok: true, json: (await apiGet('/v1/players/me/offline', token)) ?? {} };
+    const offline = (body.json as { offline?: OfflineSummary }).offline;
+    return offline && typeof offline.games === 'number' ? offline : null;
+  };
+
+  const localRecord = () => offlineRecord(parseStats(readLocal(STATS_KEY)));
+
+  const profileFacts = (identity: Identity): ProfileFacts => {
+    const pair = cachedTerritory(identity.playerId);
+    const offline = localRecord();
+    return {
+      name: shownName(identity),
+      country: browserCountry(),
+      // NOT null: a player who never chose a colour still has the one the game derived for them,
+      // which is what their tiles wear on the map. The read below only replaces it with a stored
+      // choice, so the one tile can never vanish while the read is in flight or fails.
+      colour: profileColour(identity.playerId),
+      seeds: pair?.seeds ?? null,
+      tiles: pair?.tiles ?? null,
+      matchesWon: matchesWonEver(offline, null),
+      offline,
+      online: null,
+    };
+  };
+
+  const openProfile = () => {
+    const s = signedIn();
+    if (!s) return;
+    const { identity } = s;
+    const token = identity.token;
+    const seq = ++visitorRequest;
+    let facts = profileFacts(identity);
+    // One painter for every read: each answer repaints the sheet it is already looking at, and the
+    // all-time win total is recomputed from whichever halves are known.
+    const paint = (patch: Partial<ProfileFacts>) => {
+      if (seq !== visitorRequest) return;
+      facts = { ...facts, ...patch };
+      facts.matchesWon = matchesWonEver(facts.offline, facts.online);
+      profile.show(facts);
+    };
+    facts.matchesWon = matchesWonEver(facts.offline, facts.online);
+    profile.open(facts, menuLogin);
+
+    void apiGet(`/v1/players/${encodeURIComponent(identity.playerId)}/profile`,token).then(body=>{
+      const wire=(body as {profile?:PublicPlayerProfile}|null)?.profile;
+      if(wire)paint({connectedTiles:wire.connectedTiles ?? null,tiles:wire.tiles,
+        online:wire.online,colour:profileColour(identity.playerId,wire.colourId)});
+    });
+    const device = deviceId();
+    void syncOffline(token, device).then((offline) => {
+      if (offline) paint({ offline: accountRecord(offline) });
+    });
+    // This one public aggregate also supplies the online record and colour; do not add separate
+    // match-list/colour reads to the Edge pool for facts already returned in that snapshot.
+    // At most one pair read, and only when the Territory entry's read has not landed. The same
+    // request also paints the Territory entry (web/src/online/lobby-ui.ts), so nothing is doubled.
+    void readTerritory(identity.playerId).then((counts) => {
+      if (!counts) return;
+      paint({ seeds: counts.seeds, tiles: counts.tiles });
+    });
+  };
+
+  /**
+   * ANOTHER PLAYER'S PROFILE (owner, 2026-11-01: "allow to look up other peoples profile on
+   * territory"). The Territory tile bar asks through `profile-request.ts`; this module owns the
+   * token, so the read happens here and lands in the SAME sheet in its visitor mode.
+   *
+   * The sheet opens at once in its honest empty state (every fact is the em dash), then the one
+   * allow-listed read paints it. A failed, absent or slow read simply leaves the empty state —
+   * never an invented number. `visitorRequest` makes a late answer from an older tile unable to
+   * overwrite a newer sheet.
+   */
+  let visitorRequest = 0;
+  const visitorFromWire = (
+    wire: PublicPlayerProfile | null | undefined,
+    headToHead: HeadToHead | undefined,
+  ): VisitorFacts | null => {
+    const facts = visitorFacts(wire ?? null);
+    if (!facts) return null;
+    return {
+      ...facts,
+      rivalryLine: headToHead ? formatRivalryLine(headToHead, wire?.displayName) : null,
+    };
+  };
+  const openPlayerProfile = (playerId: string, opener: HTMLElement | null) => {
+    const seq = ++visitorRequest;
+    profile.openVisitor(null, opener);
+    const identity = readIdentity(kv);
+    if (!identity) return;
+    void apiGet(`/v1/players/${encodeURIComponent(playerId)}/profile`, identity.token).then((body) => {
+      if (seq !== visitorRequest) return;
+      const payload = body as { profile?: PublicPlayerProfile; headToHead?: HeadToHead } | null;
+      profile.showVisitor(visitorFromWire(payload?.profile, payload?.headToHead));
+    });
+  };
+  window.addEventListener(PLAYER_PROFILE_EVENT, (event) => {
+    const detail = (event as CustomEvent<PlayerProfileRequest>).detail;
+    if (!detail || typeof detail.playerId !== 'string' || !detail.playerId) return;
+    openPlayerProfile(detail.playerId, detail.trigger ?? null);
+  });
+
+  // A finished OFFLINE game (main.ts dispatches this after it saves the record): tell the account, so
+  // the same numbers show on the player's other devices. Signed out, or with no API, this is a no-op.
+  window.addEventListener('futasaku:offline-game', () => {
+    const s = signedIn();
+    if (!s) return;
+    void syncOffline(s.identity.token, deviceId());
+  });
+
+  menuLogin?.addEventListener('click', () => {
+    if (signedIn()) openProfile();
+    else if(emailAvailable)openEmail('menu');
+    else void start('menu', menuLogin, null);
+  });
 
   // ---- 5. the Account block in Settings ----
-  const note = document.getElementById('online-storage-note');
+  // Settings is essentials only (owner, 2026-10-23); the account is one of them: its own last group.
   const box = el('div');
   box.id = 'acct-settings';
-  note?.after(box);
+  const accountHead = el('h3', '', ACCOUNT.settingsTitle);
+  document.querySelector('#sheet-settings .sheet-body')?.append(accountHead, box);
 
   const ask = (title: string, lines: readonly string[], yes: string, danger: boolean, run: (status: HTMLElement, yesBtn: HTMLButtonElement) => Promise<boolean>) => {
     confirmSheet.panel.textContent = '';
@@ -537,7 +873,7 @@ export const mountAccounts = async (): Promise<void> => {
       const s = signedIn();
       if (!s) return true;
       try {
-        const res = await apiPost('/v1/auth/google/delete', {}, s.identity.token);
+        const res = await apiPost(`/v1/auth/${readAccount(kv)?.provider ?? 'google'}/delete`, {}, s.identity.token);
         if (!res.ok) throw new Error(String(res.status));
         clearAccount(kv);
         writeIdentity(kv, { ...s.identity, kind: 'guest' });
@@ -553,12 +889,13 @@ export const mountAccounts = async (): Promise<void> => {
     });
 
   /**
-   * Choose a name — one clear screen, shown once after the sign-in that FORMED the account and again
-   * from Settings. Deliberately NOT a gate: the scrim, Escape and "Skip for now" all close it and
-   * leave the generated nature name in place, so a player who does not care is never blocked from
-   * playing. The server re-checks the name (server/src/display-name.ts); this only reports.
+   * Choose a name. AFTER THE SIGN-IN THAT FORMED THE ACCOUNT it is required (owner, 2026-10-28: "if
+   * someone creates an account they have to type in their nickname" — the generated nature names
+   * are for guests): the box starts empty, there is no skip, the scrim and Escape do not close it,
+   * and it comes back after a reload until a name is saved. FROM SETTINGS it is the old, optional
+   * rename, prefilled. The server re-checks the name (server/src/display-name.ts); this only reports.
    */
-  const submitNickname = async (input: HTMLInputElement, status: HTMLElement, save: HTMLButtonElement, skip: HTMLButtonElement) => {
+  const submitNickname = async (input: HTMLInputElement, status: HTMLElement, save: HTMLButtonElement, skip: HTMLButtonElement | null) => {
     const s = signedIn();
     if (!s) return;
     if (input.value.trim().length === 0) {
@@ -567,27 +904,30 @@ export const mountAccounts = async (): Promise<void> => {
       input.focus({ preventScroll: true });
       return;
     }
-    save.disabled = skip.disabled = true;
+    save.disabled = true;
+    if (skip) skip.disabled = true;
     status.textContent = ACCOUNT.working;
     status.dataset.tone = '';
     try {
       const res = await apiPatch('/v1/players/me', { displayName: input.value }, s.identity.token);
       const player = res.ok ? (res.json.player as { displayName?: unknown } | undefined) : undefined;
-      if (!player || typeof player.displayName !== 'string') throw new Error(String(res.status));
+      if (!player || typeof player.displayName !== 'string') throw new Error(res.status === 400 ? 'invalid-name' : 'service-unavailable');
       // Keep this device's identity honest, so Settings and the lobby show the NEW name at once.
       // The #tag is derived from the player id, so it is untouched and stays exactly as it was.
       writeIdentity(kv, { ...s.identity, displayName: player.displayName });
+      clearNicknamePrompt(kv);
       nickSheet.close();
       renderSettings();
       say(ACCOUNT.nicknameSaved);
-    } catch {
-      status.textContent = navigator.onLine ? ACCOUNT.nicknameError : ACCOUNT.offline;
+    } catch (error) {
+      status.textContent = !navigator.onLine ? ACCOUNT.offline : error instanceof Error && error.message === 'invalid-name' ? ACCOUNT.nicknameError : ACCOUNT.unavailable;
       status.dataset.tone = 'bad';
-      save.disabled = skip.disabled = false;
+      save.disabled = false;
+      if (skip) skip.disabled = false;
     }
   };
 
-  const openNickname = () => {
+  const openNickname = (required = false) => {
     const s = signedIn();
     if (!s) return;
     nickSheet.panel.textContent = '';
@@ -595,26 +935,31 @@ export const mountAccounts = async (): Promise<void> => {
     status.setAttribute('role', 'status');
     const input = el('input', 'acct-input');
     input.type = 'text';
-    input.maxLength = 40;
-    input.value = s.identity.displayName ?? '';
+    // The server's own limit, imported rather than repeated: 8 on NEW names and renames (owner,
+    // 2026-10-30). A legacy longer name may still be stored on this device; typing over it counts
+    // as a new name, and the server refuses anything past the same bound.
+    input.maxLength = DISPLAY_NAME_MAX;
+    // A new account types its own name: the generated guest name is never offered as a suggestion.
+    input.value = required ? '' : s.identity.displayName ?? '';
     input.placeholder = ACCOUNT.nicknamePlaceholder;
     input.setAttribute('autocomplete', 'off');
     input.setAttribute('spellcheck', 'false');
     input.setAttribute('aria-label', ACCOUNT.nicknamePlaceholder);
     const save = button('acct-btn', ACCOUNT.nicknameSave, 'nickname-save');
-    const skip = button('acct-btn', ACCOUNT.nicknameSkip, 'nickname-skip');
+    const skip = required ? null : button('acct-btn', ACCOUNT.nicknameSkip, 'nickname-skip');
     const actions = el('div', 'acct-actions row');
-    actions.append(skip, save);
-    nickSheet.panel.append(el('h2', '', ACCOUNT.nicknameTitle), el('p', '', ACCOUNT.nicknameBody), input, status, actions);
-    skip.addEventListener('click', () => nickSheet.close());
+    if (skip) actions.append(skip);
+    actions.append(save);
+    nickSheet.panel.append(el('h2', '', ACCOUNT.nicknameTitle), el('p', '', required ? ACCOUNT.nicknameRequiredBody : ACCOUNT.nicknameBody), input, status, actions);
+    skip?.addEventListener('click', () => nickSheet.close());
     save.addEventListener('click', () => void submitNickname(input, status, save, skip));
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) {
         e.preventDefault();
         void submitNickname(input, status, save, skip);
       }
     });
-    nickSheet.open();
+    nickSheet.open(undefined, { locked: required });
     // `open` focuses the first button, which would make "Skip for now" feel like the primary action.
     input.focus({ preventScroll: true });
   };
@@ -626,7 +971,7 @@ export const mountAccounts = async (): Promise<void> => {
     const name = shownName(id);
     if (name) box.append(el('p', 'acct-who', ACCOUNT.youAre(name)));
     if (s) {
-      box.append(el('p', 'muted small', ACCOUNT.signedIn(s.email)));
+      box.append(el('p', 'muted small', ACCOUNT.signedIn(s.email,readAccount(kv)?.provider)));
       // The Settings entry for the name: reuses the same sheet as the first-login step.
       const nameRow = el('div', 'acct-actions row');
       const rename = button('acct-btn', ACCOUNT.nicknameSettings, 'change-nickname');
@@ -643,9 +988,9 @@ export const mountAccounts = async (): Promise<void> => {
     } else {
       const status = el('p', 'acct-status');
       status.setAttribute('role', 'status');
-      const g = googleButton('settings-google');
+      const g = googleButton('settings-google'); g.hidden=!available;
       g.addEventListener('click', () => void start('settings', g, status));
-      box.append(el('p', 'muted small', ACCOUNT.guestNote), g, status);
+      box.append(el('p', 'muted small', ACCOUNT.guestNote), emailButton('settings'), g, status);
     }
     const p = privacyLink();
     p.style.alignSelf = 'flex-start';
@@ -655,18 +1000,38 @@ export const mountAccounts = async (): Promise<void> => {
 
   const refresh = () => {
     hub.hidden = signedIn() !== null;
-    // The main menu's LOG IN follows the same state: shown to a guest, hidden the moment the
-    // player is signed in (and never shown at all when this whole Google branch is skipped).
-    if (menuLogin) menuLogin.hidden = signedIn() !== null;
+    // The main menu's LEFT footer key follows the account state (owner brief, 2026-10-21): a guest
+    // sees LOG IN and the key starts the Google flow; a signed-in player sees their NAME and the key
+    // opens the profile. It is hidden only when this Google branch is skipped entirely, so a channel
+    // with no sign-in never shows a dead key. `shownName` is the same name Settings and the lobby use.
+    if (menuLogin) {
+      const s = signedIn();
+      const name = s ? shownName(s.identity) : null;
+      // This branch only runs once Google is known to be on, so the key is live in both states:
+      // LOG IN for a guest, the player's name when signed in. (Channels/builds where the Google
+      // branch never runs keep the markup's hidden key, so no dead key is ever shown.) The menu's
+      // first layout already painted it the same way (./menu-key.ts); from here this module owns it.
+      paintAccountKey(menuLogin, name);
+      menuLogin.dataset.owned = '1';
+    }
+    // A sign-out reloads the page, but storage can also change under us; never leave a profile open
+    // for an identity this device no longer has.
+    if (profile.isOpen() && signedIn() === null) profile.close();
   };
   renderSettings();
   refresh();
-  // ---- 6. the one-time nickname step, right after the sign-in that formed this account ----
-  // Consumed here (single use), so it is asked exactly once: skipping leaves the generated nature
-  // name in place and never nags again. A later sign-in on another device is 'signed-in' and sets
-  // no invitation at all.
-  const pendingNickname = takeNicknamePrompt(kv);
-  if (pendingNickname && signedIn()?.identity.playerId === pendingNickname) openNickname();
+  // A tap on the early-painted key, made before this module arrived, is honoured now.
+  if (menuLogin?.dataset.earlyClick) {
+    delete menuLogin.dataset.earlyClick;
+    menuLogin.click();
+  }
+  // ---- 6. the new account's name step, right after the sign-in that formed this account ----
+  // Owed until a name is saved (owner, 2026-10-28): a reload brings it back, and it cannot be skipped.
+  // A later sign-in on another device is 'signed-in' and never sets the invitation, so an existing
+  // account is never asked again.
+  const pendingNickname = pendingNicknamePrompt(kv);
+  if (pendingNickname && signedIn()?.identity.playerId === pendingNickname) openNickname(true);
+  else if (pendingNickname && !signedIn()) clearNicknamePrompt(kv);
   // The lobby rewrites identity (first guest, link codes, a 401 reset); keep both views honest.
   for (const id of ['menu-settings', 'gm-settings']) document.getElementById(id)?.addEventListener('click', () => setTimeout(renderSettings, 0));
   document.getElementById('menu-online')?.addEventListener('click', () => setTimeout(refresh, 0));

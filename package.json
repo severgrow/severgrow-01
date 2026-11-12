@@ -13,7 +13,7 @@
     "test:watch": "vitest",
     "check": "npm run typecheck && npm run test",
     "web:dev": "vite --config web/vite.config.ts",
-    "web:build": "vite build --config web/vite.config.ts",
+    "web:build": "vite build --config web/vite.config.ts && node scripts/build-art-lab.mjs",
     "admin:dev": "vite --config admin/vite.config.ts",
     "admin:build": "vite build --config admin/vite.config.ts",
     "admin:preview": "vite preview --config admin/vite.config.ts",
@@ -41,7 +41,9 @@
     "admin:verify-reads": "node --env-file-if-exists=.env --import tsx server/scripts/verify-admin-reads.ts",
     "server:verify": "node --env-file-if-exists=.env --import tsx server/scripts/verify.ts",
     "server:clean-test-data": "node --env-file-if-exists=.env --import tsx server/scripts/clean-test-data.ts",
+    "server:backfill-bots": "node --env-file-if-exists=.env --import tsx server/scripts/backfill-test-bursts.ts",
     "server:build-edge": "node server/scripts/build-edge.mjs",
+    "promote": "node scripts/promote.mjs",
     "e2e:online": "tsx web/e2e/online-lobby-check.ts && tsx web/e2e/online-duel-two-browser.ts",
     "e2e:live": "tsx web/e2e/live-duels.ts",
     "skin:manifest": "tsx web/skin-manifest.ts"

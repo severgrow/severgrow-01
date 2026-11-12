@@ -87,6 +87,12 @@ describe('the film grain stays on top of everything', () => {
     expect(filmZ, 'the film should be near the top of the z-index range').toBeGreaterThan(2147483000);
   });
 
+  it('keeps its own layer, so a filtered logo cannot paint through it', () => {
+    const rule = filmRule();
+    expect(rule, 'a filtered mark punches through a fixed overlay that stays on the root layer').toMatch(/isolation:\s*isolate/);
+    expect(rule).toMatch(/translateZ\(0\)/);
+  });
+
   it('keeps the grain ON the film, with normal blending so it is visible', () => {
     const rule = filmRule();
     expect(rule, 'the grain image must live on the film').toMatch(/background-image:\s*url\(.data:image\/svg/);
@@ -109,5 +115,20 @@ describe('the film grain stays on top of everything', () => {
     const css = filmCss();
     expect(css, 'the film must re-pin itself last').toMatch(/document\.body\.lastElementChild === grain/);
     expect(css, 'the re-pin must be observed').toMatch(/new MutationObserver/);
+  });
+});
+
+describe('nothing can sit above the grain through the browser top layer (owner, 2026-11-08)', () => {
+  // "make sure that even if we add stuff in future, grain we have is the texture sitting on top".
+  // z-index and DOM order are already pinned above. The browser TOP LAYER (a modal <dialog>, a popover,
+  // an element made full screen) paints above every z-index, so a future one would cover the grain.
+  it('uses no modal dialog, popover, or element-level full screen', () => {
+    const html = readFileSync(join(ROOT, 'web/index.html'), 'utf8');
+    for (const { file, text } of [...sources(), { file: 'index.html', text: html }]) {
+      expect(text, `${file} opens a modal dialog (top layer)`).not.toMatch(/\.showModal\(/);
+      expect(text, `${file} opens a popover (top layer)`).not.toMatch(/\.showPopover\(|<[a-z][^>]*\spopover(=|\s|>)|setAttribute\(.popover./);
+      // only the whole document may go full screen (the grain is inside it)
+      expect(text.replace(/document\.documentElement\.requestFullscreen/g, ''), `${file} makes an element full screen`).not.toMatch(/\.requestFullscreen\(/);
+    }
   });
 });

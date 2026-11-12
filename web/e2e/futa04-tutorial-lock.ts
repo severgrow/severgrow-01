@@ -208,7 +208,10 @@ try {
     await page.locator('#hud-menu').click();
     await page.waitForSelector('#sheet-menu:not([hidden])');
     const firstVisible = await page.evaluate(() => {
-      const buttons = [...document.querySelectorAll<HTMLButtonElement>('#sheet-menu .sheet-body > button')]
+      // The lead keys share one row (owner direction, 2026-10-20), so the first menu option is the
+      // first visible control in the panel's body, in DOM order. The intent is unchanged: Exit
+      // tutorial must come before Back to the game.
+      const buttons = [...document.querySelectorAll<HTMLButtonElement>('#sheet-menu .gm-body button')]
         .filter(b => !b.hidden && getComputedStyle(b).display !== 'none');
       return buttons[0]?.id ?? '';
     });

@@ -18,6 +18,14 @@ draws the game and listens to taps.
 - **Not colour alone.** The two players differ by a mark and a pattern (yours: a ring;
   the bot's: a diamond and a grain). Gold hexes have a fine weave and a "2" badge.
   Suits have their own icons. Board marks have their own shapes (see the legend).
+- **Windows have no interior rules.** A sheet, dialog or glass window never draws a
+  hairline between its rows or blocks (owner, 2026-11-02: "i also dont like the hairline
+  divisions in profile ... id remove and not add in new widnows iin future"). Separate
+  blocks with space, a size/weight step, a muted label or a soft fill — not with a 1px
+  `border-top`/`border-bottom`/`border-left`/`border-right`, a 1px shadow, or a gradient
+  rule. The plate's own outer edge is the glass material, not an interior divider. If a
+  divider is ever genuinely unavoidable, write the reason at the rule as
+  `divider-ok: <reason>` in a comment; `tests/window-dividers.test.ts` fails otherwise.
 - **No emoji as icons.** Every icon is a small SVG line drawing, made in code.
 - **Nothing downloaded.** No images, no sound files, no trackers, no outside
   requests. Fonts are free (SIL Open Font License) and bundled in `web/src/fonts`.
@@ -373,6 +381,21 @@ short tip. **Show me where** puts a bouncing arrow on the one thing to tap next:
 first the card, then the hex, then Confirm (or the deck, or "End turn"). **Why?**
 explains the move. It never plays for you.
 
+## Interface motion (2026-10-22)
+
+The surfaces around the game — pause, results, sheets, confirmations, online menus — share one
+quiet motion vocabulary: a panel *becomes present* with 8px of travel at 99% scale over 200ms and
+leaves in 150ms, while a press answers in 90ms. It is deliberately separate from the board's own
+choreography and switches off with Reduce motion or the OS preference. The PLAY submenu belongs to
+the same vocabulary: it arrives like a screen (6px of travel), not like a sheet, and the main menu
+stands down behind it.
+
+The result plate is part of that layer too: it sits under the settled board rather than over it,
+and its balance is measured (the plate is shorter, its lockup sits at ~56–58% of the frame, and it
+never scrolls). Tokens, adoption, the stills and the rules for when **not** to animate are in
+[`docs/INTERFACE-MOTION.md`](INTERFACE-MOTION.md); the before/after captures are in
+[`docs/screens/interface/`](screens/interface/README.md).
+
 ## Animations and satisfying feel
 
 Animations are driven by the engine's own event list, through one animation queue.
@@ -386,8 +409,9 @@ engine events.
 | Size | When | Effects |
 | --- | --- | --- |
 | Small | a Sprout, 1-2 tiles | a quick squash-and-stretch pop, a soft note, one small spark |
-| Medium | 3-4 tiles, a gold hex, overgrowing a bot tile, a cut of 1-3 | a staggered ripple, one rising note per tile, a chime on gold, "+3" floats up |
-| Big | 5+ tiles, a cut of 4+, a Strangle | a short build-up beat, a ~100 ms hit-stop, a stronger ripple, a soft shake, a low thud, a banner ("Big grow!", "Cut off 5!", "Strangled!"), a light buzz |
+| Medium | 3-4 tiles, a gold hex, overgrowing a bot tile, a cut of 1-2 | a staggered ripple, one rising note per tile, a chime on gold, "+3" floats up |
+| Severe | a cut of 3-4 tiles | a short build-up beat, a ~60 ms hit-stop, a 2.5px shiver, a 1.012 zoom, a seam flash, neighbours flinch, a low cut and a quiet thud |
+| Big | 5+ tiles, a cut of 5+, a Strangle | a short build-up beat, a ~100 ms hit-stop, a stronger ripple, a soft shake, a low thud, a banner ("Big grow!", "Cut off 5!", "Strangled!"), a light buzz |
 
 | Moment | What you see and hear |
 | --- | --- |
@@ -577,15 +601,19 @@ One pure generator (`web/src/logic/cut.ts`, tested in `web/tests/cut.test.ts`) t
 a timeline; the page only plays it. The same cut always looks the same, and a replay plays the
 same sequence slower.
 
-- **Tiers** (config values, `CUT_TIERS`): Small 1–2 tiles, Medium 3–4, Big 5–7, Huge 8+ or at
+- **Tiers** (config values, `CUT_TIERS`): Small 1–2 tiles, Severe 3–4, Big 5–7, Huge 8+ or at
   least half of the victim's tiles.
 - **Stages:** anticipation (the board draws in a little; first cut of a move only) → impact
-  hit-stop (~100ms, nothing moves) with a small local flash (≤60ms, ≤35% white, a few hexes
-  around the cut) and a micro zoom (1–3%) → a pulse along the cut vein → the snap (a click and a
-  2–6px shake, bigger for bigger tiers, its own vibration) → the slow-motion ripple (the tiles die
-  one ring at a time, 70ms apart, all started within 700ms; moss dries and curls away, lava flares
-  once, cools and sinks into crumbs) → the crumble, leaving a ground scar → the payoff (the "−N"
-  number, the score tally, a banner for Big and Huge, the ambient sound ducked 6 dB).
+  hit-stop (~100ms Big+, ~60ms Severe; nothing moves) with a small local flash (≤60ms, ≤35%
+  white, a few hexes around the cut) and a micro zoom (Severe 1.012, Big/Huge 1–3%) → a pulse
+  along the cut vein → the snap (a click and a shake: a 2.5px shiver on Severe, 4–6px on Big and
+  Huge, its own vibration) → the slow-motion ripple (the tiles die one ring at a time, 70ms apart,
+  all started within 700ms; moss dries and curls away, lava flares once, cools and sinks into
+  crumbs) → the crumble, leaving a ground scar → the payoff (the "−N" number, the score tally, a
+  banner for Big and Huge, the ambient sound ducked 6 dB).
+- **Severe** (3–4 tiles) also flashes the torn seam, flinches the surviving tiles beside it
+  ~1.5px toward the cut and dims them 6% for ~120ms, and plays the low cut plus a quieter thud.
+  Small stays quiet; Big and Huge keep their stronger shake and hit-stop.
 - **Length:** at most 1.8s at Normal speed, also for chains and several cuts in one move (they
   follow each other and are squeezed to fit).
 - **The opponent cutting me:** calmer: no flash, no zoom, no anticipation, at most a 2px shake,

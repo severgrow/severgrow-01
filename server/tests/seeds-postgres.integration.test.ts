@@ -118,4 +118,44 @@ describe.skipIf(!enabled)('Seeds and claims on real Postgres', () => {
     expect(await world.wallet(ownerId)).toEqual(before);
     expect((await world.world()).claims.find((claim) => claim.cellId === contestedCell)?.ownerId).toBe(ownerId);
   });
+
+  it('records a free Territory challenge without creating or destroying a Seed', async () => {
+    const challenger = crypto.randomUUID();
+    const defender = crypto.randomUUID();
+    const players = postgresStorage(pool);
+    for (const id of [challenger, defender]) {
+      await players.createPlayer({ id, kind: 'guest', displayName: `Challenge ${id.slice(0, 4)}`, createdAt: Date.now(), upgradedAt: null });
+    }
+    // One tile's price each: enough to grow one tile, and not a Seed more is needed to challenge.
+    for (let i = 0; i < 2; i++) await credit(challenger, `campaign:${crypto.randomUUID()}`);
+    for (let i = 0; i < 2; i++) await credit(defender, `campaign:${crypto.randomUUID()}`);
+    const [held, target] = await freePair();
+    expect((await world.claim(challenger, held, `req-${crypto.randomUUID()}`, Date.now())).ok).toBe(true);
+    expect((await world.claim(defender, target, `req-${crypto.randomUUID()}`, Date.now())).ok).toBe(true);
+    const beforeChallenger = (await world.wallet(challenger)).balance;
+    const beforeDefender = (await world.wallet(defender)).balance;
+    const before = beforeChallenger + beforeDefender;
+
+    const sent = await world.sendChallenge({ challengerId: challenger, cellId: target, requestId: `req-${crypto.randomUUID()}`, now: Date.now() });
+    expect(sent.ok).toBe(true);
+    if (!sent.ok) return;
+    // RULE CHANGE (owner, 2026-10-29): challenging is free. The challenger's own tile is the stake.
+    expect((await world.wallet(challenger)).balance).toBe(beforeChallenger);
+    expect((await world.wallet(defender)).balance).toBe(beforeDefender);
+    expect(sent.challenge.stake).toBe(0);
+    expect(sent.challenge.stakeCellId).toBe(held);
+    const { rows } = await pool.query(
+      "select count(*)::int as n from world_challenges where cell_id=$1 and status in ('pending','accepted')", [target],
+    );
+    expect(Number(rows[0]?.n)).toBe(1);
+
+    const declined = await world.respondChallenge({ id: sent.challenge.id, defenderId: defender, accept: false, matchId: null, now: Date.now() });
+    expect(declined.ok && declined.challenge.status).toBe('declined');
+    expect((await world.wallet(challenger)).balance + (await world.wallet(defender)).balance).toBe(before);
+    const ledger = await pool.query(
+      "select coalesce(sum(delta),0)::int as n from seed_ledger where source_key like $1",
+      [`world-challenge:${sent.challenge.id}:%`],
+    );
+    expect(Number(ledger.rows[0]?.n)).toBe(0);
+  });
 });

@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { campaignOpening, CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
-import { apply, viewFor } from '../../src/engine/index.js';
+import { RETIRED_OPENINGS, campaignDeal, campaignOpening, CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
+import { apply, newMatch, viewFor } from '../../src/engine/index.js';
 import type { Action } from '../../src/engine/index.js';
-import { botSeed, chooseLevelAction } from '../../src/bots/levels.js';
-import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
+import { botSeed } from '../../src/bots/levels.js';
+import { CURRENT_BOT_VERSION, chooseBotAction } from '../../src/bots/versions.js';
 import { verifyCampaignProof, verifyOfflineMatch } from '../src/seeds/verify.js';
+import { MemoryWorldEconomyStore } from '../src/seeds/memory.js';
+import { BETA_PAYOUT_MULTIPLIER, campaignSeedReward } from '../src/seeds/config.js';
+import { WorldEconomyService } from '../src/seeds/service.js';
+import type { PlayerRecord, Storage } from '../src/storage/types.js';
 
 const level = CAMPAIGN_LEVELS[0]!;
 const genuineWin = (level = CAMPAIGN_LEVELS[0]!): Action[] => {
@@ -13,7 +17,7 @@ const genuineWin = (level = CAMPAIGN_LEVELS[0]!): Action[] => {
   while (state.phase !== 'GAME_OVER' && actions.length < 300) {
     const actor = state.actor;
     const botLevel = actor === 0 ? 9 : level.botLevel;
-    const action = chooseLevelAction(viewFor(state, actor), botLevel,
+    const action = chooseBotAction(viewFor(state, actor), botLevel,
       botSeed(state.seed ^ (actor === 0 ? 0x9e3779b9 : 0), botLevel, state.turnNumber, state.history?.length ?? 0));
     actions.push(action);
     state = apply(state, action);
@@ -50,27 +54,199 @@ describe('levels 11+ after the /3/ lessons', () => {
   });
 });
 
-describe('levels 74+ against a rival (bots 10-12, bots-v0.11)', () => {
+describe('levels 74+ against a rival (bots 10-12, bots-v0.12)', () => {
   // A level whose bot is a rival must be provable exactly like any other, under the version that has
-  // the rival, and NEVER under bots-v0.10, which did not (a v0.10 proof cannot name a rival).
+  // the rival, and NEVER under bots-v0.10 or v0.11, which did not (an older proof cannot name a rival).
   const game = (level: (typeof CAMPAIGN_LEVELS)[number]): Action[] => {
     let state = campaignOpening(level);
     const actions: Action[] = [];
     while (state.phase !== 'GAME_OVER' && actions.length < 1600) {
       const actor = state.actor;
       const botLevel = actor === 0 ? 7 : level.botLevel;
-      const action = chooseLevelAction(viewFor(state, actor), botLevel, botSeed(state.seed ^ (actor === 0 ? 0x9e3779b9 : 0), botLevel, state.turnNumber, state.history?.length ?? 0));
+      const action = chooseBotAction(viewFor(state, actor), botLevel, botSeed(state.seed ^ (actor === 0 ? 0x9e3779b9 : 0), botLevel, state.turnNumber, state.history?.length ?? 0));
       actions.push(action);
       state = apply(state, action);
     }
     return actions;
   };
 
-  it('a full game on a rival level replays under bots-v0.11 and is refused under bots-v0.10', () => {
+  it('a full game on a rival level replays under bots-v0.12 and is refused under v0.10 and v0.11', () => {
     const level = CAMPAIGN_LEVELS.find((l) => l.botLevel === 10)!;
     const actions = game(level);
     const verified = verifyCampaignProof(level.id, actions, CURRENT_BOT_VERSION);
     expect(verified, 'a genuine game must replay').not.toBeNull();
     expect(verifyCampaignProof(level.id, actions, 'bots-v0.10')).toBeNull();
+    expect(verifyCampaignProof(level.id, actions, 'bots-v0.11')).toBeNull();
   }, 120_000);
+});
+
+describe('a random-deal game on a board a level used to have still pays (RETIRED_OPENINGS)', () => {
+  // 60 was re-authored 2026-11-12 (it shipped with level 59's exact stone). A page that dealt it
+  // randomly on the OLD board sends the deal seed with its proof; the server rebuilds that deal on the
+  // retired board as well as on today's.
+  it('verifies on the retired board with the proof\'s own deal seed, and not without it', () => {
+    const level = CAMPAIGN_LEVELS.find((l) => l.id === 'c6-60')!;
+    const old = RETIRED_OPENINGS['c6-60']![0]!;
+    const dealSeed = 271828;
+    let state = newMatch(dealSeed, old.config);
+    const actions: Action[] = [];
+    while (state.phase !== 'GAME_OVER' && actions.length < 1600) {
+      const actor = state.actor;
+      const botLevel = actor === 0 ? 7 : level.botLevel;
+      const action = chooseBotAction(viewFor(state, actor), botLevel, botSeed(state.seed ^ (actor === 0 ? 0x51ed : 0), botLevel, state.turnNumber, state.history?.length ?? 0));
+      actions.push(action);
+      state = apply(state, action);
+    }
+    expect(verifyCampaignProof(level.id, actions, CURRENT_BOT_VERSION, dealSeed)).not.toBeNull();
+    expect(verifyCampaignProof(level.id, actions, CURRENT_BOT_VERSION, dealSeed + 1)).toBeNull();
+  }, 120_000);
+});
+
+describe('level 33 (chapter IV, the owner\'s level) pays its 20 Seeds', () => {
+  // Owner report, 2026-10-25: "I'm on level 33 and haven't been getting seeds." Level 33 is a
+  // hand-authored board (rock `Outliers`, gold through the centre). This pins BOTH halves: the real
+  // game verifies against that exact board, and the 21-40 band pays 20 once, then answers `replayed`.
+  //
+  // The winning line needs a salt sweep here (unlike an early level): the board is wide open, so the
+  // first salt's line is a LOSS. Several salts, first win wins — never a fabricated result.
+  const thirtyThree = CAMPAIGN_LEVELS.find((l) => l.number === 33)!;
+  // One line, computed once: a genuine game is expensive to play, and the asserts below only read it.
+  let cached: Action[] | null = null;
+  const winningLine = (): Action[] => {
+    if (cached) return cached;
+    for (const salt of [0x9e3779b9, 0x1234567, 0x7f4a7c15, 0x2545f491]) {
+      let state = campaignOpening(thirtyThree);
+      const actions: Action[] = [];
+      while (state.phase !== 'GAME_OVER' && actions.length < 400) {
+        const actor = state.actor;
+        const botLevel = actor === 0 ? 9 : thirtyThree.botLevel;
+        const action = chooseBotAction(viewFor(state, actor), botLevel,
+          botSeed(state.seed ^ (actor === 0 ? salt : 0), botLevel, state.turnNumber, state.history?.length ?? 0));
+        actions.push(action);
+        state = apply(state, action);
+      }
+      if (state.result?.winner === 0) { cached = actions; return actions; }
+    }
+    throw new Error('no winning line found on c4-33');
+  };
+
+  it('is the hand-authored Outliers board, and a genuine win on it verifies', () => {
+    expect(thirtyThree.id).toBe('c4-33');
+    expect(thirtyThree.chapter).toBe(4);
+    expect(thirtyThree.botLevel).toBe(9);
+    expect(thirtyThree.config.board).toBeDefined();
+    const actions = winningLine();
+    const verified = verifyCampaignProof('c4-33', actions, CURRENT_BOT_VERSION);
+    expect(verified?.winner).toBe(0);
+    // A cut-short line is not a win, and an unknown bot version cannot claim it.
+    expect(verifyCampaignProof('c4-33', actions.slice(0, -1), CURRENT_BOT_VERSION)).toBeNull();
+    expect(verifyCampaignProof('c4-33', actions, 'imaginary-bot')).toBeNull();
+  });
+
+  it('pays the owner\'s 20 on the first clear and never twice', async () => {
+    const player = { id: '00000000-0000-4000-8000-000000000033' } as PlayerRecord;
+    const matches = { hitRateLimit: async () => ({ ok: true }) } as unknown as Storage;
+    const economy = new WorldEconomyService(new MemoryWorldEconomyStore(), matches);
+    // The band's figure is 20; the BETA multiplier scales what is credited, so the two numbers are
+    // pinned separately and a revert is one constant (see `BETA_PAYOUT_MULTIPLIER`).
+    const paid = 20 * BETA_PAYOUT_MULTIPLIER;
+    expect(campaignSeedReward(33)!.firstWin).toBe(20);
+    const first = await economy.campaign(player, 'c4-33', winningLine(), CURRENT_BOT_VERSION);
+    expect(first.awarded).toBe(paid);
+    expect(first.wallet.balance).toBe(paid);
+    const again = await economy.campaign(player, 'c4-33', winningLine(), CURRENT_BOT_VERSION);
+    expect(again.replayed).toBe(true);
+    expect(again.wallet.balance).toBe(paid);
+  });
+});
+
+describe('random campaign deals from level 11 (owner, 2026-11-01)', () => {
+  // Every attempt from level 11 up is a fresh shuffle chosen on the device. The proof carries that
+  // deal's seed, and the server rebuilds the deal from it on the level's own authored board, then
+  // replays every move against the real bot exactly as before. Seeds still pay once per level.
+  const eleven = CAMPAIGN_LEVELS.find((l) => l.number === 11)!;
+  const seedWin = (seed: number): Action[] | null => {
+    for (const salt of [0x9e3779b9, 0x1234567, 0x7f4a7c15, 0x2545f491, 0x51ed270b]) {
+      let state = campaignDeal(eleven, seed);
+      const actions: Action[] = [];
+      while (state.phase !== 'GAME_OVER' && actions.length < 400) {
+        const actor = state.actor;
+        const botLevel = actor === 0 ? 9 : eleven.botLevel;
+        const action = chooseBotAction(viewFor(state, actor), botLevel,
+          botSeed(state.seed ^ (actor === 0 ? salt : 0), botLevel, state.turnNumber, state.history?.length ?? 0));
+        actions.push(action);
+        state = apply(state, action);
+      }
+      if (state.result?.winner === 0) return actions;
+    }
+    return null;
+  };
+  let found: { seed: number; actions: Action[] } | null = null;
+  const randomWin = () => {
+    if (found) return found;
+    for (const seed of [314159, 271828, 161803, 141421, 173205]) {
+      const actions = seedWin(seed);
+      if (actions) return (found = { seed, actions });
+    }
+    throw new Error('no winning line on a random level-11 deal');
+  };
+
+  it('a genuine win on a random deal verifies with its seed', () => {
+    const { seed, actions } = randomWin();
+    expect(seed).not.toBe(eleven.seed);
+    expect(verifyCampaignProof(eleven.id, actions, CURRENT_BOT_VERSION, seed)?.winner).toBe(0);
+  });
+
+  it('the same moves do not verify on another deal, or without the deal', () => {
+    const { seed, actions } = randomWin();
+    expect(verifyCampaignProof(eleven.id, actions, CURRENT_BOT_VERSION, seed + 1)).toBeNull();
+    expect(verifyCampaignProof(eleven.id, actions, CURRENT_BOT_VERSION)).toBeNull();
+  });
+
+  it('refuses a deal seed that is not a whole 32-bit number', () => {
+    const { actions } = randomWin();
+    for (const bad of [-1, 1.5, 0x1_0000_0000, Number.NaN]) {
+      expect(verifyCampaignProof(eleven.id, actions, CURRENT_BOT_VERSION, bad)).toBeNull();
+    }
+  });
+
+  it('a lesson level (1-10) never accepts a deal seed: it has one authored opening', () => {
+    const one = CAMPAIGN_LEVELS[0]!;
+    expect(verifyCampaignProof(one.id, genuineWin(one), CURRENT_BOT_VERSION, one.seed)).toBeNull();
+    expect(verifyCampaignProof(one.id, genuineWin(one), CURRENT_BOT_VERSION)?.winner).toBe(0);
+  });
+
+  it('an old fixed-deal proof (queued before the update) still verifies and pays', async () => {
+    const actions = genuineWin(eleven);
+    expect(verifyCampaignProof(eleven.id, actions, CURRENT_BOT_VERSION)?.winner).toBe(0);
+  });
+
+  it('pays the first clear once, whichever deal won it', async () => {
+    const player = { id: '00000000-0000-4000-8000-000000000011' } as PlayerRecord;
+    const matches = { hitRateLimit: async () => ({ ok: true }) } as unknown as Storage;
+    const economy = new WorldEconomyService(new MemoryWorldEconomyStore(), matches);
+    const { seed, actions } = randomWin();
+    const first = await economy.campaign(player, eleven.id, actions, CURRENT_BOT_VERSION, seed);
+    expect(first.awarded).toBeGreaterThan(0);
+    expect(first.replayed).toBeFalsy();
+    const again = await economy.campaign(player, eleven.id, genuineWin(eleven), CURRENT_BOT_VERSION);
+    expect(again.replayed).toBe(true);
+    expect(again.wallet.balance).toBe(first.wallet.balance);
+    await expect(economy.campaign(player, eleven.id, actions, CURRENT_BOT_VERSION, seed + 1)).rejects.toThrow();
+  });
+});
+
+describe('the server announces random deals under the word the page looks for', () => {
+  it('SERVER_FEATURES lists every bot version it verifies, so a page knows when to send those proofs', async () => {
+    const { SERVER_FEATURES } = await import('../src/fetch-app.js');
+    const { BOT_VERSIONS } = await import('../../src/bots/versions.js');
+    for (const version of Object.keys(BOT_VERSIONS)) expect(SERVER_FEATURES).toContain(version);
+    expect(SERVER_FEATURES).toContain(CURRENT_BOT_VERSION);
+  });
+
+  it('SERVER_FEATURES spells RANDOM_DEALS_FEATURE exactly', async () => {
+    const { SERVER_FEATURES } = await import('../src/fetch-app.js');
+    const { RANDOM_DEALS_FEATURE } = await import('../../src/campaign/index.js');
+    expect(SERVER_FEATURES).toContain(RANDOM_DEALS_FEATURE);
+  });
 });

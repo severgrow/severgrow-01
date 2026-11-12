@@ -28,6 +28,7 @@ const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.met
 const styleCss = read('../src/style.css');
 const onlineCss = read('../src/online/online-css.ts');
 const worldView = read('../src/online/world-view.ts');
+const swordGlyph = read('../src/online/swords-glyph.ts');
 const atmosphereTs = read('../src/player/atmosphere.ts');
 const html = read('../index.html');
 
@@ -146,11 +147,13 @@ describe('the world map rests on the ONE shared page surface', () => {
 
   it('the world geometry drives the width cap, and the framing lives in the view', () => {
     // Mirrors the viewBox `web/src/online/world-view.ts` builds from the cells: R = 10, X = sqrt(3),
-    // and a 6-unit pad on every side. If the world's shape ever changes, this fails and the cap has
-    // to move with it. (The view itself is framed by the WINDOW’s aspect at runtime, which is why
-    // the ratio appears in the dvh cap and in world-view.ts, and no longer as a CSS aspect-ratio.)
+    // and world-view.ts's own `PAD` (18 units) on every side. If the world's shape ever changes, this
+    // fails and the cap has to move with it. (The view itself is framed by the WINDOW’s aspect at
+    // runtime, which is why the ratio appears in the dvh cap and in world-view.ts, and no longer as a
+    // CSS aspect-ratio.)
     const R = 10;
     const X = Math.sqrt(3);
+    const PAD = 18;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const { q, r } of WORLD_CELLS) {
       const x = X * (q + r / 2) * R;
@@ -158,7 +161,7 @@ describe('the world map rests on the ONE shared page surface', () => {
       minX = Math.min(minX, x - R); maxX = Math.max(maxX, x + R);
       minY = Math.min(minY, y - R); maxY = Math.max(maxY, y + R);
     }
-    const svgRatio = (maxX - minX + 12) / (maxY - minY + 12);
+    const svgRatio = (maxX - minX + 2 * PAD) / (maxY - minY + 2 * PAD);
     expect(svgRatio, `the world is nearly square: ${svgRatio.toFixed(4)}`).toBeGreaterThan(0.99);
 
     const grid = bodyOf(onlineCss, '.world-grid')!;
@@ -167,13 +170,24 @@ describe('the world map rests on the ONE shared page surface', () => {
     const capRatio = Number(cap![1]) / Number(cap![2]);
     expect(Math.abs(capRatio - svgRatio), `cap ${capRatio.toFixed(4)} vs world ${svgRatio.toFixed(4)}`).toBeLessThan(0.002);
 
-    // The framing rule: the view is sized to the WINDOW’s aspect, and the framed view is BOTH zoom
+    // The framing rule: the view is sized to the WINDOW's aspect, and the framed view is BOTH zoom
     // limits, so zooming out can never widen the box back to the world and letterbox it.
     expect(worldView, 'the view must frame itself to the window').toContain('boundsFor');
-    expect(worldView, 'the window’s aspect must come from its measured box')
-      .toMatch(/getBoundingClientRect\(\)[\s\S]{0,120}width \/ .{0,40}height/);
-    expect(worldView, 'zoom-out must stop at the framed view, not the whole world')
-      .toMatch(/Math\.max\(frame\[2\] \/ 4, Math\.min\(frame\[2\], bw \/ scale\)\)/);
+    // Decorative SVG scale must not feed back into logical framing. The behavioral regression
+    // in living-viewport.test.ts supplies scaled bounds and verifies the exact resulting camera.
+    expect(worldView, 'the view must measure the layout viewport')
+      .toMatch(/const rect = measure \? this\.viewportSize\(\) : null/);
+    expect(worldView, 'the window’s aspect must remain its measured width divided by height')
+      .toMatch(/const aspect = rect[^;]*rect\.width \/ rect\.height/);
+    // The step itself is pure now (`zoomedView`, web/tests/world-zoom.test.ts proves it as numbers);
+    // the LIMIT it must never cross is still this one line, and it must stay exactly that.
+    const stepAt = worldView.indexOf('export const zoomedView');
+    expect(stepAt, 'the zoom step must have one home').toBeGreaterThan(-1);
+    const zoomStep = worldView.slice(stepAt, worldView.indexOf('export const clampedView'));
+    // Whole-map overview and readable interaction now have independent zoom limits (owner, Nov 3).
+    expect(zoomStep, 'legacy callers retain the framed-quarter default').toContain('closestWidth = frame[2] / 4');
+    expect(zoomStep, 'zoom stays between its readable floor and the whole-map frame')
+      .toMatch(/Math\.max\(closestWidth, Math\.min\(frame\[2\], bw \/ step\)\)/);
     expect(worldView, 'a resize must re-frame the view').toContain('ResizeObserver');
   });
 
@@ -214,7 +228,30 @@ describe('the world map rests on the ONE shared page surface', () => {
     // that paints first, every EDGE in a lines group above it, and one accent path above both.
     expect(worldView, 'the fills must live in their own group').toContain("faces.classList.add('world-faces')");
     expect(worldView, 'the edges must live in their own group').toContain("lines.classList.add('world-lines')");
-    expect(worldView, 'the edge group must be appended after the fill group').toMatch(/svg\.append\(faces, lines\)/);
+    // The challenge layer (frontier marks, timer rings, the crossed swords) paints above the edges
+    // and below the selection accent; the fills still paint first and the edges above them. The
+    // swords are the LAST of the challenge groups, so the ring is never drawn over the glyph, and
+    // the QUIET disputes layer (other players' marks) is inserted before them: my own contested
+    // tiles always paint above background news about somebody else's.
+    // Assert the INVARIANT, not the spelling of the call. A new layer may join this list (the
+    // `quiet` disputes layer did, 2026-10-29); what must never change is the ORDER: faces first,
+    // then lines, then the challenge layers, with MY swords last of all.
+    const appendLine = worldView.match(/svg\.append\(faces,[^)]*\)/)?.[0] ?? '';
+    const order = (appendLine.match(/\(([^)]*)\)/)?.[1] ?? '')
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    expect(order.length, 'the map must be assembled in one append').toBeGreaterThan(3);
+    const at = (name: string) => order.indexOf(name);
+    expect(at('faces'), 'the map must be appended').toBe(0);
+    expect(at('lines'), 'the edges must paint above the fills').toBeGreaterThan(at('faces'));
+    expect(at('marks'), 'the challenge marks must paint above the edges').toBeGreaterThan(at('lines'));
+    expect(at('rings'), 'the timer rings must paint above the marks').toBeGreaterThan(at('marks'));
+    expect(at('swords'), 'MY swords must be the last challenge layer').toBe(order.length - 1);
+    // The quiet layer carries OTHER players' disputes: it must exist, and it must paint BELOW mine,
+    // so a call to action always outranks background news about somebody else.
+    expect(at('quiet'), 'the quiet disputes layer must paint below my own').toBeGreaterThan(at('rings'));
+    expect(at('quiet'), 'the quiet disputes layer must paint below my own').toBeLessThan(at('swords'));
     expect(worldView, 'the selection must draw last of all, above every edge').toMatch(/svg\.append\(accentGroup\)/);
     // The fill layer MUST paint before the stroke layer, and a face must not swallow a tap.
     const face = bodyOf(onlineCss, '.world-hex-face');
@@ -234,6 +271,55 @@ describe('the world map rests on the ONE shared page surface', () => {
     expect(accent!, 'the accent is the selection cream').toMatch(/stroke:\s*#[0-9a-f]{3,8}/i);
     expect(accent!, 'the accent must not take a tap').toContain('pointer-events: none');
   });
+
+  it('the crossed swords are a solid heraldic mark, not a hairline outline', () => {
+    // Owner, 2026-10-24: "change the shape of the swords very close to the reference image", then
+    // 2026-10-25: "i want you to trace the reference picture as it is and use that". The glyph is
+    // now a literal potrace of the reference — ONE filled composite silhouette of the whole X, not
+    // a hand-authored sword drawn twice. This test protects the facts that make it that: the fill
+    // (never a stroke), one closed subpath (no seam and no hole at the crossing), the reach inside
+    // the hex, and the single draw (no second rotated copy that would double the mark).
+    const glyph = bodyOf(onlineCss, '.world-swords-glyph');
+    expect(glyph, '.world-swords-glyph must exist').not.toBeNull();
+    expect(glyph!.replace(/\s+/g, ''), 'the glyph is filled, not stroked').toContain('fill:#f8f2e1');
+    expect(glyph!.replace(/\s+/g, ''), 'and it paints no outline of its own').toContain('stroke:none');
+    expect(glyph!, 'the challenge red bloom is what makes it a challenge marker').toContain('#ff3b2e');
+    expect(glyph!, 'the glyph is information, never a tap target').toContain('pointer-events: none');
+
+    // The committed trace is one closed subpath. Its chunks join with '' (not ' '), so splitting
+    // the data across lines cannot silently insert whitespace into a number.
+    const path = /export const SWORD_PATH = \[([\s\S]*?)\]\.join\(''\)/.exec(swordGlyph);
+    expect(path, 'SWORD_PATH must stay one joined array').not.toBeNull();
+    const d = [...path![1]!.matchAll(/'([^']*)'/g)].map((m) => m[1]!).join('');
+    expect(d.startsWith('M'), 'the path starts with a move').toBe(true);
+    expect((d.match(/M/g) ?? []).length, 'exactly one subpath').toBe(1);
+    expect((d.match(/Z/g) ?? []).length, 'exactly one closed subpath, so no seam or hole at the crossing').toBe(1);
+
+    // Every command argument is an x,y pair (C takes three of them), so pairing the numbers in
+    // order recovers every on-path and control point without parsing command-specific grammar.
+    const nums = (d.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+    expect(nums.length % 2, 'the path data is a whole number of coordinate pairs').toBe(0);
+    const points = Array.from({ length: nums.length / 2 }, (_, i) => ({ x: nums[i * 2]!, y: nums[i * 2 + 1]! }));
+    expect(points.length, 'a real trace, not a handful of hand-placed corners').toBeGreaterThan(1000);
+
+    // Reach must stay inside the hex so the mark never touches the timer ring on the outline
+    // (hex inradius is R * sqrt(3)/2 = 8.66 map units at the 10-unit radius the world uses).
+    // The trace's scale is baked in: its furthest point is 7.0 units from the centre.
+    const reach = Math.max(...points.map((p) => Math.hypot(p.x, p.y)));
+    expect(reach, 'the blades must clear the ring').toBeLessThan(8.66);
+    expect(reach, 'but still fill the tile, not shrink into a dot').toBeGreaterThan(6);
+    expect(reach, 'the committed trace targets 7.0 units').toBeCloseTo(7, 2);
+
+    // The reference already contains both swords crossing, so `makeMarker` draws SWORD_PATH once.
+    // A future edit that reintroduces the old rotate(45)/rotate(-45) pair would draw two Xs.
+    expect(worldView, 'the marker imports the traced path').toContain("from './swords-glyph.js'");
+    const marker = /private makeMarker\([\s\S]*?\n  \}/.exec(worldView)?.[0] ?? '';
+    expect(marker, 'makeMarker must exist').not.toBe('');
+    expect((marker.match(/createElementNS\(NS, 'path'\)/g) ?? []).length, 'the whole X is one path').toBe(1);
+    expect(marker, 'no second rotated copy of the swords').not.toMatch(/rotate\(/);
+    expect(marker, 'no per-sword rotation loop').not.toMatch(/for \(const turn of/);
+    expect(worldView, 'the size is baked into the trace, not a second scale transform').not.toContain('SWORD_SCALE');
+  });
 });
 
 describe('the world column shares the menu column edge', () => {
@@ -252,10 +338,14 @@ describe('the world column shares the menu column edge', () => {
     expect(bodyOf(styleCss, '.menu-inner'), 'the menu column rule must exist').toContain('width: min(420px, 100% - 32px)');
   });
 
-  it('the controls anchor to the bottom edge, so the shorter window cannot leave a dead band', () => {
+  it('the tile bar floats at the map\u2019s bottom edge, so picking a tile never changes the map\u2019s height', () => {
+    // Owner, 2026-10-28: the tile's grow / sell / challenge key lives on the map, not in the menu.
+    // It floats over the window's foot (absolute), so the map keeps the whole column and is never
+    // re-framed when a tile is picked.
     const selection = bodyOf(onlineCss, '.world-selection');
     expect(selection, 'the selection rule must exist').not.toBeNull();
-    expect(selection!, 'the controls must anchor to the bottom').toContain('margin-top: auto');
+    expect(selection!, 'the bar floats over the map').toContain('position: absolute');
+    expect(selection!, 'the bar anchors to the bottom edge').toMatch(/bottom:\s*10px/);
   });
 
   it('nothing draws a rule above the “Choose a tile” hint', () => {

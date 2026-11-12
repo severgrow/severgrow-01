@@ -155,6 +155,19 @@ export const usableCards = (v: View, legal: readonly Action[], sel: Sel): Set<nu
 
 const KIND_ORDER = (k: string) => (k.startsWith('bloom') ? 0 : k === 'sprout' ? 2 : 3);
 
+/**
+ * The one order both recipe menus use (owner, 2026-10-30: "when big bloom (4+cards) available and
+ * theres bloom menu opening - show the biggest/longest blooms first"): the recipe with the most
+ * cards first, then a deterministic kind order. The count is the recipe's REAL cards
+ * (`kindCards`), never the label or the kind string, which orders by card ids. The tie-break makes
+ * the same hand render the same order without relying on `Array.sort` stability.
+ *
+ * A Blast (`bloom-mega-…`) sorts by its own cards like every Bloom — and stays last, because a
+ * MegaBomb is its two Bomb cards while every Bloom is at least three.
+ */
+const longestFirst = (a: { kind: string }, b: { kind: string }): number =>
+  kindCards(b.kind).length - kindCards(a.kind).length || a.kind.localeCompare(b.kind, 'en', { numeric: true });
+
 /** The kinds of move still possible with what is picked, e.g. "Grow a line of 3 (4 ways)". */
 export const kindsAvailable = (v: View, legal: readonly Action[], sel: Sel): { kind: string; label: string; count: number }[] => {
   const count = new Map<string, number>();
@@ -176,7 +189,7 @@ const familyOf = (cards: readonly Card[]) => (cards.every((c) => c.rank === card
 export const moveButtons = (v: View, legal: readonly Action[], sel: Sel, showEveryRecipe = false) => {
   const byId = new Map(v.hand.map((c) => [c.id, c]));
   const kinds = kindsAvailable(v, legal, sel).filter((k) => k.kind.startsWith('bloom-'));
-  if (showEveryRecipe) return kinds.map(k=>({...k,kinds:[k.kind]}));
+  if (showEveryRecipe) return kinds.map((k) => ({ ...k, kinds: [k.kind] })).sort(longestFirst);
   const fam = new Map<string, { kind: string; label: string; count: number; score: number; kinds: string[] }>();
   for (const k of kinds) {
     const cards = kindCards(k.kind).map((id) => byId.get(id)!).filter(Boolean);
@@ -202,7 +215,7 @@ export const moveButtons = (v: View, legal: readonly Action[], sel: Sel, showEve
     else old.kinds = kinds;
   }
   return [...fam.values()]
-    .sort((a, b) => kindCards(b.kind).length - kindCards(a.kind).length || a.kind.localeCompare(b.kind, 'en', { numeric: true }))
+    .sort(longestFirst)
     .map(({ kind, label, count, kinds }) => ({ kind, label, count, kinds }));
 };
 
@@ -333,3 +346,18 @@ export const tapHex = (v: View, legal: readonly Action[], sel: Sel, key: string)
 };
 
 export const tapKind = (sel: Sel, kind: string): Sel => (sel.kind === kind ? { ...sel, kind: null, option: 0 } : { ...sel, kind, option: 0 });
+
+/**
+ * The display's word while a move is held (owner, 2026-10-24: "the LED reads GROW 1, BLOOM 3,
+ * BOMB instead of CANCEL"): what the next board tap will do, and how many tiles it takes.
+ * null when nothing is held.
+ */
+export const heldMoveWord = (sel: Sel, cardIsBomb: boolean): string | null => {
+  const kind = sel.kind;
+  if (kind?.startsWith('bloom-mega-')) return 'BLAST';
+  if (kind?.startsWith('bloom-')) return `BLOOM ${kind.split('-')[1]}`;
+  if (kind === 'fruit') return 'BOMB';
+  if (kind === 'sprout') return 'GROW 1';
+  if (sel.card !== null) return cardIsBomb ? 'BOMB' : 'GROW 1';
+  return null;
+};

@@ -31,6 +31,24 @@ const runToDeadlineConnected = async (h: LiveHarness, matchId: string, players: 
 };
 
 describe('go live', () => {
+  it('reports the configured turn limit before a Blitz challenge exists', async () => {
+    const h=makeLiveHarness({live:{turnMs:37_000}});
+    const {a,matchId}=await h.pair();
+    expect((await h.live.status(a,matchId)).limitMs).toBe(37_000);
+  });
+  it('presence entry hints refresh only the authenticated opponent, ordinary heartbeats stay quiet', async () => {
+    const h = makeLiveHarness();
+    const {a,b,matchId} = await h.pair();
+    await h.live.presence(a,'in_match',matchId,true);
+    expect(h.notifier.published).toEqual([{topic:`player:${b.id}`,payload:{kind:'presence'}}]);
+    await h.live.presence(a,'in_match',matchId);
+    expect(h.notifier.published).toHaveLength(1);
+    const outsider=await h.guest();
+    // A match ID supplied by a nonparticipant must never produce a notification.
+    await h.live.presence(outsider.player,'in_match',matchId,true);
+    expect(h.notifier.published).toHaveLength(1);
+  });
+
   it('challenge + accept switches the SAME match to the live clock with the entry allowance', async () => {
     const h = makeLiveHarness();
     const { a, b, matchId } = await h.pair();
@@ -97,48 +115,41 @@ describe('go live', () => {
   });
 });
 
-describe('real-time timeouts LOSE the match (no strikes, no escape back to 24-hour play)', () => {
-  it('finishes the match: the seat that ran out loses, reason timeout, and the winner is pinged at once', async () => {
+// OWNER CHANGED THE RULE (0.82, 2026-11-06): "BLITZ replaces real time"; at 00:00 "Turn ends, worst
+// card thrown". A CONNECTED player who runs out of time no longer loses: the autoplayer plays the turn
+// out and the match goes on. (Leaving still forfeits; a player who stays disconnected still loses.)
+describe('Blitz timeouts END THE TURN (no strikes, no escape back to 24-hour play)', () => {
+  it('a connected player who runs out of time: the turn is played out, the match goes on, live stays on', async () => {
     const h = makeLiveHarness();
     const { a, b, matchId } = await h.pair();
     await h.goLive(a, b, matchId);
     const before = await match(h, matchId);
     const seat = before.state.actor;
     await runToDeadlineConnected(h, matchId, [a, b]);
-    h.broadcaster.published.length = 0;
     const s = await h.live.status(a, matchId); // a poll is the lazy decision point
     const after = await match(h, matchId);
-    expect(after.status).toBe('finished');
-    expect(after.result).toEqual({ winner: seat === 0 ? 1 : 0, reason: 'timeout', scores: scores(before.state) });
-    // The board and the revision are untouched: a timeout is a clock decision, not a move.
-    expect(after.state).toEqual(before.state);
-    expect(after.revision).toBe(before.revision);
-    // The winner's client is woken by the SAME status-change ping every other ending publishes.
-    expect(h.broadcaster.published).toHaveLength(1);
-    expect(h.broadcaster.published[0]).toEqual({ matchId, ping: { revision: after.turnStartRevision, status: 'finished' } });
-    // Live is over, both players are free, and the wire says the match is over (not "back to 24 h").
-    expect(s.live).toBe(false);
-    expect(s.status).toBe('finished');
-    expect(s.endedReason).toBe('finished');
-    expect(s.turnDeadlineAt).toBeNull();
-    expect((await h.liveStore.player(a.id)).liveMatchId).toBeNull();
-    expect((await h.liveStore.player(b.id)).liveMatchId).toBeNull();
+    expect(after.status).toBe('active');
+    expect(after.result).toBeNull();
+    expect(after.revision).toBeGreaterThan(before.revision);
+    expect(after.state.turnPlayer).not.toBe(seat); // the turn passed
+    expect(s.live).toBe(true);
+    expect(s.turnDeadlineAt).not.toBeNull(); // the next player's fresh clock
   });
 
-  it('never auto-plays the turn and never hands the match back to the 24-hour clock', async () => {
+  it('the auto-played turn is recorded as moves for the runner-out, and never hands the match back to the 24-hour clock', async () => {
     const h = makeLiveHarness();
     const { a, b, matchId } = await h.pair();
     await h.goLive(a, b, matchId);
+    const seat = (await match(h, matchId)).state.actor;
     const movesBefore = await h.memory.movesOf(matchId, 0);
     await runToDeadlineConnected(h, matchId, [a, b]);
-    const s = await h.live.status(a, matchId);
+    await h.live.status(a, matchId);
     const after = await match(h, matchId);
-    expect(after.status).toBe('finished'); // NOT 'active'
-    expect(after.liveManaged).toBe(false);
-    expect(s.endedReason).not.toBe('strikes');
-    expect(after.turnTimeoutMs).not.toBe(DAY); // the live clock is never swapped for the 24-hour one
-    // Nothing was played on the runner-out's behalf.
-    expect(await h.memory.movesOf(matchId, 0)).toHaveLength(movesBefore.length);
+    expect(after.liveManaged).toBe(true);
+    expect(after.turnTimeoutMs).not.toBe(DAY);
+    const moves = await h.memory.movesOf(matchId, 0);
+    expect(moves.length).toBeGreaterThan(movesBefore.length);
+    expect(moves.slice(movesBefore.length).every((m) => m.seat === seat)).toBe(true);
     void b;
   });
 
@@ -189,24 +200,23 @@ describe('real-time timeouts LOSE the match (no strikes, no escape back to 24-ho
     expect(again.revision).toBe(after.revision);
   });
 
-  it('a late move after the deadline is refused (the timeout already finished the match)', async () => {
+  it('a late move after the deadline is refused (the turn was already played out)', async () => {
     const h = makeLiveHarness();
     const { a, b, matchId } = await h.pair();
     await h.goLive(a, b, matchId);
     const actor = await h.actorOf(matchId, a, b);
     const v = await h.service.viewPayload(actor, matchId);
     await runToDeadlineConnected(h, matchId, [a, b]);
+    await h.live.status(actor, matchId);
     const res = await code(
       h.service.submitAction(actor, matchId, { expectedRevision: v.revision, requestId: 'late-1', action: v.legalActions[0]! }),
     );
-    expect(res).toBe('TIMED_OUT');
-    const m = await match(h, matchId);
-    expect(m.status).toBe('finished');
-    expect(m.result?.reason).toBe('timeout');
+    expect(res).not.toBeNull();
+    expect((await match(h, matchId)).status).toBe('active');
     void b;
   });
 
-  it('the sweeper also runs due real-time decisions and finishes the match', async () => {
+  it('the sweeper also runs due Blitz decisions: the turn is played out and the match goes on', async () => {
     const h = makeLiveHarness();
     const { a, b, matchId } = await h.pair();
     await h.goLive(a, b, matchId);
@@ -214,8 +224,8 @@ describe('real-time timeouts LOSE the match (no strikes, no escape back to 24-ho
     await runToDeadlineConnected(h, matchId, [a, b]);
     await h.service.sweep('127.0.0.1');
     const after = await match(h, matchId);
-    expect(after.status).toBe('finished');
-    expect(after.result).toEqual({ winner: before.state.actor === 0 ? 1 : 0, reason: 'timeout', scores: scores(before.state) });
+    expect(after.status).toBe('active');
+    expect(after.state.turnPlayer).not.toBe(before.state.actor);
     void a;
     void b;
   });

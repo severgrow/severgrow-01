@@ -17,11 +17,27 @@ describe('deck and throw pile: glow, dim and tappable per step', () => {
     expect(p.discard).toEqual({ enabled: false, glow: false, dim: true, hint: null });
   });
 
-  it('Grow and Throw steps: both dimmed and not tappable', () => {
+  it('Grow and Throw steps (classic look): both dimmed and not tappable', () => {
     for (const phase of ['ACT', 'DISCARD', 'ROT_PICK'] as const) {
       const p = pileStates(phase, true, false, [{ t: 'EndAct' }]);
       for (const x of [p.deck, p.discard]) expect(x).toEqual({ enabled: false, glow: false, dim: true, hint: null });
     }
+  });
+
+  it('the product Throw step never dims its Throw pile: it is the target; only the deck recedes', () => {
+    // Owner, 2026-10-25: while a card can be thrown, the Throw pile must be the brightest thing.
+    const p = pileStates('DISCARD', true, false, [{ t: 'Discard', card: 1 }], true);
+    expect(p.discard).toEqual({ enabled: false, glow: false, dim: false, hint: null });
+    expect(p.deck).toEqual({ enabled: false, glow: false, dim: true, hint: null });
+    // A reveal still running (the EndAct settling) is still my Throw step: no dim flash there.
+    expect(pileStates('DISCARD', true, true, [{ t: 'Discard', card: 1 }], true).discard.dim).toBe(false);
+
+    // The opt-in is scoped to my Throw step; every other step keeps the old look.
+    expect(pileStates('ACT', true, false, [{ t: 'EndAct' }], true).discard.dim).toBe(true);
+    expect(pileStates('DISCARD', false, false, [{ t: 'Discard', card: 1 }], true).discard.dim).toBe(true);
+    expect(pileStates('GAME_OVER', true, false, [], true).discard.dim).toBe(true);
+    // And it is the product only: the classic copies pass nothing and keep both piles dim.
+    expect(pileStates('DISCARD', true, false, [{ t: 'Discard', card: 1 }]).discard.dim).toBe(true);
   });
 
   it("the bot's turn, or while animations play: nothing glows or can be tapped", () => {

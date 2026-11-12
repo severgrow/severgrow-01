@@ -13,6 +13,7 @@ import { hashToken, newId, newToken } from '../src/ids.js';
 import type { PlayerRecord } from '../src/storage/types.js';
 import { MatchService } from '../src/service.js';
 import { MemoryStorage } from '../src/storage/memory.js';
+import { BETA_PAYOUT_MULTIPLIER, SEED_ECONOMY, campaignSeedReward } from '../src/seeds/config.js';
 import { createFetchApp } from '../src/fetch-app.js';
 import { MemoryFeedbackStore, chainRouters } from '../src/feedback/feedback.js';
 import { createFeedbackRouter } from '../src/feedback/feedback.js';
@@ -24,6 +25,7 @@ import type { PgPool } from '../src/storage/postgres.js';
 import { createAdminRouter, csvCell, reportsToCsv } from '../src/admin/router.js';
 import { normalizeBuild } from '../src/admin/types.js';
 import { shapeCampaign, chapterBoundaries, chapterOf, levelIdOfSourceKey } from '../src/admin/campaign.js';
+import { shapePlayers, type PlayerFacts } from '../src/admin/players.js';
 
 const ADMIN_ID = '37e3d4d0-a34c-45b3-bc61-992fcf392912';
 const NOW = 1_760_000_000_000;
@@ -82,6 +84,7 @@ const READ_ENDPOINTS: { method: string; path: string }[] = [
   { method: 'GET', path: '/v1/admin/session' },
   { method: 'GET', path: '/v1/admin/whats-new' },
   { method: 'GET', path: '/v1/admin/overview' },
+  { method: 'GET', path: '/v1/admin/analytics' },
   { method: 'GET', path: '/v1/admin/ops' },
   { method: 'GET', path: '/v1/admin/reports' },
   { method: 'GET', path: '/v1/admin/reports.csv' },
@@ -92,6 +95,7 @@ const READ_ENDPOINTS: { method: string; path: string }[] = [
   { method: 'GET', path: '/v1/admin/economy' },
   { method: 'GET', path: '/v1/admin/world' },
   { method: 'GET', path: '/v1/admin/campaign' },
+  { method: 'GET', path: '/v1/admin/players' },
   { method: 'POST', path: '/v1/admin/seen' },
   { method: 'POST', path: '/v1/admin/reports/00000000-0000-0000-0000-000000000000/triage' },
 ];
@@ -213,7 +217,7 @@ describe('the allow-list is configuration, not code', () => {
   });
 });
 
-describe('report triage is the only mutation, and it is audited', () => {
+describe('report triage is audited (the Seeds and tile edits are covered in admin-edit.test.ts)', () => {
   it('records the status and note and writes one audit row per change', async () => {
     const t = setup();
     const admin = await t.makePlayer(ADMIN_ID, 'account', 'RYK');
@@ -472,21 +476,30 @@ describe('the metric shapes report what the data supports', () => {
     const earned = ledger.rows.filter((row) => row.delta > 0).reduce((sum, row) => sum + row.delta, 0);
     const spent = ledger.rows.filter((row) => row.delta < 0).reduce((sum, row) => sum - row.delta, 0);
 
-    // 3 queue wins (30 each) + a campaign first clear (50) = 140; one tile = 100.
-    expect(earned).toBe(140);
-    expect(spent).toBe(100);
-    expect(wallet).toMatchObject({ lifetimeEarned: 140, lifetimeSpent: 100, balance: 40 });
+    // The figures below are derived, not typed: the BETA multiplier scales every award at the
+    // settlement decision, so a hardcoded total would break the moment the beta is reverted (and
+    // would under-test the live figure while it lasts). What matters here is that the dashboard
+    // RECONCILES with the wallet, which is why the sums are computed from the same config the
+    // server pays from.
+    const M = BETA_PAYOUT_MULTIPLIER;
+    const queueTotal = 3 * SEED_ECONOMY.online.queue.win * M;
+    const campaignTotal = (campaignSeedReward(1)!.firstWin + campaignSeedReward(1)!.chapter) * M;
+    const earnedExpected = queueTotal + campaignTotal;
+    const spentExpected = SEED_ECONOMY.tileCost;
+    expect(earned).toBe(earnedExpected);
+    expect(spent).toBe(spentExpected);
+    expect(wallet).toMatchObject({ lifetimeEarned: earnedExpected, lifetimeSpent: spentExpected, balance: earnedExpected - spentExpected });
     // The ledger IS the wallet's history: its deltas sum to the wallet's own lifetime totals, and
     // the newest entry's balance_after is the balance the wallet reports now.
     expect(earned - spent).toBe(wallet.balance);
     expect(ledger.rows[0]!.balanceAfter).toBe(wallet.balance);
     // The economy panel reads the same store, so it cannot disagree with either.
-    expect(economy.totals).toMatchObject({ lifetimeEarned: 140, lifetimeSpent: 100, balance: 40 });
-    expect(economy.inflationRatio).toBeCloseTo(1.4, 5);
+    expect(economy.totals).toMatchObject({ lifetimeEarned: earnedExpected, lifetimeSpent: spentExpected, balance: earnedExpected - spentExpected });
+    expect(economy.inflationRatio).toBeCloseTo(earnedExpected / spentExpected, 5);
     const categories = new Map(economy.byCategory.map((row) => [row.category, row]));
-    expect(categories.get('queue')).toMatchObject({ minted: 90, spent: 0, net: 90 });
-    expect(categories.get('campaign')).toMatchObject({ minted: 50, spent: 0, net: 50 });
-    expect(categories.get('world_claim')).toMatchObject({ minted: 0, spent: 100, net: -100 });
+    expect(categories.get('queue')).toMatchObject({ minted: queueTotal, spent: 0, net: queueTotal });
+    expect(categories.get('campaign')).toMatchObject({ minted: campaignTotal, spent: 0, net: campaignTotal });
+    expect(categories.get('world_claim')).toMatchObject({ minted: 0, spent: spentExpected, net: -spentExpected });
     // And the denial is recorded with a reason, at zero Seeds.
     expect(economy.receipts.byDenial).toContainEqual({ value: 'not_a_first_clear', n: 1 });
     // The repeat clear is NOT a denial and NOT a payment: it is the same receipt, replayed.
@@ -641,5 +654,148 @@ describe('no secret or hidden state can reach an admin payload', () => {
     }
     // What it DOES report is the recorded shape: the timeline and how many events each move had.
     expect(Array.isArray(detail.moves)).toBe(true);
+  });
+});
+
+describe('the Players screen: every player, and the last thing the server recorded', () => {
+  const HOUR = 60 * 60 * 1000;
+  const base = (id: string, over: Partial<PlayerFacts> = {}): PlayerFacts => ({
+    id,
+    displayName: id,
+    kind: 'guest',
+    createdAt: NOW - 30 * 24 * HOUR,
+    google: false,
+    presenceAt: null,
+    isTest: false,
+    testReason: null,
+    testOverride: null,
+    matches: { played: 0, finished: 0, wins: 0, lastAt: null, lastStatus: null },
+    campaign: { highest: null, clears: 0, lastAt: null, lastLevel: null },
+    reports: { count: 0, lastAt: null },
+    tiles: { count: 0, lastAt: null },
+    seeds: 0,
+    ...over,
+  });
+
+  it('names the newest recorded activity, and orders players by it', () => {
+    const shaped = shapePlayers(
+      [
+        base('11111111-1111-4111-8111-111111111111'),
+        base('22222222-2222-4222-8222-222222222222', {
+          matches: { played: 3, finished: 2, wins: 1, lastAt: NOW - 2 * HOUR, lastStatus: 'active' },
+        }),
+        base('33333333-3333-4333-8333-333333333333', {
+          kind: 'account',
+          google: true,
+          campaign: { highest: 14, clears: 4, lastAt: NOW - HOUR, lastLevel: 14 },
+        }),
+      ],
+      NOW,
+    );
+    expect(shaped.rows.map((r) => [r.displayName, r.lastActivity])).toEqual([
+      ['33333333-3333-4333-8333-333333333333', 'campaign-clear'],
+      ['22222222-2222-4222-8222-222222222222', 'match-active'],
+      ['11111111-1111-4111-8111-111111111111', 'joined'],
+    ]);
+    expect(shaped.rows[0]!.lastActivityText).toBe('Cleared campaign level 14');
+    expect(shaped.rows[0]!.campaignHighest).toBe(14);
+    expect(shaped.rows[2]!.lastSeenAt).toBe(NOW - 30 * 24 * HOUR); // never earlier than joining
+    expect(shaped.summary).toMatchObject({ players: 3, accounts: 1, guests: 2, google: 1, seen24h: 2, seen7d: 2 });
+    expect(shaped.summary.funnel.map((step) => step.n)).toEqual([3, 1, 1, 1, 1, 0]);
+    expect(shaped.summary.highestLevel).toEqual([{ level: 14, n: 1 }]);
+  });
+
+  it('presence only decides the label while it is live; otherwise it just moves "last seen"', () => {
+    const live = shapePlayers([base('44444444-4444-4444-8444-444444444444', { presenceAt: NOW - 30_000 })], NOW).rows[0]!;
+    expect(live.lastActivity).toBe('online-now');
+    const stale = shapePlayers(
+      [base('55555555-5555-4555-8555-555555555555', { presenceAt: NOW - 3 * HOUR, matches: { played: 1, finished: 1, wins: 0, lastAt: NOW - 4 * HOUR, lastStatus: 'finished' } })],
+      NOW,
+    ).rows[0]!;
+    expect(stale.lastActivity).toBe('match-finished');
+    expect(stale.lastSeenAt).toBe(NOW - 3 * HOUR);
+  });
+
+  it('the endpoint lists real players, marks the test account as a bot (not as a person), and never leaks secrets', async () => {
+    const t = setup();
+    const admin = await t.makePlayer(ADMIN_ID, 'account', 'Owner');
+    const guest = await t.makePlayer('66666666-6666-4666-8666-666666666666', 'guest', 'MapleFox');
+    await t.storage.createPlayer({ id: '77777777-7777-4777-8777-777777777777', kind: 'guest', displayName: 'Probe', createdAt: NOW, upgradedAt: null, isTest: true });
+    t.links.rows.push({ provider: 'google', subject: 'g-1', playerId: ADMIN_ID, createdAt: NOW });
+    await t.economy.settle({ playerId: guest.player.id, sourceKey: 'campaign:c2-14', mode: 'campaign', now: NOW, outcome: 'win', campaignLevel: 14 } as never);
+    const res = await call(t.app, 'GET', '/v1/admin/players', admin.token);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      rows: { id: string; google: boolean; campaignHighest: number | null; lastActivity: string; classification: string }[];
+      total: number;
+      summary: { players: number; humans: number; bots: number };
+    };
+    // The list now carries both sides of the human/bot split (the All players screen filters, the
+    // Bots tab lists). The test row is present but classified, so no human-facing number includes it.
+    expect(body.total).toBe(3);
+    expect(body.summary.players).toBe(2);
+    expect(body.summary.humans).toBe(2);
+    expect(body.summary.bots).toBe(1);
+    expect(body.summary.humans + body.summary.bots).toBe(body.total);
+    expect(body.rows.find((r) => r.id === '77777777-7777-4777-8777-777777777777')!.classification).toBe('bot');
+    expect(body.rows.find((r) => r.id === ADMIN_ID)!.classification).toBe('human');
+    expect(body.rows.find((r) => r.id === ADMIN_ID)!.google).toBe(true);
+    expect(body.rows.find((r) => r.id === guest.player.id)!.campaignHighest).toBe(14);
+    const raw = JSON.stringify(body);
+    expect(raw).not.toContain(admin.token);
+    expect(raw).not.toMatch(/token_?hash|tokenHash|subject/i);
+    // The normal player still gets nothing.
+    expect((await call(t.app, 'GET', '/v1/admin/players', guest.token)).status).toBe(403);
+  });
+});
+
+// Owner, 2026-10-24: "I can't find a button to add seeds to someone's account". The dashboard's one
+// Seeds write: amount 1-1000, a reason, idempotent by request id, recorded in the ledger as
+// `admin_grant` and in the audit log. Refused without a token (401) and for a normal player (403).
+describe('adding Seeds to a player', () => {
+  const PLAYER = '5d1f6a0e-1c2b-4d3e-9f40-0a1b2c3d4e5f';
+  const path = `/v1/admin/players/${PLAYER}/seeds`;
+  const grant = { amount: 150, reason: 'Playtest thank-you', requestId: 'grant-request-0001' };
+
+  it('is refused without a token (401) and for a normal player (403)', async () => {
+    const t = setup();
+    await t.makePlayer(PLAYER);
+    expect((await call(t.app, 'POST', path, undefined, grant)).status).toBe(401);
+    const guest = await t.service.createGuest();
+    expect((await call(t.app, 'POST', path, guest.token, grant)).status).toBe(403);
+    expect((await t.economy.wallet(PLAYER)).balance).toBe(0);
+  });
+
+  it('adds the Seeds once, writes the ledger and the audit, and a repeated request pays nothing more', async () => {
+    const t = setup();
+    const admin = await t.makePlayer(ADMIN_ID, 'account', 'RYK');
+    await t.makePlayer(PLAYER);
+    const res = await call(t.app, 'POST', path, admin.token, grant);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, amount: 150, balance: 150, replayed: false });
+    const again = await call(t.app, 'POST', path, admin.token, grant);
+    expect(await again.json()).toMatchObject({ ok: true, balance: 150, replayed: true });
+    expect((await t.economy.wallet(PLAYER)).balance).toBe(150);
+    const rows = t.economy.ledger.filter((e) => e.playerId === PLAYER);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ delta: 150, category: 'admin_grant', sourceKey: 'admin:grant-request-0001', balanceAfter: 150 });
+    // It shows on the player's own page, in the ledger the dashboard already reads.
+    const page = await (await call(t.app, 'GET', `/v1/admin/player?q=${PLAYER}`, admin.token)).json() as { wallet: { balance: number }; ledger: { category: string }[] };
+    expect(page.wallet.balance).toBe(150);
+    expect(page.ledger[0]!.category).toBe('admin_grant');
+  });
+
+  it('refuses a bad amount, a missing reason, a bad id, or a player who does not exist', async () => {
+    const t = setup();
+    const admin = await t.makePlayer(ADMIN_ID, 'account', 'RYK');
+    await t.makePlayer(PLAYER);
+    for (const amount of [0, -5, 1001, 2.5, '50']) {
+      expect((await call(t.app, 'POST', path, admin.token, { ...grant, amount })).status, String(amount)).toBe(400);
+    }
+    expect((await call(t.app, 'POST', path, admin.token, { ...grant, reason: ' ' })).status).toBe(400);
+    expect((await call(t.app, 'POST', path, admin.token, { ...grant, requestId: 'x' })).status).toBe(400);
+    expect((await call(t.app, 'POST', '/v1/admin/players/not-an-id/seeds', admin.token, grant)).status).toBe(400);
+    expect((await call(t.app, 'POST', `/v1/admin/players/${ADMIN_ID.replace('3', '4')}/seeds`, admin.token, grant)).status).toBe(404);
+    expect((await t.economy.wallet(PLAYER)).balance).toBe(0);
   });
 });

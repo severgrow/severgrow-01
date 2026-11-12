@@ -6,9 +6,12 @@
 // a column the in-memory store does not keep, the difference is stated at that line rather than
 // faked (there is one: a world claim's `source`).
 import { playerTag } from '../../../src/player-tag.js';
-import { WORLD_CELLS } from '../world.js';
+import { newId } from '../ids.js';
+import { WORLD_CELLS, seenCellIds } from '../world.js';
 import { SEED_ECONOMY } from '../seeds/config.js';
 import { shapeCampaign } from './campaign.js';
+import { classificationOf, shapePlayers, PLAYERS_LIMIT, type PlayerFacts } from './players.js';
+import { campaignLevelOfSourceKey } from '../seeds/config.js';
 import type { MatchRecord, PlayerRecord } from '../storage/types.js';
 import type { MemoryStorage } from '../storage/memory.js';
 import type { MemoryFeedbackStore } from '../feedback/feedback.js';
@@ -24,6 +27,7 @@ import type {
   AdminReportRow,
   AdminStore,
 } from './types.js';
+import { shapeAnalytics, type AnalyticsPlayerFact } from './analytics.js';
 import { TAG_SCAN_LIMIT, normalizeBuild } from './types.js';
 import { DAY_MS, clampLimit, decodeCursor, lastDays, pageOf, str, utcDay } from './util.js';
 
@@ -59,10 +63,14 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
   // production: a PLAYER is judged by its own flag and nothing else; a MATCH is judged by its own
   // flag OR by any participant being a marked player; an OWNED row (wallet, ledger entry, receipt,
   // claim, report, identity link) is judged by the player it belongs to.
-  const testPlayerIds = (): Set<string> => new Set(players().filter((p) => p.isTest === true).map((p) => p.id));
+  // The effective marker, exactly as SQL's `coalesce(test_override, is_test)`: the owner's override
+  // is part of the rule on every read, not a label the screen applies afterwards.
+  const effectiveTest = (p: PlayerRecord): boolean =>
+    p.testOverride === false ? false : p.testOverride === true ? true : p.isTest === true;
+  const testPlayerIds = (): Set<string> => new Set(players().filter(effectiveTest).map((p) => p.id));
   const isMarked = (playerId: string | null | undefined): boolean =>
     typeof playerId === 'string' && testPlayerIds().has(playerId);
-  const visiblePlayers = (): PlayerRecord[] => players().filter((p) => p.isTest !== true);
+  const visiblePlayers = (): PlayerRecord[] => players().filter((p) => !effectiveTest(p));
   const matchVisible = async (match: MatchRecord): Promise<boolean> => {
     if (match.isTest === true) return false;
     const parts = await sources.storage.participantsOf(match.id);
@@ -128,6 +136,33 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
   };
 
   return {
+    async setPlayerVisibility(input) {
+      const row = players().find((p) => p.id === input.playerId);
+      if (!row) return null;
+      const updated: PlayerRecord = { ...row, testOverride: input.override };
+      await sources.storage.updatePlayer(updated);
+      auditRows.push({
+        id: newId(),
+        actorId: input.actorId,
+        action: 'player.visibility',
+        targetType: 'player',
+        targetId: input.playerId,
+        detail: { override: input.override },
+        createdAt: input.now,
+      });
+      const judged = classificationOf({
+        isTest: updated.isTest === true,
+        testReason: updated.testReason ?? null,
+        testOverride: updated.testOverride === true ? true : updated.testOverride === false ? false : null,
+      });
+      return {
+        isTest: updated.isTest === true,
+        testReason: updated.testReason ?? null,
+        testOverride: updated.testOverride === true ? true : updated.testOverride === false ? false : null,
+        classification: judged.classification,
+        reason: judged.reason,
+      };
+    },
     async readSeen(adminId) {
       return seen.get(adminId)?.seenAt ?? null;
     },
@@ -211,6 +246,67 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
       return overview;
     },
 
+    async analytics(now) {
+      const humans = visiblePlayers();
+      const visible = await visibleMatches();
+      const claims = [...(economy()?.claims.values() ?? [])].filter((c) => !isMarked(c.ownerId));
+      const rematchIds = new Set<string>();
+      for (const match of visible) {
+        if (match.status !== 'finished') continue;
+        const rematch = await sources.storage.rematchOf(match.id);
+        if (rematch) rematchIds.add(rematch.id);
+      }
+
+      const facts = new Map<string, AnalyticsPlayerFact>();
+      for (const player of humans) {
+        facts.set(player.id, {
+          playerId: player.id,
+          createdAt: player.createdAt,
+          activityDays: new Set([utcDay(player.createdAt)]),
+          finishedMatchCount: 0,
+          invitesSent: 0,
+          invitesJoined: 0,
+          hasClaim: false,
+          rematchCount: 0,
+          guideOpened: ((await sources.storage.accountGuideOf(player.id))?.seen.length ?? 0) > 0,
+        });
+      }
+
+      for (const claim of claims) {
+        const fact = facts.get(claim.ownerId);
+        if (!fact) continue;
+        fact.hasClaim = true;
+        fact.activityDays.add(utcDay(claim.claimedAt));
+      }
+
+      for (const match of visible) {
+        const parts = await sources.storage.participantsOf(match.id);
+        const friend = modeOf(match) === 'friend';
+        const finished = match.status === 'finished' && match.finishedAt !== null;
+        const isRematch = rematchIds.has(match.id);
+        const seat0 = parts.find((p) => p.seat === 0);
+        const joined = parts.length >= 2;
+
+        if (friend && seat0 && facts.has(seat0.playerId)) {
+          const creator = facts.get(seat0.playerId)!;
+          creator.invitesSent += 1;
+          if (joined) creator.invitesJoined += 1;
+        }
+
+        for (const part of parts) {
+          const fact = facts.get(part.playerId);
+          if (!fact) continue;
+          if (finished) {
+            fact.finishedMatchCount += 1;
+            fact.activityDays.add(utcDay(match.finishedAt!));
+          }
+          if (isRematch && finished) fact.rematchCount += 1;
+        }
+      }
+
+      return shapeAnalytics([...facts.values()], now);
+    },
+
     async reports(filter) {
       const limit = clampLimit(filter.limit);
       let rows = feedbackRows().filter((r) => !isMarked(r.playerId)).map(reportRow);
@@ -246,6 +342,17 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
 
     async audit(entry) {
       auditRows.push({ ...entry });
+    },
+
+    async grantSeeds(input) {
+      if (!(await sources.storage.playerById(input.playerId))) return null;
+      if (!sources.economy) throw new Error('No Seeds economy in this dev server.');
+      const result = await sources.economy.grant({ playerId: input.playerId, amount: input.amount, sourceKey: `admin:${input.requestId}`, now: input.now });
+      if (!result.replayed) auditRows.push({
+        id: newId(), actorId: input.actorId, action: 'seeds.grant', targetType: 'player', targetId: input.playerId,
+        detail: { amount: input.amount, reasonLength: input.reason.length, balance: result.balance, replayed: false }, createdAt: input.now,
+      });
+      return result;
     },
 
     async stuck(now, windows) {
@@ -549,8 +656,10 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
       return {
         serverNow: now,
         revision: store?.revision ?? 0,
-        cellsTotal: WORLD_CELLS.length,
-        cellIds: WORLD_CELLS.map((cell) => cell.id),
+        // The SEEN map (world v3): the v2 coast plus the land uncovered around every tile, the same
+        // set players see (server/src/world.ts), so a tile grown on new land shows here too.
+        cellsTotal: seenCellIds(claims.map((c) => c.cellId)).size,
+        cellIds: [...seenCellIds(claims.map((c) => c.cellId))],
         totalClaims: claims.length,
         owners: new Set(claims.map((c) => c.ownerId)).size,
         claimsByDay: days.map((day) => ({ day, n: byDay.get(day)?.length ?? 0 })),
@@ -589,6 +698,65 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
         })),
         paidLevels,
       );
+    },
+    async players(now) {
+      // The ONE read that includes the automated accounts: the Bots tab lists them and the summary
+      // counts both sides. Every other read above uses `visiblePlayers()`.
+      const all = players();
+      const store = economy();
+      const receipts = [...(store?.receipts.values() ?? [])];
+      const facts: PlayerFacts[] = [];
+      const matchesByPlayer = new Map<string, MatchRecord[]>();
+      const seatOf = new Map<string, number>();
+      for (const match of await visibleMatches()) {
+        for (const part of await sources.storage.participantsOf(match.id)) {
+          const list = matchesByPlayer.get(part.playerId) ?? [];
+          list.push(match);
+          matchesByPlayer.set(part.playerId, list);
+          seatOf.set(`${match.id}:${part.playerId}`, part.seat);
+        }
+      }
+      const maxOf = (values: readonly number[]): number | null => (values.length ? Math.max(...values) : null);
+      for (const player of all) {
+        const mine = (matchesByPlayer.get(player.id) ?? []).sort((a, b) => b.updatedAt - a.updatedAt);
+        const finished = mine.filter((m) => m.status === 'finished');
+        const clears = receipts
+          .filter((r) => r.input.playerId === player.id && r.input.mode === 'campaign')
+          .sort((a, b) => a.input.now - b.input.now);
+        const levels = clears.map((r) => campaignLevelOfSourceKey(r.input.sourceKey)).filter((n): n is number => n !== null);
+        const lastClear = clears[clears.length - 1] ?? null;
+        const reports = feedbackRows().filter((r) => r.playerId === player.id);
+        const claims = [...(store?.claims.values() ?? [])].filter((c) => c.ownerId === player.id);
+        facts.push({
+          id: player.id,
+          displayName: player.displayName,
+          kind: player.kind,
+          createdAt: player.createdAt,
+          google: (sources.links?.rows ?? []).some((link) => link.playerId === player.id),
+          // Live presence lives in the live-duel store, not here; the SQL store reads `presence_at`.
+          presenceAt: null,
+          isTest: player.isTest === true,
+          testReason: player.testReason ?? null,
+          testOverride: player.testOverride === true ? true : player.testOverride === false ? false : null,
+          matches: {
+            played: mine.length,
+            finished: finished.length,
+            wins: finished.filter((m) => m.result && m.result.winner !== null && m.result.winner === seatOf.get(`${m.id}:${player.id}`)).length,
+            lastAt: mine[0]?.updatedAt ?? null,
+            lastStatus: mine[0]?.status ?? null,
+          },
+          campaign: {
+            highest: maxOf(levels),
+            clears: clears.filter((r) => r.awarded > 0).length,
+            lastAt: lastClear?.input.now ?? null,
+            lastLevel: lastClear ? campaignLevelOfSourceKey(lastClear.input.sourceKey) : null,
+          },
+          reports: { count: reports.length, lastAt: maxOf(reports.map((r) => r.createdAt)) },
+          tiles: { count: claims.length, lastAt: maxOf(claims.map((c) => c.claimedAt)) },
+          seeds: walletOf(player.id).balance,
+        });
+      }
+      return shapePlayers(facts, now, PLAYERS_LIMIT);
     },
   };
 };

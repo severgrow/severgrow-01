@@ -1,24 +1,55 @@
 // Phase 4 — online menu / lobby screens. Duel play opens in Phase 5.
 
 import { DuelClient, DuelError, browserStorage } from '../../../server/src/client.js';
-import type { MatchListEntry, MatchSummary, MatchViewPayload } from '../../../server/src/protocol.js';
-import { ONLINE } from '../../../src/strings.js';
+import type { MatchListEntry, MatchSummary, MatchViewPayload, ReplayPayload, WorldMapPayload } from '../../../server/src/protocol.js';
+import { ONLINE, PLANET, REPLAY } from '../../../src/strings.js';
+import { FEATURES } from '../channel.js';
 import { createIdentityStore } from './identity.js';
 import type { IdentityStore } from './identity.js';
 import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
+import { createLobbyActionGuard, lobbyActionStillCurrent } from './lobby-action.js';
+import { pollDue } from './poll-gate.js';
+import {
+  countNeedingResponse,
+  needsMyResponse,
+  yourMoveCount,
+  yourMatchesButtonName,
+  yourMatchesLabel,
+} from './match-attention.js';
 import { WAIT_DOTS_CSS, waitDots } from './live/wait-dots.js';
 import { createHudBrandMark } from '../player/branding.js';
+import { enterSurface, exitSurface, resetSurface, INTERFACE_MOTION } from '../ui/interface-motion.js';
+import { leaveLobbyForMatch } from './lobby-exit.js';
+import { mountChallengeHandoff } from './challenge-handoff.js';
 import { WorldView } from './world-view.js';
+import { lastWorld, rememberWorld } from './world-memory.js';
+import { mountWorldSource } from './living-world-source.js';
+import { mountEndgamePlanet as mountEndgamePlanetPane } from './endgame-planet.js';
+import { mountLivingTerritory } from './living-territory.js';
+import { requestPlayerProfile } from '../accounts/profile-request.js';
+import { installTerritoryCountUI, answerWaiting, territoryCounts } from './menu-territory.js';
+import type { TerritoryCounts } from './menu-territory.js';
+import { mountAnswerClock } from './menu-territory-clock.js';
+import { correctedNow, emptyClock, noteServerNow } from './clock.js';
+import { waitingActionCount } from './territory-attention.js';
+import { cachedTerritory, registerTerritoryReader, rememberTerritory } from './territory-cache.js';
 import { seedIcon } from './seed-icon.js';
-import { flushSeedProofs } from './seed-rewards.js';
-import type { RewardResult } from '../../../server/src/seeds/types.js';
+import type { SeedFlushResult } from './seed-rewards.js';
+import { settlePendingSeeds } from './seed-settle.js';
+import { SWORD_PATH } from './swords-glyph.js';
+import { askRematch } from './rematch-confirm.js';
+import type { SeedWallet } from '../../../server/src/seeds/types.js';
+
 import {
-  FIRST_ONLINE_CARD_KEY,
+  findTap,
   friendlyJoinError,
+  matchPollVerdict,
   inviteLink,
+  continuedMatchAfterSearch,
   isSearchParked,
   isWellFormedInviteCode,
   normalizeInviteCodeInput,
+  hubPollMs,
   pageTitleForLobby,
   parseJoinHash,
   shareInviteText,
@@ -30,6 +61,11 @@ import {
 export type LobbyUiHooks = {
   /** Return to the main menu screen. */
   showMenu: () => void;
+  /**
+   * A finished duel's replay, fetched by the lobby (it owns the identity/token) and handed to the
+   * page, which owns the player. Absent: a finished row simply re-opens the match, as before.
+   */
+  openReplay?: (payload: ReplayPayload) => void;
   /** Open the duel board. `liveJoin` is true only when the match turned ACTIVE while this player
    *  was on the screen (the waiting creator when the friend joins, or the joiner itself); it is
    *  false when the player returns to a match later. Used only to gate the one-off lottery. */
@@ -41,15 +77,42 @@ export type LobbyUiHooks = {
     liveJoin: boolean;
   }) => void;
   /**
-   * Start a local game against the computer (the existing offline game). Offered from a long
-   * parked search; the search keeps running in the background. Never touches online state, so the
-   * offline save/Continue mechanism is unchanged.
+   * Start a practice match (the existing offline game). Offered from a parked search; the search
+   * keeps running in the background. Never touches online state, so the offline save is unchanged.
    */
   startComputerGame?: () => void;
+  /**
+   * Play the current campaign level while the search keeps running. The page leaves any online
+   * duel, resumes a saved campaign match silently when one exists, otherwise starts the current
+   * level. It must not wipe the classic save. Not named `startCampaignLevel`: that function
+   * already opens one level by id.
+   */
+  startOfferedLevel?: () => void;
+  /**
+   * Play one of the game's own sound cues by name (the bank in `ui/sound-bank.ts`). The Territory
+   * screen uses it so its keys speak the same voice as the board; absent, it is simply silent.
+   */
+  cue?: (name: string) => void;
+  /**
+   * The campaign level this device is on, for the Territory's selection line (owner report,
+   * 2026-10-24). It is the SAME record the PLAY entry reads, so the two surfaces can never disagree
+   * about the player's own number.
+   */
+  campaignLevel?: () => number | null;
+  /**
+   * Done achievement ids from a real Territory read. The quiet toast in main.ts consumes them;
+   * absent, the map still paints the achievements window as before.
+   */
+  onAchievementsDone?: (doneIds: readonly string[]) => void;
   now?: () => number;
 };
 
 type OnlineScreen = 'hub' | 'waiting' | 'join' | 'world' | null;
+
+/** The finished row's two keys share one 20px glyph cell. */
+const REPLAY_KEY_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.2v3.6h3.6"/><path d="M10.3 9.1 15 12l-4.7 2.9Z" fill="currentColor" stroke="none"/></svg>';
+/** The owner's traced crossed swords (swords-glyph.ts), the same mark as the planet's challenge key. */
+const SWORDS_KEY_SVG = `<svg viewBox="-7.6 -7.6 15.2 15.2" aria-hidden="true"><path d="${SWORD_PATH}" fill="currentColor"/></svg>`;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -63,17 +126,32 @@ export type OnlineLobbyController = {
    * main menu never bounces a player into the online hub.
    */
   openWorld(from: 'hub' | 'menu'): void;
+  /**
+   * THE PLANET ON THE FINISH CARD (owner brief, 2026-11-11). The pane is built beside the lobby's
+   * own WorldView so it shares the SAME client, identity and cached map: the finish card must never
+   * be a second, disagreeing viewer of the world. Null where the planet is not part of this build
+   * (the locked futa04 line keeps its classic card) or where the world cannot be mounted.
+   */
+  mountEndgamePlanet(host: HTMLElement, level: () => number | null): import('./endgame-planet.js').EndgamePlanet | null;
+  /**
+   * Leave the lobby for a match: the one transition every entry point uses (a match row, a friend
+   * joining, a join code, a Territory challenge). Tears the Territory view down and gives the
+   * visible lobby screen the interface's own exit beat before `#game` is shown. `showScreen` hides
+   * every lobby screen regardless, so this is the transition, not the guarantee.
+   */
+  leaveForMatch(): void;
   handleBootHash(): Promise<void>;
   refreshTitle(): void;
   /** Live duels: open one of my matches by id (web/src/online/live/). */
   openMatch?(matchId: string): Promise<void>;
   /**
-   * A rematch from a finished standard duel: create a fresh match and show the existing
-   * invite/share screen (the same one `createMatch` / "Create a duel" opens).
+   * A rematch from a finished standard duel. Mutual (2026-10-22): the first press waits, the
+   * second press starts the game for both. `finishedMatchId` is the duel that just ended; with an
+   * older server (no rematch endpoint) it falls back to a fresh invite, as before.
    */
-  rematch(): Promise<void>;
+  rematch(finishedMatchId?: string | null): Promise<void>;
   trainingSeedTicket(botLevel: number): Promise<{ id: string; seed: number } | null>;
-  syncSeedRewards(): Promise<{ key: string; reward: RewardResult }[]>;
+  syncSeedRewards(): Promise<SeedFlushResult>;
 };
 
 export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController => {
@@ -86,11 +164,13 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       enabled: false,
       openHub: async () => undefined,
       openWorld: () => undefined,
+      mountEndgamePlanet: () => null,
+      leaveForMatch: () => undefined,
       handleBootHash: async () => undefined,
       refreshTitle: () => undefined,
       rematch: async () => undefined,
       trainingSeedTicket: async () => null,
-      syncSeedRewards: async () => [],
+      syncSeedRewards: async () => ({ awards: [], refused: [] }),
     };
   }
 
@@ -118,11 +198,68 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   let identityReplaced = false;
   const now = hooks.now ?? (() => Date.now());
 
+  /**
+   * ONE lobby action at a time. The server ignores a duplicate find/create/join, but the client
+   * must not send one either: a second tap while the first request is in flight is refused before
+   * it can reach the network, the key it came from is locked with `aria-busy` (a pending face),
+   * and the lock is released on success, failure and timeout. The guard itself is DOM-free and
+   * unit-tested (web/tests/lobby-action-guard.test.ts); this only paints the control.
+   */
+  const pendingControlIds: Record<string, string> = { find: 'online-find', create: 'online-create', join: 'online-join-submit' };
+  let pendingControl: HTMLButtonElement | null = null;
+  const paintPending = (action: string | null) => {
+    if (pendingControl) {
+      // Give the key back exactly as it was: a control disabled for its own reason stays disabled.
+      pendingControl.disabled = pendingControl.dataset.pendingWasDisabled === '1';
+      pendingControl.removeAttribute('aria-busy');
+      pendingControl.classList.remove('is-pending');
+      delete pendingControl.dataset.pendingWasDisabled;
+      pendingControl = null;
+    }
+    if (!action) return;
+    const el = document.getElementById(pendingControlIds[action] ?? '') as HTMLButtonElement | null;
+    if (!el) return;
+    pendingControl = el;
+    el.dataset.pendingWasDisabled = el.disabled ? '1' : '0';
+    el.disabled = true;
+    el.setAttribute('aria-busy', 'true');
+    el.classList.add('is-pending');
+  };
+  const guard = createLobbyActionGuard({ onPending: paintPending });
+
   let matches: MatchListEntry[] = [];
   let waiting: { matchId: string; inviteCode: string } | null = null;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
+  /** A waiting-screen request that is still out; a 2 s tick must not stack another (poll-gate.ts). */
+  let waitingInFlight = false;
   let serverOffset = 0;
   let worldView: WorldView | null = null;
+  const worldSource = mountWorldSource(() => client.worldMap(), lastWorld(browserStorage()), world => rememberWorld(browserStorage(), world));
+  let living: ReturnType<typeof mountLivingTerritory> | null = null;
+
+  /**
+   * THE DISCLOSURE'S OWN STATE — and the guard against the list snapping shut.
+   *
+   * The hub refreshes the match list on a timer (and after joins/searches), so `renderMatches`
+   * runs many times while the player looks at the screen. It must never decide whether the list is
+   * open: it only PAINTS `matchesExpanded`. Only a click on the disclosure changes this boolean.
+   * That is the whole fix for the obvious bug ("a poll re-collapses the panel"): the renderer has
+   * no write to this state, so a poll cannot close what the player opened. The choice survives
+   * screen changes for the session because this module-scoped value is not reset on `openHub`.
+   */
+  let matchesExpanded = false;
+  /** A cheap fingerprint of the painted rows: unchanged polls do not rebuild the DOM at all. */
+  let matchesSignature = '';
+  /** One list request at a time, so a 10s poll can never stack behind a slow network. */
+  let reloadInFlight = false;
+  let hubPollTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const stopHubPoll = () => {
+    if (hubPollTimer) {
+      clearTimeout(hubPollTimer);
+      hubPollTimer = null;
+    }
+  };
 
   // How the join screen was reached. A typed code joins straight away; a link arrival confirms
   // first (an intentional asymmetry — a forwarded link may reach the wrong person).
@@ -138,6 +275,21 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   // and keeps running (its own timer) while the player is on the board playing the computer.
   let search: { token: string; matchId: string; startedAt: number } | null = null;
   let searchTimer: ReturnType<typeof setInterval> | null = null;
+  /** A search request that is still out (poll-gate.ts keeps the 2 s tick from stacking one). */
+  let searchInFlight = false;
+  /** True while a cancel has not landed. A Find tap during it must not park another entry. */
+  let cancelPending = false;
+  /**
+   * Find and cancel share one queue. A second Find resumes the entry already in hand, and a Find
+   * that arrives while a cancel is in flight waits until that cancel lands, so the client never
+   * parks a second queue entry.
+   */
+  let searchQueue: Promise<unknown> = Promise.resolve();
+  const enqueueSearch = <T>(task: () => Promise<T>): Promise<T> => {
+    const run = searchQueue.then(task, task);
+    searchQueue = run.then(() => undefined, () => undefined);
+    return run;
+  };
   let computerGameActive = false;
   let pendingMatched: { token: string; payload: MatchViewPayload } | null = null;
 
@@ -154,8 +306,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       pollTimer = null;
     }
     stopSearchTimer();
+    stopHubPoll();
     search = null;
     waiting = null;
+    syncLooking();
   };
 
   /** Show the one honest line for a replaced identity in whichever online screen is open. */
@@ -184,6 +338,63 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     document.head.append(style);
   }
 
+  // "Looking for opponent" on the board, between the menu and the logo. Fixed, so it is not a
+  // grid child of the HUD (a grid child would shove the menu). It lives inside #game .hud, so it
+  // hides with the game. The dots are the shared wait-dots, not a second animation.
+  const LOOKING_CSS = `
+#online-search-looking {
+  position: fixed;
+  z-index: 8;
+  top: var(--futasaku-logo-top, 16px);
+  left: calc(env(safe-area-inset-left, 0px) + 56px);
+  right: calc(env(safe-area-inset-right, 0px) + 108px);
+  height: var(--futasaku-logo-height, 22px);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  pointer-events: none;
+  color: var(--instrument-muted, var(--c-muted));
+  font-size: var(--instrument-label-size, .6875rem);
+  letter-spacing: var(--instrument-tracking, .08em);
+  line-height: 1;
+  white-space: nowrap;
+}
+#online-search-looking[hidden] { display: none !important; }
+#online-search-looking .online-search-looking-words {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+`;
+  const mountLooking = () => {
+    const hud = document.querySelector('#game .hud');
+    if (!hud || document.getElementById('online-search-looking')) return;
+    if (!document.getElementById('online-search-looking-css')) {
+      const style = document.createElement('style');
+      style.id = 'online-search-looking-css';
+      style.textContent = LOOKING_CSS;
+      document.head.append(style);
+    }
+    const el = document.createElement('p');
+    el.id = 'online-search-looking';
+    el.setAttribute('role', 'status');
+    el.hidden = true;
+    const words = document.createElement('span');
+    words.className = 'online-search-looking-words';
+    words.textContent = ONLINE.searchLooking;
+    el.append(words, waitDots());
+    hud.append(el);
+  };
+  mountLooking();
+  const syncLooking = () => {
+    const el = document.getElementById('online-search-looking');
+    if (!el) return;
+    // Only while a search is running AND the offline game from this offer is on screen.
+    el.hidden = !(search && computerGameActive);
+  };
+
   // The waiting headline is ONE stable text node plus ONE persistent dots node: the search screen
   // re-renders every 2s, and rebuilding the dots each time would restart the CSS animation before
   // it could cycle (the same reason the live pill builds its dots once).
@@ -208,6 +419,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     brandMark = null;
   }
   const screens: Record<'hub' | 'waiting' | 'join' | 'world', HTMLElement> = { hub, waiting: waitingEl, join: joinEl, world: worldEl };
+  const challengeHandoff=mountChallengeHandoff(worldEl);
   const notice = (id: string, text: string) => {
     const el = document.getElementById(id);
     if (el) el.textContent = text;
@@ -223,16 +435,44 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     el.replaceChildren(document.createTextNode(text), waitDots());
   };
 
+  /**
+   * Every online screen is a doorway one step below the menu, and waiting/join are one step below
+   * the hub, so the arrival travels the same way a screen change does: forward from below, back
+   * from above (owner, 2026-11-02). `null` is the closed lobby.
+   */
+  const ONLINE_RANK: Record<'hub' | 'waiting' | 'join' | 'world', number> = { hub: 1, waiting: 2, join: 2, world: 2 };
+  let shownOnline: OnlineScreen = null;
   const show = (next: OnlineScreen) => {
     if (next !== 'world') worldView?.close();
     hub.hidden = next !== 'hub';
     waitingEl.hidden = next !== 'waiting';
     joinEl.hidden = next !== 'join';
     worldEl.hidden = next !== 'world';
+    // Each online screen arrives on the shared interface beat; the screens we leave are reset so a
+    // half-finished entrance can never surface later. No transform on the game: these are menus.
+    const way = (next ? ONLINE_RANK[next] : 0) < (shownOnline ? ONLINE_RANK[shownOnline] : 0) ? -1 : 1;
+    shownOnline = next;
+    for (const [key, el] of Object.entries(screens) as [keyof typeof screens, HTMLElement][]) {
+      const head = el.querySelector<HTMLElement>('.online-head');
+      if (key === next && key !== 'world') {
+        enterSurface(el, { travel: way * INTERFACE_MOTION.screen });
+        if (head) {
+          resetSurface(head);
+          enterSurface(head, { travel: way * INTERFACE_MOTION.travel, delay: INTERFACE_MOTION.stagger });
+        }
+      } else {
+        resetSurface(el);
+        if (head) resetSurface(head);
+      }
+    }
     // The online screens are their own full-screen view: keep the main menu fully out of the
     // way (hidden, not merely behind) so its title/buttons can never bleed through the panel.
     // Every path back to the menu goes through hooks.showMenu() → showScreen('menu').
-    if (menuEl) menuEl.hidden = next !== null;
+    if (next === 'world') living?.open();
+    else {
+      if (next !== null) living?.hide();
+      if (menuEl) menuEl.hidden = next !== null;
+    }
     if (brandMark) {
       const head = next ? screens[next].querySelector('.online-head') : null;
       if (head && brandMark.parentElement !== head) head.append(brandMark);
@@ -241,6 +481,68 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       clearInterval(pollTimer);
       pollTimer = null;
     }
+    // The match list only refreshes while the hub is the visible screen.
+    if (next !== 'hub') stopHubPoll();
+  };
+
+  /**
+   * THE ONE WAY OUT OF THE LOBBY FOR A MATCH (owner report, 2026-10-28: "accepting challenge in
+   * territory opens the duel screen under it ... everything on top of eachother — can never happen").
+   *
+   * Hiding the screens is `showScreen`'s job (it calls the same shared list, so it can never be
+   * skipped); this is the deliberate part: the Territory view is torn down whole — the challenge
+   * sheet lives on `<body>`, outside the screen that is leaving, so it goes now rather than fading
+   * over the board — and the screen the player is looking at leaves on the interface's own beat
+   * (`leaveLobbyForMatch`). The game screen itself is never animated: it is only revealed.
+   */
+  const leaveForMatch = (): void => {
+    leaveLobbyForMatch({ teardown: () => worldView?.close(true) });
+  };
+
+  /**
+   * THE PLAY ONLINE KEY'S ONE LIVE WORD (owner, 2026-11-01): the SAME match list the hub draws,
+   * through the SAME "is it my move" predicate as the list's red "!", so the menu can never claim
+   * a move the list does not. Written only when it changes, so a poll leaves the key alone.
+   */
+  /**
+   * PLAY ONLINE keeps its words (owner, 2026-11-10: "always keep PLAY ONLINE as button but make an
+   * icon signalising we have YOUR MOVE to do on the side of the button - similar to how we have tiles
+   * and seeds living inside THE PLANET button"). Built once: the label in the middle, and on the
+   * right a quiet gold read-out (the turn glyph and the count) shown only while matches wait for me.
+   * Updates touch the count's text and one attribute, never the layout.
+   */
+  let menuMarker: { label: HTMLElement; side: HTMLElement; count: HTMLElement } | null = null;
+  const paintMenuOnline = () => {
+    if (!menuOnline) return;
+    if (!menuMarker || !menuMarker.label.isConnected) {
+      menuOnline.classList.add('menu-online-entry');
+      const balance = document.createElement('span');
+      balance.className = 'menu-online-side';
+      balance.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('span');
+      label.className = 'menu-online-label';
+      const side = document.createElement('span');
+      side.className = 'menu-online-side menu-online-turns';
+      side.setAttribute('aria-hidden', 'true');
+      side.hidden = true;
+      // The turn glyph: a small play wedge inside a hex, the board's own shape.
+      side.innerHTML = '<svg class="menu-online-turn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.2 13.9 4.6v6.8L8 14.8 2.1 11.4V4.6Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6.6 5.4 10.6 8 6.6 10.6Z" fill="currentColor"/></svg>';
+      const count = document.createElement('span');
+      count.className = 'menu-online-value';
+      side.append(count);
+      menuOnline.replaceChildren(balance, label, side);
+      menuMarker = { label, side, count };
+    }
+    const n = yourMoveCount(matches);
+    if (menuMarker.label.textContent !== ONLINE.playOnline) menuMarker.label.textContent = ONLINE.playOnline;
+    if (menuMarker.side.hidden !== (n === 0)) menuMarker.side.hidden = n === 0;
+    if (menuMarker.count.textContent !== String(n)) menuMarker.count.textContent = String(n);
+    menuOnline.classList.toggle('has-your-move', n > 0);
+    // The spoken name keeps the destination and adds the count.
+    const name = n > 0 ? ONLINE.menuYourMoveName(n) : ONLINE.playOnline;
+    if (menuOnline.getAttribute('aria-label') !== name) menuOnline.setAttribute('aria-label', name);
+    const title = n > 0 ? ONLINE.menuYourMoveTitle(n) : '';
+    if (menuOnline.title !== title) menuOnline.title = title;
   };
 
   const fillCopy = () => {
@@ -254,13 +556,21 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
     $('online-join-open').textContent = ONLINE.join;
     const worldBtn = document.getElementById('online-world') as HTMLButtonElement | null;
-    if (worldBtn) worldBtn.textContent = ONLINE.worldMap;
+    // THE PLANET (/test/ only): the same screen under its new name (owner, 2026-11-04).
+    const worldName = FEATURES.planet ? PLANET.title : ONLINE.worldTitle;
+    if (worldBtn) {
+      worldBtn.textContent = FEATURES.planet ? PLANET.menu : ONLINE.worldMap;
+      // Not on the Play online menu (owner, 2026-11-10: "remove the planet from play online menu"):
+      // THE PLANET has its own entry on the main menu.
+      worldBtn.hidden = true;
+    }
     // The Territory's heading AND its spoken name come from the one string (owner, 2026-10-16:
     // the shared screen is called Territory). It opens from two places - the menu and the hub - and
     // both must name the same screen.
-    $('online-world-title').textContent = ONLINE.worldTitle;
-    $('online-world-screen').setAttribute('aria-label', ONLINE.worldTitle);
-    $('online-matches-title').textContent = ONLINE.yourMatches;
+    $('online-world-title').textContent = worldName;
+    $('online-world-screen').setAttribute('aria-label', worldName);
+    // The Your-matches label carries a COUNT, so `paintMatchesDisclosure` owns its text. Writing
+    // the count-less string here would wipe the number every time another screen calls fillCopy.
     $('online-matches-empty').textContent = ONLINE.emptyMatches;
     // The waiting TITLE is owned by `setWaitingTitle` (it carries the shared animated dots), so it
     // is deliberately not written here — writing textContent would drop the persistent dots node.
@@ -285,10 +595,11 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     const tagline = document.getElementById('menu-tagline');
     if (tagline) tagline.textContent = ONLINE.tagline;
     if (menuOnline) {
-      menuOnline.textContent = ONLINE.playOnline;
-      menuOnline.setAttribute('aria-label', ONLINE.playOnline);
+      // The generic label OR "your move", from the match list the menu already read (`fillCopy`
+      // runs on every hub/join/waiting open, so it must never stomp the live word).
+      paintMenuOnline();
     }
-    // The 0.5 product menu MOVES #menu-new into the PLAY submenu and labels it "Training" (main.ts).
+    // The 0.5 product menu MOVES #menu-new into the PLAY submenu and labels it "Practice match" (main.ts).
     // Only the flat legacy menu names it "Play offline"; fillCopy runs again on every hub open, so
     // writing it here would stomp the product label back to "Play offline".
     const offline = document.getElementById('menu-new');
@@ -302,41 +613,153 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     document.title = pageTitleForLobby(yourTurnCount(matches));
   };
 
+  /**
+   * Paint the disclosure from `matchesExpanded`. This function is the ONLY place the button,
+   * badge and panel chrome are written, and it never ASSIGNS the open/closed choice — a render
+   * caused by the poll therefore cannot close a list the player opened.
+   */
+  const paintMatchesDisclosure = (total: number, waiting: number) => {
+    const toggle = $('online-matches-toggle') as HTMLButtonElement;
+    const label = $('online-matches-title');
+    const badge = $('online-matches-attention');
+    const panel = $('online-matches-panel');
+    label.textContent = yourMatchesLabel(total);
+    toggle.setAttribute('aria-expanded', String(matchesExpanded));
+    // The visible label plus the badge in words: a screen reader never hears a bare "!".
+    toggle.setAttribute('aria-label', yourMatchesButtonName(total, waiting));
+    badge.hidden = waiting === 0;
+    badge.textContent = '!';
+    panel.hidden = !matchesExpanded;
+  };
+
+  const setMatchesExpanded = (open: boolean) => {
+    if (matchesExpanded === open) return;
+    matchesExpanded = open;
+    const toggle = $('online-matches-toggle') as HTMLButtonElement;
+    const panel = $('online-matches-panel');
+    toggle.setAttribute('aria-expanded', String(open));
+    if (open) {
+      panel.hidden = false;
+      // The lobby's own interface beat; `enterSurface` is already gated by Reduce motion and the
+      // OS preference, and the badge itself is static (no animation to gate).
+      enterSurface(panel, { travel: 4, scale: 0.99 });
+    } else {
+      exitSurface(panel, {
+        travel: 4,
+        scale: 0.99,
+        onDone: () => {
+          // A rapid reopen cancels `exitSurface`, so `onDone` must also re-check the state.
+          if (!matchesExpanded) panel.hidden = true;
+        },
+      });
+    }
+  };
+
   const renderMatches = () => {
     const list = $('online-matches');
     const empty = $('online-matches-empty');
-    const rows = trimLobbyList(matches).map((e) => toLobbyRow(e, now(), serverOffset));
-    list.replaceChildren();
+    const shown = trimLobbyList(matches);
+    const rows = shown.map((entry) => ({ entry, row: toLobbyRow(entry, now(), serverOffset) }));
+    const waiting = countNeedingResponse(shown);
+    paintMatchesDisclosure(rows.length, waiting);
     empty.hidden = rows.length > 0;
-    for (const row of rows) {
-      const li = document.createElement('li');
-      li.className = `online-row bucket-${row.bucket}${row.warnLastTwoHours || row.atRisk ? ' warn' : ''}`;
-      li.tabIndex = 0;
-      li.setAttribute('role', 'button');
-      li.dataset.matchId = row.matchId;
-      // Grace is shown as a word next to the clock (never colour alone), plus the last-2-hours warn.
-      const warnSmall = [
-        row.graceWord ? escapeHtml(row.graceWord) : '',
-        row.warnLastTwoHours ? escapeHtml(ONLINE.warnLastTwoHours) : '',
-      ]
-        .filter(Boolean)
-        .map((t) => `<small>${t}</small>`)
-        .join('');
-      li.innerHTML = `<span class="online-row-icon" data-icon="${row.statusIcon}" aria-hidden="true"></span>
-        <span class="online-row-main"><b>${escapeHtml(row.opponentName)}</b>
-        <span class="online-row-status">${escapeHtml(row.statusWord)}</span></span>
-        <span class="online-row-time">${row.timeLeft ? escapeHtml(row.timeLeft) : ''}${warnSmall}</span>`;
-      const open = () => void openMatch(row.matchId);
-      li.addEventListener('click', open);
-      li.addEventListener('keydown', (ev) => {
-        if (ev.key === 'Enter' || ev.key === ' ') {
-          ev.preventDefault();
-          open();
+    // Rebuild rows only when something they show actually changed. A poll that finds the same
+    // list leaves the DOM (and any keyboard focus) exactly where it was.
+    const signature = rows
+      .map(({ entry, row }) =>
+        [
+          row.matchId,
+          row.bucket,
+          row.opponentName,
+          row.statusWord,
+          row.timeLeft ?? '',
+          row.warnLastTwoHours ? 1 : 0,
+          row.graceWord ?? '',
+          needsMyResponse(entry) ? 1 : 0,
+          row.rematch ?? '',
+        ].join('\u0001'),
+      )
+      .join('\u0002');
+    if (signature !== matchesSignature) {
+      matchesSignature = signature;
+      const focusedId =
+        document.activeElement instanceof HTMLElement ? document.activeElement.dataset.matchId ?? null : null;
+      list.replaceChildren();
+      for (const { entry, row } of rows) {
+        const needsResponse = needsMyResponse(entry);
+        const li = document.createElement('li');
+        const finished = row.bucket === 'finished';
+        li.className = `online-row bucket-${row.bucket}${row.warnLastTwoHours || row.atRisk ? ' warn' : ''}${
+          needsResponse ? ' needs-response' : ''
+        }${finished ? ' is-finished' : ''}${row.statusWord === ONLINE.statusYourTurn ? ' is-yours' : ''}`;
+        // A live row is one key (it opens the game). A finished row is NOT: its two keys are its
+        // actions (owner, 2026-11-10: "just name of opp and 2 icons - replay and challenge again").
+        if (!finished) {
+          li.tabIndex = 0;
+          li.setAttribute('role', 'button');
         }
-      });
+        li.dataset.matchId = row.matchId;
+        // THE GRID (owner, 2026-11-11: "Won or lost should always be in same line, have its own space
+        // ... divide this whole games submenu in a grid ... ultra clean"): every row is the same three
+        // columns — name | state | a fixed right slot (the clock, or the two keys) — so names, states,
+        // times and keys line up from the first row to the last. Grace is not shown (owner: "Opponent
+        // used their grace - shouldn't be shown"); the last two hours tint the clock and the frame,
+        // and are spoken to a screen reader.
+        const stateWord = row.statusWord === ONLINE.statusTheirTurn ? ONLINE.rowTheirTurn : row.statusWord;
+        const stateClass = finished ? `result-${row.statusWord.toLowerCase()}`
+          : row.statusWord === ONLINE.statusYourTurn ? 'state-yours' : 'state-theirs';
+        li.innerHTML = `<span class="online-row-name">${needsResponse ? '<span class="online-row-attention" aria-hidden="true"></span>' : ''}<b>${escapeHtml(row.opponentName)}</b></span>
+        <span class="online-row-status ${stateClass}">${escapeHtml(stateWord)}</span>
+        ${finished ? '' : `<span class="online-row-time${row.warnLastTwoHours ? ' is-warn' : ''}">${row.timeLeft ? escapeHtml(row.timeLeft) : ''}${row.warnLastTwoHours ? `<small class="online-sr">${escapeHtml(ONLINE.warnLastTwoHours)}</small>` : ''}</span>`}`;
+        if (finished) {
+          const keys = document.createElement('span');
+          keys.className = 'online-row-keys';
+          // WATCH THE REPLAY: its own key (it used to be the whole row and the words "Watch replay").
+          if (row.replayable) {
+            const replay = document.createElement('button');
+            replay.type = 'button';
+            replay.className = 'online-row-key online-row-replay';
+            replay.setAttribute('aria-label', ONLINE.rowReplayKey(row.opponentName));
+            replay.title = replay.getAttribute('aria-label') ?? '';
+            replay.innerHTML = REPLAY_KEY_SVG;
+            keys.append(replay);
+          } else {
+            const gap = document.createElement('span');
+            gap.className = 'online-row-key-gap';
+            keys.append(gap);
+          }
+          // CHALLENGE AGAIN: the crossed swords (owner, 2026-11-10: "make the rematch button swords
+          // and ask to confirm"). A press from either player waits for the other; the second press
+          // starts the game for both. Gold while the opponent already asked.
+          if (row.rematch) {
+            const again = document.createElement('button');
+            again.type = 'button';
+            again.className = `online-row-key online-row-rematch${row.rematch === 'theirs' ? ' is-theirs' : ''}`;
+            again.dataset.rematch = row.rematch;
+            again.dataset.opponent = row.opponentName;
+            again.setAttribute('aria-label', row.rematch === 'theirs' ? ONLINE.rowRematchAccept(row.opponentName) : ONLINE.rowRematchKey(row.opponentName));
+            again.title = again.getAttribute('aria-label') ?? '';
+            again.innerHTML = SWORDS_KEY_SVG;
+            keys.append(again);
+          } else {
+            const gap = document.createElement('span');
+            gap.className = 'online-row-key-gap';
+            keys.append(gap);
+          }
+          li.append(keys);
+        }
+      // No listeners per row: the list handles every row's press (wired once, below).
       list.appendChild(li);
+      }
+      if (focusedId) {
+        const again = [...list.querySelectorAll<HTMLElement>('li[data-match-id]')].find(
+          (el) => el.dataset.matchId === focusedId,
+        );
+        again?.focus();
+      }
     }
     refreshTitle();
+    paintMenuOnline();
   };
 
   const ensureIdentity = async () => {
@@ -347,11 +770,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
     return status.identity;
   };
-  const syncSeedRewards = async () => {
-    const id = await ensureIdentity();
-    const storage = browserStorage();
-    return id && storage ? flushSeedProofs(storage, client, id.token) : [];
-  };
+  // Seeds settle through the ONE path that also serves the finish card (online/seed-settle.ts).
+  // It owns the deadline, the retry and the identity for a payout, so the hub and a finish card can
+  // never disagree about a proof, and a player who never opens this hub is still paid.
+  const syncSeedRewards = () => settlePendingSeeds();
   const trainingSeedTicket = async (botLevel: number) => {
     const id = await ensureIdentity();
     if (!id) return null;
@@ -362,55 +784,91 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   };
   worldView = new WorldView(client, async () => {
     const id = await ensureIdentity();
-    return id ? { token: id.token, playerId: id.playerId } : null;
+    return id ? { token: id.token, playerId: id.playerId, kind: id.kind } : null;
+  }, () => worldSource.read(), async () => {
+    // A late mutation acknowledgement must not reuse a menu read that began before it committed.
+    if (menuPass) await menuPass.catch(() => undefined);
+    if (menuEl?.hidden === false && worldEl.dataset.livingTerritory === 'menu') await refreshMenu();
   });
+  living = menuEl ? mountLivingTerritory({menu: menuEl, screen: worldEl, planet: FEATURES.planet,
+    preview: () => worldView?.preview(worldSource.peek(), identity.peek(), !worldSource.isFresh()),
+    stop: () => worldView?.close(true),
+    freeze: (on) => worldView?.freezeMenuPreview(on),
+    // The menu's last painted frame, handed to the shared map before the panel takes the CSS box.
+    anchor: (box, rect) => worldView?.setMenuFrame(box, rect),
+  }) : null;
+  worldSource.subscribe(() => living?.update());
+  const syncMenuWorld = (visible: boolean) => living?.menu(visible);
+  window.addEventListener('futasaku:screen', event => {
+    const name = (event as CustomEvent<string>).detail;
+    if (name === 'play-menu') living?.play();
+    else syncMenuWorld(name === 'menu');
+  });
+  window.addEventListener('pageshow', event => { if(event.persisted) { living?.settle(); if(menuEl?.hidden === false) void refreshMenu(); } });
+  worldView.setCue((name) => hooks.cue?.(name));
+  // A rival's tile offers SEE PROFILE; the accounts module owns the sheet and the token, and hears
+  // this request through one zero-dependency event (web/src/accounts/profile-request.ts).
+  worldView.setProfileOpener((playerId, trigger) => requestPlayerProfile(playerId, trigger));
+  // The Territory's own-tile level comes from this device's campaign record, not from the server's
+  // last paid clear (owner report, 2026-10-24).
+  worldView.setMyLevel(() => hooks.campaignLevel?.() ?? null);
+  if (hooks.onAchievementsDone) worldView.setAchievementNote(hooks.onAchievementsDone);
 
   const reloadMatches = async () => {
-    const id = await ensureIdentity();
-    if (!id) return;
+    // Single flight: a slow request must not let the 10s hub poll stack a second list read.
+    if (reloadInFlight) return;
+    reloadInFlight = true;
     try {
-      const res = await client.listMatches(id.token);
-      serverOffset = res.serverNow - now();
-      matches = res.matches;
-      renderMatches();
-      notice('online-hub-notice', '');
-      flashIdentityReplaced();
-    } catch (error) {
-      notice('online-hub-notice', errorMessage(error));
+      const id = await ensureIdentity();
+      if (!id) return;
+      try {
+        const res = await client.listMatches(id.token);
+        serverOffset = res.serverNow - now();
+        matches = res.matches;
+        renderMatches();
+        notice('online-hub-notice', '');
+        flashIdentityReplaced();
+      } catch (error) {
+        notice('online-hub-notice', errorMessage(error));
+      }
+    } finally {
+      reloadInFlight = false;
     }
   };
 
-  const maybeFirstCard = () => {
-    const card = $('online-first-card');
-    const storage = browserStorage();
-    const seen = storage?.get(FIRST_ONLINE_CARD_KEY) === '1';
-    if (seen) {
-      card.hidden = true;
-      return;
-    }
-    $('online-first-title').textContent = ONLINE.firstCardTitle;
-    const ul = $('online-first-list');
-    ul.replaceChildren();
-    for (const line of ONLINE.firstCardLines) {
-      const li = document.createElement('li');
-      li.textContent = line;
-      ul.appendChild(li);
-    }
-    $('online-first-ok').textContent = ONLINE.firstCardOk;
-    card.hidden = false;
+  /**
+   * A quiet list refresh while the hub is the visible screen. The red "!" lives on a COLLAPSED
+   * button, so it is only useful if it can appear without the player touching anything: an
+   * opponent's Throw (or a friend joining) must light it. Ten seconds normally; four while the
+   * list is open with a game waiting on the opponent (lobby.ts hubPollMs), so their finished turn
+   * shows on the row without a tap. The timer stops with the screen.
+   */
+  const startHubPoll = () => {
+    stopHubPoll();
+    const tick = () => {
+      hubPollTimer = setTimeout(() => {
+        hubPollTimer = null;
+        if (hub.hidden) return;
+        // A hidden tab does not need the list: no request, no repaint (poll-gate.ts's rule).
+        if (!document.hidden) void reloadMatches();
+        tick();
+      }, hubPollMs({ expanded: matchesExpanded, entries: matches }));
+    };
+    tick();
   };
 
   const openHub = async () => {
     fillCopy();
     show('hub');
-    maybeFirstCard();
     closeMatchedPrompt();
     computerGameActive = false;
+    syncLooking();
     // A search may still be running in the background: say so, but never block the hub.
     notice('online-hub-notice', search ? ONLINE.searchStatusSr : '');
     const linkBlock = document.getElementById('online-link-block');
     if (linkBlock) linkBlock.hidden = false;
     await reloadMatches();
+    startHubPoll();
   };
 
   const openWaiting = (match: MatchSummary) => {
@@ -419,6 +877,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     show('waiting');
     setWaitingMode('invite');
     setWaitingTitle(ONLINE.waitingTitle, true);
+    $('online-waiting-body').textContent = ONLINE.waitingBody; // a rematch wait rewrites it
     $('online-invite-code').textContent = match.inviteCode;
     $('online-invite-code').setAttribute('aria-label', `${match.inviteCode}. ${ONLINE.codeTapCopy}.`);
     notice('online-waiting-notice', '');
@@ -427,22 +886,52 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     pollTimer = setInterval(() => void pollWaiting(), 2000);
   };
 
+  const clearInviteWait = async (line: string) => {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+    waiting = null;
+    await openHub();
+    notice('online-hub-notice', line);
+  };
+
   const pollWaiting = async () => {
     if (!waiting) return;
+    // A hidden tab asks nothing, and a request still out is never stacked on (poll-gate.ts).
+    if (!pollDue({ hidden: document.hidden, inFlight: waitingInFlight })) return;
     const id = identity.peek();
     if (!id) return;
+    waitingInFlight = true;
+    const current = waiting;
     try {
-      const res = await client.getState(id.token, waiting.matchId);
+      const res = await client.getState(id.token, current.matchId);
       serverOffset = res.serverNow - now();
-      if (res.player.status === 'active') {
-        const payload = res.player;
-        if (pollTimer) clearInterval(pollTimer);
-        pollTimer = null;
-        // The friend just joined while we sat on the waiting screen: this is our live-join moment.
-        launchDuel(id.token, payload, true);
+      if (waiting?.matchId !== current.matchId) return;
+      switch (matchPollVerdict(res.player.status, null)) {
+        case 'active':
+          if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+          }
+          launchDuel(id.token, res.player, true);
+          return;
+        case 'cleared':
+          await clearInviteWait(
+            res.player.status === 'finished' ? ONLINE.errFinished : ONLINE.waitingInviteHint,
+          );
+          return;
+        default:
+          return;
       }
-    } catch {
-      /* keep waiting; quiet */
+    } catch (error) {
+      if (waiting?.matchId !== current.matchId) return;
+      const code = error instanceof DuelError ? error.code : null;
+      if (matchPollVerdict(null, code) === 'cleared') {
+        await clearInviteWait(code === 'NOT_A_PARTICIPANT' ? ONLINE.identityReset : ONLINE.errGeneric);
+      }
+    } finally {
+      waitingInFlight = false;
     }
   };
 
@@ -469,19 +958,52 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       if (el) el.hidden = mode === 'search';
     }
     const cancel = document.getElementById('online-cancel-match') as HTMLButtonElement | null;
-    if (cancel) cancel.textContent = mode === 'search' ? ONLINE.searchStop : ONLINE.cancelMatch;
+    if (cancel) {
+      cancel.hidden = mode === 'search'; cancel.textContent = ONLINE.cancelMatch;
+      cancel.parentElement?.toggleAttribute('hidden',mode === 'search');
+    }
     const options = document.getElementById('online-search-options');
     if (options && mode !== 'search') options.hidden = true;
   };
 
+  /** The campaign level named on the offer, or null when this build has no campaign place. */
+  const offeredLevel = (): number | null => {
+    const n = hooks.campaignLevel?.();
+    if (typeof n !== 'number' || !Number.isFinite(n) || n < 1) return null;
+    return Math.trunc(n);
+  };
+
+  const paintSearchOffer = () => {
+    const computer = document.getElementById('online-search-computer');
+    if (computer) computer.textContent = ONLINE.searchPlayComputer;
+    const invite = document.getElementById('online-search-invite');
+    if (invite) invite.textContent = ONLINE.searchInviteFriend;
+    const keep = document.getElementById('online-search-keep');
+    if (keep) keep.textContent = ONLINE.searchKeepWaiting;
+    const levelBtn = document.getElementById('online-search-level');
+    const level = offeredLevel();
+    if (levelBtn) {
+      levelBtn.hidden = level == null;
+      if (level != null) levelBtn.textContent = ONLINE.searchPlayLevel(level);
+    }
+  };
+
+  let offerTimer: ReturnType<typeof setTimeout> | null = null;
   const renderSearch = () => {
     if (!search) return;
-    const parked = isSearchParked(now() - search.startedAt, parkedOfferMs());
-    // Active search shows the animated dots; the parked "Nobody yet" offer is a still state.
-    setWaitingTitle(parked ? ONLINE.searchParkedTitle : ONLINE.searchTitle, !parked);
-    $('online-waiting-body').textContent = parked ? ONLINE.searchParkedBody : ONLINE.searchBody;
+    setWaitingTitle(ONLINE.searchTitle, false);
+    $('online-waiting-body').textContent = ONLINE.searchBody;
+    paintSearchOffer();
+    // OWNER'S RULE (2026-11-08): the offer (Practice match / Level / Invite a friend) waits 5 s, so
+    // the search gets a fair chance before the player is steered away from it.
     const options = document.getElementById('online-search-options');
+    const waited = now() - search.startedAt;
+    const parked = isSearchParked(waited, parkedOfferMs());
     if (options) options.hidden = !parked;
+    // One redraw when the window ends (the 2 s poll does not repaint this screen).
+    if (offerTimer) { clearTimeout(offerTimer); offerTimer = null; }
+    if (!parked) offerTimer = setTimeout(() => { offerTimer = null; renderSearch(); }, parkedOfferMs() - waited + 20);
+    syncLooking();
   };
 
   const stopSearchTimer = () => {
@@ -493,21 +1015,43 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
 
   const stopSearch = () => {
     stopSearchTimer();
+    if (offerTimer) { clearTimeout(offerTimer); offerTimer = null; }
     search = null;
     setWaitingMode('invite');
+    syncLooking();
   };
 
-  const cancelSearchAndStop = async () => {
+  /**
+   * `cleared` — the queue entry is gone (or there was none). `kept` — the cancel did not land,
+   * so the same entry stays and must not be replaced. `left` — something else already took the
+   * search (a match went live); the caller must not open the hub over that.
+   */
+  type SearchCancel = 'cleared' | 'kept' | 'left';
+
+  const cancelSearchAndStop = (): Promise<SearchCancel> => enqueueSearch(async () => {
     const s = search;
-    stopSearch();
-    if (s) {
-      try {
-        await client.cancelSearch(s.token);
-      } catch {
-        /* calm: the search may already be gone */
+    if (!s) return 'cleared';
+    // Keep the slot until the server agrees. Clearing it first is how a second Find parks again.
+    cancelPending = true;
+    stopSearchTimer();
+    try {
+      await client.cancelSearch(s.token);
+    } catch {
+      if (search === s) {
+        if (!searchTimer) searchTimer = setInterval(() => void pollSearch(), 2000);
+        syncLooking();
+        return 'kept';
       }
+      return 'left';
+    } finally {
+      cancelPending = false;
     }
-  };
+    if (search !== s) return 'left';
+    search = null;
+    setWaitingMode('invite');
+    syncLooking();
+    return 'cleared';
+  });
 
   /** Gentle, dismissible "Opponent found" prompt while the player is inside a computer game. */
   const openMatchedPrompt = (token: string, payload: MatchViewPayload) => {
@@ -524,43 +1068,106 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     if (nowBtn) nowBtn.textContent = ONLINE.matchedPlayNow;
     if (laterBtn) laterBtn.textContent = ONLINE.matchedLater;
     el.hidden = false;
+    el.classList.remove('ix-closing');
+    const card = el.querySelector<HTMLElement>('.online-card');
+    if (card) enterSurface(card);
   };
 
   const closeMatchedPrompt = () => {
     pendingMatched = null;
     const el = document.getElementById('online-matched');
-    if (el) el.hidden = true;
+    if (!el) return;
+    const card = el.querySelector<HTMLElement>('.online-card');
+    el.classList.add('ix-closing');
+    const done = () => {
+      if (!pendingMatched) el.hidden = true;
+      el.classList.remove('ix-closing');
+    };
+    if (!exitSurface(card ?? el, { onDone: done })) done();
+  };
+
+  const clearParkedSearch = async (line: string) => {
+    const showingSearch = !waitingEl.hidden && waitingEl.dataset.mode === 'search';
+    stopSearch();
+    closeMatchedPrompt();
+    computerGameActive = false;
+    syncLooking();
+    if (showingSearch) await openHub();
+    notice('online-hub-notice', line);
+  };
+
+  /**
+   * The search ended without this player stopping it: the other searcher may already share an open
+   * game with them, and the server continued THAT game (owner, 2026-11-11). Open it, exactly as a
+   * fresh pairing opens (a practice game in progress gets the "opponent found" prompt). False when
+   * there is no such game, so the caller goes home as before.
+   */
+  const openContinuedGame = async (current: { token: string; matchId: string; startedAt: number }): Promise<boolean> => {
+    try {
+      const list = await client.listMatches(current.token);
+      const id = continuedMatchAfterSearch(list.matches, current.startedAt + serverOffset, current.matchId);
+      if (!id || search?.matchId !== current.matchId) return false;
+      const res = await client.openView(current.token, id);
+      if (res.player.status !== 'active') return false;
+      const wasComputer = computerGameActive;
+      stopSearch();
+      computerGameActive = false;
+      syncLooking();
+      void reloadMatches();
+      if (wasComputer) openMatchedPrompt(current.token, res.player);
+      else launchDuel(current.token, res.player, false);
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const pollSearch = async () => {
     if (!search) return;
+    // Same gate as the waiting screen: a hidden tab asks nothing and a stuck request is not stacked.
+    if (!pollDue({ hidden: document.hidden, inFlight: searchInFlight })) return;
+    searchInFlight = true;
+    const current = search;
     try {
-      const res = await client.getState(search.token, search.matchId);
+      const res = await client.getState(current.token, current.matchId);
       serverOffset = res.serverNow - now();
-      const payload = res.player;
-      const token = search.token;
-      if (payload.status === 'active') {
-        stopSearch();
-        void reloadMatches();
-        if (computerGameActive) openMatchedPrompt(token, payload);
-        else launchDuel(token, payload, true);
+      if (search?.matchId !== current.matchId) return;
+      const token = current.token;
+      switch (matchPollVerdict(res.player.status, null)) {
+        case 'active': {
+          const wasComputer = computerGameActive;
+          stopSearch();
+          computerGameActive = false;
+          syncLooking();
+          void reloadMatches();
+          if (wasComputer) openMatchedPrompt(token, res.player);
+          else launchDuel(token, res.player, true);
+          return;
+        }
+        case 'cleared':
+          if (await openContinuedGame(current)) return;
+          await clearParkedSearch(ONLINE.searchCancelled);
+          return;
+        default:
+          break;
+      }
+    } catch (error) {
+      if (search?.matchId !== current.matchId) return;
+      const code = error instanceof DuelError ? error.code : null;
+      if (matchPollVerdict(null, code) === 'cleared') {
+        if (await openContinuedGame(current)) return;
+        await clearParkedSearch(ONLINE.searchCancelled);
         return;
       }
-      if (payload.status === 'finished') {
-        // The parked search expired (nobody came within the window). Calm, honest exit.
-        stopSearch();
-        void openHub();
-        notice('online-hub-notice', ONLINE.searchCancelled);
-        return;
-      }
-    } catch {
-      /* quiet: a transient failure must not drop a parked search */
+    } finally {
+      searchInFlight = false;
     }
     renderSearch();
   };
 
-  const startSearch = (token: string, matchId: string) => {
-    search = { token, matchId, startedAt: now() };
+  /** Show the search already in hand. Does not reset its clock and does not ask the server. */
+  const resumeSearch = () => {
+    if (!search) return;
     waiting = null;
     if (pollTimer) {
       clearInterval(pollTimer);
@@ -570,17 +1177,48 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     show('waiting');
     setWaitingMode('search');
     renderSearch();
-    notice('online-waiting-notice', ONLINE.searchStatusSr);
+    notice('online-waiting-notice', `${ONLINE.findOpponentLooking}…`);
     flashIdentityReplaced();
-    stopSearchTimer();
-    searchTimer = setInterval(() => void pollSearch(), 2000);
+    if (!searchTimer) searchTimer = setInterval(() => void pollSearch(), 2000);
+    syncLooking();
   };
 
-  const openMatch = async (matchId: string) => {
+  const startSearch = (token: string, matchId: string) => {
+    // Already in the queue: resume that entry. Adopting a new id here would be a second one.
+    if (search) {
+      resumeSearch();
+      return;
+    }
+    search = { token, matchId, startedAt: now() };
+    resumeSearch();
+  };
+
+  /**
+   * A FINISHED duel's row opens its replay (owner brief, 2026-10-25): the last ten finished duels
+   * are exactly what the list already shows, so the way in is the row itself. The authorised read
+   * happens here because the lobby owns the identity and its token; the payload is handed to the
+   * page, which owns the player.
+   */
+  const openReplay = async (matchId: string) => {
     const id = await ensureIdentity();
     if (!id) return;
     try {
-      const res = await client.getState(id.token, matchId);
+      const res = await client.replay(id.token, matchId);
+      serverOffset = res.serverNow - now();
+      hooks.openReplay?.(res.replay);
+    } catch {
+      notice('online-hub-notice', REPLAY.unavailable);
+    }
+  };
+
+  const openMatch = async (matchId: string) => {
+    const fromWorld=!worldEl.hidden&&worldEl.getAttribute('aria-hidden')!=='true';
+    const id = await ensureIdentity();
+    if (!id) return;
+    try {
+      // Only the turns this device has not seen (owner report, 2026-10-27: reopening a match
+      // replayed the whole game and flickered, not just the opponent's move made meanwhile).
+      const res = await client.openView(id.token, matchId);
       serverOffset = res.serverNow - now();
       if (res.player.status === 'waiting') {
         try {
@@ -593,54 +1231,120 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         }
       }
       // Returning to a match from the list is never a live join: no lottery, the chip carries it.
-      launchDuel(id.token, res.player, false);
+      if(fromWorld)await challengeHandoff.run(()=>launchDuel(id.token,res.player,false));
+      else launchDuel(id.token,res.player,false);
     } catch (error) {
       notice('online-hub-notice', errorMessage(error));
     }
   };
 
-  /** Creates a fresh match and opens the invite/share screen. `false` when it could not. */
-  const createMatch = async (): Promise<boolean> => {
-    const id = await ensureIdentity();
-    if (!id) return false;
-    try {
-      const res = await client.createMatch(id.token);
-      serverOffset = res.serverNow - now();
-      openWaiting(res.match);
-      return true;
-    } catch (error) {
-      notice('online-hub-notice', errorMessage(error));
-      return false;
-    }
+  // The Territory challenge sheet can open the linked duel it created. `openMatch` is declared here,
+  // after the view was constructed, so the view is handed the opener once it exists.
+  worldView?.setMatchOpener((matchId) => void openMatch(matchId));
+
+  /**
+   * Creates a fresh match and opens the invite/share screen. `started` is false when the guard
+   * refused a second tap, so a caller such as rematch can tell "declined" from "failed".
+   */
+  const createMatch = async (): Promise<{ ok: boolean; started: boolean }> => {
+    const out = await guard.run('create', async () => {
+      const id = await ensureIdentity();
+      if (!id) return false;
+      try {
+        const res = await client.createMatch(id.token);
+        serverOffset = res.serverNow - now();
+        openWaiting(res.match);
+        return true;
+      } catch (error) {
+        notice('online-hub-notice', errorMessage(error));
+        return false;
+      }
+    });
+    return { ok: out.started && !out.timedOut && out.value === true, started: out.started };
   };
 
   /**
-   * A rematch from a finished standard duel. Identical to "Create a duel" from the hub — a fresh
-   * match with a fresh invite code, shown on the same waiting/share screen. On failure, land on the
-   * hub, which is where "Create a duel" reports its error line.
+   * A rematch from a finished standard duel (owner, 2026-10-22: "they both press rematch = they're
+   * straight in a new game"). The server pairs the two presses: the first creates the rematch and
+   * waits on the usual waiting screen (which already enters the game the moment the seat fills),
+   * the second enters it at once. The invite code stays on that screen as a second way in.
+   * A server without the endpoint (before its deploy) answers NOT_FOUND, and then this is exactly
+   * the old behaviour: a fresh invite via "Create a duel". On failure, land on the hub. A refused
+   * second tap (the first request is still in flight) leaves the screen alone.
    */
-  const rematch = async (): Promise<void> => {
-    if (!(await createMatch())) await openHub();
+  const rematch = async (finishedMatchId: string | null = null): Promise<void> => {
+    if (finishedMatchId) {
+      const out = await guard.run('create', async (): Promise<'done' | 'failed' | 'older-server'> => {
+        const id = await ensureIdentity();
+        if (!id) return 'failed';
+        try {
+          const res = await client.rematch(id.token, finishedMatchId);
+          if (!lobbyActionStillCurrent(guard, 'create')) return 'failed';
+          serverOffset = res.serverNow - now();
+          if (res.player.status === 'active') {
+            launchDuel(id.token, res.player, true);
+            return 'done';
+          }
+          openWaiting(res.match);
+          setWaitingTitle(ONLINE.rematchWaitingTitle, true);
+          $('online-waiting-body').textContent = ONLINE.rematchWaitingBody;
+          return 'done';
+        } catch (error) {
+          if (error instanceof DuelError && error.status === 404 && error.code === 'NOT_FOUND') return 'older-server';
+          notice('online-hub-notice', errorMessage(error));
+          return 'failed';
+        }
+      });
+      if (!out.started) return;
+      if (!out.timedOut && out.value === 'done') return;
+      if (out.timedOut || out.value === 'failed') {
+        await openHub();
+        return;
+      }
+    }
+    const created = await createMatch();
+    if (created.started && !created.ok) await openHub();
   };
 
   const findOpponent = async () => {
     if (!findOpponentEnabled()) return;
-    const id = await ensureIdentity();
-    if (!id) return;
-    noticeWithDots('online-hub-notice', ONLINE.findOpponentLooking);
-    try {
-      const res = await client.findOpponent(id.token);
-      serverOffset = res.serverNow - now();
-      if (res.paired && res.player.status === 'active') {
-        // Paired with an opponent right now: a live join.
-        launchDuel(id.token, res.player, true);
+    await enqueueSearch(async () => {
+      const gate = findTap(search !== null, cancelPending);
+      // Resume, or wait out a cancel. Either way: do not park a second entry.
+      if (gate !== 'park') {
+        if (gate === 'resume') resumeSearch();
         return;
       }
-      // Parked: we stay in the queue and keep polling, even if the player leaves the screen.
-      startSearch(id.token, res.match.matchId);
-    } catch (error) {
-      notice('online-hub-notice', errorMessage(error));
-    }
+      const out = await guard.run('find', async () => {
+        const id = await ensureIdentity();
+        if (!id) return;
+        // The cancel or another find may have taken the slot while this waited on the guard.
+        if (findTap(search !== null, cancelPending) !== 'park') {
+          if (search) resumeSearch();
+          return;
+        }
+        noticeWithDots('online-hub-notice', ONLINE.findOpponentLooking);
+        try {
+          const res = await client.findOpponent(id.token);
+          if (!lobbyActionStillCurrent(guard, 'find')) return;
+          serverOffset = res.serverNow - now();
+          if (search) {
+            resumeSearch();
+            return;
+          }
+          if (res.paired && res.player.status === 'active') {
+            // Paired with an opponent right now: a live join.
+            launchDuel(id.token, res.player, true);
+            return;
+          }
+          // Parked: we stay in the queue and keep polling, even if the player leaves the screen.
+          startSearch(id.token, res.match.matchId);
+        } catch (error) {
+          if (lobbyActionStillCurrent(guard, 'find')) notice('online-hub-notice', errorMessage(error));
+        }
+      });
+      if (out.started && out.timedOut) notice('online-hub-notice', ONLINE.errGeneric);
+    });
   };
 
   const joinWithCode = async (raw: string) => {
@@ -655,21 +1359,23 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       notice('online-join-notice', ONLINE.errCodeFormat);
       return;
     }
-    const id = await ensureIdentity();
-    if (!id) return;
-    try {
-      const res = await client.joinMatch(id.token, cleaned);
-      serverOffset = res.serverNow - now();
-      // Joining a duel in person is the joiner's live-join moment.
-      launchDuel(id.token, res.player, true);
-    } catch (error) {
-      if (error instanceof DuelError && error.code === 'ALREADY_JOINED') {
-        notice('online-join-notice', ONLINE.errAlreadyJoined);
-        await reloadMatches();
-        return;
+    await guard.run('join', async () => {
+      const id = await ensureIdentity();
+      if (!id) return;
+      try {
+        const res = await client.joinMatch(id.token, cleaned);
+        serverOffset = res.serverNow - now();
+        // Joining a duel in person is the joiner's live-join moment.
+        launchDuel(id.token, res.player, true);
+      } catch (error) {
+        if (error instanceof DuelError && error.code === 'ALREADY_JOINED') {
+          notice('online-join-notice', ONLINE.errAlreadyJoined);
+          await reloadMatches();
+          return;
+        }
+        notice('online-join-notice', error instanceof DuelError ? friendlyJoinError(error.code) : errorMessage(error));
       }
-      notice('online-join-notice', error instanceof DuelError ? friendlyJoinError(error.code) : errorMessage(error));
-    }
+    });
   };
 
   /**
@@ -702,8 +1408,9 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         await navigator.share({ title: ONLINE.brand, text, url: link });
         return;
       }
-    } catch {
-      /* fall through to copy */
+    } catch (error) {
+      if (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError') return;
+      /* A real sharing failure can still fall through to copy. */
     }
     try {
       await navigator.clipboard.writeText(link);
@@ -751,7 +1458,18 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     hooks.showMenu();
     refreshTitle();
   });
-  $('online-waiting-back').addEventListener('click', () => void openHub());
+  $('online-waiting-back').addEventListener('click', () => {
+    void (async () => {
+      if (search && waitingEl.dataset.mode === 'search') {
+        const stopped = await cancelSearchAndStop();
+        if (stopped !== 'cleared') {
+          if (stopped === 'kept') notice('online-waiting-notice', ONLINE.errGeneric);
+          return;
+        }
+      }
+      await openHub();
+    })();
+  });
   $('online-join-back').addEventListener('click', () => void openHub());
   /**
    * The world map is reachable from TWO places and its back control is honest about which one: the
@@ -763,65 +1481,230 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     fillCopy();
     show('world');
     void renderWorld();
+    // The panel has been framed synchronously by `WorldView.open`; settle the menu's full-bleed
+    // map into it (a no-op from the hub, or under Reduce motion).
+    living?.enter();
   };
-  document.getElementById('menu-world')?.addEventListener('click', () => openWorld('menu'));
+  const worldEntry = document.getElementById('menu-world') as HTMLButtonElement | null;
+  worldEntry?.addEventListener('click', () => openWorld('menu'));
+  // Code readiness, not network readiness: a tap can never land before this handler exists.
+  if (worldEntry) worldEntry.disabled = false;
   $('online-world-back').addEventListener('click', () => {
     if (worldFrom === 'hub') return void openHub();
-    show(null);
-    hooks.showMenu();
-    refreshTitle();
+    // The panel leaves on its own beat (dim, skin out), and only then is the menu put back and
+    // revealed — so the return never hard-cuts from the framed window to the full-bleed background.
+    const backToMenu = () => { show(null); hooks.showMenu(); refreshTitle(); };
+    if (living) living.leave(backToMenu);
+    else backToMenu();
   });
   document.getElementById('online-world')?.addEventListener('click', () => openWorld('hub'));
   // The first affordable claim is invited only on the quiet menu, never during a match,
   // animation, online turn or rematch flow. The server remembers acknowledgement per identity.
   let invitationOpen = false;
-  let invitationChecking = false;
   let invitationDismissedThisSession = false;
-  const checkWorldInvitation = async () => {
-    if (invitationOpen || invitationChecking || invitationDismissedThisSession || menuEl?.hidden !== false || !worldEl.hidden) return;
-    invitationChecking = true;
+  /**
+   * The Territory entry's two read-outs. They are painted from the SAME menu-show pass that offers
+   * the invitation, so the menu never pays a second wallet request for them (owner brief,
+   * 2026-10-20). This is not a poll: one read when the menu appears, and only while it is on show.
+   */
+  const territoryUI = installTerritoryCountUI();
+  /**
+   * The answer countdown behind the entry's right half (owner, 2026-11-01). It owns ONE interval,
+   * is pointed at the deadline the menu pass below already read, and stops the moment no answer is
+   * waiting. `now` is the lobby's injectable clock, so a test can drive it; the deadline itself is
+   * the server's, corrected once per read (`noteServerNow`).
+   */
+  const answerClock = mountAnswerClock((text, urgency) => territoryUI.answer(text, urgency), now);
+  let menuPass: Promise<void> | null = null;
+
+  /**
+   * The pair, read ONCE for this identity: the wallet and the map in one `Promise.all`. Used by the
+   * menu pass below AND by the profile (through `registerTerritoryReader`), so the two surfaces can
+   * never pay for two different reads of the same thing (owner brief, 2026-10-21). Unknown stays
+   * unknown; the caller paints an em dash, never a 0.
+   */
+  const readMenuCounts = async (playerId?: string, publicMap = worldSource.read()): Promise<TerritoryCounts | null> => {
+    // Public geography must load even when identity or the wallet cannot be read.
+    void publicMap.catch(() => undefined);
+    const id = await ensureIdentity();
+    if (!id || (playerId && id.playerId !== playerId)) {
+      if (menuEl?.hidden === false) territoryUI.paint(null);
+      answerClock.stop();
+      return null;
+    }
+    living?.update();
+    let wallet: SeedWallet | null = null;
+    let world: WorldMapPayload['world'] | null = null;
+    let waiting = 0;
+    let duelList: MatchListEntry[] | null = null;
+    let duelServerNow = 0;
     try {
-      await syncSeedRewards();
-      if (menuEl?.hidden !== false) return;
-      const id = await ensureIdentity();
-      if (!id) return;
-      let wallet;
-      try { wallet = await client.seedWallet(id.token); } catch { return; }
-      if (wallet.balance < 100 || wallet.worldInvitationSeen || menuEl?.hidden !== false) return;
-      invitationOpen = true;
-      const sheet = document.createElement('div');
-      sheet.className = 'world-invitation';
-      sheet.setAttribute('role', 'dialog');
-      sheet.setAttribute('aria-modal', 'true');
-      sheet.setAttribute('aria-label', '100 Seeds');
-      const card = document.createElement('div');
-      card.className = 'world-invitation-card';
-      const title = document.createElement('strong');
-      title.textContent = '100 SEEDS';
-      const line = document.createElement('p');
-      line.textContent = 'Your place in the world is waiting.';
-      const actions = document.createElement('div');
-      const open = document.createElement('button');
-      open.textContent = ONLINE.worldInviteOpen;
-      const later = document.createElement('button');
-      later.textContent = 'LATER';
-      const finish = (go: boolean) => {
-        sheet.remove(); invitationOpen = false; invitationDismissedThisSession = true;
-        void client.acknowledgeWorldInvitation(id.token).catch(() => { /* Retry on a later session. */ });
-        if (go) openWorld('menu');
-      };
-      open.addEventListener('click', () => finish(true));
-      later.addEventListener('click', () => finish(false));
-      actions.append(open, later);
-      card.append(seedIcon(28), title, line, actions);
-      sheet.append(card);
-      document.body.append(sheet);
-      open.focus();
-    } finally { invitationChecking = false; }
+      const [readWallet, map, challenges, duels] = await Promise.all([
+        client.seedWallet(id.token),
+        publicMap,
+        // The menu's own signal: the shared "is anything waiting for me" predicate.
+        client.worldChallenges(id.token).catch(() => null),
+        // The SAME match list the hub draws, so the Play online key can say "your move". It rides
+        // the read the menu already makes on show: no new endpoint and no poll (owner, 2026-11-01).
+        client.listMatches(id.token).catch(() => null),
+      ]);
+      wallet = readWallet;
+      world = map.world;
+      waiting = waitingActionCount(challenges);
+      // ONE server-clock correction per read, then the answer window is an absolute deadline the
+      // clock ticks against. An unread list answers null, which stops the tick (never a guess).
+      const clock = challenges ? noteServerNow(emptyClock(), challenges.serverNow, now()) : null;
+      const answer = clock ? answerWaiting(challenges, correctedNow(clock, now())) : null;
+      answerClock.set(answer ? answer.expiresAt : null, answer?.count ?? 1);
+      if (duels) {
+        duelList = duels.matches;
+        duelServerNow = duels.serverNow;
+      }
+    } catch {
+      // Offline, signed out, or a failed request: both read-outs stay hidden, together.
+      wallet = null;
+      world = null;
+      answerClock.stop();
+    }
+    if (wallet && menuEl?.hidden === false && identity.peek()?.playerId === id.playerId)
+      worldView?.useMenuWallet(id.playerId, wallet);
+    const counts = territoryCounts(wallet, world, id.playerId, waiting);
+    rememberTerritory(id.playerId, counts);
+    if (menuEl?.hidden === false) territoryUI.paint(counts);
+    // The SAME list paints the Play online key's live word (and the hub, if it is open). Kept out
+    // of the try above: a paint can never be mistaken for a failed wallet/map read.
+    if (duelList) {
+      serverOffset = duelServerNow - now();
+      matches = duelList;
+      renderMatches();
+    }
+    // The invitation reads the SAME wallet response; it never costs a second request.
+    offerWorldInvitation(id, wallet);
+    return counts;
   };
-  window.addEventListener('futasaku:menu', () => { void checkWorldInvitation(); });
-  if (menuEl?.hidden === false) void checkWorldInvitation();
+  registerTerritoryReader((playerId) => readMenuCounts(playerId));
+
+  const offerWorldInvitation = (id: { token: string }, wallet: SeedWallet | null) => {
+    if (invitationOpen || invitationDismissedThisSession || menuEl?.hidden !== false || !worldEl.hidden) return;
+    if (!wallet || wallet.balance < 100 || wallet.worldInvitationSeen) return;
+    invitationOpen = true;
+    const sheet = document.createElement('div');
+    sheet.className = 'world-invitation';
+    sheet.setAttribute('role', 'dialog');
+    sheet.setAttribute('aria-modal', 'true');
+    sheet.setAttribute('aria-label', '100 Seeds');
+    const card = document.createElement('div');
+    card.className = 'world-invitation-card';
+    const title = document.createElement('strong');
+    // Title keeps the currency word here (src/strings.ts must stay free of "seed"; see seed-icon.ts).
+    title.textContent = '100 SEEDS';
+    const line = document.createElement('p');
+    line.textContent = ONLINE.worldInviteBody;
+    const actions = document.createElement('div');
+    const open = document.createElement('button');
+    open.className = 'world-invitation-primary';
+    open.textContent = ONLINE.worldInviteOpen;
+    const later = document.createElement('button');
+    later.className = 'world-invitation-secondary';
+    later.textContent = ONLINE.worldInviteLater;
+    const finish = (go: boolean) => {
+      sheet.remove(); invitationOpen = false; invitationDismissedThisSession = true;
+      void client.acknowledgeWorldInvitation(id.token).catch(() => { /* Retry on a later session. */ });
+      if (go) openWorld('menu');
+    };
+    open.addEventListener('click', () => finish(true));
+    later.addEventListener('click', () => finish(false));
+    actions.append(open, later);
+    card.append(seedIcon(28), title, line, actions);
+    sheet.append(card);
+    document.body.append(sheet);
+    open.focus();
+  };
+
+  /**
+   * ONE pass per menu show: settle queued proofs, read the wallet ONCE and the world ONCE, paint
+   * the two read-outs, then use that same wallet for the invitation card. Single-flight, so a
+   * burst of `futasaku:menu` events can never stack requests. Any failure hides both numbers (a
+   * stale or invented value is worse than no value); the label and the entry stay untouched.
+   */
+  const refreshMenu = (): Promise<void> => {
+    if (menuEl?.hidden !== false) return Promise.resolve();
+    // A return from another screen never blinks: paint what is known for THIS identity, and clear
+    // at once when the identity changed (a sign-out reload, or a fresh guest).
+    territoryUI.paint(cachedTerritory(identity.peek()?.playerId ?? null));
+    if (menuPass) return menuPass;
+    menuPass = (async () => {
+      try {
+        // Start the public map immediately; identity and Seed settlement never block its arrival.
+        const publicMap = worldSource.read();
+        void publicMap.catch(() => undefined);
+        // The counts FIRST (owner, 2026-11-08: "I don't see my seeds and tiles amount on the territory
+        // button"): awaiting the Seeds settlement before this read left the key empty for as long as
+        // a slow or stuck settle took. One wallet + one map read, remembered for the profile too.
+        await readMenuCounts(undefined, publicMap);
+        // Then settle queued Seed proofs; read the wallet again only if that actually paid something.
+        const settled = await syncSeedRewards().catch(() => null);
+        if (menuEl?.hidden !== false) return;
+        if (settled && settled.awards.length > 0) await readMenuCounts(undefined, worldSource.read());
+      } finally {
+        menuPass = null;
+      }
+    })();
+    return menuPass;
+  };
+  window.addEventListener('futasaku:menu', () => { void refreshMenu(); });
+  // Coming back to the tab: the polls were silent while it was hidden, so ask once immediately
+  // rather than leaving the waiting screen (or the parked search) one tick stale.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    living?.settle();
+    if(menuEl?.hidden === false) void refreshMenu();
+    if (waiting) void pollWaiting();
+    else if (search) void pollSearch();
+    // Your matches went quiet while hidden: the opponent may have moved. Ask once, now.
+    if (!hub.hidden) void reloadMatches();
+  });
+  if (menuEl?.hidden === false) { syncMenuWorld(true); void refreshMenu(); }
   $('online-create').addEventListener('click', () => void createMatch());
+  // The "Your matches" disclosure. Opening also asks for the freshest list; the render it causes
+  // reads `matchesExpanded`, so it cannot shut the panel it just opened.
+  // EVERY ROW'S PRESS, in one place: the list is rebuilt on every change, so per-row listeners would
+  // be re-created each time (the online soak counts them). The Rematch key is a real button inside
+  // the row: its press asks for the rematch; anywhere else on the row opens the game (or replay).
+  {
+    const list = $('online-matches');
+    const rowOf = (target: EventTarget | null): HTMLElement | null =>
+      target instanceof Element ? target.closest<HTMLElement>('li[data-match-id]') : null;
+    const openRow = (li: HTMLElement) => { void openMatch(li.dataset.matchId!); };
+    list.addEventListener('click', (ev) => {
+      const li = rowOf(ev.target);
+      if (!li) return;
+      const key = ev.target instanceof Element ? ev.target.closest<HTMLElement>('.online-row-key') : null;
+      if (key?.classList.contains('online-row-replay')) { void openReplay(li.dataset.matchId!); return; }
+      if (key?.classList.contains('online-row-rematch')) {
+        // Ask first (owner, 2026-11-10: 'ask to confirm "You want to challenge RYK again?"').
+        const id = li.dataset.matchId!;
+        void askRematch(key.dataset.opponent ?? ONLINE.opponentFallback, key).then((yes) => { if (yes) void rematch(id); });
+        return;
+      }
+      // A finished row is not a key itself: only its two keys act.
+      if (li.classList.contains('is-finished')) return;
+      openRow(li);
+    });
+    list.addEventListener('keydown', (ev) => {
+      const li = rowOf(ev.target);
+      // Only a live row itself: a key's own Enter/Space is a native button click.
+      if (!li || ev.target !== li || li.classList.contains('is-finished') || (ev.key !== 'Enter' && ev.key !== ' ')) return;
+      ev.preventDefault();
+      openRow(li);
+    });
+  }
+  $('online-matches-toggle').addEventListener('click', () => {
+    const open = !matchesExpanded;
+    setMatchesExpanded(open);
+    if (open) void reloadMatches();
+    if (!hub.hidden) startHubPoll(); // the pace follows the panel at once
+  });
   document.getElementById('online-find')?.addEventListener('click', () => void findOpponent());
   $('online-join-open').addEventListener('click', () => {
     fillCopy();
@@ -852,7 +1735,11 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   $('online-cancel-match').addEventListener('click', () => {
     if (search && waitingEl.dataset.mode === 'search') {
       void (async () => {
-        await cancelSearchAndStop();
+        const stopped = await cancelSearchAndStop();
+        if (stopped !== 'cleared') {
+          if (stopped === 'kept') notice('online-waiting-notice', ONLINE.errGeneric);
+          return;
+        }
         await openHub();
         notice('online-hub-notice', ONLINE.searchCancelled);
       })();
@@ -878,22 +1765,27 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       await openHub();
     })();
   });
-  // Play the computer: the offline game starts and the search KEEPS RUNNING in the background.
+  // Practice match: the offline game starts and the search KEEPS RUNNING in the background.
   document.getElementById('online-search-computer')?.addEventListener('click', () => {
+    if (!search) return;
     computerGameActive = true;
+    syncLooking();
     hooks.startComputerGame?.();
+  });
+  // Current campaign level: same search, same "still looking" line. Does not wipe the classic save.
+  document.getElementById('online-search-level')?.addEventListener('click', () => {
+    if (!search || !hooks.startOfferedLevel) return;
+    computerGameActive = true;
+    syncLooking();
+    hooks.startOfferedLevel();
   });
   // Invite a friend instead: stop the search, then open the invite screen.
   document.getElementById('online-search-invite')?.addEventListener('click', () => {
     void (async () => {
-      await cancelSearchAndStop();
-      await createMatch();
+      const stopped = await cancelSearchAndStop();
+      if (stopped === 'cleared') await createMatch();
+      else if (stopped === 'kept') notice('online-waiting-notice', ONLINE.errGeneric);
     })();
-  });
-  // Keep searching: hide the offer and give the queue another full window.
-  document.getElementById('online-search-keep')?.addEventListener('click', () => {
-    if (search) search.startedAt = now();
-    renderSearch();
   });
   // Opponent found while playing the computer: the offline game stays resumable.
   document.getElementById('online-matched-now')?.addEventListener('click', () => {
@@ -905,10 +1797,6 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     closeMatchedPrompt();
     notice('online-hub-notice', ONLINE.matchedNotice);
     void reloadMatches();
-  });
-  $('online-first-ok').addEventListener('click', () => {
-    browserStorage()?.set(FIRST_ONLINE_CARD_KEY, '1');
-    $('online-first-card').hidden = true;
   });
 
   const linkMake = document.getElementById('online-link-make');
@@ -953,7 +1841,26 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     ($('online-join-code') as HTMLInputElement).focus();
   };
 
-  return { enabled: true, openHub, openWorld, handleBootHash, refreshTitle, openMatch, rematch, trainingSeedTicket, syncSeedRewards };
+  /**
+   * THE PLANET ON THE FINISH CARD. Built from this lobby's own client, identity and cached world, so
+   * there is exactly ONE viewer of the world on this page. `level` is the campaign place for the
+   * owner line's LEVEL word (never a second source of truth).
+   */
+  const mountEndgamePlanet = (host: HTMLElement, level: () => number | null) =>
+    mountEndgamePlanetPane(host, {
+      client,
+      identity: async () => {
+        const id = await ensureIdentity();
+        return id ? { token: id.token, playerId: id.playerId, kind: id.kind } : null;
+      },
+      cachedWorld: () => worldSource.peek(),
+      level,
+    });
+
+  return {
+    enabled: true, openHub, openWorld, mountEndgamePlanet, leaveForMatch, handleBootHash, refreshTitle,
+    openMatch, rematch, trainingSeedTicket, syncSeedRewards,
+  };
 };
 
 const escapeHtml = (s: string) =>

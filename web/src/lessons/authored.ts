@@ -30,6 +30,11 @@ export type PositionSpec = {
   deck: readonly CardSpec[];
   /** The Throw pile, bottom first; its last card is the one on top. */
   discard?: readonly CardSpec[];
+  /**
+   * Engine overrides this lesson withholds (never invents). Used by level 1 to turn Overgrow off
+   * until level 2 explains it; every other lesson leaves it out, so its rules are the defaults.
+   */
+  rules?: Partial<RulesConfig>;
 };
 
 /** Your home and theirs on the small map (the engine's own ring2 roots). */
@@ -46,8 +51,10 @@ export const smallBoard = (rock: readonly string[] = [], gold: readonly string[]
   homes: [SMALL_HOMES[0], SMALL_HOMES[1]],
 });
 
-/** The rules overrides a position plays under: the small map and its terrain, nothing else. */
-export const positionConfig = (p: Pick<PositionSpec, 'rock' | 'gold'>): Partial<RulesConfig> => ({
+/** The rules overrides a position plays under: the small map and its terrain, plus any rule the
+ *  lesson withholds on purpose. The board always wins over `rules`, so a lesson cannot replace it. */
+export const positionConfig = (p: Pick<PositionSpec, 'rock' | 'gold' | 'rules'>): Partial<RulesConfig> => ({
+  ...(p.rules ?? {}),
   boardRadius: SMALL_BOARD_RADIUS,
   rootStyle: 'ring2',
   board: smallBoard(p.rock, p.gold),

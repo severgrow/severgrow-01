@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DIFFICULTIES, DIFFICULTY_STEP_KEY, defaultDifficultyForLevel, parseDifficultyStep, stepAfterGame, stepLevelFor,
+  DIFFICULTIES, DIFFICULTY_STEP_KEY, defaultDifficultyForLevel, matchLabel, parseDifficultyStep, stepAfterGame, stepLevelFor,
 } from '../src/logic/difficulty.js';
 
 describe('training difficulty tiers', () => {
@@ -51,5 +51,21 @@ describe('training difficulty tiers', () => {
   it('can label an older saved exact level without modifying it', () => {
     expect([1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => defaultDifficultyForLevel(level as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9)))
       .toEqual(['easy', 'easy', 'easy', 'easy', 'medium', 'medium', 'medium', 'hard', 'hard']);
+  });
+});
+
+describe('what the player is told about the opponent', () => {
+  it('a practice match is named by its difficulty, never by the internal opponent level 1-9', () => {
+    for (const botLevel of [1, 2, 3, 4, 5, 6, 7, 8, 9] as const) {
+      for (const difficulty of [null, 'easy', 'medium', 'hard'] as const) {
+        const label = matchLabel({ campaign: null, difficulty, botLevel });
+        expect(['Easy', 'Medium', 'Hard']).toContain(label);
+      }
+    }
+    expect(matchLabel({ campaign: null, difficulty: 'medium', botLevel: 7 })).toBe('Medium');
+    expect(matchLabel({ campaign: null, difficulty: null, botLevel: 8 })).toBe('Hard');
+  });
+  it('a campaign match is named by its campaign level', () => {
+    expect(matchLabel({ campaign: 12, difficulty: null, botLevel: 4 })).toBe('Level 12');
   });
 });

@@ -95,7 +95,7 @@ const openPage = async (theme: string, size: keyof typeof SIZES, settings: Recor
   return { page, errors };
 };
 
-/** Builds the menu as far as the Training entry: the product menu keeps it behind PLAY. */
+/** Builds the menu as far as the Practice match entry: the product menu keeps it behind PLAY. */
 const openTraining = async (page: Page): Promise<void> => {
   await openMenuEntry(page, 'menu-new');
 };
@@ -121,7 +121,7 @@ const pickDifficultyLevel = async (page: Page, level: Level) => {
   await page.click(`#level-grid [data-difficulty="${tier.id}"]`);
 };
 
-/** Play → Training → the given bot level (default 7). */
+/** Play → Practice match → the given bot level (default 7). */
 const newGame = async (page: Page, level: Level = 7) => {
   await openTraining(page);
   await pickDifficultyLevel(page, level);
@@ -172,7 +172,11 @@ const playTurn = async (page: Page) => {
         await card.click();
         if (await pickTarget(page)) {
           if (await page.locator('#confirm-play').isVisible()) await page.click('#confirm-play');
-          else await page.click('#confirm-cancel').catch(() => {});
+          // A single-target move can already have played: there is then nothing to cancel.
+          // Do not spend the default 30s action timeout waiting for a control that is gone.
+          else if (await page.locator('#confirm-cancel').isVisible()) {
+            await page.locator('#confirm-cancel').click({ timeout: 2000 }).catch(() => {});
+          }
         } else await page.locator('#moves .cancel').click({ timeout: 2000 }).catch(() => {}); // the game may have moved on to Throw (auto-advance)
       } else {
         // When nothing can grow, the game moves on to the Throw step by itself (auto-advance),
@@ -226,7 +230,9 @@ const playTurn = async (page: Page) => {
   await idle(page);
   const level = await page.evaluate(() => (window as unknown as { __severgrow: { settings: () => { level: number } } }).__severgrow.settings().level);
   const hud = (await page.textContent('#turn')) ?? '';
-  check('the difficulty screen starts a game at the seeded Easy level', level === 3 && hud.includes('Level 3'), `${level} · ${hud.trim().slice(0, 40)}`);
+  // The internal opponent level (1-9) is never shown to the player (owner, 2026-10-20): the game
+  // runs at level 3, and the turn pill names the difficulty, Easy.
+  check('the difficulty screen starts a game at the seeded Easy level', level === 3 && hud.includes('Easy') && !/Level \d/.test(hud), `${level} · ${hud.trim().slice(0, 40)}`);
   {
     // UI overhaul: the hint line is always in the dock; the moves reference now lives in the
     // in-game menu (the floating "?" corner tool was removed by owner direction).
@@ -368,6 +374,10 @@ for (const theme of THEMES) {
     await openSettingsGroup(page, 'settings-look');
     await page.locator('#speed-seg .seg-btn', { hasText: 'Off' }).click();
     await page.click('#sheet-settings [data-close]');
+    // Settings now returns to the pause panel it was opened from (0.6: a sheet returns to its
+    // opener), and a paused game does not drain its queue, so resuming is an explicit second step.
+    // The animation assertions below are unchanged.
+    await page.click('#gm-resume');
     await page.waitForTimeout(100);
     const same = (await boardTiles(page)) === (await stateTiles(page));
     check(`${theme}: ADVERSARIAL 3 animations off mid-animation leaves a correct board`, midBusy && same && !(await isBusy(page)));
@@ -395,6 +405,9 @@ for (const theme of THEMES) {
     await page.click('#gm-settings');
     await page.locator('[data-setting="largeText"]').click();
     await page.click('#sheet-settings [data-close]');
+    // Settings now returns to the pause panel it was opened from (0.6: a sheet returns to its
+    // opener), so resuming is an explicit second step. The rest of the check is unchanged.
+    await page.click('#gm-resume');
     await page.setViewportSize({ width: 844, height: 390 }); // rotate to landscape
     await page.waitForTimeout(200);
     await page.setViewportSize({ width: 390, height: 844 });
@@ -504,6 +517,9 @@ const big = bigCutDemo();
   await page.click('#gm-settings');
   await page.click('#palette-seg [data-value="moss"]');
   await page.click('#sheet-settings [data-close]');
+    // Settings now returns to the pause panel it was opened from (0.6: a sheet returns to its
+    // opener), so resuming is an explicit second step. The rest of the check is unchanged.
+  await page.click('#gm-resume');
   const ok = await settled(page);
   const look = await page.evaluate(() => document.documentElement.dataset.theme);
   check('juice ADVERSARIAL 6: switching palette mid-animation keeps a correct board', ok && look === 'moss' && errors.length === 0);
@@ -538,6 +554,8 @@ const big = bigCutDemo();
   await page.click('#gm-settings');
   await page.click('#palette-seg [data-value="ink"]');
   await page.click('#sheet-settings [data-close]');
+  // Settings returns to the pause panel it was opened from (0.6), so resume explicitly.
+  await page.click('#gm-resume');
   const ok = await settled(page);
   const s = (await getState(page))!;
   const wrong = await page.evaluate((board) => {

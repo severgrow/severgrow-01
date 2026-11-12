@@ -55,7 +55,8 @@ export type Settings = {
 
 export const DEFAULT_SETTINGS: Settings = {
   level: 7,
-  sound: true,
+  // Off until the player turns it on (owner, 2026-11-05: "make sound disabled by default").
+  sound: false,
   music: false,
   vibration: true,
   reduceMotion: false,
@@ -79,8 +80,26 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export const SETTINGS_KEY = 'severgrow.settings.v1';
 
-/** Settings from a saved string; `systemReduce` is the device's reduce-motion wish. */
-export const parseSettings = (raw: string | null, systemReduce = false): Settings => {
+/**
+ * The fields a player still sets on the Futasaku channels (owner, 2026-10-23: "settings is just
+ * essentials"): the four switches in Settings, the bot level (chosen by the level, not in Settings)
+ * and the hand order (switched by the game's own Sort key). Hand side lives in player/thumb.ts.
+ */
+export const ESSENTIAL_SETTINGS = ['level', 'handSort', 'sound', 'vibration', 'reduceMotion', 'largeText'] as const;
+
+/**
+ * Settings from a saved string; `systemReduce` is the device's reduce-motion wish. With
+ * `essentialsOnly` (the Futasaku channels) every field outside ESSENTIAL_SETTINGS is its fixed
+ * default whatever was saved, so a choice made before that change can never leave a player on an
+ * option they can no longer reach. The classic line keeps every saved option.
+ */
+export const parseSettings = (raw: string | null, systemReduce = false, essentialsOnly = false): Settings => {
+  if (essentialsOnly) {
+    const all = parseSettings(raw, systemReduce);
+    const out: Settings = { ...DEFAULT_SETTINGS, reduceMotion: systemReduce };
+    for (const k of ESSENTIAL_SETTINGS) (out as Record<string, unknown>)[k] = all[k];
+    return out;
+  }
   const out: Settings = { ...DEFAULT_SETTINGS, reduceMotion: systemReduce };
   let saved: unknown;
   try {
@@ -101,14 +120,20 @@ export const parseSettings = (raw: string | null, systemReduce = false): Setting
   // the old device-based "Confirm drawn moves" setting: On carries over as Always
   if (s.confirmDraw === true) out.confirmPolicy = 'always';
   if (CONFIRM_MODES.includes(s.confirmPolicy as ConfirmMode)) out.confirmPolicy = s.confirmPolicy as ConfirmMode;
-  for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'weakPulse', 'placementList', 'eyeCandy', 'autoSkip', 'bloomHints'] as const) {
+  for (const k of ['music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'weakPulse', 'placementList', 'eyeCandy', 'autoSkip', 'bloomHints'] as const) {
     if (typeof s[k] === 'boolean') out[k] = s[k] as boolean;
   }
+  // SOUND IS A CHOICE (owner, 2026-11-05: off by default). A saved `sound` from before was only the
+  // old default (on), never a choice, so it is not read; the choice is saved as `soundOn`.
+  if (typeof s.soundOn === 'boolean') out.sound = s.soundOn;
   for (const k of ['sfxVolume', 'musicVolume'] as const) {
     if (typeof s[k] === 'number' && Number.isFinite(s[k])) out[k] = Math.round(Math.min(100, Math.max(0, s[k] as number)));
   }
   return out;
 };
+
+/** What is saved: the settings, with the sound choice under its own name (see parseSettings). */
+export const saveableSettings = (s: Settings): Settings & { soundOn: boolean } => ({ ...s, soundOn: s.sound });
 
 /** How long animations take relative to normal (0 = skip them). */
 export const speedFactor = (s: Speed): number => ({ slow: 1.6, normal: 1, fast: 0.5, skip: 0 })[s];

@@ -4,12 +4,16 @@
 // Auth is our own bearer tokens — Supabase JWT verification must stay OFF on this function.
 /// <reference path="./edge-deno.d.ts" />
 import postgres from 'postgres';
+import { chatNotifier } from './chat/notifier.js';
+import { createChatRouter } from './chat/router.js';
+import { createTerritoryChatRouter, postgresTerritoryChatStore } from './chat/territory.js';
+import { postgresChatStore } from './chat/postgres.js';
 import { CURRENT_RULES_VERSION } from '../../src/engine/index.js';
 import { DEFAULT_SERVER_CONFIG, adminPlayerIdsFromEnv, productionCorsOrigins } from './config.js';
 import type { ServerConfig } from './config.js';
 import { corsHeadersForRequest } from './cors.js';
 import { ApiError } from './errors.js';
-import { createFetchApp } from './fetch-app.js';
+import { SERVER_FEATURES, createFetchApp } from './fetch-app.js';
 import { MatchService } from './service.js';
 import { createSupabaseBroadcaster } from './broadcast-supabase.js';
 import type { MatchBroadcaster } from './broadcast.js';
@@ -128,7 +132,8 @@ const buildRuntime = async (): Promise<EdgeRuntime> => {
   });
   const pool = withEdgeConnectionRetry(poolFromPostgresJs(sql));
   const live = wireLiveEdge({ storage: postgresStorage(pool), pool, server: edgeConfig, env: (n) => Deno.env.get(n), ...(broadcaster ? { broadcaster } : {}) });
-  const economy = new WorldEconomyService(postgresWorldEconomyStore(pool), live.storage);
+  const economyStore = postgresWorldEconomyStore(pool);
+  const economy = new WorldEconomyService(economyStore, live.storage);
   const service = new MatchService({
     storage: live.storage,
     config: edgeConfig,
@@ -141,13 +146,15 @@ const buildRuntime = async (): Promise<EdgeRuntime> => {
   const supaUrl = Deno.env.get('SUPABASE_URL') ?? '';
   const supaKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
   const accounts = createAccountsRouter({
+    emailEnabled: Deno.env.get('EMAIL_ACCOUNTS_ENABLED') === 'true',
     links: postgresIdentityLinkStore(pool),
     storage: live.storage,
     auth: supaUrl && supaKey ? supabaseAuthProvider({ url: supaUrl, anonKey: supaKey, serviceRoleKey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? null }) : null,
     authenticate: (t) => service.authenticate(t),
     now: () => service.serverNow(),
   });
-  const app = createFetchApp({ service, config: edgeConfig, logger: log, live: chainRouters(live.router(service), createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t) }), createFeedbackRouter({ store: postgresFeedbackStore(pool), storage: live.storage, authenticate: (t) => service.authenticate(t), now: () => service.serverNow() }), accounts, createAdminRouter({ store: postgresAdminStore(pool), authenticate: (t) => service.authenticate(t), config: edgeConfig, now: () => service.serverNow(), rulesVersion: service.rulesVersion, storage: live.storage, pingDb: () => service.pingStorage(), log })) });
+  const app = createFetchApp({ service, config: edgeConfig, logger: log, live: chainRouters(live.router(service), createChatRouter({ store: postgresChatStore(pool), service, storage: live.storage,
+    ...(supaUrl && supaKey ? { notifier: chatNotifier(supaUrl, supaKey)! } : {}) }), createTerritoryChatRouter({ store: postgresTerritoryChatStore(pool), service, storage: live.storage }), createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t) }), createFeedbackRouter({ store: postgresFeedbackStore(pool), storage: live.storage, authenticate: (t) => service.authenticate(t), now: () => service.serverNow() }), accounts, createAdminRouter({ store: postgresAdminStore(pool), economy: economyStore, authenticate: (t) => service.authenticate(t), config: edgeConfig, now: () => service.serverNow(), rulesVersion: service.rulesVersion, storage: live.storage, pingDb: () => service.pingStorage(), log })) });
   return { app, service, dbInfo: classifyDatabaseUrl(databaseUrl) };
 };
 
@@ -206,7 +213,7 @@ Deno.serve(async (req) => {
     const dbConfigured = Boolean(Deno.env.get('DATABASE_URL'));
     if (url.searchParams.get('db') !== '1') {
       return new Response(
-        JSON.stringify({ ok: true, rulesVersion: CURRENT_RULES_VERSION, serverNow: Date.now(), dbConfigured }),
+        JSON.stringify({ ok: true, rulesVersion: CURRENT_RULES_VERSION, serverNow: Date.now(), dbConfigured, features: SERVER_FEATURES }),
         { status: 200, headers: corsJson },
       );
     }
@@ -218,6 +225,7 @@ Deno.serve(async (req) => {
         ok: true,
         rulesVersion: runtime.service.rulesVersion,
         serverNow: runtime.service.serverNow(),
+        features: SERVER_FEATURES,
         db: { ok: true, ms: Date.now() - startedDb, pooler: runtime.dbInfo.kind, port: runtime.dbInfo.port },
       };
       return new Response(JSON.stringify(body), { status: 200, headers: corsJson });

@@ -29,11 +29,18 @@ import type {
   MatchListEntry,
   MatchSummary,
   MatchViewPayload,
+  OfflineSummary,
   OnlineGameResult,
   PlayerSummary,
+  PublicPlayerProfile,
+  ReplayPayload,
+  ReplaySeat,
   SubmitActionRequest,
   SubmitActionResponse,
 } from './protocol.js';
+import { parseAccountCampaignProgress } from './account-campaign-progress.js';
+import { parseAccountGuide } from './account-guide.js';
+import { parseOfflineCounters } from './offline.js';
 import { fromEngineResult } from './protocol.js';
 import { actorChanged, gatedRevisionFor, gatedStateFor, turnBoundaryAdvanced } from './turn-boundary.js';
 import { graceSpentBetween } from './grace.js';
@@ -119,12 +126,26 @@ export class MatchService {
 
   // ---- identity ----
 
-  async createGuest(_displayName: string | null = null, clientIp: string | null = null): Promise<{ player: PlayerSummary; token: string }> {
+  async createGuest(
+    _displayName: string | null = null,
+    clientIp: string | null = null,
+    testTraffic = false,
+  ): Promise<{ player: PlayerSummary; token: string }> {
     await this.rateLimit(`guest:ip:${clientIp ?? 'unknown'}`, HOUR_MS, this.config.rateLimits.guestPerIpPerHour);
     const now = this.now();
     const id = newId();
     // Nature names only — no free-text moderation surface (rule 8).
-    const player: PlayerRecord = { id, kind: 'guest', displayName: natureName(id), createdAt: now, upgradedAt: null };
+    const player: PlayerRecord = {
+      id,
+      kind: 'guest',
+      displayName: natureName(id),
+      createdAt: now,
+      upgradedAt: null,
+      // Only when the caller is an automated harness (the header in fetch-app.ts). This marker is the
+      // durable answer the dashboard trusts; it is never inferred, and a real player's browser cannot
+      // reach this branch.
+      ...(testTraffic ? { isTest: true, testReason: 'Tagged at creation by an automated test harness.' } : {}),
+    };
     await this.storage.createPlayer(player);
     const token = await this.issueToken(player.id, now);
     return { player: playerSummary(player), token };
@@ -132,6 +153,79 @@ export class MatchService {
 
   async getMe(player: PlayerRecord): Promise<PlayerSummary> {
     return playerSummary(player);
+  }
+
+  /**
+   * ANOTHER PLAYER'S PUBLIC PROFILE. The economy owns the one aggregate read; this is the thin
+   * service door so the route does not have to know about the seeds store. Signed-in callers only
+   * (the route authenticates first), and the response is the closed allow-list in `protocol.ts`.
+   */
+  async publicProfile(playerId: string): Promise<PublicPlayerProfile> {
+    if (!this.economy) throw new ApiError('DB_UNAVAILABLE', 'Profiles are not available right now.');
+    return await this.economy.publicProfile(playerId);
+  }
+
+  /** Finished duels between the viewer and another player, from the viewer's seat. */
+  async headToHead(viewerId: string, opponentId: string) {
+    return this.storage.headToHead(viewerId, opponentId);
+  }
+
+  /**
+   * The account's OFFLINE record over every device (migration 0022). The player comes from the
+   * token, never the request, so one account can only ever read its own numbers. A player who has
+   * never posted an offline game reads zeroes.
+   */
+  async offlineStats(player: PlayerRecord): Promise<OfflineSummary> {
+    return this.storage.offlineSummaryOf(player.id);
+  }
+
+  /**
+   * THE ACCOUNT'S FURTHEST VERIFIED CAMPAIGN LEVEL. One store read from the id the token names —
+   * never an id from the request — so an account can only ever read its own place. This is the
+   * existing `campaignHighestLevel` (a single indexed `max` over the player's campaign receipts),
+   * never the reward-proof-only `campaign_clears` table; `null` when there is no economy attached.
+   */
+  async campaignHighestLevel(player: PlayerRecord): Promise<number | null> {
+    if (!this.economy) return null;
+    return this.economy.campaignHighestLevel(player);
+  }
+
+  /**
+   * One device posts its RUNNING totals. They are cumulative, so storage keeps the highest value
+   * each counter has seen; the response is the fresh aggregate for the whole account.
+   */
+  async putOfflineStats(player: PlayerRecord, body: Record<string, unknown>): Promise<OfflineSummary> {
+    return this.storage.mergeOfflineStats(player.id, parseOfflineCounters(body), this.now());
+  }
+
+  /**
+   * The account's campaign progress snapshot (migration 0023), or null when none was posted.
+   * Authenticated player only — the token names the row, never an id from the request.
+   */
+  async accountCampaignProgress(player: PlayerRecord) {
+    return this.storage.accountCampaignProgressOf(player.id);
+  }
+
+  /**
+   * Keep the further-ahead of the stored campaign snapshot and this device's POST. Seeds,
+   * Territory and achievement rewards are never written here.
+   */
+  async putAccountCampaignProgress(player: PlayerRecord, body: Record<string, unknown>) {
+    return this.storage.mergeAccountCampaignProgress(
+      player.id,
+      parseAccountCampaignProgress(body),
+      this.now(),
+    );
+  }
+
+  /** The in-game guide's progress for this player (migration 0024), or null before the first POST. */
+  async accountGuide(player: PlayerRecord) {
+    return this.storage.accountGuideOf(player.id);
+  }
+
+  /** Join this device's guide progress into the account's (beats only ever added). */
+  async putAccountGuide(player: PlayerRecord, body: Record<string, unknown>) {
+    return this.storage.mergeAccountGuide(player.id, parseAccountGuide(body), this.now());
   }
 
   /**
@@ -145,7 +239,7 @@ export class MatchService {
     if (player.kind !== 'account') {
       throw new ApiError('FORBIDDEN', 'Sign in with Google to choose your own name.');
     }
-    const name = assertDisplayName(displayName);
+    const name = assertDisplayName(displayName, player.displayName);
     const updated: PlayerRecord = { ...player, displayName: name };
     await this.storage.updatePlayer(updated);
     return playerSummary(updated);
@@ -336,8 +430,10 @@ export class MatchService {
         }
         throw new ApiError('INTERNAL', 'Could not find an opponent.');
       }
-      if (result.paired) {
-        // The parked player's page learns about the activation from this ping.
+      if (result.paired && !result.resumed) {
+        // The parked player's page learns about the activation from this ping. A resume changes no
+        // state (the game was already active), so it must not look like a fresh pairing to the
+        // opponent's page.
         await safePublish(this.broadcaster, result.match.id, { revision: result.match.revision, status: result.match.status });
       }
       return {
@@ -349,9 +445,15 @@ export class MatchService {
     throw new ApiError('INTERNAL', 'Could not find an opponent right now. Please try again.');
   }
 
-  /** Stop a parked search: retire it so no later searcher is matched into it. Calm no-op otherwise. */
+  /**
+   * Stop a parked search: retire it so no later searcher is matched into it. Calm no-op otherwise.
+   *
+   * Not on the JOIN budget on purpose. Find resumes share the join budget; if Stop searching reused
+   * that bucket, a player who re-tapped Find could be stuck in the queue until the waiting window
+   * expired. It has a budget of its own (twice Find's by default), so a cancel storm is still capped.
+   */
   async cancelSearch(player: PlayerRecord): Promise<{ cancelled: boolean }> {
-    await this.rateLimit(`join:player:${player.id}`, HOUR_MS, this.config.rateLimits.joinPerPlayerPerHour);
+    await this.rateLimit(`cancel-search:player:${player.id}`, HOUR_MS, this.config.rateLimits.cancelSearchPerPlayerPerHour);
     return { cancelled: await this.storage.cancelOpenQueueMatch(player.id, this.now()) };
   }
 
@@ -399,6 +501,10 @@ export class MatchService {
 
     const participants = await this.storage.participantsOf(current.id);
     if (participants.length >= 2) throw new ApiError('MATCH_FULL', 'That match already has two players.');
+    // ONE GAME PER PAIR: the player already shares an open game with this host: open that one.
+    const host = participants.find((p) => p.playerId !== player.id)?.playerId ?? null;
+    const shared = host ? await this.openMatchBetween(player.id, host, current.id) : null;
+    if (shared) return { match: await this.summary(shared.match), player: await this.payload(shared.match, shared.seat, []) };
     const seat: Player = participants.some((p) => p.seat === 0) ? 1 : 0;
     const now = this.now();
 
@@ -419,6 +525,67 @@ export class MatchService {
 
     await safePublish(this.broadcaster, resolved.id, { revision: resolved.revision, status: resolved.status });
     return { match: await this.summary(resolved), player: await this.payload(resolved, seat, []) };
+  }
+
+  /**
+   * A mutual rematch of a finished standard duel (owner, 2026-10-22: "they both press rematch =
+   * they're straight in a new game"). The first press creates the rematch match, tagged with the
+   * finished match's id, and waits on it; the second press, by the other player, takes seat 1 and
+   * the match goes active for both. A repeated press returns the same match, and the storage's
+   * one-rematch-per-match rule turns two simultaneous presses into one match.
+   */
+  async rematch(player: PlayerRecord, matchId: string): Promise<{ match: MatchSummary; player: MatchViewPayload }> {
+    await this.rateLimit(`join:player:${player.id}`, HOUR_MS, this.config.rateLimits.joinPerPlayerPerHour);
+    if (typeof matchId !== 'string' || matchId.length === 0) throw new ApiError('INVALID_REQUEST', 'A match id is required.');
+    const finished = await this.requireParticipantFresh(player, matchId);
+    if (finished.status !== 'finished') throw new ApiError('MATCH_NOT_FINISHED', 'Finish this match before a rematch.');
+    // ONE GAME PER PAIR: already playing each other in another game? That game is the rematch.
+    const opponent = (await this.storage.participantsOf(matchId)).find((p) => p.playerId !== player.id)?.playerId ?? null;
+    const shared = opponent ? await this.openMatchBetween(player.id, opponent, matchId) : null;
+    if (shared && (await this.storage.rematchOf(matchId))?.id !== shared.match.id) {
+      return { match: await this.summary(shared.match), player: await this.payload(shared.match, shared.seat, []) };
+    }
+    for (let attempt = 0; attempt < MAX_INVITE_CODE_ATTEMPTS; attempt++) {
+      const existing = await this.storage.rematchOf(matchId);
+      if (existing) return this.takeRematchSeat(player, existing);
+      const open = (await this.storage.matchesOfPlayer(player.id)).filter((m) => m.status !== 'finished').length;
+      if (open >= this.config.maxOpenMatchesPerPlayer) {
+        throw new ApiError('TOO_MANY_MATCHES', 'Finish or leave a match before starting another.');
+      }
+      const now = this.now();
+      const created = this.buildWaitingMatch(now, false);
+      const result = await this.storage.createRematch(created, matchId, player.id, now);
+      if (result.ok) return { match: await this.summary(created), player: await this.payload(created, 0, []) };
+      // The other player's press won the race (or an invite code collided): read theirs, or retry.
+      if (result.code !== 'REMATCH_EXISTS' && result.code !== 'DUPLICATE_INVITE_CODE') {
+        throw new ApiError('INTERNAL', 'Could not start the rematch.');
+      }
+    }
+    throw new ApiError('INTERNAL', 'Could not start the rematch right now. Please try again.');
+  }
+
+  /**
+   * ONE GAME PER PAIR (owner, 2026-11-09: "2 players can only have 1 game against each other at a
+   * time"): the open (waiting or active) game these two already share, other than `except`.
+   */
+  private async openMatchBetween(playerId: string, otherId: string, except: string): Promise<{ match: MatchRecord; seat: Player } | null> {
+    const rows = await this.storage.listMatchesForPlayer(playerId);
+    const row = rows.find((r) => r.match.id !== except && r.match.status !== 'finished' && r.opponentId === otherId);
+    return row ? { match: row.match, seat: row.mySeat } : null;
+  }
+
+  /** The second press of a rematch: the player's own seat if they have one, otherwise seat 1. */
+  private async takeRematchSeat(player: PlayerRecord, match: MatchRecord): Promise<{ match: MatchSummary; player: MatchViewPayload }> {
+    const now = this.now();
+    const current = (await this.storage.applyExpiry(match.id, now)) ?? match;
+    const mine = await this.storage.participantOf(current.id, player.id);
+    if (mine) return { match: await this.summary(current), player: await this.payload(current, mine.seat, []) };
+    if (current.status !== 'waiting') throw new ApiError('MATCH_EXPIRED', 'That rematch is no longer open.');
+    const added = await this.storage.addParticipant({ matchId: current.id, playerId: player.id, seat: 1, joinedAt: now, lastSeenAt: now });
+    if (!added.ok && added.code !== 'ALREADY_JOINED') throw new ApiError('MATCH_FULL', 'That rematch already has two players.');
+    const resolved = (await this.storage.activateMatch(current.id, now, this.config.turnTimeoutMs)) ?? current;
+    await safePublish(this.broadcaster, resolved.id, { revision: resolved.revision, status: resolved.status });
+    return { match: await this.summary(resolved), player: await this.payload(resolved, 1, []) };
   }
 
   // ---- reading a match ----
@@ -461,6 +628,12 @@ export class MatchService {
         result: match.result,
       });
     }
+    // A waiting rematch on a finished row: who pressed it (one read per finished row, together).
+    await Promise.all(out.filter((e) => e.status === 'finished').map(async (e) => {
+      const re = await this.storage.rematchOf(e.matchId).catch(() => null);
+      if (!re || re.status !== 'waiting') return;
+      e.rematch = (await this.storage.participantOf(re.id, player.id)) ? 'mine' : 'theirs';
+    }));
     // Your turn first, then waiting, then finished (latest activity).
     const rank = (e: MatchListEntry): number => {
       if (e.status === 'active' && e.turnPlayer === e.mySeat) return 0;
@@ -478,15 +651,69 @@ export class MatchService {
    * removed by the engine's single rule (`hidePrivateEvents`).
    */
   async viewPayload(player: PlayerRecord, matchId: string, sinceRevision = 0): Promise<MatchViewPayload> {
+    const { match, seat } = await this.requireSeatFresh(player, matchId);
+    // A finished match settles on every view (idempotent): the retry is what makes a transient
+    // economy failure self-heal. Its report is this player's own award, or nothing.
+    const settled = match.status === 'finished' ? await this.safeSettleOnline(match) : null;
+    this.assertRulesSupported(match.rulesVersion);
+    const visibleRevision = gatedRevisionFor(match, seat);
+    // Independent reads and the presence touch go out TOGETHER: one round trip instead of four
+    // (owner, 2026-11-09: a Blitz view took 1.7 s). Same data, same response.
+    const opponent = this.opponentOf(matchId, seat);
+    const [, moves] = await Promise.all([
+      this.storage.touchParticipant(matchId, player.id, this.now()),
+      this.storage.movesOf(matchId, sinceRevision),
+      opponent,
+    ]);
+    const visibleMoves = moves.filter((m) => m.revision <= visibleRevision);
+    return this.payload(match, seat, visibleMoves.flatMap((m) => m.events), settled?.get(player.id) ?? null, opponent);
+  }
+
+  /**
+   * A FINISHED duel's replay, for one of its two players only (owner brief, 2026-10-25).
+   *
+   * The authorisation is the same one every other match read uses — `requireParticipantFresh`
+   * refuses a caller who is not in the match (`NOT_A_PARTICIPANT`, 403), and does not distinguish
+   * "wrong player" from "no such match" for anyone outside it. Nothing private is added: `config`
+   * and `rulesVersion` are already in every view, the seed and starting seat are the public facts a
+   * verifier needs, and the action log is what both devices already received as events.
+   *
+   * Why the log rather than a board per frame: the engine is deterministic, so `{seed, config,
+   * startingPlayer}` + the ordered actions rebuild every position of the match on the client — the
+   * same way the save system resumes a game. A replay therefore costs a few kilobytes, not a video.
+   */
+  async replayOf(player: PlayerRecord, matchId: string): Promise<ReplayPayload> {
     const match = await this.requireParticipantFresh(player, matchId);
-    if (match.status === 'finished') await this.safeSettleOnline(match);
+    if (match.status !== 'finished') throw new ApiError('MATCH_NOT_FINISHED', 'This duel is still being played.');
     this.assertRulesSupported(match.rulesVersion);
     const seat = await this.seatOf(player, matchId);
-    await this.storage.touchParticipant(matchId, player.id, this.now());
-    const visibleRevision = gatedRevisionFor(match, seat);
-    const moves = await this.storage.movesOf(matchId, sinceRevision);
-    const visibleMoves = moves.filter((m) => m.revision <= visibleRevision);
-    return this.payload(match, seat, visibleMoves.flatMap((m) => m.events));
+    const moves = await this.storage.movesOf(matchId, 0);
+    const participants = await this.storage.participantsOf(matchId);
+    const seats: ReplaySeat[] = [];
+    for (const participant of participants) {
+      const record = await this.storage.playerById(participant.playerId);
+      seats.push({
+        seat: participant.seat,
+        playerId: participant.playerId,
+        displayName: record?.displayName ?? null,
+        tag: playerTag(participant.playerId),
+      });
+    }
+    seats.sort((a, b) => a.seat - b.seat);
+    return {
+      matchId: match.id,
+      status: 'finished',
+      rulesVersion: match.rulesVersion,
+      seed: match.seed,
+      config: match.config,
+      startingPlayer: match.startingPlayer,
+      seat,
+      seats,
+      actions: moves.map((move) => move.action),
+      revisions: moves.map((move) => move.revision),
+      result: match.result,
+      finishedAt: match.finishedAt,
+    };
   }
 
   async resign(player: PlayerRecord, matchId: string): Promise<{ match: MatchSummary; player: MatchViewPayload }> {
@@ -505,11 +732,14 @@ export class MatchService {
   async sweep(
     clientIp: string | null = null,
     options: { internal?: boolean } = {},
-  ): Promise<{ timedOut: number; expiredWaiting: number; deletedGuests: number; graceExtended: number }> {
+  ): Promise<{ timedOut: number; expiredWaiting: number; deletedGuests: number; graceExtended: number; prunedMatches: number }> {
     // An authenticated cron/CI sweep gets its own bucket so a player's per-IP budget (or a shared
     // "unknown" bucket) can never block routine housekeeping. It is still rate limited.
     const bucket = options.internal === true ? 'sweep:internal' : `sweep:ip:${clientIp ?? 'unknown'}`;
     await this.rateLimit(bucket, HOUR_MS, this.config.rateLimits.sweepPerIpPerHour);
+    // Territory challenges: an unanswered challenge forfeits at its own deadline, and an accepted one older than
+    // 7 days closes stale. The same daily housekeeping call that clears matches applies both.
+    await this.economy?.expireChallenges(this.now()).catch(() => 0);
     const result = await this.storage.sweep(this.now(), GUEST_MAX_AGE_MS);
     // A sweeper-spent grace is the same visible state change as a lazily-spent one, and a match the
     // sweeper just finished by timeout is a TERMINAL change the other device must be woken for —
@@ -528,19 +758,30 @@ export class MatchService {
       // Housekeeping log for operators (no secrets).
       console.info(`sweep: deleted ${result.deletedGuests} guest account(s) with no matches`);
     }
+    if ((result.prunedMatches ?? 0) > 0) {
+      // Never names a player or a match: just how much the retention rule trimmed this pass.
+      console.info(`sweep: pruned ${result.prunedMatches} finished match(es) past every player's newest ten`);
+    }
     // The wire response stays lean: the ids were only needed to fire the pings above.
     return {
       timedOut: result.timedOut,
       expiredWaiting: result.expiredWaiting,
       deletedGuests: result.deletedGuests,
       graceExtended: result.graceExtended,
+      prunedMatches: result.prunedMatches ?? 0,
     };
   }
 
   // ---- the authoritative action pipeline ----
 
   async submitAction(player: PlayerRecord, matchId: string, request: SubmitActionRequest): Promise<SubmitActionResponse> {
-    await this.rateLimit(`actions:player:${player.id}`, MINUTE_MS, this.config.rateLimits.actionsPerPlayerPerMinute);
+    // The rate limit and the match/seat read are independent: one round trip, not three. The limit
+    // still decides first (a refused caller gets RATE_LIMITED, never a match error).
+    const [limited, seated] = await Promise.allSettled([
+      this.rateLimit(`actions:player:${player.id}`, MINUTE_MS, this.config.rateLimits.actionsPerPlayerPerMinute),
+      this.requireSeat(player, matchId),
+    ]);
+    if (limited.status === 'rejected') throw limited.reason;
 
     const { expectedRevision, requestId } = request ?? {};
     if (!Number.isInteger(expectedRevision) || (expectedRevision as number) < 0) {
@@ -551,9 +792,12 @@ export class MatchService {
     }
 
     const { actions, asBatch } = this.normalizeActions(request);
-    await this.requireParticipant(player, matchId);
-
-    const before = await this.storage.matchById(matchId);
+    if (seated.status === 'rejected') throw seated.reason;
+    // The row read with the seat is the "before" (it used to be read a second time).
+    const before: MatchRecord | null = seated.value.match;
+    // The opponent's name for the response does not depend on the move: start reading it now.
+    const opponent = this.opponentOf(matchId, seated.value.seat);
+    opponent.catch(() => undefined);
     const beforeStatus = before?.status;
     const beforeBoundary = before?.turnStartRevision;
 
@@ -581,20 +825,28 @@ export class MatchService {
     const boundaryMoved =
       !result.replayed &&
       (result.match.status !== beforeStatus || result.match.turnStartRevision !== beforeBoundary);
-    if (boundaryMoved || result.match.status === 'finished') {
-      await safePublish(this.broadcaster, matchId, { revision: result.match.turnStartRevision, status: result.match.status });
-    }
-    // The commit's own expiry step may have spent a grace before applying the action.
-    if (!result.replayed) await this.publishGraceChange(before, result.match);
+    // The other device's ping goes out WHILE this reply is built, not before it (owner, 2026-11-09:
+    // Blitz moves arrived late): the two never depended on each other.
+    const pinged = (async () => {
+      if (boundaryMoved || result.match.status === 'finished') {
+        await safePublish(this.broadcaster, matchId, { revision: result.match.turnStartRevision, status: result.match.status });
+      } else if (!result.replayed && result.match.liveManaged) {
+        // BLITZ: every move is pinged as it lands, so the watcher sees it at once (owner, 2026-11-09).
+        await safePublish(this.broadcaster, matchId, { revision: result.match.revision, status: result.match.status });
+      }
+      // The commit's own expiry step may have spent a grace before applying the action.
+      if (!result.replayed) await this.publishGraceChange(before, result.match);
+    })();
     // Finished engine matches earn Seeds, exactly once per player. A result replay repairs a
     // transient settlement failure without touching the deterministic game state.
     if (result.match.status === 'finished') await this.safeSettleOnline(result.match);
 
     const events = result.moves.flatMap((m) => m.events);
+    const [view] = await Promise.all([this.payload(result.match, result.move.seat, events, null, opponent), pinged]);
     return {
       ok: true,
       replayed: result.replayed,
-      player: await this.payload(result.match, result.move.seat, events),
+      player: view,
       serverNow: this.now(),
     };
   }
@@ -677,7 +929,15 @@ export class MatchService {
   }
 
   /** Assembles the wire payload for one seat from an authoritative match and raw events. */
-  private async payload(match: MatchRecord, seat: Player, events: readonly Event[]): Promise<MatchViewPayload> {
+  private async payload(
+    match: MatchRecord,
+    seat: Player,
+    events: readonly Event[],
+    /** This seat's settled award for the duel, when the finished view just asked the economy. */
+    seeds: { awarded: number; reason: string | null } | null = null,
+    /** The opponent, when the caller already started reading it (in parallel with other reads). */
+    opponent?: Promise<{ opp: Participant | null; oppPlayer: PlayerRecord | null }>,
+  ): Promise<MatchViewPayload> {
     const source = gatedStateFor(match, seat);
     const revision = gatedRevisionFor(match, seat);
     const view = viewFor(source, seat);
@@ -686,9 +946,7 @@ export class MatchService {
       source.actor === seat &&
       source.phase !== 'GAME_OVER' &&
       revision === match.revision; // mid-turn opponent never gets legal actions from gated state alone
-    const participants = await this.storage.participantsOf(match.id);
-    const opp = participants.find((p) => p.seat !== seat) ?? null;
-    const oppPlayer = opp ? await this.storage.playerById(opp.playerId) : null;
+    const { opp, oppPlayer } = await (opponent ?? this.opponentOf(match.id, seat));
     return {
       matchId: match.id,
       rulesVersion: match.rulesVersion,
@@ -709,25 +967,44 @@ export class MatchService {
         ? { seat: opp.seat, playerId: opp.playerId, displayName: oppPlayer?.displayName ?? null }
         : null,
       result: match.result,
+      // Present only when this seat's finish was settled and the economy reported it. A resign or a
+      // timeout never settles, so those cards carry no field and show no Seeds line.
+      ...(seeds ? { seeds } : {}),
       serverNow: this.now(),
     };
   }
 
-  private async requireParticipant(player: PlayerRecord, matchId: string): Promise<MatchRecord> {
-    const match = await this.storage.matchById(matchId);
+  /** The other seat and its player record (two dependent reads; callers may start it early). */
+  private async opponentOf(matchId: string, seat: Player): Promise<{ opp: Participant | null; oppPlayer: PlayerRecord | null }> {
+    const participants = await this.storage.participantsOf(matchId);
+    const opp = participants.find((p) => p.seat !== seat) ?? null;
+    const oppPlayer = opp ? await this.storage.playerById(opp.playerId) : null;
+    return { opp, oppPlayer };
+  }
+
+  /**
+   * The match and the caller's seat, read TOGETHER (one database round trip, not two: owner,
+   * 2026-11-09, Blitz "responsiveness is really bad"). Same answers and the same errors as before:
+   * an unknown match first, then a caller who is not in it.
+   */
+  private async requireSeat(player: PlayerRecord, matchId: string): Promise<{ match: MatchRecord; seat: Player }> {
+    const [match, participant] = await Promise.all([this.storage.matchById(matchId), this.storage.participantOf(matchId, player.id)]);
     if (!match) throw new ApiError('MATCH_NOT_FOUND', 'Unknown match.');
-    const participant = await this.storage.participantOf(matchId, player.id);
     if (!participant) throw new ApiError('NOT_A_PARTICIPANT', 'You are not in this match.');
-    return match;
+    return { match, seat: participant.seat };
   }
 
   /** Participant check + lazy expiry (same decision point as writes). */
   private async requireParticipantFresh(player: PlayerRecord, matchId: string): Promise<MatchRecord> {
-    const before = await this.requireParticipant(player, matchId);
-    const fresh = await this.storage.applyExpiry(matchId, this.now());
+    return (await this.requireSeatFresh(player, matchId)).match;
+  }
+
+  /** `requireParticipantFresh` plus the caller's seat (a participant never leaves a match). */
+  private async requireSeatFresh(player: PlayerRecord, matchId: string): Promise<{ match: MatchRecord; seat: Player }> {
+    const { match: before, seat } = await this.requireSeat(player, matchId);
+    // The row just read is handed over: when nothing is due, no lock is taken (storage fast path).
+    const fresh = await this.storage.applyExpiry(matchId, this.now(), before);
     if (!fresh) throw new ApiError('MATCH_NOT_FOUND', 'Unknown match.');
-    const participant = await this.storage.participantOf(matchId, player.id);
-    if (!participant) throw new ApiError('NOT_A_PARTICIPANT', 'You are not in this match.');
     await this.publishGraceChange(before, fresh);
     // A poll that discovers a deadline the match already passed must ANNOUNCE the finish on the same
     // ping path a completed turn uses, so the other device learns at once instead of waiting for its
@@ -736,7 +1013,7 @@ export class MatchService {
       await safePublish(this.broadcaster, fresh.id, { revision: fresh.revision, status: fresh.status });
       await this.safeSettleOnline(fresh);
     }
-    return fresh;
+    return { match: fresh, seat };
   }
 
   /**
@@ -755,13 +1032,18 @@ export class MatchService {
     return participant.seat;
   }
 
-  /** Economy failures never roll back a completed duel. A later finished view retries safely. */
-  private async safeSettleOnline(match: MatchRecord): Promise<void> {
-    if (!this.economy) return;
+  /**
+   * Economy failures never roll back a completed duel. A later finished view retries safely.
+   * Returns what each seat was paid (empty when nothing settled, or when the economy is absent or
+   * failing) so the finished view can report a seat's own award instead of the client guessing one.
+   */
+  private async safeSettleOnline(match: MatchRecord): Promise<Map<string, { awarded: number; reason: string | null }>> {
+    if (!this.economy) return new Map();
     try {
-      await this.economy.settleOnline(match);
+      return await this.economy.settleOnline(match);
     } catch (error) {
       console.warn(`Seeds settlement pending for match ${match.id}: ${String(error)}`);
+      return new Map();
     }
   }
 

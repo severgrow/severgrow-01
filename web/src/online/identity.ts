@@ -4,6 +4,22 @@ import type { KeyValue } from '../../../server/src/client.js';
 import type { OnlineIdentityRecord } from './types.js';
 
 export const IDENTITY_STORAGE_KEY = 'severgrow.duel.identity.v1';
+/** Storage events expose the raw prefixed key; unrelated writes must never trigger a storage probe. */
+export const isIdentityStorageEvent = (key: string | null, prefix: string): boolean =>
+  key === null || key === prefix + IDENTITY_STORAGE_KEY;
+
+// Same-tab storage writes do not emit the browser's storage event. Notify online consumers at
+// the successful write boundary so guest creation/account linking need no discovery timer.
+const identityListeners = new Set<(identity: OnlineIdentityRecord | null) => void>();
+export const subscribeIdentityChanges = (listener: (identity: OnlineIdentityRecord | null) => void) => {
+  identityListeners.add(listener);
+  return () => { identityListeners.delete(listener); };
+};
+const announceIdentity = (identity: OnlineIdentityRecord | null) => {
+  for (const listener of identityListeners) {
+    try { listener(identity); } catch { /* A presentation listener must not fail a stored identity. */ }
+  }
+};
 
 const STORAGE_BLOCKED_MESSAGE =
   'This browser blocked storage. Online matches cannot be kept on this device.';
@@ -58,6 +74,26 @@ const parseIdentity = (raw: string | null): OnlineIdentityRecord | null => {
   }
 };
 
+/**
+ * The name stored on THIS device for exactly `playerId`, or null.
+ *
+ * Territory's always-on identity line (owner, 2026-10-30) needs the player's own name without a new
+ * request: the identity record already carries it (a guest's generated nature name, or the account's
+ * chosen one), and a record belonging to another player is never borrowed. The channel's storage
+ * prefix is applied below us (`channel.ts` patches `Storage.prototype`), so the plain key is right.
+ */
+export const storedDisplayName = (playerId: string): string | null => {
+  try {
+    const raw = globalThis.localStorage?.getItem(IDENTITY_STORAGE_KEY) ?? null;
+    const parsed = raw ? JSON.parse(raw) as { playerId?: unknown; displayName?: unknown } : null;
+    if (!parsed || parsed.playerId !== playerId || typeof parsed.displayName !== 'string') return null;
+    const name = parsed.displayName.trim();
+    return name ? name : null;
+  } catch {
+    return null;
+  }
+};
+
 export const createIdentityStore = (options: {
   client: DuelClient;
   storage?: KeyValue | null;
@@ -84,6 +120,7 @@ export const createIdentityStore = (options: {
         message: STORAGE_BLOCKED_MESSAGE,
       };
     }
+    announceIdentity(identity);
     return { ok: true, identity };
   };
 
@@ -119,6 +156,7 @@ export const createIdentityStore = (options: {
     // (creating a guest) instead of handing back the token the server just refused.
     try {
       storage.remove(IDENTITY_STORAGE_KEY);
+      announceIdentity(null);
     } catch {
       return { ok: false, reason: 'storage_blocked', message: STORAGE_BLOCKED_MESSAGE };
     }

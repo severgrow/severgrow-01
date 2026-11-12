@@ -70,6 +70,8 @@ export const wireLiveEdge = (options: {
     live: postgresLiveStore(options.pool),
     server: options.server,
     ...(options.broadcaster ? { broadcaster: options.broadcaster } : {}),
-    ...(url && key ? { notifier: supabaseLiveNotifier({ url, key }) } : {}),
+    ...(url && key ? { notifier: supabaseLiveNotifier({ url, key,
+      onError: error => console.warn('live_notification_delivery_failed', error instanceof Error ? error.message : 'Realtime publish failed'),
+    }) } : {}),
   });
 };

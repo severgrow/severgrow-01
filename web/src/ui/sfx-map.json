@@ -1,0 +1,593 @@
+{
+ "folder": "audio/sfx/",
+ "sets": {
+  "ui_dull_click": [
+   "ui_dull_click_01.mp3",
+   "ui_dull_click_02.mp3"
+  ],
+  "ui_press": [
+   "ui_press_01.mp3",
+   "ui_press_02.mp3",
+   "ui_press_03.mp3",
+   "ui_press_04.mp3"
+  ],
+  "ui_release": [
+   "ui_release_01.mp3",
+   "ui_release_02.mp3",
+   "ui_release_03.mp3"
+  ],
+  "ui_flick": [
+   "ui_flick_01.mp3",
+   "ui_flick_02.mp3",
+   "ui_flick_03.mp3"
+  ],
+  "ui_flick_back": [
+   "ui_flick_back_01.mp3",
+   "ui_flick_back_02.mp3"
+  ],
+  "ui_key": [
+   "ui_key_01.mp3",
+   "ui_key_02.mp3",
+   "ui_key_03.mp3",
+   "ui_key_04.mp3",
+   "ui_key_05.mp3",
+   "ui_key_06.mp3",
+   "ui_key_07.mp3",
+   "ui_key_08.mp3",
+   "ui_key_09.mp3",
+   "ui_key_10.mp3",
+   "ui_key_11.mp3",
+   "ui_key_12.mp3",
+   "ui_key_13.mp3",
+   "ui_key_14.mp3",
+   "ui_key_15.mp3",
+   "ui_key_16.mp3",
+   "ui_key_17.mp3",
+   "ui_key_18.mp3",
+   "ui_key_19.mp3",
+   "ui_key_20.mp3"
+  ],
+  "ui_tape_close": [
+   "ui_tape_close_01.mp3",
+   "ui_tape_close_02.mp3",
+   "ui_tape_close_03.mp3",
+   "ui_tape_close_04.mp3"
+  ],
+  "ui_clack": [
+   "ui_clack_01.mp3",
+   "ui_clack_02.mp3",
+   "ui_clack_03.mp3",
+   "ui_clack_04.mp3"
+  ],
+  "card_fan": [
+   "card_fan_01.mp3",
+   "card_fan_02.mp3"
+  ],
+  "card_fan_cards": [
+   "card_fan_cards_01.mp3",
+   "card_fan_cards_02.mp3"
+  ],
+  "card_shuffle": [
+   "card_shuffle_01.mp3"
+  ],
+  "wood_drop": [
+   "wood_drop_01.mp3",
+   "wood_drop_02.mp3",
+   "wood_drop_03.mp3",
+   "wood_drop_04.mp3",
+   "wood_drop_05.mp3"
+  ],
+  "wood_drop_heavy": [
+   "wood_drop_heavy_01.mp3",
+   "wood_drop_heavy_02.mp3",
+   "wood_drop_heavy_03.mp3",
+   "wood_drop_heavy_04.mp3",
+   "wood_drop_heavy_05.mp3"
+  ],
+  "card_flick": [
+   "card_flick_01.mp3",
+   "card_flick_02.mp3",
+   "card_flick_03.mp3",
+   "card_flick_04.mp3",
+   "card_flick_05.mp3"
+  ],
+  "close_slide": [
+   "close_slide_01.mp3",
+   "close_slide_02.mp3",
+   "close_slide_03.mp3"
+  ],
+  "metal_dull": [
+   "metal_dull_01.mp3",
+   "metal_dull_02.mp3",
+   "metal_dull_03.mp3"
+  ],
+  "metal_error": [
+   "metal_error_01.mp3",
+   "metal_error_02.mp3",
+   "metal_error_03.mp3"
+  ],
+  "metal_big": [
+   "metal_big_01.mp3",
+   "metal_big_02.mp3",
+   "metal_big_03.mp3",
+   "metal_big_04.mp3"
+  ],
+  "zip": [
+   "zip_01.mp3",
+   "zip_02.mp3",
+   "zip_03.mp3",
+   "zip_04.mp3",
+   "zip_05.mp3",
+   "zip_06.mp3"
+  ],
+  "shaky": [
+   "shaky_01.mp3",
+   "shaky_02.mp3"
+  ],
+  "gritty": [
+   "gritty_01.mp3",
+   "gritty_02.mp3"
+  ],
+  "velcro": [
+   "velcro_01.mp3",
+   "velcro_02.mp3"
+  ],
+  "tile_land": [
+   "tile_land_01.mp3",
+   "tile_land_02.mp3",
+   "tile_land_03.mp3"
+  ],
+  "tile_land_opp": [
+   "tile_land_opp_01.mp3",
+   "tile_land_opp_02.mp3",
+   "tile_land_opp_03.mp3",
+   "tile_land_opp_04.mp3",
+   "tile_land_opp_05.mp3",
+   "tile_land_opp_06.mp3",
+   "tile_land_opp_07.mp3",
+   "tile_land_opp_08.mp3",
+   "tile_land_opp_09.mp3",
+   "tile_land_opp_10.mp3",
+   "tile_land_opp_11.mp3",
+   "tile_land_opp_12.mp3"
+  ],
+  "tile_land_opp_low": [
+   "tile_land_opp_low_01.mp3",
+   "tile_land_opp_low_02.mp3",
+   "tile_land_opp_low_03.mp3",
+   "tile_land_opp_low_04.mp3",
+   "tile_land_opp_low_05.mp3",
+   "tile_land_opp_low_06.mp3",
+   "tile_land_opp_low_07.mp3",
+   "tile_land_opp_low_08.mp3",
+   "tile_land_opp_low_09.mp3",
+   "tile_land_opp_low_10.mp3",
+   "tile_land_opp_low_11.mp3",
+   "tile_land_opp_low_12.mp3",
+   "tile_land_opp_low_13.mp3",
+   "tile_land_opp_low_14.mp3"
+  ],
+  "wood_stack": [
+   "wood_stack_01.mp3",
+   "wood_stack_02.mp3",
+   "wood_stack_03.mp3",
+   "wood_stack_04.mp3",
+   "wood_stack_05.mp3",
+   "wood_stack_06.mp3",
+   "wood_stack_07.mp3",
+   "wood_stack_08.mp3",
+   "wood_stack_09.mp3",
+   "wood_stack_10.mp3",
+   "wood_stack_11.mp3"
+  ],
+  "chalk": [
+   "chalk_01.mp3",
+   "chalk_02.mp3",
+   "chalk_03.mp3"
+  ],
+  "wood_block_drop": [
+   "wood_block_drop_01.mp3"
+  ],
+  "wood_click": [
+   "wood_click_01.mp3",
+   "wood_click_02.mp3",
+   "wood_click_03.mp3",
+   "wood_click_04.mp3"
+  ],
+  "rock_rub": [
+   "rock_rub_01.mp3",
+   "rock_rub_02.mp3",
+   "rock_rub_03.mp3",
+   "rock_rub_04.mp3",
+   "rock_rub_05.mp3"
+  ],
+  "rock_click": [
+   "rock_click_01.mp3",
+   "rock_click_02.mp3",
+   "rock_click_03.mp3",
+   "rock_click_04.mp3",
+   "rock_click_05.mp3",
+   "rock_click_06.mp3",
+   "rock_click_07.mp3",
+   "rock_click_08.mp3"
+  ],
+  "water_drop": [
+   "water_drop_01.mp3"
+  ],
+  "coins": [
+   "coins_01.mp3",
+   "coins_02.mp3",
+   "coins_03.mp3",
+   "coins_04.mp3"
+  ],
+  "glass_ring": [
+   "glass_ring_01.mp3",
+   "glass_ring_02.mp3",
+   "glass_ring_03.mp3"
+  ],
+  "glass_tap": [
+   "glass_tap_01.mp3",
+   "glass_tap_02.mp3",
+   "glass_tap_03.mp3",
+   "glass_tap_04.mp3",
+   "glass_tap_05.mp3",
+   "glass_tap_06.mp3",
+   "glass_tap_07.mp3",
+   "glass_tap_08.mp3"
+  ],
+  "glass_tap_soft": [
+   "glass_tap_soft_01.mp3",
+   "glass_tap_soft_02.mp3",
+   "glass_tap_soft_03.mp3",
+   "glass_tap_soft_04.mp3",
+   "glass_tap_soft_05.mp3",
+   "glass_tap_soft_06.mp3",
+   "glass_tap_soft_07.mp3",
+   "glass_tap_soft_08.mp3",
+   "glass_tap_soft_09.mp3",
+   "glass_tap_soft_10.mp3"
+  ]
+ },
+ "events": {
+  "ui.press": {
+   "sounds": [
+    "ui_press"
+   ],
+   "volume": 0.8,
+   "pitchJitter": 0.03,
+   "when": "Finger down on any menu key"
+  },
+  "ui.release": {
+   "sounds": [
+    "ui_release"
+   ],
+   "volume": 0.6,
+   "pitchJitter": 0.03,
+   "when": "Finger up; together with press = the full click-clack"
+  },
+  "ui.primary": {
+   "sounds": [
+    "ui_clack"
+   ],
+   "volume": 0.9,
+   "pitchJitter": 0.02,
+   "when": "PLAY, Find match, big confirm keys (instead of press/release)"
+  },
+  "ui.back": {
+   "sounds": [
+    "ui_dull_click"
+   ],
+   "volume": 0.7,
+   "pitchJitter": 0.03,
+   "when": "Back, cancel, tapping something that does nothing"
+  },
+  "ui.close": {
+   "sounds": [
+    "ui_tape_close"
+   ],
+   "volume": 0.7,
+   "pitchJitter": 0.02,
+   "when": "Panel / sheet closes. Prefer variant 04 (your favourite)"
+  },
+  "ui.toggle_on": {
+   "sounds": [
+    "ui_flick"
+   ],
+   "volume": 0.8,
+   "pitchJitter": 0.02,
+   "when": "Any switch turned on"
+  },
+  "ui.toggle_off": {
+   "sounds": [
+    "ui_flick_back"
+   ],
+   "volume": 0.8,
+   "pitchJitter": 0.02,
+   "when": "Any switch turned off"
+  },
+  "ui.done": {
+   "sounds": [
+    "wood_click"
+   ],
+   "volume": 0.8,
+   "pitchJitter": 0.02,
+   "when": "Saved / confirmed / loaded"
+  },
+  "card.shuffle": {
+   "sounds": [
+    "card_shuffle"
+   ],
+   "volume": 0.8,
+   "pitchJitter": 0.02,
+   "when": "Match start, rematch, campaign restart"
+  },
+  "card.draw_deck": {
+   "sounds": [
+    "card_flick"
+   ],
+   "volume": 0.8,
+   "pitchJitter": 0.04,
+   "when": "Draw from deck (favour 01\u201302)"
+  },
+  "card.draw_discard": {
+   "sounds": [
+    "card_fan_cards"
+   ],
+   "volume": 0.8,
+   "pitchJitter": 0.03,
+   "when": "Take the top discard"
+  },
+  "card.select": {
+   "sounds": [
+    "ui_key"
+   ],
+   "volume": 0.55,
+   "pitchJitter": 0.04,
+   "when": "Tap / lift a card in your hand. Heard most \u2014 kept quiet"
+  },
+  "card.sort": {
+   "sounds": [
+    "card_fan"
+   ],
+   "volume": 0.7,
+   "pitchJitter": 0.02,
+   "when": "Auto-sort or hand closes"
+  },
+  "card.discard": {
+   "sounds": [
+    "wood_drop"
+   ],
+   "volume": 0.8,
+   "pitchJitter": 0.03,
+   "when": "Throw your last card (ends your turn online)"
+  },
+  "meld.add_card": {
+   "sounds": [
+    "wood_stack"
+   ],
+   "volume": 0.7,
+   "pitchJitter": 0,
+   "when": "Each card joining a meld; pitch steps up +1 semitone per card"
+  },
+  "meld.complete": {
+   "sounds": [
+    "wood_block_drop"
+   ],
+   "volume": 0.9,
+   "pitchJitter": 0.02,
+   "when": "Valid meld locks in"
+  },
+  "meld.opponent": {
+   "sounds": [
+    "wood_drop_heavy"
+   ],
+   "volume": 0.75,
+   "pitchJitter": 0.03,
+   "when": "Opponent lays a meld"
+  },
+  "meld.invalid": {
+   "sounds": [
+    "metal_dull"
+   ],
+   "volume": 0.7,
+   "pitchJitter": 0.02,
+   "when": "Illegal meld / tile you cannot claim"
+  },
+  "hex.claim": {
+   "sounds": [
+    "tile_land"
+   ],
+   "volume": 0.8,
+   "pitchJitter": 0.03,
+   "when": "Your hexes land. Several at once: 80 ms apart, rotate the 3"
+  },
+  "hex.claim_opp": {
+   "sounds": [
+    "tile_land_opp",
+    "tile_land_opp_low"
+   ],
+   "volume": 0.75,
+   "pitchJitter": 0.03,
+   "when": "Opponent hexes land (low set for bot turns)"
+  },
+  "hex.select": {
+   "sounds": [
+    "rock_click"
+   ],
+   "volume": 0.45,
+   "pitchJitter": 0.05,
+   "when": "Hover / pick a hex"
+  },
+  "network.grow": {
+   "sounds": [
+    "zip"
+   ],
+   "volume": 0.6,
+   "pitchJitter": 0.03,
+   "when": "Mycelium spreads: 01\u201304 short growth, 05\u201306 big spreads"
+  },
+  "network.bloom": {
+   "sounds": [
+    "gritty"
+   ],
+   "volume": 0.7,
+   "pitchJitter": 0,
+   "when": "Big chain across many tiles (use 02, the long one)"
+  },
+  "hex.steal": {
+   "sounds": [
+    "velcro"
+   ],
+   "volume": 0.75,
+   "pitchJitter": 0.03,
+   "when": "You take an opponent hex"
+  },
+  "hex.lost": {
+   "sounds": [
+    "metal_big"
+   ],
+   "volume": 0.5,
+   "pitchJitter": 0.03,
+   "when": "Opponent takes yours (quieter than match loss)"
+  },
+  "connection.line": {
+   "sounds": [
+    "chalk"
+   ],
+   "volume": 0.55,
+   "pitchJitter": 0.03,
+   "when": "Connection drawn between hexes / map path"
+  },
+  "seeds.payout": {
+   "sounds": [
+    "coins",
+    "glass_tap"
+   ],
+   "volume": 0.85,
+   "pitchJitter": 0,
+   "when": "Coins, then a glass tick per counter step, pitch rising"
+  },
+  "seeds.spend": {
+   "sounds": [
+    "coins"
+   ],
+   "volume": 0.6,
+   "pitchJitter": 0,
+   "when": "Pay for a tile: one coin drop pitched down 2 semitones"
+  },
+  "map.sprout": {
+   "sounds": [
+    "rock_click",
+    "water_drop"
+   ],
+   "volume": 0.8,
+   "pitchJitter": 0.02,
+   "when": "Plant your sprout: rock click + droplet 60 ms later"
+  },
+  "map.spin": {
+   "sounds": [
+    "rock_rub"
+   ],
+   "volume": 0.45,
+   "pitchJitter": 0.06,
+   "when": "Globe drag: one rub per flick, louder for faster spins"
+  },
+  "map.zoom": {
+   "sounds": [
+    "gritty"
+   ],
+   "volume": 0.4,
+   "pitchJitter": 0.03,
+   "when": "Zoom in/out (use 01, the short one)"
+  },
+  "bot.level": {
+   "sounds": [
+    "rock_click"
+   ],
+   "volume": 0.7,
+   "pitchJitter": 0,
+   "when": "Pick bot level 1\u20139: +1 semitone per level"
+  },
+  "turn.yours": {
+   "sounds": [
+    "glass_ring"
+   ],
+   "volume": 0.7,
+   "pitchJitter": 0.01,
+   "when": "Your turn starts"
+  },
+  "turn.opponent": {
+   "sounds": [
+    "glass_tap_soft"
+   ],
+   "volume": 0.55,
+   "pitchJitter": 0.02,
+   "when": "Opponent's turn starts"
+  },
+  "turn.end": {
+   "sounds": [
+    "close_slide"
+   ],
+   "volume": 0.55,
+   "pitchJitter": 0.02,
+   "when": "You end your turn"
+  },
+  "timer.tick": {
+   "sounds": [
+    "glass_tap_soft"
+   ],
+   "volume": 0.4,
+   "pitchJitter": 0,
+   "when": "Last 10 seconds, once per second"
+  },
+  "notify.move": {
+   "sounds": [
+    "water_drop"
+   ],
+   "volume": 0.8,
+   "pitchJitter": 0,
+   "when": "Async: opponent moved while you were away"
+  },
+  "match.found": {
+   "sounds": [
+    "wood_block_drop"
+   ],
+   "volume": 0.9,
+   "pitchJitter": 0,
+   "when": "Opponent found / duel starts (then shuffle)"
+  },
+  "match.win": {
+   "sounds": [
+    "glass_ring",
+    "coins"
+   ],
+   "volume": 0.9,
+   "pitchJitter": 0,
+   "when": "Glass ring + coins together (synth stab later)"
+  },
+  "match.lose": {
+   "sounds": [
+    "metal_big"
+   ],
+   "volume": 0.85,
+   "pitchJitter": 0,
+   "when": "Use 02, the long dramatic one"
+  },
+  "online.error": {
+   "sounds": [
+    "metal_error"
+   ],
+   "volume": 0.7,
+   "pitchJitter": 0,
+   "when": "Disconnected / failed to send move"
+  },
+  "bot.thinking": {
+   "sounds": [
+    "shaky"
+   ],
+   "volume": 0.25,
+   "pitchJitter": 0,
+   "when": "Optional, very quiet while a bot thinks; skip if it nags"
+  }
+ }
+}

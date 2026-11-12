@@ -5,8 +5,8 @@
 // existing board painting are untouched.
 import type { Action, View } from '../../../src/engine/index.js';
 import type { Sel } from '../logic/interaction.js';
-import { DRAG_THRESHOLD_PX, resolveDrag } from '../logic/drag.js';
-import type { DragHover, DragLedWord, DragResolution, DragSource } from '../logic/drag.js';
+import { DRAG_THRESHOLD_PX, FLICK_WINDOW_MS, resolveDrag } from '../logic/drag.js';
+import type { DragHover, DragLedWord, DragMode, DragResolution, DragSource } from '../logic/drag.js';
 
 export type DragLayerHooks = {
   /** True only when a drag may start at all (my turn, not busy, a game on screen). */
@@ -19,13 +19,18 @@ export type DragLayerHooks = {
   /** A hex's centre on screen, for the small snap toward it. */
   pointOf: (key: string) => { x: number; y: number } | null;
   overDiscardPile: (clientX: number, clientY: number) => boolean;
-  upperBoard: (clientY: number) => boolean;
   /** Bloom paint Reverse (kept in sync with the board's toggle). */
   bloomReverse?: () => boolean;
   /** Optional: mark the cockpit shell while a throw drop would commit. */
   setThrowZone?: (on: boolean) => void;
-  /** Plays a legal action the same way the tap path would. */
-  commit: (action: Action) => void;
+  /**
+   * Plays a legal action the same way the tap path would; `mode` says which gesture played it and
+   * `from` is the ghost's last box, so the committed flight can continue from where the card was
+   * (instead of snapping back to the hand for one frame).
+   */
+  commit: (action: Action, mode: DragMode, from?: DOMRect) => void;
+  /** A started move that stayed too short to mean a drag: run the tap it would have been. */
+  tap?: (cardId: number) => void;
   /** No group chosen: open the existing Bloom choices for this card. */
   openBloom: (cardId: number, key: string) => void;
   /** Show a word on the cockpit sign, or null to clear it. */
@@ -109,10 +114,11 @@ type Active = {
   x: number;
   y: number;
   time: number;
-  lastX: number;
-  lastY: number;
-  lastTime: number;
-  /** Peak upward speed (px/ms) seen after the drag started. */
+  /** When the pointer went down, for the "gesture shorter than the window" fallback. */
+  t0: number;
+  /** The last ~8 pointer samples (time, y): upward speed is read over a window, not one frame. */
+  samples: { t: number; y: number }[];
+  /** Peak upward speed (px/ms) measured over FLICK_WINDOW_MS or longer. */
   peakUpSpeed: number;
   shape: string[];
   started: boolean; // past the threshold
@@ -149,6 +155,15 @@ export function mountDragLayer(hooks: DragLayerHooks) {
   let suppressTimer = 0;
   let deckEl: HTMLElement | null = null;
   let discardEl: HTMLElement | null = null;
+  /**
+   * The ghost's own size, kept as numbers. Reading `getBoundingClientRect()` after every pointermove
+   * (after the previous move wrote the ghost's transform) forces a layout flush per move — a
+   * read-after-write in the hottest input loop. The size is written once and, while the 180ms
+   * mini/full morph is actually playing, sampled from the box; the rest of the drag uses the numbers.
+   */
+  let ghostW = 0;
+  let ghostH = 0;
+  let ghostMorphUntil = 0;
 
   const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
   const reduced = () => hooks.reducedMotion();
@@ -182,9 +197,12 @@ export function mountDragLayer(hooks: DragLayerHooks) {
 
   const buildGhost = (a: Active) => {
     const g = document.createElement('div');
+    const fromDeck = a.source.kind === 'deck';
     const cls = a.faceEl.classList.contains('card') ? a.faceEl.className : 'card';
-    g.className = `drag-ghost ${cls}`;
-    g.innerHTML = a.faceEl.innerHTML;
+    // A card dragged off the Draw pile is face down: it wears the game's real card back
+    // (`.card.back`, cards.ts), never a copy of the pile's own markup (owner, 2026-10-24).
+    g.className = fromDeck ? 'drag-ghost card back drag-from-deck' : `drag-ghost ${cls}`;
+    g.innerHTML = fromDeck ? '' : a.faceEl.innerHTML;
     const fromPile = a.source.kind === 'deck' || a.source.kind === 'discard';
     g.classList.toggle('drag-from-pile', fromPile);
     const r = a.faceEl.getBoundingClientRect();
@@ -194,6 +212,8 @@ export function mountDragLayer(hooks: DragLayerHooks) {
     g.style.height = `${h}px`;
     g.dataset.fullW = String(w);
     g.dataset.fullH = String(h);
+    ghostW = w;
+    ghostH = h;
     // Chevron element exists for hand grow morph; CSS keeps it hidden until drag-mini.
     if (!fromPile) {
       const chev = document.createElement('span');
@@ -219,15 +239,16 @@ export function mountDragLayer(hooks: DragLayerHooks) {
     const grow = a.resolution.mode === 'place' || a.resolution.mode === 'bloom'
       || a.resolution.mode === 'bloom-open' || a.resolution.mode === 'mega';
     const mini = overBoard || grow;
-    ghost.classList.toggle('drag-mini', mini);
-    ghost.classList.toggle('futa04-mini-card', mini);
-    if (mini) {
-      // Match the smart-bloom mini-card proportions.
-      ghost.style.width = `${MINI_W}px`;
-      ghost.style.height = `${MINI_H}px`;
-    } else {
-      ghost.style.width = `${fullW}px`;
-      ghost.style.height = `${fullH}px`;
+    // Only WRITE on a real change: setting the same width/height every move still invalidates style.
+    if (ghost.classList.contains('drag-mini') !== mini) {
+      ghost.classList.toggle('drag-mini', mini);
+      ghost.classList.toggle('futa04-mini-card', mini);
+      ghost.style.width = `${mini ? MINI_W : fullW}px`;
+      ghost.style.height = `${mini ? MINI_H : fullH}px`;
+      ghostW = mini ? MINI_W : fullW;
+      ghostH = mini ? MINI_H : fullH;
+      // The box is mid-transition for this long; sample it while it moves, never after.
+      ghostMorphUntil = performance.now() + 220;
     }
   };
 
@@ -236,7 +257,7 @@ export function mountDragLayer(hooks: DragLayerHooks) {
     const g = ghost;
     const mini = !!g?.classList.contains('drag-mini');
     // Stable mini height so a mid-morph bounding box does not shove aim off the board.
-    const h = mini ? MINI_H : (g ? g.getBoundingClientRect().height : 72);
+    const h = mini ? MINI_H : (ghostH || 72);
     // Full card: a little below the top edge. Mini: card-top / chevron-base tip cluster
     // (tiles under the raised bloom icon + arrow — thumb stays lower and uses finger fallback).
     const lift = mini
@@ -289,9 +310,24 @@ export function mountDragLayer(hooks: DragLayerHooks) {
       if (a.source.kind === 'hand') hooks.onCardFocus?.(a.source.cardId);
     }
     if (!a.started || !ghost) return;
-    const dt = Math.max(1, a.time - a.lastTime);
-    const frameUp = Math.max(0, (a.lastY - a.y) / dt);
-    a.peakUpSpeed = Math.max(a.peakUpSpeed, frameUp);
+    // Upward speed over a window, never one frame: a slow drag with a 3px pointer jitter is not a
+    // swipe. Pairs younger than FLICK_WINDOW_MS are skipped, and the peak only latches confirmed
+    // measurements, so a single spike cannot throw a card.
+    a.samples.push({ t: a.time, y: a.y });
+    if (a.samples.length > 8) a.samples.shift();
+    let measured = false;
+    for (const sample of a.samples) {
+      const dt = a.time - sample.t;
+      if (dt < FLICK_WINDOW_MS) continue;
+      measured = true;
+      a.peakUpSpeed = Math.max(a.peakUpSpeed, Math.max(0, (sample.y - a.y) / dt));
+    }
+    // Younger than the window: read it whole. At that length it cannot be a slow drag, and a quick
+    // desktop flick must not be lost for being faster than the window.
+    if (!measured && a.time - a.t0 < FLICK_WINDOW_MS && a.samples.length > 1) {
+      const oldest = a.samples[0]!;
+      a.peakUpSpeed = Math.max(a.peakUpSpeed, Math.max(0, (oldest.y - a.y) / Math.max(1, a.time - oldest.t)));
+    }
     morphGhost(a, a.resolution.mode === 'place' || a.resolution.mode === 'bloom'
       || a.resolution.mode === 'bloom-open' || a.resolution.mode === 'mega' || !!a.resolution.hoverKey);
     // Visual aim (raised mini + chevron tip) wins when legal; finger tip is the fallback
@@ -309,7 +345,6 @@ export function mountDragLayer(hooks: DragLayerHooks) {
       shape: a.shape as readonly string[],
       upSpeed: a.peakUpSpeed,
       upTravel: Math.max(0, a.startY - a.y),
-      upperBoard: hooks.upperBoard(a.y),
       reverse: hooks.bloomReverse?.() ?? false,
     };
     const usable = (r: DragResolution) =>
@@ -362,10 +397,16 @@ export function mountDragLayer(hooks: DragLayerHooks) {
         targetY += (dy / len) * 10;
       }
     }
-    const r = ghost.getBoundingClientRect();
+    // Only a live mini/full morph needs the real box; a settled ghost uses its written size, so a
+    // pointermove never has to flush layout after the previous move's style write.
+    if (performance.now() < ghostMorphUntil) {
+      const r = ghost.getBoundingClientRect();
+      ghostW = r.width;
+      ghostH = r.height;
+    }
     const mini = ghost.classList.contains('drag-mini');
-    tx = targetX - r.width / 2;
-    ty = targetY - r.height * ghostLift(mini);
+    tx = targetX - (ghostW || 48) / 2;
+    ty = targetY - (ghostH || 72) * ghostLift(mini);
     if (reduced()) {
       gx = tx;
       gy = ty;
@@ -397,8 +438,9 @@ export function mountDragLayer(hooks: DragLayerHooks) {
     armClickGuard();
     hooks.onDragEnd?.();
     if (commit) {
-      if (res.commit) hooks.commit(res.commit);
+      if (res.commit) hooks.commit(res.commit, res.mode, from?.getBoundingClientRect());
       else if (res.openOptions && res.hoverKey && a.source.kind === 'hand') hooks.openBloom(a.source.cardId, res.hoverKey);
+      else if (res.asTap && a.source.kind === 'hand') hooks.tap?.(a.source.cardId);
       else if (from) hooks.flyBack(from, a.sourceEl);
     } else if (from) {
       hooks.flyBack(from, a.sourceEl);
@@ -408,9 +450,6 @@ export function mountDragLayer(hooks: DragLayerHooks) {
 
   const onMove = (event: PointerEvent) => {
     if (!active || event.pointerId !== active.pointerId) return;
-    active.lastX = active.x;
-    active.lastY = active.y;
-    active.lastTime = active.time;
     active.x = event.clientX;
     active.y = event.clientY;
     active.time = event.timeStamp || performance.now();
@@ -464,9 +503,8 @@ export function mountDragLayer(hooks: DragLayerHooks) {
       x: event.clientX,
       y: event.clientY,
       time: event.timeStamp || performance.now(),
-      lastX: event.clientX,
-      lastY: event.clientY,
-      lastTime: event.timeStamp || performance.now(),
+      t0: event.timeStamp || performance.now(),
+      samples: [{ t: event.timeStamp || performance.now(), y: event.clientY }],
       peakUpSpeed: 0,
       shape: [],
       started: false,

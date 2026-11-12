@@ -1,7 +1,7 @@
 // CAMPAIGN RESET — the one piece of player state the server never holds.
 //
 // Which campaign levels are unlocked is NOT a database row: the game keeps it in the player's own
-// browser (`severgrow.campaign.progress.v2`, plus the unfinished match and a "last mode" note; see
+// browser (`severgrow.campaign.progress.v3`, plus the unfinished match and a "last mode" note; see
 // src/campaign/progress.ts). The server only ever records the Seeds a first clear paid. So "reset
 // the campaign" from the dashboard can only mean the browser the owner is sitting in front of —
 // this module does exactly that, and nothing else.
@@ -27,6 +27,8 @@
  * remove those too, so a stale v1 can never come back to life.
  */
 export const CAMPAIGN_SUFFIXES = [
+  'severgrow.campaign.progress.v3',
+  'severgrow.campaign.save.v3',
   'severgrow.campaign.progress.v2',
   'severgrow.campaign.save.v2',
   'severgrow.campaign.progress.v1',

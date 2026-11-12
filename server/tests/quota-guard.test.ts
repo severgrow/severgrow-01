@@ -192,6 +192,10 @@ const CLASSIFIED: Record<string, Protection> = {
   // scripts, and both are reachable only by running them on purpose.
   'server/scripts/mark-test-data.ts': 'explicit-command',
   'server/scripts/clean-test-data.ts': 'explicit-command',
+  // The conservative bot backfill (added 2026-10-24). Reads DATABASE_URL, dry-runs unless
+  // `--commit` is passed, is absent from every default npm script, and only marks rows (never
+  // deletes). Reachable only by running it on purpose (`npm run server:backfill-bots`).
+  'server/scripts/backfill-test-bursts.ts': 'explicit-command',
   // The manual smoke is normally a loopback target, but `BASE_URL=<real>` points it at a real
   // deployment. It now reads DATABASE_URL (so the real-capable detector flags it) purely to mark the
   // rows it creates as test data; it stays out of every default npm script.

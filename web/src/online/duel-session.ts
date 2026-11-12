@@ -7,16 +7,37 @@ import type { Step } from '../logic/anim.js';
 import type { Played } from '../logic/session.js';
 import { breakdownPart } from '../logic/endgame.js';
 import { gameHighlights } from '../logic/highlights.js';
+import { harvestFigure } from '../logic/harvest.js';
+import type { HarvestFigure } from '../logic/harvest.js';
 import { moveSummary, resultReason, resultTitle } from '../logic/log.js';
 import type { Highlight } from '../logic/highlights.js';
 import { ONLINE, RESULT } from '../../../src/strings.js';
 import type { OnlineDriver } from './driver.js';
+import { boardSignature, buildOpponentTurnReplay, openingBoard } from './opponent-turn-replay.js';
+import type { OpponentTurnReplay, ReplayReason } from './opponent-turn-replay.js';
 import { shadowFromView } from './shadow.js';
-import { stepsFromEvents, syncStep } from './steps-from-events.js';
+import { stepContextFor, stepsFromEvents, syncStep } from './steps-from-events.js';
+
+/**
+ * A Blitz duel is on (the live controller marks the page while the match is in Blitz mode,
+ * online/live/mount.ts). Read from the document so the session needs no new wiring.
+ */
+const blitzDuelNow = (): boolean =>
+  typeof document !== 'undefined' && document.documentElement.dataset.blitzDuel === '1';
 
 export type OnlinePlayResult =
   | { ok: true; played: Played | null; catchUp: Step[]; finished: boolean }
   | { ok: false; message: string };
+
+/** The opponent's last completed turn, plus the scores its starting board had. */
+export type OnlineTurnReplay = OpponentTurnReplay & { scores: [number, number] };
+
+/** Why the Replay control is (not) offered: `pending` = not answered yet for this board. */
+export type TurnReplayReason = 'ok' | 'no-turn' | 'unverified' | 'pending';
+
+type TurnReplayResult =
+  | { ok: true; replay: OnlineTurnReplay }
+  | { ok: false; reason: ReplayReason | 'pending' };
 
 /**
  * Everything the finish screen shows. Deliberately the SAME shape and the same sentences offline
@@ -27,11 +48,18 @@ export type FinishInfo = {
   reason: string;
   /** The small context line under the title — never a repeat of the reason. */
   sub: string;
+  /** The opponent's display name, for the share card's two names (null when the match has none). */
+  opponentName: string | null;
   scores: [number, number];
   breakdown: string;
   /** Already mapped to display seats (0 = me), ready for the shared highlight list. */
   highlights: Highlight[];
   moves: string | null;
+  /**
+   * THE DOUBLE HARVEST: the final position as one small figure, once the duel's public record has
+   * loaded (null until then). The one-line summary that sat beside it was removed (owner, 2026-10-30).
+   */
+  harvest: HarvestFigure | null;
 };
 
 /**
@@ -63,11 +91,30 @@ export class OnlineSession {
    */
   private revealing = false;
   /**
+   * True while `consumeCatchUp` is BUILDING the steps, and it exists because of a re-entrancy:
+   * `driver.skipCatchUp()` emits, and that emit runs a full `onChange` + `render` inside
+   * `consumeCatchUp` — before the caller has the steps in its queue. A gate that only reads the
+   * queue therefore saw an empty board at the exact moment the deciding move was arriving, which
+   * is how the loser's "you lost" plate could go up over a move it never showed (owner report,
+   * 2026-10-25). The finish screen holds while this is true.
+   */
+  private preparing = false;
+  /** Keep server callbacks from starting our own throw before its local presentation is ready. */
+  private committingTurn = false;
+  /**
    * True when the replay now in flight is the LIVE enemy turn this device was waiting for, false
    * for a catch-up after being away. Only the live reveal gets the full, readable pace; an away
    * catch-up keeps its 2x (and its Skip).
    */
   private revealLive = false;
+  /**
+   * The last verified answer to "can this seat replay the opponent's last turn?", cached per
+   * match + server revision + board. Never fetched from a render: `prepareOpponentTurnReplay()`
+   * does the one read, the page only reads the getters below.
+   */
+  private replayCheck: { key: string; result: TurnReplayResult } | null = null;
+  /** The key of a check that is in flight (so a burst of renders cannot start a second fetch). */
+  private replayChecking: string | null = null;
 
   constructor(readonly driver: OnlineDriver) {
     this.state = this.buildDisplayState();
@@ -101,17 +148,25 @@ export class OnlineSession {
     if (this.boardBlocked) return []; // never act on a board that is still replaying
     const snap = this.driver.snapshot();
     if (snap.view.actor !== snap.seat || snap.status !== 'active') return [];
-    // Legal in engine space → map to display (screen) coords for the UI.
-    return snap.legal.map((a) => this.driver.perspective().mapActionToScreen(a));
+    // Legal in display (screen) coords: the driver maps them once per position and keeps the result
+    // (tests/online-snapshot-cache.test.ts), instead of re-mapping on every read.
+    return snap.screenLegal;
   }
 
   get canUndo(): boolean {
+    // Blitz has no Undo: every move is sent the moment it is made.
+    if (blitzDuelNow()) return false;
     return !this.boardBlocked && this.driver.draft().canUndo();
   }
 
   /** True while the opponent's finished turn is still replaying; input is closed. */
   get isRevealing(): boolean {
     return this.boardBlocked;
+  }
+
+  /** Keep the finish plate behind steps being prepared, including our confirmed local throw. */
+  get isPreparingCatchUp(): boolean {
+    return this.preparing || this.committingTurn;
   }
 
   /** True when the reveal now in flight is the live enemy turn (not a catch-up after being away). */
@@ -146,13 +201,18 @@ export class OnlineSession {
 
   /** Take catch-up steps since last consume (opponent / own committed turn). */
   consumeCatchUp(): Step[] {
+    if (this.committingTurn) return [];
     const events = [...this.driver.pendingEvents()];
+    // The re-entrant call made by `skipCatchUp`'s own emit lands here with an empty buffer. It must
+    // NOT touch `preparing`: it is the outer call that is still building the steps.
     if (!events.length) return [];
-    // Close the gate BEFORE anything else. `skipCatchUp()` fires `emit()`, which runs a full
-    // render inside this very call: if the flag were set after it, that render would see an open
-    // gate (the enemy board already swapped in) — the exact window the owner reported.
+    // Close the gates BEFORE anything else. `skipCatchUp()` fires `emit()`, which runs a full
+    // render inside this very call: if the flags were set after it, that render would see an open
+    // input gate (the enemy board already swapped in) AND an empty step queue (the finish plate
+    // over the deciding move). Both are the exact window the owner reported.
     this.revealing = true;
     this.revealLive = this.driver.pendingOrigin() === 'live';
+    this.preparing = true;
     this.driver.skipCatchUp();
     let steps: Step[];
     try {
@@ -165,9 +225,11 @@ export class OnlineSession {
       // it here — the caller still reports the failure — so a broken step is a glitch, not a lock.
       this.revealing = false;
       this.revealLive = false;
+      this.preparing = false;
       this.lastCatchUp = [];
       throw error;
     }
+    this.preparing = false;
     this.lastCatchUp = steps;
     // The page replays these through the shared AnimQueue; until it drains, input stays shut.
     return steps;
@@ -177,10 +239,102 @@ export class OnlineSession {
     return this.lastCatchUp;
   }
 
+  // ---------- replaying the opponent's last turn -------------------------------------------
+  //
+  // The offline game replays the bot's turn from `Session.turns`. Online that record does not
+  // exist (this class keeps only its OWN actions), so the turn is rebuilt from the match's public
+  // event history — and offered ONLY when the rebuild is proven against the live board. See
+  // `opponent-turn-replay.ts` for the grouping rule and the self-check.
+
+  /** The opponent's last completed turn, if a verified reconstruction of it is cached. */
+  get opponentTurnReplay(): OnlineTurnReplay | null {
+    const hit = this.replayCheck;
+    if (!hit || hit.key !== this.replayKey()) return null; // the board or the revision moved on
+    return hit.result.ok ? hit.result.replay : null;
+  }
+
   /**
-   * Play a UI action (display coords). Draw/Throw are async; mid-turn Grow is local draft.
+   * Why the control is (not) offered — an honest tooltip needs to tell "they have not moved yet"
+   * apart from "the board could not be verified".
    */
+  get turnReplayReason(): TurnReplayReason {
+    const hit = this.replayCheck;
+    if (!hit || hit.key !== this.replayKey()) return 'pending';
+    return hit.result.ok ? 'ok' : hit.result.reason;
+  }
+
+  /**
+   * True when the opponent's last turn can be replayed right now: a verified reconstruction exists,
+   * nothing is moving, and it is MY turn — the same two conditions the offline control has
+   * (`Session.canReplayOpponent`: `actor === viewer`, and no replay in flight). Offering it while
+   * they are moving would put a replay next to their live turn.
+   */
+  get canReplayOpponentTurn(): boolean {
+    if (this.boardBlocked || this.finished) return false;
+    const snap = this.driver.snapshot();
+    if (snap.view.actor !== snap.seat) return false;
+    return this.opponentTurnReplay !== null;
+  }
+
+  /**
+   * Answer the replay question for the current match state, at most once per match + revision +
+   * board. Deliberately NOT called from a render path: the page calls it where a snapshot lands,
+   * so a render burst can never turn into a fetch burst.
+   */
+  async prepareOpponentTurnReplay(): Promise<void> {
+    // BLITZ streams the opponent's every move, and each one is a new revision: a full history
+    // download per move only competed with the live updates (owner, 2026-11-09: Blitz moves
+    // arrived late). In Blitz the check waits for my own turn (the only time it is offered).
+    // An ordinary duel never sees their mid-turn moves, so it is unchanged.
+    const snap = this.driver.snapshot();
+    if (blitzDuelNow() && snap.status === 'active' && snap.view.actor !== snap.seat) return;
+    const key = this.replayKey();
+    if (this.replayCheck?.key === key || this.replayChecking === key) return;
+    this.replayChecking = key;
+    let result: TurnReplayResult;
+    try {
+      const events = await this.historySnapshot();
+      result = this.replayKey() === key ? this.buildOpponentTurn(events) : { ok: false, reason: 'pending' };
+    } catch {
+      // A refused or failed read is not an error the player must see: the control simply stays off.
+      result = { ok: false, reason: 'unverified' };
+    } finally {
+      this.replayChecking = null;
+    }
+    if (result.ok || result.reason !== 'pending') this.replayCheck = { key, result };
+  }
+
+  /** One fetch keyed on everything the answer depends on (match, revision, the board on screen). */
+  private replayKey(): string {
+    const snap = this.driver.snapshot();
+    return `${snap.matchId}|${snap.revision}|${boardSignature(this.state.board)}`;
+  }
+
+  private buildOpponentTurn(events: readonly Event[]): TurnReplayResult {
+    const snap = this.driver.snapshot();
+    if (this.finished) return { ok: false, reason: 'no-turn' };
+    const p = this.driver.perspective();
+    const built = buildOpponentTurnReplay({
+      events,
+      opponent: (1 - snap.seat) as Player,
+      live: { actor: snap.view.actor, finished: this.finished },
+      perspective: p,
+      // The match's true opening board (homes and all), already in display space: `this.state` is
+      // the display state, so its config carries the display homes. The seed is not available
+      // online and is not needed — see `openingBoard`.
+      startBoard: openingBoard(this.state.config),
+      liveBoard: this.state.board,
+      context: stepContextFor(this.view),
+    });
+    if (!built.ok) return built;
+    // The scores the turn started on, read off that board (never invented).
+    const at = viewFor({ ...this.state, board: built.replay.startBoard }, 0);
+    return { ok: true, replay: { ...built.replay, scores: [at.score, at.opponentScore] } };
+  }
+
+  /** Play a UI action (display coords). Draw/Throw are async; mid-turn Grow is local draft. */
   async play(action: Action): Promise<OnlinePlayResult> {
+    if (this.committingTurn) return { ok: false, message: ONLINE.errBusy };
     if (this.revealing) {
       return { ok: false, message: ONLINE.statusRevealWait };
     }
@@ -204,7 +358,15 @@ export class OnlineSession {
     if (engine.t === 'EndAct' || engine.t === 'Discard') {
       // EndAct leaves the ACT step; the Discard (when a card is left) finishes the turn.
       // Both commit a batch to the server, so the turn boundary is real.
-      const res = await this.driver.throwTurn(engine);
+      // Blitz: the moves already shown are still being sent; the throw follows them, in order.
+      const before = this.buildEngineShadow();
+      const beforeDisp = this.cloneState(this.state);
+      this.committingTurn = true;
+      let res: Awaited<ReturnType<OnlineDriver['throwTurn']>>;
+      try {
+        await this.blitzSent();
+        res = await this.driver.throwTurn(engine);
+      } finally { this.committingTurn = false; }
       if (!res.ok) {
         this.refresh();
         return { ok: false, message: res.message ?? ONLINE.errTurnFailed };
@@ -212,7 +374,16 @@ export class OnlineSession {
       this.refresh();
       this.log.push(engine);
       const catchUp = this.consumeCatchUp();
-      return { ok: true, played: null, catchUp, finished: this.finished };
+      const ownDiscard = engine.t === 'Discard'
+        ? buildSteps(before, engine, this.buildEngineShadow(), this.seat)
+          .map(s => mapStepDisplay(s, this.driver)).filter(s => s.k === 'discard')
+        : [];
+      const played: Played | null = ownDiscard.length
+        ? { before: beforeDisp, action, after: this.state, steps: ownDiscard }
+        : null;
+      return { ok: true, played,
+        catchUp: played ? catchUp.filter(s => !(engine.t === 'Discard' && s.k === 'discard' && s.player === 0 && s.card.id === engine.card)) : catchUp,
+        finished: this.finished };
     }
 
     // Mid-turn draft (Grow / Bloom / Bomb / Blast / …)
@@ -240,6 +411,7 @@ export class OnlineSession {
     // drops the rest of the turn, so `[winningMove, EndAct]` commits the win and finishes the match
     // for BOTH devices. (That server rule was added for this case; the client half was missing.)
     if (afterEng.phase === 'GAME_OVER') {
+      await this.blitzSent();
       const res = await this.driver.throwTurn({ t: 'EndAct' });
       if (!res.ok) {
         // Nothing was committed. The driver has already dropped a draft it could not send and
@@ -250,12 +422,48 @@ export class OnlineSession {
       this.refresh();
       return { ok: true, played, catchUp: this.consumeCatchUp(), finished: this.finished };
     }
+    // BLITZ (owner, 2026-11-06: "the moves should be shown as soon as they're done"; 2026-11-09:
+    // "responsiveness is really bad"): the move is shown AT ONCE from the local draft, exactly like a
+    // normal turn, and sent to the server straight away in the background, one at a time and in
+    // order, so the opponent watches each one land. No Undo in Blitz.
+    if (blitzDuelNow()) this.sendBlitz();
     return { ok: true, played, catchUp: [], finished: false };
   }
 
+  /** The Blitz moves still being sent (resolves at once when there are none). */
+  private blitzSending: Promise<void> | null = null;
+  private blitzSent(): Promise<void> {
+    return this.blitzSending ?? Promise.resolve();
+  }
+  private sendBlitz(): void {
+    if (this.blitzSending) return; // the running loop picks the new move up
+    this.blitzSending = (async () => {
+      try {
+        for (let guard = 0; guard < 64; guard++) {
+          const next = this.driver.draft().actions()[0];
+          if (!next) return;
+          const res = await this.driver.commitNow(next, { rebase: true });
+          if (!res.ok) {
+            // The server refused what was shown: drop the unsent moves and go back to its truth.
+            this.driver.draft().clear();
+            this.driver.draft().persist();
+            this.refresh();
+            this.blitzError?.(res.message ?? ONLINE.errMoveIllegal);
+            return;
+          }
+          this.refresh();
+        }
+      } finally {
+        this.blitzSending = null;
+      }
+    })();
+  }
+  /** Set by the page: a Blitz move that the server refused after it was shown. */
+  blitzError: ((message: string) => void) | null = null;
+
   undo(): boolean {
     // Undo is an input like any other: it stays shut until the enemy turn has been shown.
-    if (this.boardBlocked) return false;
+    if (this.boardBlocked || blitzDuelNow()) return false;
     if (!this.driver.draftUndo()) return false;
     this.driver.draft().persist();
     this.refresh();
@@ -271,19 +479,26 @@ export class OnlineSession {
   }
 
   /**
-   * One fetch of the match's whole public event history (the server keeps every move). Used only
-   * by the finish screen, so the highlights match offline. Never replays or mutates the live view.
+   * One fetch of the match's whole public event history (the server keeps every move). Used by the
+   * finish screen (highlights) and by the opponent-turn replay. Never replays or mutates the live
+   * view.
    */
   async loadHistory(): Promise<void> {
     if (this.historyLoaded) return;
     try {
-      this.historyEvents = await this.driver.history();
-      this.historyLoaded = true;
+      await this.historySnapshot();
     } catch {
       // Offline / refused: leave the history empty; the screen hides the highlights rather than
       // showing blank rows.
       this.historyLoaded = true;
     }
+  }
+
+  /** The one full public-history read. Both callers share it, so a match is never fetched twice. */
+  private async historySnapshot(): Promise<readonly Event[]> {
+    this.historyEvents = await this.driver.history();
+    this.historyLoaded = true;
+    return this.historyEvents;
   }
 
   /** Payload for the finished screen — the same sentences and information as offline. */
@@ -294,20 +509,26 @@ export class OnlineSession {
     const sub = snap.opponentName ? ONLINE.finishSubOpponent(snap.opponentName) : ONLINE.finishSubFallback;
     const breakdown = RESULT.breakdown(breakdownPart(this.state, 0), breakdownPart(this.state, 1));
     const r = snap.result;
-    if (!r) return { title: ONLINE.finishedFallback, reason: '', sub, scores, breakdown, highlights: [], moves: null };
+    if (!r) return { title: ONLINE.finishedFallback, reason: '', sub, opponentName: snap.opponentName, scores, breakdown, highlights: [], moves: null, harvest: null };
     const history = this.historyEvents;
     const highlights = gameHighlights(history, snap.seat).map((h) => ({
       ...h,
       by: h.by === null ? null : ((h.by === snap.seat ? 0 : 1) as Player),
     }));
+    // The stamp waits for the match's public record (or the finish card draws the live board).
+    const record = this.historyLoaded && history.length > 0 ? history : null;
     return {
       title: resultTitle(r, snap.seat),
       reason: resultReason(r, snap.seat),
       sub,
+      opponentName: snap.opponentName,
       scores,
       breakdown,
       highlights,
       moves: moveSummary(history, snap.seat),
+      // `snap.view` is the engine's own seat view: engine coords; the figure turns it into the
+      // reading seat's perspective itself.
+      harvest: record ? harvestFigure(snap.view.board, snap.view.config, snap.seat, snap.view.terrain) : null,
     };
   }
 

@@ -9,6 +9,7 @@ import type { MemoryStorage } from '../storage/memory.js';
 import { createAdminRouter } from './router.js';
 import type { AdminRouter } from './router.js';
 import type { AdminStore } from './types.js';
+import type { WorldEconomyStore } from '../seeds/types.js';
 
 export type AdminWiring = { router: AdminRouter; store: AdminStore; kind: 'postgres' | 'memory' };
 
@@ -20,6 +21,8 @@ export const adminRouterNode = async (
     databaseUrl: string | null;
     /** The dev server's own stores, when it has them (the in-memory path). */
     memory?: { feedback?: unknown; economy?: unknown; links?: unknown } | null;
+    /** The Seeds/world store the server itself uses, for the owner's dashboard edits. */
+    economyStore?: WorldEconomyStore | null;
     note: string;
   },
 ): Promise<AdminWiring> => {
@@ -50,6 +53,7 @@ export const adminRouterNode = async (
 
   const router = createAdminRouter({
     store,
+    economy: deps.economyStore ?? null,
     authenticate: (token) => deps.service.authenticate(token),
     config: deps.config,
     now: () => deps.service.serverNow(),

@@ -7,6 +7,7 @@ import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { servePreview } from './helpers/preview-port.js';
 import { apply, legalActions, viewFor } from '../../src/engine/index.js';
+import { skipPlan } from '../src/logic/emptyturn.js';
 import type { State } from '../../src/engine/index.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
 // Run the focused sort/pile regression after the board-turn suite. Both suites now take a FREE
@@ -22,7 +23,16 @@ const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executab
 let checks = 0;
 const check = (value: unknown, name: string) => { assert(value, name); checks++; };
 const state = (p: Page) => p.evaluate(() => (window as any).__severgrow.state() as State);
-const idle = (p: Page) => p.waitForFunction(() => { const h = (window as any).__severgrow; return h && !h.busy() && h.state()?.actor === 0; }, undefined, { timeout: 30000 });
+const idle = async (p: Page) => {
+  await p.waitForFunction(() => { const h = (window as any).__severgrow; return h && !h.busy() && h.state()?.actor === 0; }, undefined, { timeout: 30000 });
+  const s = await state(p), view = viewFor(s, 0);
+  const autoSkip = await p.evaluate(() => (window as any).__severgrow.settings().autoSkip as boolean);
+  // The owner's essentials-only policy fixes autoSkip ON, ignoring the old saved false value.
+  // busy() can clear one render before that automatic EndAct: wait for the actual settled state.
+  if (s.phase === 'ACT' && skipPlan(legalActions(view), view.hand.length, autoSkip).kind === 'auto') {
+    await p.waitForFunction(() => { const h = (window as any).__severgrow; return !h.busy() && h.state()?.actor === 0 && h.state()?.phase !== 'ACT'; }, undefined, { timeout: 30000 });
+  }
+};
 // Fanned cards intentionally overlap. Click a visible piece of the requested card,
 // rather than Playwright's centre point, which can belong to the next card.
 const clickVisibleCard = async (p: Page, id: number) => {
@@ -85,9 +95,12 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
   check(obscured.length===0,`${w}: tip leaves all playable hexes and both homes clear (${obscured})`);
   await target.click();
   await idle(page);
-  check(JSON.stringify(await state(page)) === JSON.stringify(apply(grown, action)), `${w}: first valid target tap places exact action`);
+  let expectedGrow = apply(grown, action);
+  const expectedView = viewFor(expectedGrow, 0);
+  if (skipPlan(legalActions(expectedView), expectedView.hand.length, true).kind === 'auto') expectedGrow = apply(expectedGrow, {t:'EndAct'});
+  check(JSON.stringify(await state(page)) === JSON.stringify(expectedGrow), `${w}: first valid target tap places exact action, including the automatic step`);
   await target.click(); await idle(page);
-  check(JSON.stringify(await state(page)) === JSON.stringify(apply(grown, action)), `${w}: repeated target tap cannot duplicate the action`);
+  check(JSON.stringify(await state(page)) === JSON.stringify(expectedGrow), `${w}: repeated target tap cannot duplicate the action`);
   check(await page.locator('#board .mark-line,#board .mark-ink').count() === 0, `${w}: artwork communicates ownership without shapes`);
   await page.click('#tool-undo'); await idle(page);
   check(JSON.stringify(await state(page)) === JSON.stringify(grown), `${w}: Undo restores exact state`);
@@ -104,12 +117,23 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
   check(await throwCard.evaluate(el => el.classList.contains('futa04-throw-picked') && getComputedStyle(el).filter === 'grayscale(1)'), `${w}: Throw selection is enlarged and colorless`);
   await clickVisibleCard(page, discard.card);
   await page.waitForTimeout(100);
-  check((await state(page)).history!.some(e => e.t === 'Discard' && e.card === discard.card), `${w}: actual card throw`);
+  check(JSON.stringify(await state(page)) === JSON.stringify(before), `${w}: the second card tap deselects and never throws`);
+  check((await page.locator('#hand .futa04-throw-picked').count()) === 0, `${w}: nothing stays picked after the second tap`);
+  await clickVisibleCard(page, discard.card);
+  await page.locator('#discard').click();
+  await page.waitForTimeout(100);
+  check((await state(page)).history!.some(e => e.t === 'Discard' && e.card === discard.card), `${w}: actual pile throw`);
   await idle(page);
   const saved = await state(page);
   await page.evaluate(() => history.replaceState(null, '', location.pathname));
   await page.reload(); await page.waitForTimeout(500);
-  await page.click('#menu-continue'); await idle(page);
+  // Owner decision (2026-10-19): the product main menu has NO Continue. This suite uses the
+  // saved match only as a fixture for the post-resume checks, so it invokes the hidden legacy
+  // control directly — it is not asserting that a player can reach it. Boot first, so the click
+  // cannot land before main.ts binds the control.
+  await page.waitForFunction(() => (window as any).__severgrow?.ready?.() === true, undefined, { timeout: 20000 });
+  await page.evaluate(() => (document.getElementById('menu-continue') as HTMLButtonElement | null)?.click());
+  await idle(page);
   check(JSON.stringify(await state(page)) === JSON.stringify(saved), `${w}: resume after turn`);
   await page.click('#hud-menu');
   check(await page.locator('#gm-turn').textContent(), `${w}: Pause retains turn info`);

@@ -2,13 +2,24 @@
 
 declare const __CHANNEL__: string;
 
-/** Deployed duel API base URL, or null when this build has no online endpoint. */
-export const duelApiUrl = (): string | null => {
-  const env = (import.meta as { env?: Record<string, string | undefined> }).env;
+/** The run-time env bag the bundler injects (`import.meta.env`). */
+const buildEnv = (): Record<string, string | undefined> | undefined =>
+  (import.meta as { env?: Record<string, string | undefined> }).env;
+
+/**
+ * The deployed duel API base, resolved from a build's env bag. Pure, so the resolution itself can be
+ * pinned by a unit test (the built-bundle half is checked by `web/e2e/seeds-campaign-33.ts`).
+ */
+export const duelApiUrlFrom = (env: Record<string, string | undefined> | undefined): string | null => {
   const raw = env?.VITE_DUEL_API_URL?.trim();
   if (!raw) return null;
   return raw.replace(/\/+$/, '');
 };
+
+/** Deployed duel API base URL, or null when this build has no online endpoint. */
+export const duelApiUrl = (): string | null => (artFrame() ? null : duelApiUrlFrom(buildEnv()));
+/** The Art Lab's phone frame plays offline only (no guests, no presence, no traffic to the server). */
+const artFrame = () => typeof location !== 'undefined' && /(^|[?&])artlab=1(&|$)/.test(location.search);
 
 export const onlineBuildEnabled = (): boolean => duelApiUrl() !== null;
 
@@ -24,14 +35,15 @@ export const findOpponentEnabled = (): boolean => {
 };
 
 /**
- * How long a parked Find-opponent search waits before offering the honest computer fallback.
- * Defaults to the product three-minute window; a build may override it (VITE_PARKED_OFFER_MS),
- * which the e2e walk uses so it never has to wait three real minutes.
+ * How long a parked Find-opponent search waits before offering a game against the computer.
+ * Owner, 2026-11-08: 5 seconds (was three minutes). The search keeps running. A build may
+ * override it (VITE_PARKED_OFFER_MS); the e2e walk shortens it so it never waits the real 5 s.
  */
+export const PARKED_OFFER_MS = 5_000;
 export const parkedOfferMs = (): number => {
   const env = (import.meta as { env?: Record<string, string | undefined> }).env;
   const raw = Number(env?.VITE_PARKED_OFFER_MS);
-  return Number.isFinite(raw) && raw > 0 ? raw : 3 * 60 * 1000;
+  return Number.isFinite(raw) && raw > 0 ? raw : PARKED_OFFER_MS;
 };
 
 /** Public site base used in invite links (Pages). */

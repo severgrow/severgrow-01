@@ -9,8 +9,10 @@ import { duelApiUrl, duelRegion } from '../online/config.js';
 import { getOnlineSession } from '../online/duel-runtime.js';
 import { IDENTITY_STORAGE_KEY } from '../online/identity.js';
 import { glassBaseCss } from '../player/glass-surface.js';
-import { buildContext, cleanStack, createCrashGate, createQueue, safePath } from './core.js';
-import type { FeedbackKind, FeedbackPayload } from './core.js';
+import { buildContext, cleanStack, createCrashGate, createQueue, iosVersion, safePath } from './core.js';
+import type { FeedbackKind, FeedbackPayload, ScreenFit } from './core.js';
+import { paintBetaLine, replayEarlyTap } from './beta-line.js';
+import { ICONS } from '../ui/icons.js';
 
 declare const __CHANNEL__: string;
 
@@ -69,7 +71,7 @@ const context = (): Record<string, unknown> => {
     channel: typeof __CHANNEL__ !== 'undefined' ? __CHANNEL__ : '',
     path: safePath(location.pathname),
     screen: visibleScreen(),
-    viewport: { w: innerWidth, h: innerHeight, dpr: devicePixelRatio || 1 },
+    viewport: { w: innerWidth, h: innerHeight, dpr: devicePixelRatio || 1, ...screenFit() },
     standalone: matchMedia?.('(display-mode: standalone)').matches ?? false,
     touch: 'ontouchstart' in window || navigator.maxTouchPoints > 0,
     lang: navigator.language,
@@ -88,6 +90,33 @@ const context = (): Record<string, unknown> => {
     errors: crashMessages,
     uptimeMs: performance.now() - started,
   });
+};
+
+/** The page against the physical screen: what iOS reports, for the "does the game fill the screen" case. */
+const screenFit = (): ScreenFit | Record<string, never> => {
+  try {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)';
+    document.body.append(probe);
+    const cs = getComputedStyle(probe);
+    const insetTop = Math.round(parseFloat(cs.paddingTop) || 0);
+    const insetBottom = Math.round(parseFloat(cs.paddingBottom) || 0);
+    probe.remove();
+    const vv = window.visualViewport;
+    return {
+      screenW: screen.width,
+      screenH: screen.height,
+      vvH: vv ? Math.round(vv.height) : null,
+      vvTop: vv ? Math.round(vv.offsetTop) : null,
+      insetTop,
+      insetBottom,
+      appH: document.documentElement.style.getPropertyValue('--futasaku-app-height') || null,
+      homeApp: document.documentElement.classList.contains('home-screen-app'),
+      ios: iosVersion(navigator.userAgent),
+    };
+  } catch {
+    return {};
+  }
 };
 
 const token = (): string | null => {
@@ -138,20 +167,31 @@ ${glassBaseCss('.fb-glass')}
 .fb-glass ul { margin:0; padding-left:18px; color:#e2d4b4; line-height:1.45; display:grid; gap:4px; }
 .fb-glass .fb-small { font-size:12px; color:#b7a98a; }
 .fb-glass textarea { width:100%; box-sizing:border-box; min-height:110px; resize:vertical; border-radius:10px; padding:10px;
-  border:1px solid rgba(214,204,177,.25); background:rgba(255,255,255,.04); color:#f0e9dc; font:400 15px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); }
+  border:1px solid rgba(214,204,177,.25); background:rgba(242, 237, 228,.04); color:#f0e9dc;
+  /* 16px is a FLOOR, not a style choice (owner, 2026-10-26: chat "zooms in awkwardly when
+     entering text box ... should never happen on any phone"). iOS Safari zooms the whole page
+     when a focused text field computes under 16px, and the page then stays zoomed after the
+     keyboard closes. Every text-entry control in this app must therefore be at least 16px. */
+  font:400 16px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); }
 .fb-glass .fb-actions { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
 .fb-glass .fb-actions button, .fb-glass .fb-link { min-height:44px; min-width:44px; padding:0 14px; border-radius:10px; cursor:pointer;
-  border:1px solid rgba(214,204,177,.25); background:rgba(255,255,255,.04); color:#f0e9dc; font:700 14px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.06em; }
+  border:1px solid rgba(214,204,177,.25); background:rgba(242, 237, 228,.04); color:#f0e9dc; font:700 14px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.06em; }
 .fb-glass .fb-actions button.primary { background:#8fbf6a; border-color:#8fbf6a; color:#0d100d; }
 .fb-glass .fb-actions .fb-link { background:none; border:0; text-decoration:underline; padding:0 4px; margin-right:auto; }
 .fb-glass .fb-status { min-height:1.4em; color:#c9e4a8; }
 .fb-glass .fb-status[data-tone='bad'] { color:#e0735c; }
 .large-text .fb-glass p, .large-text .fb-glass li { font-size:16px; }
-#menu-beta { text-wrap:pretty; }
-@media (max-height: 700px) { #menu-beta { font-size:0.78rem; line-height:1.4; } }
-#menu-beta button { display:inline; min-height:0; padding:6px 2px; margin:-6px 0; border:0; background:none; color:inherit;
-  font:inherit; letter-spacing:inherit; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
-#menu-beta button:focus-visible { outline:2px solid currentColor; outline-offset:2px; border-radius:4px; }
+#menu-beta { text-wrap: pretty; max-width: 44ch; margin: 0; color: var(--fu-cream-62);
+  /* one instrument label: the menu's small tracked uppercase, like the game's other captions */
+  font-family: var(--font-ui); font-size: 0.68rem; line-height: 1.35; letter-spacing: 0.16em; text-transform: uppercase; }
+/* A real 44px tap target that costs almost no column height: the box is 44px tall and the negative
+   block margins pull it back into the text line, so the version line stays ONE quiet line while the
+   link is comfortably tappable (owner, 2026-10-20). */
+#menu-beta button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px;
+  padding: 0 4px; margin: -13px 0; border: 0; background: none; color: inherit;
+  font: inherit; letter-spacing: inherit; text-transform: inherit; text-decoration: underline; text-underline-offset: 4px;
+  text-decoration-thickness: 1px; cursor: pointer; }
+#menu-beta button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; border-radius: 4px; }
 `;
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): HTMLElementTagNameMap[K] => {
@@ -267,23 +307,22 @@ export const mountFeedback = (): void => {
   checkHash();
   window.addEventListener('hashchange', checkHash);
 
-  // ---- the beta line on the main menu (in the old tagline slot, with the tagline's own spacing) ----
-  const menuButtons = document.querySelector('#menu .menu-buttons');
-  let betaLink: HTMLButtonElement | null = null;
-  if (menuButtons && !document.getElementById('menu-beta')) {
-    const note = el('p', 'tagline');
-    note.id = 'menu-beta';
-    note.append(document.createTextNode(`${FEEDBACK.betaNote(FEEDBACK.betaVersion)} `));
-    betaLink = el('button', '', FEEDBACK.betaLink);
-    betaLink.type = 'button';
-    betaLink.dataset.fb = 'menu-link';
+  // ---- the beta line on the main menu (between the wordmark and the buttons) ----
+  // The element is in the markup in source order (logo → beta line → PLAY …), so its seen, tab and
+  // screen-reader order is right before any JS runs. It is a quiet version line, not a fourth button
+  // (owner, 2026-10-20), on every channel. The menu's first layout has normally painted it already
+  // (./beta-line.ts); this paints it through the same function if not, and gives the link its sheet.
+  let betaLink = paintBetaLine(document.getElementById('menu-beta'));
+  if (betaLink) {
+    betaLink.dataset.owned = '1';
     betaLink.addEventListener('click', () => openGuide()); // replaced by the report form below when a server exists
-    note.append(betaLink);
-    menuButtons.before(note);
   }
 
   // ---- "Report a problem" ----
-  if (!api) return; // a build with no server (offline only) has nowhere to send a report
+  if (!api) {
+    replayEarlyTap(betaLink); // offline-only builds: the link opens the tester guide
+    return; // a build with no server (offline only) has nowhere to send a report
+  }
   const report = sheet('fb-report', FEEDBACK.title);
   const status = el('p', 'fb-status');
   status.setAttribute('role', 'status');
@@ -352,7 +391,9 @@ export const mountFeedback = (): void => {
     const fresh = betaLink.cloneNode(true) as HTMLButtonElement;
     fresh.addEventListener('click', openReport);
     betaLink.replaceWith(fresh);
+    betaLink = fresh;
   }
+  replayEarlyTap(betaLink);
   const button = (id: string, cls: string) => {
     const b = el('button', cls, FEEDBACK.open);
     b.type = 'button';
@@ -361,8 +402,18 @@ export const mountFeedback = (): void => {
     b.addEventListener('click', openReport);
     return b;
   };
-  const settingsBtn = document.getElementById('gm-settings');
-  settingsBtn?.parentElement?.insertBefore(button('gm-report', 'btn ghost'), settingsBtn.nextSibling);
+  // The pause panel's tool row (owner, 2026-10-23): a flag key with its word, placed BEFORE Settings,
+  // which stays the panel's last control.
+  const tools = document.querySelector('#sheet-menu .gm-tools');
+  const reportKey = el('button', 'gm-tool', '');
+  reportKey.type = 'button';
+  reportKey.id = 'gm-report';
+  reportKey.dataset.fb = 'open';
+  reportKey.setAttribute('aria-label', FEEDBACK.open);
+  reportKey.innerHTML = `<span class="i" data-icon="flag">${ICONS.flag}</span><span class="gm-tool-word"></span>`;
+  reportKey.querySelector('.gm-tool-word')!.textContent = FEEDBACK.openShort;
+  reportKey.addEventListener('click', openReport);
+  if (tools) tools.insertBefore(reportKey, document.getElementById('gm-settings'));
   const settingsBody = document.querySelector('#sheet-settings .sheet-body');
   settingsBody?.append(button('settings-report', 'btn ghost'));
 };

@@ -3,8 +3,9 @@
 // Two rules this file exists to keep:
 //   * the token is the PLAYER's normal token — there is no admin key, no service-role key and no
 //     database credential anywhere in this build, and none is ever fetched;
-//   * a token is read from this device's own storage (where the game already keeps it) or pasted by
-//     the owner, and is never taken from the URL — a token in a query string ends up in history,
+//   * a token comes from "Sign in with Google" on this page (admin/src/google.ts), from this device's
+//     own storage (where the game already keeps it) or is pasted by the owner, and is never taken
+//     from the URL — a token in a query string ends up in history,
 //     referrers and screenshots.
 
 export type ApiOk<T> = { ok: true; data: T };
@@ -37,9 +38,31 @@ export const IDENTITY_KEYS: readonly string[] = [
 /** Where a pasted token is kept for this tab only (never `localStorage`: it is not the game's). */
 export const ADMIN_TOKEN_KEY = 'severgrow.admin.token';
 
-export type TokenSource = 'game' | 'pasted';
+export type TokenSource = 'google' | 'game' | 'pasted';
 
-const readIdentityToken = (storage: Storage): string | null => {
+/** Set for this tab by "Sign out": the game's token on this device is then not picked up again. */
+export const SIGNED_OUT_KEY = 'futasaku.admin.signed-out';
+/** The dashboard's own token from "Sign in with Google" (admin/src/google.ts). */
+const OWN_TOKEN_KEY = 'futasaku.admin.token.v1';
+
+/**
+ * Which token to use, in order: the dashboard's own Google sign-in, the game's identity on this
+ * device (unless the owner signed out of the dashboard in this tab), then a pasted token.
+ */
+export const pickToken = (found: {
+  own: string | null;
+  game: string | null;
+  pasted: string | null;
+  signedOut: boolean;
+}): { token: string; source: TokenSource } | null => {
+  const usable = (t: string | null): t is string => typeof t === 'string' && t.length >= 16;
+  if (usable(found.own)) return { token: found.own, source: 'google' };
+  if (usable(found.game) && !found.signedOut) return { token: found.game, source: 'game' };
+  if (usable(found.pasted)) return { token: found.pasted, source: 'pasted' };
+  return null;
+};
+
+export const readIdentityToken = (storage: Storage): string | null => {
   for (const key of IDENTITY_KEYS) {
     try {
       const raw = storage.getItem(key);
@@ -62,19 +85,39 @@ const safeStorage = (kind: 'local' | 'session'): Storage | null => {
   }
 };
 
+const safeGet = (storage: Storage | null, key: string): string | null => {
+  try {
+    return storage?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+};
+
+/** The game's own token on this device, whether or not the dashboard would use it. */
+export const gameToken = (): string | null => {
+  const local = safeStorage('local');
+  return local ? readIdentityToken(local) : null;
+};
+
 /** Find a usable token, and say where it came from so the UI can be honest about it. */
 export const findToken = (): { token: string; source: TokenSource } | null => {
   const local = safeStorage('local');
-  const fromGame = local ? readIdentityToken(local) : null;
-  if (fromGame) return { token: fromGame, source: 'game' };
   const session = safeStorage('session');
+  return pickToken({
+    own: safeGet(local, OWN_TOKEN_KEY),
+    game: gameToken(),
+    pasted: safeGet(session, ADMIN_TOKEN_KEY),
+    signedOut: safeGet(session, SIGNED_OUT_KEY) === '1',
+  });
+};
+
+/** A fresh sign-in (Google or pasted) lifts this tab's "signed out" mark. */
+export const clearSignedOut = (): void => {
   try {
-    const pasted = session?.getItem(ADMIN_TOKEN_KEY) ?? null;
-    if (pasted && pasted.length >= 16) return { token: pasted, source: 'pasted' };
+    safeStorage('session')?.removeItem(SIGNED_OUT_KEY);
   } catch {
     /* ignored */
   }
-  return null;
 };
 
 /** Keep a pasted token for this tab. It never touches the game's own stored identity. */
@@ -86,18 +129,37 @@ export const rememberPastedToken = (token: string): void => {
   }
 };
 
-/** Forget BOTH the pasted copy and the game's stored identity on this device. */
+/**
+ * Sign out of the DASHBOARD: forget its own token and any pasted one, and stop using the game's token
+ * in this tab. The game's stored identity is never removed — signing out here must not sign the game
+ * out (or, for a guest, lose the player for good).
+ */
 export const forgetToken = (): void => {
+  const session = safeStorage('session');
   try {
-    safeStorage('session')?.removeItem(ADMIN_TOKEN_KEY);
+    session?.removeItem(ADMIN_TOKEN_KEY);
+    session?.setItem(SIGNED_OUT_KEY, '1');
   } catch {
     /* ignored */
   }
-  const local = safeStorage('local');
-  if (!local) return;
-  for (const key of IDENTITY_KEYS) {
+  try {
+    safeStorage('local')?.removeItem(OWN_TOKEN_KEY);
+  } catch {
+    /* ignored */
+  }
+};
+
+/** Drop only a token that the server called dead, leaving the game's identity alone. */
+export const forgetDeadToken = (source: TokenSource): void => {
+  if (source === 'google') {
     try {
-      local.removeItem(key);
+      safeStorage('local')?.removeItem(OWN_TOKEN_KEY);
+    } catch {
+      /* ignored */
+    }
+  } else if (source === 'pasted') {
+    try {
+      safeStorage('session')?.removeItem(ADMIN_TOKEN_KEY);
     } catch {
       /* ignored */
     }
@@ -131,9 +193,49 @@ export type AdminSession = {
   serverNow: number;
 };
 
+class AdminTimeout extends Error {}
+const failed = (error: unknown): { ok: false; status: number; code: string; message: string } =>
+  error instanceof AdminTimeout
+    ? { ok: false, status: 0, code: 'TIMEOUT', message: TIMEOUT_MESSAGE }
+    : { ok: false, status: 0, code: 'OFFLINE', message: 'Could not reach the duel API.' };
+
 export type Page<T> = { rows: T[]; total: number; nextCursor: string | null };
 
+/**
+ * ONE REQUEST AT A TIME, and none forever (owner report, 2026-10-28: "Seeds & world" showed "Function
+ * failed due to not having enough compute resources" and "Loading…" without end). The page used to
+ * fire several heavy reads together; the Edge function has a small per-request budget and its pooled
+ * queries can hang when issued together (server/src/admin/postgres.ts, `world`). The client now sends
+ * them in the order asked, each after the last has answered, and gives up after this long.
+ */
+export const ADMIN_REQUEST_TIMEOUT_MS = 45_000;
+const TIMEOUT_MESSAGE = 'The server took too long to answer. Try again.';
+
 export class AdminApi {
+  /** The tail of the one-at-a-time line every request joins. */
+  private line: Promise<unknown> = Promise.resolve();
+
+  /** Join the line: start only when the request ahead has answered, and stop waiting at the timeout. */
+  private send(url: string, init: RequestInit = {}): Promise<Response> {
+    const run = async (): Promise<Response> => {
+      const abort = new AbortController();
+      const timer = setTimeout(() => abort.abort(), ADMIN_REQUEST_TIMEOUT_MS);
+      try {
+        const response = await fetch(url, { ...init, signal: abort.signal });
+        const body = await response.arrayBuffer();
+        return new Response([204,205,304].includes(response.status) ? null : body, { status: response.status, statusText: response.statusText, headers: response.headers });
+      } catch (error) {
+        if (abort.signal.aborted) throw new AdminTimeout();
+        throw error;
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+    const turn = this.line.then(run, run);
+    this.line = turn.catch(() => undefined);
+    return turn;
+  }
+
   constructor(
     private readonly base: string,
     readonly token: string,
@@ -176,23 +278,23 @@ export class AdminApi {
     }
     const text = search.toString();
     try {
-      const response = await fetch(`${this.base}${path}${text ? `?${text}` : ''}`, { headers: this.headers() });
+      const response = await this.send(`${this.base}${path}${text ? `?${text}` : ''}`, { headers: this.headers() });
       return await this.parse<T>(response);
-    } catch {
-      return { ok: false, status: 0, code: 'OFFLINE', message: 'Could not reach the duel API.' };
+    } catch (error) {
+      return failed(error);
     }
   }
 
   async post<T>(path: string, body: unknown): Promise<ApiResult<T>> {
     try {
-      const response = await fetch(`${this.base}${path}`, {
+      const response = await this.send(`${this.base}${path}`, {
         method: 'POST',
         headers: this.headers({ 'content-type': 'application/json' }),
         body: JSON.stringify(body ?? {}),
       });
       return await this.parse<T>(response);
-    } catch {
-      return { ok: false, status: 0, code: 'OFFLINE', message: 'Could not reach the duel API.' };
+    } catch (error) {
+      return failed(error);
     }
   }
 
@@ -205,13 +307,13 @@ export class AdminApi {
     }
     const text = search.toString();
     try {
-      const response = await fetch(`${this.base}${path}${text ? `?${text}` : ''}`, { headers: this.headers({ accept: 'text/csv' }) });
+      const response = await this.send(`${this.base}${path}${text ? `?${text}` : ''}`, { headers: this.headers({ accept: 'text/csv' }) });
       if (response.ok) return { ok: true, data: await response.text() };
       const parsed = await this.parse<never>(response);
       if (parsed.ok) return { ok: false, status: response.status, code: 'ERROR', message: 'The export could not be read.' };
       return { ok: false, status: parsed.status, code: parsed.code, message: parsed.message };
-    } catch {
-      return { ok: false, status: 0, code: 'OFFLINE', message: 'Could not reach the duel API.' };
+    } catch (error) {
+      return failed(error);
     }
   }
 

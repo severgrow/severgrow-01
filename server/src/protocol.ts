@@ -1,7 +1,9 @@
+import type { TerritoryStanding } from './territory-ranking.js';
 // The wire format shared by the server and its TypeScript client. These are the ONLY shapes
 // that cross the network: a match summary and a player-specific view. The authoritative engine
 // `State` (deck order, both hands, seed) is never part of any payload.
-import type { Action, EndReason, Event, GameResult, Player, View } from '../../src/engine/index.js';
+import type { Action, EndReason, Event, GameResult, Player, RulesConfig, View } from '../../src/engine/index.js';
+import type { WorldDispute } from './seeds/types.js';
 
 export type MatchStatus = 'waiting' | 'active' | 'finished';
 
@@ -54,6 +56,14 @@ export type MatchViewPayload = {
   gracePeriods: number;
   opponent: { seat: Player; playerId: string; displayName: string | null } | null;
   result: OnlineGameResult | null;
+  /**
+   * What THIS seat was paid for a finished duel, when the server knows it. Present only on a
+   * finished match that actually settled (`settleOnline` returns before settling a resignation or
+   * a timeout, so those carry no field). It is a REPORT, never a promise: `awarded` is what the
+   * receipt says, which is 0 when a daily cap denied the reward — the client shows nothing for 0
+   * rather than "+0".
+   */
+  seeds?: { awarded: number; reason: string | null };
   serverNow: number;
 };
 
@@ -81,6 +91,36 @@ export type MatchSummary = {
   serverNow: number;
 };
 
+/**
+ * ONE PLAYER'S PUBLIC PROFILE — the allow-list of `GET /v1/players/:id/profile`.
+ *
+ * This is what a signed-in player may learn about ANOTHER player. It is deliberately a closed
+ * shape: the route builds exactly these keys and nothing else. It carries no email or identity
+ * provider data, no Seeds wallet, no offline record from devices, no tokens and no devices. A new
+ * field here is a privacy decision, so `server/tests/public-profile.test.ts` asserts this exact
+ * shape and fails if a private one ever appears.
+ */
+export type PublicPlayerProfile = {
+  displayName: string | null;
+  /** The `#TAG` that tells two players with the same name apart (derived from the id, as the map does). */
+  tag: string;
+  /** The furthest Campaign level their verified clears show, or null. */
+  level: number | null;
+  /** Cells they own in the shared world (`world_claims`). */
+  tiles: number;
+  connectedTiles?: number;
+  /** Their Territory colour slot, already resolved to the palette default if they never chose. */
+  colourId: number;
+  /** The ONLINE record only: finished duels they took part in, and their best winning run. */
+  online: { games: number; wins: number; longestStreak: number };
+};
+
+/**
+ * HEAD-TO-HEAD between two signed-in players — finished duels only, from the ASKER's seat.
+ * Carried beside `PublicPlayerProfile` on the profile route; never part of the public allow-list.
+ */
+export type HeadToHead = { games: number; youWins: number; themWins: number; draws: number };
+
 export type MatchListEntry = {
   matchId: string;
   status: MatchStatus;
@@ -97,6 +137,12 @@ export type MatchListEntry = {
   graceUsed: [number, number];
   gracePeriods: number;
   result: OnlineGameResult | null;
+  /**
+   * Finished rows only: a rematch of this game is waiting (owner, 2026-11-09: "a button next to
+   * finished online matches to challenge this player again"). 'theirs' = the opponent pressed
+   * Rematch and waits for this player; 'mine' = this player pressed and waits. Absent otherwise.
+   */
+  rematch?: 'theirs' | 'mine';
 };
 
 export type CreateMatchResponse = { ok: true; match: MatchSummary; player: MatchViewPayload; serverNow: number };
@@ -143,6 +189,48 @@ export type MatchSummaryResponse = { ok: true; match: MatchSummary; serverNow: n
 export type UpgradeResponse = { ok: true; player: PlayerSummary; serverNow: number };
 export type MeResponse = { ok: true; player: PlayerSummary; serverNow: number };
 export type MatchListResponse = { ok: true; matches: MatchListEntry[]; serverNow: number };
+
+/**
+ * ONE device's cumulative OFFLINE record (migration 0022), exactly as the device posts it. The
+ * counters are running totals, never deltas: the server keeps the greatest value each has seen,
+ * so a stale snapshot can only repeat progress, never erase it.
+ */
+export type OfflineCounters = { deviceId: string; played: number; wins: number; losses: number; draws: number; bestStreak: number };
+
+/**
+ * The account's offline record over ALL its devices: games/wins/draws are sums, while
+ * `longestStreak` is the largest single-device best — a run on one device is not continued on
+ * another, so a sum would invent a streak nobody had.
+ */
+export type OfflineSummary = { games: number; wins: number; draws: number; longestStreak: number };
+export type OfflineSummaryResponse = { ok: true; offline: OfflineSummary; serverNow: number };
+
+/** One seat of a replay: who played it. Never a token, never anything private. */
+export type ReplaySeat = { seat: Player; playerId: string; displayName: string | null; tag: string | null };
+
+/**
+ * A finished duel, rebuilt from its own record: the public rules snapshot, the seed and the
+ * starting seat, and the ordered action log. No board, no hands, no deck order — the client
+ * replays it with the deterministic engine, exactly as the two devices did.
+ */
+export type ReplayPayload = {
+  matchId: string;
+  status: 'finished';
+  rulesVersion: string;
+  seed: number;
+  config: RulesConfig;
+  startingPlayer: Player;
+  /** The caller's own seat, so the board is painted from their side. */
+  seat: Player;
+  seats: ReplaySeat[];
+  /** Every committed action, in revision order (draws and throws included). */
+  actions: Action[];
+  /** Parallel to `actions`: the match revision each action produced. */
+  revisions: number[];
+  result: OnlineGameResult | null;
+  finishedAt: number | null;
+};
+export type ReplayResponse = { ok: true; replay: ReplayPayload; serverNow: number };
 export type ResignResponse = { ok: true; match: MatchSummary; player: MatchViewPayload; serverNow: number };
 export type LinkCodeResponse = { ok: true; code: string; expiresAt: number; serverNow: number };
 export type LinkRedeemResponse = { ok: true; player: PlayerSummary; token: string; serverNow: number };
@@ -152,13 +240,17 @@ export type SweepResponse = {
   expiredWaiting: number;
   deletedGuests: number;
   graceExtended: number;
+  /** Finished duels trimmed under the replay retention rule (never a player's newest ten). */
+  prunedMatches: number;
   serverNow: number;
 };
 
 /**
  * One tile on the PUBLIC shared world map. Deliberately carries only what a visitor needs: the
- * cell, the holder's display name, when it was placed and whether it was taken by beating the
- * previous holder. No player id, no match id — the map is a public read.
+ * cell, who holds it (the owner's id and display name, which the map has always published), the
+ * holder's colour and Campaign level, and when it was placed. No match id, no token, no balance.
+ * `disputes` names the two sides of an OPEN challenge for the same reason: the claim beside it
+ * already names the holder.
  */
 export type WorldMapPayload = {
   world: {
@@ -167,6 +259,27 @@ export type WorldMapPayload = {
     cells: { id: string; q: number; r: number }[];
     claims: { cellId: string; ownerId: string; ownerName: string | null; ownerLevel: number | null; ownerTag: string; colour: string; claimedAt: number }[];
     cost: number;
+    /**
+     * Historical field, kept for older clients. 0 since 2026-10-29: a challenge costs no Seeds; the
+     * challenger puts one of their own tiles at stake instead (`WorldChallengeWire.stakeCellId`).
+     */
+    challengeStake: number;
+    /**
+     * Tiles under an OPEN challenge, whoever is playing — the map's dispute layer reads this
+     * (owner, 2026-10-29). Minimal public shape: the cell and the two sides' ids, nothing private.
+     * One entry per disputed cell (`world_challenges_one_open_idx`). OPTIONAL because a client may
+     * be talking to a server deployed before this field existed; the client treats it as empty.
+     */
+    disputes?: WorldDispute[];
+    rankings?: TerritoryStanding[];
+    /**
+     * THE PLANET (owner, 2026-11-04): true when this server accepts a new tile anywhere on the
+     * planet, seen or not. OPTIONAL because a page may talk to a server deployed before it; the page
+     * then keeps the seen-map rule.
+     */
+    growAnywhere?: boolean;
+    /** What selling a tile back pays (owner, 2026-11-04: 50). OPTIONAL: an older server pays `cost`. */
+    saleReturn?: number;
   };
 };
 export type WorldMapResponse = { ok: true } & WorldMapPayload;

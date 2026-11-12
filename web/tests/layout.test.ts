@@ -1,9 +1,9 @@
 // Step 3: the board fills the screen in whichever orientation gives bigger tiles, the dock has
 // one fixed height, nothing overlaps, a full hand (Fruit cards included) is always visible, no
 // gap around the board is over 16pt, and the corner tools never cover a tile.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { allCoords, coordKey } from '../../src/engine/index.js';
-import { BOARD_MARGIN, CENTRE_MIN, HAND_EDGE, HEIGHTS, SIDE_GAP, MAX_GAP, MAX_HAND, MIN_SLICE, SORT_W, TOOL, boardUnits, computeLayout, overlaps } from '../src/logic/layout.js';
+import { BOARD_MARGIN, CENTRE_MIN, HAND_EDGE, HEIGHTS, SIDE_GAP, MAX_GAP, MAX_HAND, MIN_SLICE, SORT_W, TOOL, boardUnits, computeLayout, overlaps, setSlimHud } from '../src/logic/layout.js';
 import type { Box, Layout, Viewport } from '../src/logic/layout.js';
 import { setOrient } from '../src/logic/orient.js';
 import { cornerPts } from '../src/ui/geom.js';
@@ -164,6 +164,42 @@ describe('v0.8 UI pass: a bigger board, bigger piles, "?" on the board', () => {
   }
 });
 
+// 0.6 polish: the thumb layout is the product's phone layout, and a card you cannot hit is not a
+// card. On the smallest supported phone the height cap used to force 40pt cards; the dock may spend
+// a little of the map's height instead, as long as the piles keep their row and the fan stays
+// symmetric. 360x640 already had wider cards and must not shrink.
+describe('thumb layout: cards are at least the 44pt touch minimum', () => {
+  // The product channels use the slim 44pt header (the browser's own reading). The default layout
+  // calculator keeps the taller legacy header unless told, which would test a different phone.
+  beforeEach(() => setSlimHud(true));
+  afterEach(() => setSlimHud(false));
+  const views = [{ w: 320, h: 568 }, { w: 360, h: 640 }] as const;
+  for (const v of views) {
+    it(`${v.w}x${v.h}: every card is at least 44pt wide, the piles stay clear and the fan is symmetric`, () => {
+      const l = computeLayout(v, 3, MAX_HAND, 'right');
+      const t = l.thumb;
+      expect(t, `${v.w}x${v.h} uses the thumb layout`).toBeTruthy();
+      expect(t!.card.w).toBeGreaterThanOrEqual(44);
+      // The fan only ever fills its band BELOW the pile row, so widening cannot clip the piles.
+      expect(t!.band.y).toBeGreaterThanOrEqual(t!.piles.y + t!.piles.h);
+      expect(t!.deck.x).toBeGreaterThanOrEqual(0);
+      expect(t!.deck.x + t!.deck.w).toBeLessThanOrEqual(v.w);
+      expect(t!.discard.x + t!.discard.w).toBeLessThanOrEqual(v.w);
+      // Symmetric about the dock's centre line, whatever the width.
+      const centre = t!.fan.cx ?? v.w / 2;
+      expect(Math.abs(centre - v.w / 2)).toBeLessThanOrEqual(0.5);
+      expect(t!.fan.anchorX - centre).toBeCloseTo(t!.fan.lhMax, 6);
+      // The dock itself stays on the screen.
+      expect(l.dock.y + l.dock.h).toBeLessThanOrEqual(v.h + 0.01);
+    });
+  }
+  it('360x640 is above the minimum on its own (the relaxed pass never touches it)', () => {
+    // The real page measures 56px here (web/e2e/polish-3.ts pins before/after); this asserts the
+    // one thing the change promises everywhere: no phone ships a card under 44pt.
+    expect(computeLayout({ w: 360, h: 640 }, 3, MAX_HAND, 'right').thumb!.card.w).toBeGreaterThanOrEqual(44);
+  });
+});
+
 // v0.8.1: on desktop (side layout) the dock had spare height but its rows touched: the piles sat
 // on the hand. The rows now have SIDE_GAP between them, and the dock box counts it (positioning
 // pass: two rows, so one gap).
@@ -232,5 +268,54 @@ describe('positioning pass: a symmetric dock', () => {
   it('the board got the hint row back: 360x640 (height-limited) tiles grow', () => {
     // v0.8 at 360x640: 50.0pt tiles with the 56pt message row
     expect(computeLayout({ w: 360, h: 640 }).hexPx).toBeGreaterThan(50.0 * 1.05);
+  });
+});
+
+// OWNER, 2026-11-08: "on desktop hand and cockpit should be lower down, if you divide screen into 4 equal
+// parts - it should be roughly centred in the bottom right corner of 4 rectangles"; the board: "centred in
+// left half". Desktops (>= 1000 x 650) split the screen in halves; compact landscape keeps its fit.
+describe('desktop quarters: board centred in the left half, cockpit + hand in the bottom-right quarter', () => {
+  for (const [w, h] of [[1280, 800], [1440, 900], [1920, 1080], [2560, 1440]] as const) {
+    it(`${w}x${h}`, () => {
+      const l = computeLayout({ w, h });
+      expect(l.mode).toBe('side');
+      expect(l.quad).toBe(true);
+      const bx = l.board.x + l.board.w / 2;
+      expect(Math.abs(bx - w / 4)).toBeLessThanOrEqual(w * 0.03);
+      expect(l.board.x + l.board.w).toBeLessThanOrEqual(w / 2);
+      const dx = l.dock.x + l.dock.w / 2;
+      const dy = l.dock.y + l.dock.h / 2;
+      expect(Math.abs(dx - (w * 3) / 4)).toBeLessThanOrEqual(w * 0.03);
+      // centred on the bottom-right quarter's middle, or as low as it can go without leaving the screen
+      expect(dy).toBeGreaterThan(h * 0.6);
+      expect(l.dock.y + l.dock.h).toBeLessThanOrEqual(h);
+      expect(l.dock.x).toBeGreaterThanOrEqual(w / 2);
+      expect(overlaps(l.board, l.dock)).toBe(false);
+    });
+  }
+  it('compact landscape (a phone on its side, a short window) keeps its old fit', () => {
+    expect(computeLayout({ w: 900, h: 420 }).quad ?? false).toBe(false);
+    expect(computeLayout({ w: 1000, h: 620 }).quad ?? false).toBe(false);
+  });
+  it('the page places the cockpit on that quarter centre, and keeps it on screen', async () => {
+    const { readFileSync } = await import('node:fs');
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    // the quarters are placed by placeDesktopQuarters (measured at rest), which centreSideDock calls
+    expect(main).toMatch(/measureAtRest\(document\.getElementById\('board-wrap'\), \(\) => placeDesktopQuarters\(root\)\)/);
+    const fn = main.slice(main.indexOf('function placeDesktopQuarters('), main.indexOf('function placeDesktopQuarters(') + 4000);
+    expect(fn).toMatch(/innerWidth \* 0\.75/);
+    expect(fn).toMatch(/innerHeight \* 0\.75/);
+    expect(fn).toContain('--side-dock-shift-y');
+  });
+  it('the board touches the screen middle with its right edge, with the same space above and below it', async () => {
+    // owner, 2026-11-08: "the board should be higher up - same margin on top and bottom" / "a bit to the
+    // right, so with right edge it touches the middle of the screen"
+    const { readFileSync } = await import('node:fs');
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const fn = main.slice(main.indexOf('function placeDesktopQuarters('), main.indexOf('function placeDesktopQuarters(') + 4000);
+    expect(fn).toMatch(/innerWidth \/ 2 - restRight/);
+    expect(fn).toMatch(/innerHeight \/ 2 - restMidY/);
+    const css = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/\[data-quad='1'\] \.board-wrap \{[^}]*position: relative;[^}]*left: var\(--quad-board-x, 0px\);[^}]*top: var\(--quad-board-y, 0px\);/);
   });
 });

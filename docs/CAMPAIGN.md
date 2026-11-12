@@ -24,10 +24,12 @@ described further down ("The 2026-10-17 onboarding pass") is **not current** for
 players "surround their home to win", while most real games end when the Draw pile runs out. /3
 teaches that first.
 
-**What it is.** Levels 1-10 are ten short authored lessons, one idea each, every one ending in a real
-win. Level 11 is the first 37-hex level and has no lesson. Level ids, Seeds rules and chapter bonuses
-are unchanged. The full script of each lesson (beats, words, wrong-tap answers, finish lines) is in
-**[LESSON-SCRIPTS.md](LESSON-SCRIPTS.md)**. It must match the code.
+**What it is.** Levels 1-8 and 10 are short authored lessons, one idea each, every one ending in a
+real win. **Level 9 is a full game from scratch** on the small map (owner, 2026-11-01): a real deal,
+the real bot, every legal move, the Who-starts ritual, and the live cue display still coaching each
+action as it happens. Level 11 is the first 37-hex level and has no lesson. Level ids, Seeds rules
+and chapter bonuses are unchanged. The full script of each lesson (beats, words, wrong-tap answers,
+finish lines) is in **[LESSON-SCRIPTS.md](LESSON-SCRIPTS.md)**. It must match the code.
 
 | Level | Teaches | Ends |
 |---|---|---|
@@ -39,8 +41,18 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 | 6 | knock-out: surround their home | by surround |
 | 7 | Bomb | on points |
 | 8 | Blast (two Bombs) and its free Grow | on points |
-| 9 | the Throw pile can finish a Bloom; skip the Grow | on points |
+| 9 | a real game from scratch on the small map: every legal move, live coaching | a real result (win or loss) |
 | 10 | a normal game against the gentlest bot | on points (or surround) |
+
+**The Who-starts ritual from level 9 on** (owner, 2026-10-24; level 9 added 2026-11-01). Levels 1-8
+keep their authored openings and go straight to the board. From level 9 — the first real game —
+every campaign match opens with the same card ritual as a practice match and an online duel: same
+component, timing, reveal and sound (`logic/starter-ritual.ts` decides where it plays,
+`player/starter-ritual.ts` draws it). It is presentation only; the engine's
+`startingPlayerFor`/`newMatch` (and the server, online) still decides who starts, and an authored
+lesson opening always starts on the player's turn. After the cards, level 10 says one line in the
+info box before the first draw: "You are ready now for your first game of Futasaku. Good luck!" —
+dismissible with a tap anywhere, never repeated.
 
 **How a lesson is authored** (`web/src/lessons/`):
 
@@ -54,7 +66,14 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
   - never takes your home's last open side;
   - always draws from the Draw pile, so the authored Throw pile stays as set.
   - Level 10 uses the existing level-1 bot.
-- `lessons.ts` holds the lesson data. It derives each beat (what is lit, the instruction and reason) from the **live** game state, never from a step counter, so any legal alternative keeps working.
+- `lessons.ts` holds the lesson data. It derives each beat (what is lit, the action on the display
+  and the explanation in the info box) from the **live** game state, never from a step counter, so
+  any legal alternative keeps working. `lesson-voice.ts` splits the two voices: the display says
+  what to do, the box explains why — never the same words in both.
+- **Level 9 is `kind: 'free'`**: it has no `position`. `lessonOpening` calls the campaign level's
+  own `campaignOpening` (`newMatch`), so the deal, board and starting seat are the engine's. Its
+  beats are the same live ones, marked `always`: the mastery fade may soften the light, never
+  silence the action line.
 - `answer.ts` answers a wrong tap from the engine's own reasons (`claimBlocker`, `fruitTargetBlocker`, `legalActions`, the Bloom shapes).
 
 **Guidance by level.**
@@ -62,8 +81,9 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 | Levels | Guidance |
 |---|---|
 | 1-3 | Locked: only the lit thing reacts. Every other tap is answered in the glass or the LED, with a small ring at the spot. |
-| 4-9 | Every legal move is played; the light adapts. The one-word hint stays on screen. |
-| 10 | No guidance unless idle for 6 s (or Show me); one LAST TURN beat. |
+| 4-8 | Every legal move is played; the light adapts. The action line stays on the display. |
+| 9 | A real game. Every legal move is played; the live cue always names the action of the moment, and mastery may soften the light but never silences it. |
+| 10 | No guidance unless idle for 6 s; one LAST TURN beat. |
 | 11-30 | The existing levels, unchanged. No lesson. |
 
 - **No text on the map.** In every mode the old on-board "tap why" plate now goes to the LED; the map only gets a ring.
@@ -72,8 +92,9 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 **Storage and versioning.** The root, `/2/` and `/3/` share one origin:
 
 - `/3/` uses its own storage prefix, `futa05-3:` (`web/src/channel.ts`, by path), and its own service-worker cache, `futa05lessons3-`. Nothing in /3 reads or writes the root's or /2's progress, saves or hints.
-- Each lesson has a `version`. The seen explanations and that version are saved beside the level's match (`severgrow.lesson.meta.v1`). A saved match from another lesson version restarts the level cleanly.
-- Completed levels stay completed (the progress record is the existing one).
+- Each lesson has a `version` (**3**, with levels 1 and 9 at **4**). The seen explanations and that version are saved beside the level's match (`severgrow.lesson.meta.v1`). A saved match from another lesson version restarts the level cleanly.
+- Per-action mastery (Draw / Grow / Throw / Cut / Take over / Bloom / Bomb / Blast / Strengthen / Surround) is saved in `severgrow.lesson.mastery.v1`, keyed to that lesson version. A version bump starts the fade cleanly.
+- **v3 reset (2026-10-19):** the onboarding polish changed lesson versions and several authored boards, so progress and the unfinished match moved to `.v3`. Old `.v2` (and `.v1`) keys stay in the browser, unread; every player starts the campaign at level 1 again. Completed levels therefore stay completed only within the current `.v3` record.
 
 **Seeds.** Levels 1-10 pay **no Seeds in /3** and their finish card has no Seeds line:
 
@@ -81,13 +102,36 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 - Levels 11+ are untouched: same openings, same proofs, same payouts.
 - Clearing 1-10 locally only unlocks the next level on the device. Nothing in a level-11+ proof depends on it.
 
+**Random deals from level 11, and the restart rest (owner, 2026-11-01).** "I want deals to always be
+completely random. As if you'd be playing card game in real life."
+
+- Levels 1-8 and 10 (lessons) keep their one authored opening; level 9 is a real game on the
+  level's fixed seed (not a random deal, so its proof stays reproducible). From level 11 every
+  attempt — the first one
+  and every Restart — is a fresh shuffle (`campaignDeal(level, seed)`): hands, piles and who starts
+  change; the level's authored board, rock, gold and bot level never do (`tests/campaign/random-deals.test.ts`).
+- The win proof carries the deal's seed (`dealSeed`); the server rebuilds the deal on the level's board
+  and replays every move against the real bot (`verifyCampaignProof(..., dealSeed)`). Seeds still pay
+  once per level. A proof without `dealSeed` is checked on the fixed opening, so older queued wins pay.
+- **Safety switch.** The page deals randomly only after the server lists `campaign-random-deals` in
+  `GET /v1/health` `features` (remembered on the device for offline play). An older server never sees
+  a random-deal proof it would refuse — a refused proof is dropped, so its Seeds would be lost.
+  Server deploy: rebuild `supabase/functions/duel/bundle.ts` and redeploy `duel` (DEPLOY-ONLINE.md).
+- **The rest.** Five new deals in a row on levels 11+ without a move of the player's own rest the
+  campaign for one hour (`web/src/logic/campaign-deals.ts`; sheet `#sheet-rest`, words `CAMPAIGN.rest*`).
+  One real move, or a finished match, clears the count; resuming a saved match is not a new deal.
+  Browser walk: `node --import tsx web/e2e/campaign-random-deals.ts`.
+
 **Engine rules: unchanged.** No rule, scoring, card-count or legal-move change. Draw/Grow/Throw, Bloom, Bomb, Blast and the strangle are the engine's own; the tests check this.
 
 **How to add or change a lesson without bringing confusion back:**
 
 1. One idea per level.
 2. Author the position so the moment *must* happen (a stacked Draw pile, a hand that holds the cards). If a lesson cannot happen naturally, change the position, never a rule.
-3. Words go in the `LESSON` section of `src/strings.ts`: instruction ≤ 6 words, reason fits two lines on the smallest phone (owner, 2026-10-19), never "tree" (it is your home), never "take over", one word list (Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points), never "set"/"run", no tile colours.
+3. Words go in the `LESSON` section of `src/strings.ts`: the display carries an action line of 2-6
+   words (never a lone word), the info box one full sentence that fits four lines on the smallest
+   phone (owner, 2026-10-19), never "tree" (it is your home), never "take over", one word list
+   (Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points), never "set"/"run", no tile colours.
 4. Bump the lesson's `version`.
 5. Update LESSON-SCRIPTS.md.
 6. Run `web/tests/lessons.test.ts`, which has the three automated players, and the browser run `web/e2e/lessons-3.ts`.
@@ -96,13 +140,27 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 
 - Automated:
   - `npx vitest run web/tests/lessons.test.ts web/tests/lesson-*.test.ts`;
-  - then build the futa05 channel and run `npx tsx web/e2e/lessons-3.ts`: the lit-only tapper through levels 1-10, random taps, refresh, hints off, level 11.
+  - then build the futa05 channel and run `npx tsx web/e2e/lessons-3.ts`: the lit-only tapper through levels 1-10, random taps, refresh, hints off, level 11;
+  - with a `CHANNEL=futa04` build, `npx tsx web/e2e/futa04-lesson-9-free.ts`: level 9 is a real game — the Who-starts ritual, the 19-hex board, a cue at every action, a real finish and the record/unlock.
 - These prove the levels can always be finished. They do **not** prove a beginner understands them; that needs real new players.
+
+**The first board's art.** A cold first visit waits for the pictures the first lesson composes (the
+Futa04 ground, both homes and the rocks; the same files the board module starts downloading while
+the menu is up) with an **800 ms cap**, then starts anyway. The wait shows the compose state only —
+no spinner, no extra screen. A `severgrow.board-warmed.v1` marker makes every repeat visit skip it
+entirely, and a hidden page skips it too. Measured at 390x844 with a 4x CPU throttle: +0–3 ms on
+localhost (the files are already decoded by the time the menu is tapped) and +800 ms (the cap) on
+Slow 3G; a warm reload adds 0 ms.
 
 **The old Tutorial** (menu entry unchanged) is **still available, to be retired later**. The levels do not depend on it:
 
 - the shared small-map radius lives in `src/campaign/small-board.ts`;
-- the glass window and focus layer live in `web/src/player/glass-surface.ts`.
+- the glass window and focus layer live in `web/src/player/glass-surface.ts`;
+- the lesson's words live in two places only: the info box (`#lesson-plate`, explanations, one
+  sentence, no border, no buttons, `pointer-events:none`) and the cockpit display (the action).
+  `web/src/lessons/lesson-voice.ts` chooses which. The game's header stays the menu and the logo,
+  the map keeps full size, and levels 1-10 show no glass window, no `LEVEL n` kicker, no title and
+  no mission. Every other screen keeps its own chrome.
 
 ## The level schema
 
@@ -133,9 +191,10 @@ No UI change is needed: the campaign screen is drawn from the level data, so fur
 restructuring.
 
 **As built:** Chapters I-VII — levels 1-70 — the campaign is complete. Every board is hand-authored
-(`config.board`); `boardRadius` is 2 (the small map) for levels 1-3 and 3 for the rest, so only the
-three discovery levels use the small map and every real match runs on the full hexagon. Levels 31-70
-were built one chapter at a time; the plan and its measurements are in `docs/CAMPAIGN-31-70.md`.
+(`config.board`); `boardRadius` is 2 (the small map) for levels 1-3 and 9 and 3 for the rest. Levels
+1-3 are the discovery levels; **level 9 became a real game on the small map on 2026-11-01** at the
+owner's request (every other real match still runs on the full hexagon). Levels 31-70 were built one
+chapter at a time; the plan and its measurements are in `docs/CAMPAIGN-31-70.md`.
 
 ## Validation rules
 
@@ -263,8 +322,9 @@ Second clarity pass (2026-10-17, after the objective landed):
   useless without a referent. The Draw pile haloes itself at that step, so the next touch is still
   obvious.
 - When the only thing left is to finish the turn, the window **points at the end-turn control**.
-  In the throw phase it points at the **hand**, because the line says "tap a card twice"; once a card
-  waits for its second tap the line becomes "tap the same card again".
+  In the throw phase it points at the **hand** until a card is picked, then at the **Throw pile**
+  (owner, 2026-10-25: a second tap on the picked card now deselects; the throw is a swipe up, a
+  drag to the pile, or a tap on the pile).
 - A dead tap is answered everywhere it can happen: a hex (rock, connection, wrong phase) *and* a card
   before the draw ("Draw a card first"), placed at the tapped thing.
 - A round cockpit button with no action is invisible on the guided levels instead of blank — a
@@ -304,16 +364,22 @@ Playing them found two things that a unit test cannot see:
    a *strategic* match, and it is why level 8's Fruit lesson can be missed by a competent player: the
    game ends before the networks touch.
 
-   This needs an owner decision before more tuning: keep 1-10 on the 19-hex map and accept short
-   strangles, or return levels 4-10 to the 37-hex board (where the corner home has more neighbours) as
-   the pre-onboarding build had. Rules are not changed either way — only the map each level plays on.
+   This was the owner decision point for levels 1-10 on the 19-hex map; **it was answered for level
+   9 on 2026-11-01** (a real game there, accepting the short strangle), and levels 4-8 and 10 stay on
+   the 37-hex board.
 
-- **The board split is 1-3 small, 4-30 full.** The ten-level small-map experiment was reverted after
-  playing it: on the 19-hex map a corner home has three neighbours and one Bloom places three tiles,
-  so a single Bloom strangulates it (measured: L5, L6 and L9 in three turns, L8 in four). Levels 4-10
-  are back on the 37-hex board, where they run 7-30 turns instead — and level 8's Fruit lesson now
-  genuinely surfaces, because the networks have time to touch. Because `/2` and the root publish the
-  same levels again, the temporary alternate-opening fallback was removed with it.
+- **The board split is 1-3 and 9 small, the rest full.** The ten-level small-map experiment was
+  reverted after playing it: on the 19-hex map a corner home has three neighbours and one Bloom
+  places three tiles, so a single Bloom strangulates it (measured: L5, L6 and L9 in three turns, L8
+  in four). Levels 4-8 and 10 are back on the 37-hex board, where they run 7-30 turns instead — and
+  level 8's Fruit lesson now genuinely surfaces, because the networks have time to touch.
+  **On 2026-11-01 the owner asked for level 9 to be a full game on the small map anyway**; it is
+  the one real match on 19 hexes, and it is short for the same geometric reason (a strong player
+  wins by surround in 3 turns; a careless one loses). Since 2026-11-12 the lesson pins its own
+  deal (seed 95017, chosen so its Throw-pile sentence is true) on the same board; the campaign
+  level's own seed stays 95009. Because `/2` and the root publish the same levels again, the
+  c1-09 alternate-opening entry is kept (it is now identical to the level's current board) so an
+  older /2/ proof still verifies.
 - **The first ten levels keep the game's existing guidance language**, and nothing new competes with
   it: the draw/throw piles halo at their step, playable cards are outlined in the hand, and a picked
   card lights its legal hexes on the board. The cockpit's LED still owns the turn's word (GROW!,
@@ -352,7 +418,7 @@ terrain the player has to read and the better bots behind it.
 | --- | --- | --- | --- | --- | --- | --- |
 | 11 | Pebble Trail | 4 | 2 | 3 | 35 | A mirrored pebble pair beside the trail; still wide open |
 | 12 | Split Meadow | 5 | 3 | 3 | 34 | A short wall across the centre; two lanes to pick |
-| 13 | The Detour | 5 | 4 | 3 | 33 | A four-hex arc to route around |
+| 13 | The Detour | **8** | 4 | 3 | 33 | A four-hex arc to route around; a deliberate bot-8 spike (owner, 2026-10-20) |
 | 14 | Open Horizon | 5 | 1 | 3 | 36 | Breathing space: one lone stone, a clearly better bot |
 | 15 | Twin Stones | 6 | 4 | 3 | 33 | Twin wings plus a central pair: two threats at once |
 | 16 | Broken Crossing | 6 | 4 | 3 | 33 | A broken wall with two crossings |
@@ -418,7 +484,7 @@ symmetry is also why rock counts are even and gold counts odd: gold is the centr
 data (`breather: true`) so the choice is reviewed rather than an invisible curve: 31 (re-entry after
 the level-30 finale) and 38 (the gold-heavy breather). The tests allow bot 8 only on a flagged
 breather, never twice in a row, and never on more than a quarter of the extension. The 1-30 ladder
-keeps its original "never decreases" rule, unchanged.
+keeps its original "never decreases" rule, with the one pinned level-13 bot-8 spike (2026-10-20).
 
 **Two terrains, two jobs.** Rock takes space; gold creates value. A chapter leans on one, which is
 what makes IV (rock-led), V (planned: gold-led), VI (rock-heavy, gold-light) and VII (both) feel
@@ -628,17 +694,24 @@ level:
 | 4-5 | 2 |
 | 6-8 | 3 |
 | 9-11 | 4 |
-| 12-14 | 5 |
+| 12-14 | 5 (level 13 is 8 — the deliberate spike) |
 | 15-17 | 6 |
 | 18-20 | 7 |
 | 21-24 | 8 |
 | 25-30 | 9 |
 
-Full sequence: `1,1,1, 2,2, 3,3,3, 4,4,4, 5,5,5, 6,6,6, 7,7,7, 8,8,8,8, 9,9,9,9,9,9`.
+Full sequence: `1,1,1, 2,2, 3,3,3, 4,4,4, 5,8,5, 6,6,6, 7,7,7, 8,8,8,8, 9,9,9,9,9,9`.
+
+**One deliberate exception (owner, 2026-10-20): level 13 is a bot-8 spike.** "The Detour" keeps its
+board, seed, name and intent and only names a stronger bot — two rungs above its neighbours. Level 14
+returns straight to bot 5, so the spike is a single level, not a raised plateau. The ladder guard
+below pins it by level number: every other step through 1-30 still never decreases, and a second
+spike or a permanent lift fails the test.
 
 The ladder is pinned by a **guard test**, not a comment: `tests/campaign/levels.test.ts` asserts the
-bot level never decreases as the level number rises **through the teaching chapters (1-30)**, that it
-starts at 1 and ends at 9, and the exact sequence above. The old curve rose to bot 5 at level 20 then
+bot level never decreases as the level number rises **through the teaching chapters (1-30)** — except
+at the one declared level-13 spike, which the test pins by number and requires to recover at level 14
+— that it starts at 1 and ends at 9, and the exact sequence above. The old curve rose to bot 5 at level 20 then
 dropped back to bot 4 at level 21, and nothing caught it, because the previous test allowed a one-step
 fall. Existing player progress is untouched — campaign progress is stored per level **id**, and no id
 changed.
@@ -647,7 +720,7 @@ changed.
 difficulty through terrain and allows an occasional bot 8 as a *breather*. That is a reviewed design
 choice, so it is declared in the data (`breather: true`) and the test is stricter than "it may drop":
 bot 8 is legal only on a flagged breather, never twice in a row, and never on more than a quarter of
-the extension. The 1-30 rule above is unchanged.
+the extension. The 1-30 rule above is unchanged apart from the single pinned level-13 spike.
 
 ## Two boards for the same levels (the /2/ onboarding line)
 
@@ -671,10 +744,26 @@ device, or produced by a bundle built before the change, must never be refused b
   70 levels and miss one: nothing past the gap opens**) and a save cannot be edited into a shortcut.
   A loss removes nothing. A completed level stays replayable. Restarting a level reproduces the
   intended fixed start (the seed is never rerolled).
-- Progress is its own record, `severgrow.campaign.progress.v1`: the completed ids, the best attempt
+- **The player's PLACE is the anchor (owner, 2026-10-24).** *Place* is `currentLevel(progress)`: the
+  level they are working on (the one they just finished, or the next unfinished one). Everything that
+  returns the player to the campaign reads it: the PLAY entry, the level list's `current` tile, its
+  Continue, and the way back from a finished level. The level list scrolls that tile into view and
+  keeps its head (Back, Continue) fixed above the scrolling chapters.
+- **A replay can never move the place.** A saved match on any level *behind* the place is a replay in
+  progress; it is never offered by the campaign entry, and the level list's Continue never says
+  "Resume" for it (that was the reported stranding: replaying level 1 made the entry resume level 1).
+  `recordCampaignResult` already kept a replay's win from unlocking anything; the entry and the saved
+  match now agree. A won replay's finish card leads **Back to levels**, not "Next level", so the player
+  is never marched through levels they already passed.
+- **The Tutorial (Settings → Tutorial).** The first nine campaign levels, replayable at any progress.
+  It is an ENTRY POINT only: the tiles are the campaign's own `CampaignLevel` objects (same seed, bot,
+  config and lesson), started through the same `startGame` seam with `tutorial = true`. A tutorial
+  match writes nothing at all — no `CampaignProgress`, no resume save, no lesson notes, no Seed proof —
+  and its finish card leads **Back to Tutorial** (Settings), never into the campaign.
+- Progress is its own record, `severgrow.campaign.progress.v3`: the completed ids, the best attempt
   per level, and the derived unlocked count. Classic's `severgrow.stats.v1` (`winsByLevel`, a length-9
   array) is never migrated or reshaped.
-- A campaign match is saved under its **own** key (`severgrow.campaign.save.v1`, wrapped with the
+- A campaign match is saved under its **own** key (`severgrow.campaign.save.v3`, wrapped with the
   level id around the normal offline save), so the classic save
   (`severgrow.save.v7`) is never overwritten by a campaign game. `severgrow.lastmode.v1` records
   which offline match was played last, and **Continue** resumes that one. An unfinished campaign
@@ -839,8 +928,11 @@ Reading:
 
 | File | Proves |
 | --- | --- |
-| `tests/campaign/levels.test.ts` | every level's board is legal and playable; the campaign is well formed across every chapter built; the authored rock counts (1-70) and the per-level board radius (2 for levels 1-3, 3 for the rest); **the 1-30 bot ladder never decreases and matches the approved sequence exactly**; from 31 a bot-8 dip is allowed only on a flagged `breather`, never twice in a row, and at most a quarter of the extension; **terrain pressure (rocks + gold) does not fall chapter by chapter**; no rock or gold in a root zone; no single hex that decides the game; each level is reproducible (same id → same terrain, homes, deal); **the strict order rule** (access derived from the completed list, a gap opens nothing past it, an edited unlocked counter grants nothing, 69 of 70 leaves the campaign unfinished, a replay opens nothing new) |
+| `tests/campaign/levels.test.ts` | every level's board is legal and playable; the campaign is well formed across every chapter built; the authored rock counts (1-70) and the per-level board radius (2 for levels 1-3, 3 for the rest); **the 1-30 bot ladder never decreases (apart from the one pinned level-13 bot-8 spike, which must recover at level 14) and matches the approved sequence exactly**; from 31 a bot-8 dip is allowed only on a flagged `breather`, never twice in a row, and at most a quarter of the extension; **terrain pressure (rocks + gold) does not fall chapter by chapter**; no rock or gold in a root zone; no single hex that decides the game; each level is reproducible (same id → same terrain, homes, deal); **the strict order rule** (access derived from the completed list, a gap opens nothing past it, an edited unlocked counter grants nothing, 69 of 70 leaves the campaign unfinished, a replay opens nothing new) |
 | `tests/campaign/isolation.test.ts` | the shared rules version has no board; `src/engine/`, `server/src/` and `web/src/online/` never read a campaign level |
 | `web/tests/campaign-seam.test.ts` | only a campaign level produces overrides; the online client cannot build a match from a config; campaign saves never share the classic key |
 | `web/tests/campaign-save.test.ts` | progress saves/restores; an unfinished campaign match resumes as its level; existing classic (and legacy) saves still decode |
+| `web/tests/campaign-flow.test.ts` | a replay never moves the place; the entry ignores a replay save; the Tutorial is the campaign's own levels 1-9 by reference and leaves progress byte-identical; the entry/sheet/save wiring |
+| `web/tests/finish-card.test.ts` | which action leads the finish card in every mode, including a replay (Back to levels) and a tutorial (Back to Tutorial) |
 | `web/e2e/campaign-shots.ts` | the browser flow at 360x640 and 390x844: menu → campaign → level on its own seed and board → resume on reload → win unlocks the next → tile states, reading sizes, no clipping, screenshots |
+| `web/e2e/level-flow.ts` | the browser flow of the return path: finish level 23, open the list on the place, replay level 1, keep the place, refuse to resume the replay save, and the Settings → Tutorial round trip (screenshots in `/tmp/levelflow`) |

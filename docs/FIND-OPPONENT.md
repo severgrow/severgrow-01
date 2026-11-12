@@ -17,14 +17,29 @@ Find Opponent reuses the `matches` table:
 
 Pairing is one atomic storage step, `Storage.claimOpenQueueOrPark`:
 
-1. If the player already has a `waiting` open-queue match, it is returned as-is. A repeat tap can
+1. If an earlier search of the player has already been paired, the **active open-queue game** they
+   are a seat of is returned (`paired: true, resumed: true`) and nothing is created. Without this
+   a repeat Find (a second device, a reload, a re-entered screen) started a brand-new empty search:
+   one device then waited in that new match while its opponent sat in the real one, both looking
+   for an opponent forever (owner, 2026-11-12). Any leftover solo search of the same player is
+   retired in the same step. A game that began as an **invite** is never resumed — an open invite
+   must not stop a player meeting a stranger.
+2. If the player already has a `waiting` open-queue match, it is returned as-is. A repeat tap can
    never create a second parked entry and can never pair a player with themselves.
-2. The player's unfinished-match count is read in the same step. At
-   `maxOpenMatchesPerPlayer` (10) the call is refused with the friendly `TOO_MANY_MATCHES`.
-3. Else the **oldest** `waiting` open-queue match with one free seat is claimed (FIFO,
-   `FOR UPDATE SKIP LOCKED`), the joiner is seated and the match is activated — one step, so two
-   simultaneous searchers can never both claim it and never both end up waiting.
-4. Else the searcher is parked (a new `waiting` open-queue match, seat 0).
+3. The player's unfinished-match count is read in the same step. At
+   `maxOpenMatchesPerPlayer` (10) the player may **not** join a fresh search or park: the call is
+   refused with the friendly `TOO_MANY_MATCHES`. The cap never blocks step 1 or 4b below, which
+   add no match.
+4. Else the **oldest** `waiting` open-queue match with one free seat that the caller does **not**
+   already share an open game with is claimed (FIFO, `FOR UPDATE SKIP LOCKED`), the joiner is
+   seated and the match is activated — one step, so two simultaneous searchers can never both
+   claim it and never both end up waiting. The one-game-per-pair rule is **pair-scoped**: an open
+   game against a third party never blocks a search.
+5. Else, if the only searcher waiting already **shares an open game** with the caller, that search
+   is retired and the shared game is touched and returned to the caller (`continued: true`). The
+   other page sees its search end and opens the same game, so a pair can never wait for each other
+   forever and never gets a second game (owner, 2026-11-11).
+6. Else the searcher is parked (a new `waiting` open-queue match, seat 0).
 
 In Postgres the whole step runs inside a transaction holding
 `pg_advisory_xact_lock(<constant>)`, which serialises every search across the shared pooler. In
@@ -123,6 +138,14 @@ resigned**) are deliberately unchanged. No emoji anywhere.
 - `server/tests/find-opponent-parking.test.ts` — parking persists past 20s, FIFO with 3 parked,
   no self/double (incl. concurrent double-tap), never a second parked entry, cap refusal, atomic
   one-match race, matched-while-away list state/deadline/ping, cancel, rate limits.
+- `server/tests/find-opponent-shared-pair.test.ts` — two searchers who already share a game continue
+  that game (also at the open-match cap), a player with a game against a third party still pairs
+  with a fresh stranger (both tap orders), two strangers pair, and a repeated Find (twice or three
+  times parked, and again after both seats were paired) always returns the SAME game — never a
+  second empty search (the owner's reports).
+- `server/tests/matchmaking-hardening.test.ts` — Stop searching still works after Find resumes
+  spend the join budget; cancel→find→cancel never doubles a player's queue rows; a paired result
+  is two distinct human seats; expired parked searches stay unclaimable.
 - `server/tests/timeout-grace.test.ts` — first miss extends, second loses, per-seat independence,
   idempotency (lazy read racing the sweeper), clock semantics, grace disabled.
 - `server/tests/postgres.integration.test.ts` — real DB: two simultaneous searchers → exactly one

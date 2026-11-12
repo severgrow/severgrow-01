@@ -78,6 +78,9 @@ export const createDraftEngine = (options: {
   let baseRevision = 0;
   let draftActions: Action[] = [];
   let shadow: State | null = null;
+  /** The last view()/legal() answers and the position they were computed for. */
+  const memo: { viewFor: unknown; viewServer: unknown; view: View | null; legalFor: unknown; legalServer: unknown; legal: Action[] | null } =
+    { viewFor: undefined, viewServer: undefined, view: null, legalFor: undefined, legalServer: undefined, legal: null };
   let undoStack: State[] = [];
 
   const rebuildShadow = (): void => {
@@ -87,11 +90,24 @@ export const createDraftEngine = (options: {
     }
     let s = shadowFromView(serverView);
     undoStack = [];
-    for (const action of draftActions) {
-      undoStack.push(s);
-      s = applyAs(s, serverView.player, action);
+    try {
+      for (const action of draftActions) {
+        undoStack.push(s);
+        s = applyAs(s, serverView.player, action);
+      }
+      shadow = s;
+    } catch {
+      // A draft that no longer replays against the server's view is STALE (the server moved on,
+      // or the board changed under it). Dropping it is the honest outcome: better a clean turn
+      // than a half-built shadow that throws on the next tap - which is what a player would read
+      // as "undo is broken" (owner, 2026-10-21).
+      draftActions = [];
+      undoStack = [];
+      shadow = shadowFromView(serverView);
+      if (storage) {
+        try { storage.remove(draftStorageKey(matchId)); } catch { /* storage blocked */ }
+      }
     }
-    shadow = s;
   };
 
   const restore = (stored: DraftSnapshot | null): void => {
@@ -162,21 +178,39 @@ export const createDraftEngine = (options: {
       return true;
     },
 
-    canUndo: () => draftActions.length > 0,
+    // ONE SOURCE OF TRUTH (owner, 2026-10-21: "one player wasn't able to undo after growing").
+    // This used to answer from `draftActions` alone while `undo()` also needs an `undoStack`
+    // entry, so the two could disagree and offer a button that then refused. They now agree by
+    // construction: undo is available exactly when there is both an action and a state to go
+    // back to.
+    canUndo: () => draftActions.length > 0 && undoStack.length > 0,
 
     actions: () => draftActions,
 
     view() {
       if (!serverView) throw new Error('Draft has no server view yet.');
-      if (shadow) return viewFor(shadow, serverView.player);
-      return serverView;
+      if (!shadow) return serverView;
+      // The engine never mutates a state, and `shadow`/`serverView` are only ever REPLACED, so the
+      // pair identifies the position: asked again with nothing changed, the same View comes back
+      // (a render asks many times; tests/online-snapshot-cache.test.ts).
+      if (memo.viewFor !== shadow || memo.viewServer !== serverView) {
+        memo.viewFor = shadow;
+        memo.viewServer = serverView;
+        memo.view = viewFor(shadow, serverView.player);
+      }
+      return memo.view!;
     },
 
     legal() {
       if (!serverView) return [];
       if (serverView.actor !== serverView.player) return [];
-      const state = shadow ?? shadowFromView(serverView);
-      return legalActions(viewFor(state, serverView.player));
+      if (memo.legalFor !== shadow || memo.legalServer !== serverView) {
+        const state = shadow ?? shadowFromView(serverView);
+        memo.legalFor = shadow;
+        memo.legalServer = serverView;
+        memo.legal = legalActions(viewFor(state, serverView.player));
+      }
+      return memo.legal!;
     },
 
     persist() {

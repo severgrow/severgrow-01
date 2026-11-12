@@ -1,0 +1,95 @@
+name: Extra regression checks
+
+on:
+  push:
+    branches: [futa0.5-online, 'fix/**', 'release/**']
+  pull_request:
+    paths:
+      - 'admin/**'
+      - 'server/**'
+      - 'web/**'
+      - '.github/workflows/extra-regressions.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extra-regressions-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  browser:
+    name: extra (${{ matrix.suite }})
+    # PINNED, not `ubuntu-latest`: GitHub moved `ubuntu-latest` to 26.04 during 2026-10-28, and
+    # Playwright 1.56.1 refuses it ("Playwright does not support chromium on ubuntu26.04-x64"),
+    # which failed EVERY browser job at `playwright-core install` before a single test ran. Pin the
+    # last image the pinned Playwright supports; unpin when Playwright ships 26.04 support.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [admin-dashboard, online-stale-token-recovery, online-soak-teardown, online-opponent-discard, online-rematch-key, online-find-shared-pair, your-matches-grid, online-player-throw, online-presence-journey, settings-visual, accounts-email, pwa-viewport-layout]
+    env:
+      # These suites only use their own in-process API; never touch a live wallet or project.
+      VITE_SUPABASE_URL: http://127.0.0.1:9
+      VITE_SUPABASE_ANON_KEY: local-e2e-placeholder
+      # Exercise ten exit cycles after the first five populate browser/material caches.
+      # Keep the existing heap/listener limits; short runs confuse cache warmup with a leak.
+      SOAK_MATCHES: '15'
+      SOAK_TURNS: '4'
+      # Isolate transport recovery from software-GPU timing. Discard/visual suites keep WebGL.
+      JOURNEY_LOW_GPU: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: bash scripts/install-browser.sh chromium
+      - name: Select the pinned browser
+        run: node --input-type=module -e 'import {chromium} from "playwright-core"; console.log("PW_CHROMIUM=" + chromium.executablePath())' >> "$GITHUB_ENV"
+      - name: Build the installed-app viewport fixture
+        if: matrix.suite == 'pwa-viewport-layout'
+        run: CHANNEL=futa04 npm run web:build
+      - name: Verify the listener probe against native browser cleanup
+        if: matrix.suite == 'online-soak-teardown'
+        run: node --import tsx web/e2e/online-probe-lifetime.ts
+      - name: Run the regression suite
+        run: |
+          set -o pipefail
+          node --import tsx --import ./scripts/browser-ci-errors.mjs web/e2e/${{ matrix.suite }}.ts 2>&1 | tee regression.log
+      - name: Check real touch throws
+        if: matrix.suite == 'online-player-throw'
+        run: |
+          set -o pipefail
+          THROW_GESTURE=swipe node --import tsx --import ./scripts/browser-ci-errors.mjs web/e2e/online-player-throw.ts 2>&1 | tee -a regression.log
+      - name: Annotate failed checks
+        if: failure()
+        run: |
+          node --input-type=module -e '
+            import { readFileSync, existsSync } from "node:fs";
+            if (existsSync("regression.log")) {
+              for (const line of readFileSync("regression.log", "utf8").split("\n")) {
+                if (/^FAIL |EXIT FAILED|AssertionError|TimeoutError|locator\.click:|page\.click:/.test(line)) {
+                  const safe = line.replaceAll("%", "%25").replaceAll("\r", "%0D");
+                  console.log("::error::" + safe);
+                }
+              }
+            }
+          '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: extra-${{ matrix.suite }}
+          path: |
+            regression.log
+            docs/screens/online/soak-report.json
+            docs/screens/online/soak-stall-*.json
+            docs/screens/online/soak-stall-*.png
+            /tmp/opponent-discard/
+            /tmp/player-throw/
+            /tmp/online-presence-journey/
+          retention-days: 7

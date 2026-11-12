@@ -36,7 +36,7 @@ const setup = () => {
     await service.upgradePlayer(g.record, 'anything');
     return { token: g.token, record: await service.authenticate(g.token) };
   };
-  return { service, call, guest, account };
+  return { service, call, guest, account, storage };
 };
 
 describe('renameMe: a signed-in player stores their own name', () => {
@@ -57,10 +57,10 @@ describe('renameMe: a signed-in player stores their own name', () => {
     const h = setup();
     const { record } = await h.account();
     const tagBefore = playerTag(record.id);
-    const renamed = await h.service.renameMe(record, 'Totally Different');
+    const renamed = await h.service.renameMe(record, 'Renamed');
     expect(renamed.id).toBe(record.id);
     expect(playerTag(renamed.id)).toBe(tagBefore);
-    expect(taggedName(renamed.displayName ?? '', renamed.id)).toBe(`Totally Different #${tagBefore}`);
+    expect(taggedName(renamed.displayName ?? '', renamed.id)).toBe(`Renamed #${tagBefore}`);
   });
 
   it('refuses a guest, which keeps its generated nature name', async () => {
@@ -76,9 +76,9 @@ describe('PATCH /v1/players/me', () => {
   it('stores the typed name for an account and echoes it back, normalised', async () => {
     const h = setup();
     const { token } = await h.account();
-    const res = await h.call('PATCH', '/v1/players/me', { displayName: "  Fern   O'Hara " }, token);
+    const res = await h.call('PATCH', '/v1/players/me', { displayName: "  Fern   O'N " }, token);
     expect(res.status).toBe(200);
-    expect(res.json.player).toMatchObject({ kind: 'account', displayName: "Fern O'Hara" });
+    expect(res.json.player).toMatchObject({ kind: 'account', displayName: "Fern O'N" });
   });
 
   it('refuses a guest with FORBIDDEN', async () => {
@@ -93,7 +93,7 @@ describe('PATCH /v1/players/me', () => {
     const h = setup();
     const { token } = await h.account();
     const bad: [string, unknown][] = [
-      ['too long', 'x'.repeat(41)],
+      ['too long', 'x'.repeat(9)],
       ['empty', '   '],
       ['newline', 'Big\nFox'],
       ['control', 'Big\u0000Fox'],
@@ -116,5 +116,37 @@ describe('PATCH /v1/players/me', () => {
     const h = setup();
     const res = await h.call('PATCH', '/v1/players/me', { displayName: 'Nobody' }, undefined);
     expect(res.status).toBe(401);
+  });
+
+  // THE OWNER'S NAME LIMIT (2026-10-30): "make the account names be max 8 characters ... existing
+  // longer names are LEFT ALONE; enforce 8 only on NEW names and RENAMES".
+  it('accepts exactly 8 characters and refuses 9 — both on first naming and on a rename', async () => {
+    const h = setup();
+    const { token, record } = await h.account();
+    const eight = await h.call('PATCH', '/v1/players/me', { displayName: 'EightChr' }, token);
+    expect(eight.status).toBe(200);
+    expect(eight.json.player?.displayName).toBe('EightChr');
+    const nine = await h.call('PATCH', '/v1/players/me', { displayName: 'NineCharr' }, token);
+    expect(nine.status).toBe(400);
+    expect(nine.json.code).toBe('INVALID_REQUEST');
+    // Nothing long was stored: the account still has the eight-character name it just chose.
+    expect((await h.service.authenticate(token)).displayName).toBe('EightChr');
+    // And the same decision is the one `renameMe` itself makes (the route is only a doorway).
+    await expect(h.service.renameMe({ ...record, displayName: 'EightChr' }, 'NineCharr'))
+      .rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  });
+
+  it('leaves a legacy long name alone, but will not let it be replaced by another long one', async () => {
+    const h = setup();
+    const { token, record } = await h.account();
+    // Simulate a row that predates the rule.
+    const legacy = { ...record, displayName: 'BloomHeron' };
+    await h.storage.updatePlayer(legacy);
+    const same = await h.call('PATCH', '/v1/players/me', { displayName: 'BloomHeron' }, token);
+    expect(same.status).toBe(200);
+    expect(same.json.player?.displayName).toBe('BloomHeron');
+    const other = await h.call('PATCH', '/v1/players/me', { displayName: 'BloomHeronTwo' }, token);
+    expect(other.status).toBe(400);
+    expect((await h.service.authenticate(token)).displayName).toBe('BloomHeron');
   });
 });

@@ -4,6 +4,7 @@ import { getOrient, getRotation, toScreen } from '../logic/orient.js';
 import { snapBasis } from '../logic/pixelgrid.js';
 import type { ThemeStyle } from '../logic/themes.js';
 import type { MaterialLook } from '../logic/materials.js';
+import { globePoint, globePoseAt, globeRadialScale, globeUnpoint, type GlobePose } from '../online/map-globe.js';
 
 /** Used when no look is given (tests, the lab): full material detail. */
 export const FULL_LOOK: MaterialLook = { intensity: 1, textures: true, facets: true, cracks: true, motion: true, depth: 3, rim: 0.4, shadow: 0.5 };
@@ -19,7 +20,9 @@ export const noiseTile = (): string => {
   try {
     const c = document.createElement('canvas');
     c.width = c.height = 64;
-    const x = c.getContext('2d');
+    // a CPU canvas: it is only ever read back, and a GPU one costs a graphics start-up on that first
+    // read (measured 2026-11-11: 1.3 s of frozen page at board entry on software graphics)
+    const x = c.getContext('2d', { willReadFrequently: true });
     if (!x) return noiseUrl;
     const img = x.createImageData(64, 64);
     let seed = 20261002;
@@ -63,10 +66,66 @@ export const setPixelGrid = (q: number) => {
 };
 export const getPixelGrid = () => quantum;
 
+/**
+ * THE BOARD AS A SMALL PLANET (0.75, owner 2026-11-04: "A 5% bulge on the board, using the spread
+ * curve from the flat Territory globe ... Must never make the board harder to read or to tap").
+ * Every point of the board is drawn on the Territory globe's own spread curve (web/src/online/map-globe.ts,
+ * `k(u) = 1 - f * u^1.25`) at 5% for the board's outer corner: tile centres (`centerOf`) and every
+ * hex corner (`cornerPts`) are bent, so neighbours keep sharing their corners and the board stays one
+ * seamless surface. Everything that places anything on the board reads `centerOf`/`cornerPts`, so
+ * the art, the overlays, the effects and the hit test all bend together. Off (null) everywhere but
+ * the live game's board.
+ */
+export const BOARD_BULGE = 0.05;
+let bulgeKeys: readonly string[] | null = null;
+let bulge: GlobePose | null = null;
+let bulgeFor = '';
+/** Bend this board (its cell keys), or switch the bend off (null). */
+export const setBoardBulge = (keys: readonly string[] | null) => {
+  bulgeKeys = keys && keys.length ? [...keys] : null;
+  bulge = null;
+  bulgeFor = '';
+};
+/** The bend's pose for the current orientation (recomputed when the lattice basis changes). */
+export const boardBulge = (): GlobePose | null => {
+  if (!bulgeKeys) return null;
+  const tag = `${getOrient()}:${getRotation()}:${quantum}`;
+  if (bulgeFor === tag) return bulge;
+  bulgeFor = tag;
+  const pts = bulgeKeys.map((k) => { const c = parseKey(k); return latticeCentre(c.q, c.r); });
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  // The rim is the outer CORNER of the last tile, as on the Territory globe.
+  const radius = Math.max(...pts.map((p) => Math.hypot(p.x - cx, p.y - cy))) + S;
+  bulge = globePoseAt(cx, cy, radius, BOARD_BULGE);
+  return bulge;
+};
+/** How much smaller a tile is drawn at `key` (1 off the bend). */
+export const tileBulge = (key: string): number => {
+  const pose = boardBulge();
+  if (!pose) return 1;
+  const c = parseKey(key), flat = latticeCentre(c.q, c.r);
+  return globeRadialScale(pose, flat.x, flat.y);
+};
+/** A hex's centre on the FLAT lattice (before any bend): the hit test and the bent corners read it. */
+export const flatCentreOf = (key: string) => {
+  const c = parseKey(key);
+  return latticeCentre(c.q, c.r);
+};
+/** The flat (unbent) screen point under a drawn one: the hit test's way back to the lattice. */
+export const unbend = (x: number, y: number): { x: number; y: number } => {
+  const pose = boardBulge();
+  return pose ? globeUnpoint(pose, x, y) : { x, y };
+};
+
 /** A hex's centre on screen (board orientation and rotation applied: logic/orient.ts). */
 export const centerOf = (key: string) => {
   const c = parseKey(key);
-  return latticeCentre(c.q, c.r);
+  const flat = latticeCentre(c.q, c.r);
+  const pose = boardBulge();
+  if (!pose) return flat;
+  const at = globePoint(pose, flat.x, flat.y);
+  return quantum > 0 ? { x: Math.round(at.x / quantum) * quantum, y: Math.round(at.y / quantum) * quantum } : at;
 };
 /** The same, from axial q, r (the painted world uses it per hex: no key parsing). */
 export const latticeCentre = (q: number, r: number) => {
@@ -85,12 +144,18 @@ export const hash = (s: string) => {
 };
 
 export const cornerPts = (key: string, size: number, jitter = 0) => {
-  const { x, y } = centerOf(key);
+  const pose = boardBulge();
+  // On the bent board every CORNER is bent (not the tile about its centre), exactly as the Territory
+  // globe does it: two neighbours share a corner, so both draw it at the same bent point and no gap
+  // can open between them (owner, 2026-11-04: "gaps in the map ... should never happen").
+  const { x, y } = pose ? flatCentreOf(key) : centerOf(key);
   return Array.from({ length: 6 }, (_, i) => {
     const a = (Math.PI / 180) * (60 * i - 30);
     const r = size * (1 + (jitter ? (hash(`${key}:${i}`) - 0.5) * jitter : 0));
     const o = toScreen(r * Math.cos(a), r * Math.sin(a));
-    return [x + o.x, y + o.y] as const;
+    if (!pose) return [x + o.x, y + o.y] as const;
+    const at = globePoint(pose, x + o.x, y + o.y);
+    return [at.x, at.y] as const;
   });
 };
 export const polyPoints = (pts: readonly (readonly [number, number])[]) => pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');

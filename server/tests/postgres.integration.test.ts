@@ -87,6 +87,7 @@ const INTEGRATION_CONFIG = {
   rateLimits: {
     guestPerIpPerHour: 100_000,
     joinPerPlayerPerHour: 100_000,
+    cancelSearchPerPlayerPerHour: 100_000,
     joinPerIpPerHour: 100_000,
     createPerPlayerPerHour: 100_000,
     createPerIpPerHour: 100_000,

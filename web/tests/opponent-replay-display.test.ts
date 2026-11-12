@@ -71,7 +71,7 @@ describe('source wiring (the two-browser suite proves the runtime)', () => {
 
   it('the online replay wires the personality and the dim, and lifts it on every drain', () => {
     // The event rides its anchor step through the ONE mechanism offline uses.
-    expect(mainSource).toMatch(/displayEventForPlay\(beforeState, os\.state, catchUp, HUMAN\)/);
+    expect(mainSource).toMatch(/displayEventForPlay\(beforeState, os\.state, catchUp, HUMAN, 'neutral', true\)/);
     expect(mainSource).toMatch(/displaySteps\.set\(anchor, displayEvent\)/);
     expect(mainSource).toMatch(/outcomeSteps\.set\(cue\.step, cue\)/);
     expect(mainSource).toMatch(/replayedByOpponent\(pending, os\.seat\)/);
@@ -83,7 +83,9 @@ describe('source wiring (the two-browser suite proves the runtime)', () => {
   });
 
   it('offline is untouched — afterPlay still computes the event the same way', () => {
-    expect(mainSource).toMatch(/displayEventForPlay\(p\.before,p\.after,p\.steps,HUMAN\)/);
-    expect(mainSource).toMatch(/displayEventForPlay\(result\.played\.before, result\.played\.after, result\.played\.steps, HUMAN\)/);
+    // Owner, 2026-11-11: offline free play speaks as the opponent and may show a picture; online
+    // stays the neutral voice (pictures only).
+    expect(mainSource).toMatch(/displayEventForPlay\(p\.before,p\.after,p\.steps,HUMAN,voice,signArt\)/);
+    expect(mainSource).toMatch(/displayEventForPlay\(result\.played\.before, result\.played\.after, result\.played\.steps, HUMAN, 'neutral', true\)/);
   });
 });

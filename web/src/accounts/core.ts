@@ -9,6 +9,7 @@
 //      hand that token ONCE to our server (POST /v1/auth/google), which asks Supabase who it is and
 //      answers with one of our own player tokens. The Supabase session is then closed.
 import type { KeyValue } from '../../../server/src/client.js';
+import { ACCOUNT } from '../../../src/strings.js';
 
 export const PENDING_KEY = 'futasaku.auth.pending.v1';
 export const ACCOUNT_KEY = 'futasaku.account.v1';
@@ -22,7 +23,7 @@ export const PENDING_MAX_AGE_MS = 15 * 60 * 1000;
 export type ReturnTo = 'online' | 'settings' | 'menu';
 export type Pending = { verifier: string; returnTo: ReturnTo; at: number };
 /** What this device remembers about the sign-in, for Settings. The email never goes to our server. */
-export type AccountRecord = { provider: 'google'; email: string | null; playerId: string };
+export type AccountRecord = { provider: 'google' | 'email'; email: string | null; playerId: string };
 export type Flash = { kind: 'signed-in' | 'failed'; text: string; returnTo: ReturnTo };
 
 export const base64Url = (bytes: Uint8Array): string => {
@@ -107,8 +108,8 @@ export const takePending = (kv: KeyValue | null, now: number): Pending | null =>
 
 export const readAccount = (kv: KeyValue | null): AccountRecord | null => {
   const a = readJson<Partial<AccountRecord>>(kv, ACCOUNT_KEY);
-  if (!a || a.provider !== 'google' || typeof a.playerId !== 'string') return null;
-  return { provider: 'google', email: typeof a.email === 'string' ? a.email : null, playerId: a.playerId };
+  if (!a || (a.provider !== 'google' && a.provider !== 'email') || typeof a.playerId !== 'string') return null;
+  return { provider: a.provider, email: typeof a.email === 'string' ? a.email : null, playerId: a.playerId };
 };
 export const writeAccount = (kv: KeyValue | null, a: AccountRecord): boolean => writeJson(kv, ACCOUNT_KEY, a);
 export const clearAccount = (kv: KeyValue | null) => drop(kv, ACCOUNT_KEY);
@@ -133,6 +134,14 @@ export const takeNicknamePrompt = (kv: KeyValue | null): string | null => {
   return p && typeof p.playerId === 'string' ? p.playerId : null;
 };
 
+/** The new account's name step, still owed (read WITHOUT removing): it is asked until a name is saved. */
+export const pendingNicknamePrompt = (kv: KeyValue | null): string | null => {
+  const p = readJson<{ playerId?: unknown }>(kv, NICKNAME_KEY);
+  return p && typeof p.playerId === 'string' ? p.playerId : null;
+};
+/** A name was saved: the step is settled. */
+export const clearNicknamePrompt = (kv: KeyValue | null): void => { drop(kv, NICKNAME_KEY); };
+
 /** GET /auth/v1/settings → is the Google provider switched on in the Supabase dashboard? */
 export const googleEnabled = (settings: unknown): boolean => {
   const ext = (settings as { external?: Record<string, unknown> } | null)?.external;
@@ -145,4 +154,22 @@ export const identityFromSignIn = (body: unknown): { token: string; playerId: st
   if (typeof b?.token !== 'string' || typeof b.player?.id !== 'string') return null;
   const kind = b.player.kind === 'account' ? 'account' : 'guest';
   return { token: b.token, playerId: b.player.id, displayName: typeof b.player.displayName === 'string' ? b.player.displayName : null, kind };
+};
+
+/**
+ * The toast after a Google sign-in (owner, 2026-10-22). "Games played as a guest were not moved" is
+ * said only when an earlier, different identity actually had matches — or when that could not be
+ * checked (null), because then the warning is the honest default. A guest who never played (the one
+ * Play online creates on a new phone) is simply welcomed back.
+ */
+export const signInMessage = (s: {
+  outcome: unknown;
+  name: string;
+  beforePlayerId: string | null;
+  afterPlayerId: string;
+  guestHadMatches: boolean | null;
+}): string => {
+  if (s.outcome === 'linked') return ACCOUNT.linked(s.name);
+  const switched = s.outcome === 'signed-in' && s.beforePlayerId !== null && s.beforePlayerId !== s.afterPlayerId;
+  return switched && s.guestHadMatches !== false ? ACCOUNT.switched(s.name) : ACCOUNT.welcomeBack(s.name);
 };

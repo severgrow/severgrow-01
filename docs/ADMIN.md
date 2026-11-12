@@ -1,8 +1,19 @@
 # FUTASAKU Admin dashboard (v1)
 
 A read-only operations dashboard for the owner, served at **`/admin/`** on the site. It reads the
-same database the game writes, through its own narrowly scoped API, and it can change exactly one
-thing: **report triage**.
+same database the game writes, through its own narrowly scoped API, and it can change three
+things: **report triage**, **a player's Seeds** (an audited grant below, and — for testing, at the
+owner's request, 2026-10-22 — the test edits in §3a), and **who owns a map tile** (§3a).
+
+### Adding Seeds
+
+The player page (`#/player?q=…`) has an **Add Seeds** card: a whole number from 1 to 1000 and a
+short reason, confirmed once. `POST /v1/admin/players/:id/seeds` with `{ amount, reason, requestId }`
+writes one `seed_ledger` row (`category = 'admin_grant'`, `source_key = 'admin:<requestId>'`, the
+reason and the admin's id in `metadata`) and one `admin_audit` row (`seeds.grant`). The request id
+makes a double tap pay once. It is refused without a token (401) and for any non-admin (403), like
+every admin route. No migration is needed (`seed_ledger.category` is free text). **Needs the `duel`
+function redeployed.**
 
 - **Status: built, not published.** The migration is written and **unapplied**; the `/admin/` route is
   **not** wired into the Pages deploy and is **not** linked from the game. Publishing is the owner's
@@ -73,6 +84,16 @@ ADMIN_PLAYER_IDS=37e3d4d0-a34c-45b3-bc61-992fcf392912 npm run server:dev
   never read as "allow everyone".
 - The list is printed in the server's boot line (ids are not secrets); the dashboard never shows it.
 
+### Signing in on /admin/ directly (2026-10-20)
+
+The sign-in card offers **Sign in with Google** — the game's own Google round trip
+(`web/src/accounts/core.ts`), returning to `/admin/` (allowed by the Supabase redirect list
+`https://www.futasaku.com/**`). The resulting player token is kept under the dashboard's own key
+`futasaku.admin.token.v1`; the admin API still decides server-side whether that player is an admin.
+Order of tokens: this Google sign-in, then the game's identity on the device, then a pasted token
+(under "Use a player token instead"). **Sign out** forgets only the dashboard's tokens and stops using
+the game's token in that tab — it never signs the game out.
+
 ### What the browser holds
 
 The player's **normal bearer token**, and nothing else. It is read from where the game already keeps
@@ -103,12 +124,17 @@ All routes require an allow-listed bearer token. `X` marks a mutation.
 | `GET /v1/admin/reports` | `feedback_reports` + triage, filtered and paginated (keyset) |
 | `GET /v1/admin/reports.csv` | the same rows as CSV, same filters, same fields, capped |
 | `POST /v1/admin/reports/:id/triage` **X** | status (`new`/`reviewing`/`resolved`) + private note; audited |
+| `GET /v1/admin/players` | every account, **both sides of the human/bot split** (each row carries `classification`, `classificationReason`, `testReason`), with humans and bots counted separately |
+| `POST /v1/admin/players/:id/visibility` **X** | the owner's correction: `{override:'human' \| 'bot' \| 'auto'}`. Stored on the player row and audited in the same transaction |
 | `GET /v1/admin/player?q=` | nickname, tag (`#7QK2`) or player id lookup |
 | `GET /v1/admin/matches[/:id]` | match list, and one match's result, participants and move timeline |
 | `GET /v1/admin/ledger` | the Seeds ledger, filtered and paginated |
 | `GET /v1/admin/economy` | minted vs spent, per category, receipts and denials, caps in force |
 | `GET /v1/admin/world` | the map, recent claims and the day index the replay steps through |
 | `GET /v1/admin/campaign` | verified campaign clears, per opaque level id and per chapter |
+| `POST /v1/admin/seeds/adjust` **X** | give or take Seeds for one player (§3a); audited |
+| `POST /v1/admin/world/cell` **X** | set or clear the owner of one map cell (§3a); audited |
+| `GET /v1/admin/players` | every visible player: kind, Google, joined, last recorded activity and what it was, online matches, highest verified campaign level, Seeds; plus the journey / where-they-left-off / highest-level summaries (`server/src/admin/players.ts`). **Needs the `duel` function redeployed**; until then the screen says so |
 
 Every list is `order by … limit …` with a hard page cap (`MAX_PAGE`, 200) and, where the table grows,
 a **keyset cursor** (`created_at|id`) rather than an offset. Nothing scans a full table:
@@ -120,11 +146,74 @@ returns *how many* events a move produced, never the event payloads (they are th
 server-side record and can contain the opponent's hidden draw). This is asserted by tests, not just
 intended.
 
-**The one mutation** is report triage. Each change appends a row to `admin_audit` (who, what, when,
+**The content mutations** are report triage, the two owner edits in §3a and the human/bot correction
+in §3b. Each change appends a row to `admin_audit` (who, what, when,
 old→new status, the note *length*). The note text itself is **not** copied into the audit row: it
 already lives on the report, and duplicating player-adjacent text into a second table is how private
-text ends up somewhere nobody expected. No wallet adjustments, no tile transfers, no bans, no map
-publishing, no gameplay change.
+text ends up somewhere nobody expected. There are still no bans, no map publishing and no gameplay
+change.
+
+### 3a. The owner's test edits — Seeds and tiles (2026-10-22)
+
+Asked for by the owner so Territory challenges can be simulated by hand while there are no real
+players: *"allow me to allocate seeds to any accounts, and also edit the world map."* Both live on
+the **Seeds and world** screen and both go through the same server-side allow-list as everything else.
+
+| edit | what it does | what it never does |
+|---|---|---|
+| **Give or take Seeds** (`POST /v1/admin/seeds/adjust` `{playerId, delta, reason?, requestId}`) | one `seed_ledger` row in category **`admin_adjust`** (reason and admin id in its `metadata`), the wallet moved by the same amount in the same transaction, one `admin_audit` row (`seeds.adjust`) | take a balance below zero (refused, with the real balance); apply twice (the request id is the ledger's idempotency key); move more than 1,000,000 at once; touch `lifetime_earned`/`lifetime_spent` (they describe play — the grant shows up under its own category instead) |
+| **Set a tile's owner** (`POST /v1/admin/world/cell` `{cellId, ownerId \| null}`) | gives any cell to any player (`world_claims.source = 'admin'`) or clears it; free; ignores the next-to-your-land rule; bumps the world revision so every client redraws; one `admin_audit` row (`world.cell`) | strand escrowed Seeds — an open Territory challenge on that cell is first closed as `stale` and its stake refunded, exactly like the 7-day close; act on rock or a cell that is not on the map |
+
+Clearing a tile deletes its `world_claims` row, and the database cascades that to the cell's
+(already closed) `world_challenges` history. The Seeds those challenges moved stay in `seed_ledger`,
+which is never touched. Reassigning a tile keeps its history.
+
+Needs: migration `0014_world_challenges.sql` (it adds the `'admin'` tile source) and the `duel` Edge
+Function redeployed. Until then the two forms answer "This needs the updated server" and change nothing.
+
+### 3b. Bots vs real people testing the game (2026-10-24)
+
+The owner: *"i mainly care about not confusing bots with real players who are testing the game."*
+There are **three** groups, and the dashboard never collapses the last two:
+
+1. **Automated test accounts** — created by an e2e suite, a soak/simulation script or CI. Nothing
+   human looks at them. Hidden from every human-facing view by default; listed on the **Bots** tab.
+2. **Real people testing the game** — the owner, friends, invited playtesters. **Never hidden**, and
+   never labelled a bot. Their guest name is generated from their id like everyone else's, so a
+   generated-looking name is not evidence of anything.
+3. **Regular players** — humans, same as group 2.
+
+**How an account is classified** (`classificationOf`, `server/src/admin/players.ts` — one function,
+both stores, the dashboard reads its sentence):
+
+| evidence | result |
+|---|---|
+| the owner's override (`players.test_override`) | wins in both directions, and is reversible |
+| `players.is_test` + the reason written when it was marked | bot, with that reason shown |
+| `players.is_test` with no reason recorded | bot, "no reason recorded" shown — never a guessed reason |
+| no marker | **human**. Names are never consulted |
+
+**Two ways the marker is written**, both explicit:
+
+- **At creation** (`POST /v1/guests` with `x-futasaku-traffic: test` → `is_test = true`, reason
+  "Tagged at creation by an automated test harness"). `DuelClient` sends it by default when there is
+  no browser, because a real player is always in a browser and a harness is always a Node process;
+  `testTraffic` remains an explicit option. The game's own guest creation never sends it.
+- **The conservative backfill** (`server/scripts/backfill-test-bursts.ts`, dry-run by default): only a
+  `guest` with **no recorded activity of any kind ever** (no match seat, wallet, ledger, claim,
+  receipt, report, identity or presence) **and** created inside a CI-sized burst (≥ 8 accounts within
+  ±5 minutes) **and** older than 6 hours. Anything ambiguous is left human on purpose.
+
+**The correction.** The Bots tab prints each reason and offers *"This is a real person — always
+show"*: `POST /v1/admin/players/:id/visibility {override:'human'}`, stored on the player row so it
+survives a reload, audited in the same transaction, and honoured by **every** admin read
+(`coalesce(test_override, is_test)`). *"Undo"* hands the row back to its stored marker. A corrected
+account moves between the human list and the Bots tab immediately, and the counts are recomputed from
+the rows, so `humans + bots` always equals the total shown.
+
+**The game's campaign/training bots are not here** and never were players: they live in `src/bots/`
+and leave no `players` row (they are verified offline by `server/src/seeds/verify.ts`). The Bots tab
+states this so "bots" cannot be read as "in-game opponents".
 
 ---
 
@@ -149,12 +238,17 @@ publishing, no gameplay change.
 | Rules drift | `matches.rules_version` grouped against `CURRENT_RULES_VERSION` |
 | Guest → account | `players.kind`, `created_at`, `player_identities` |
 | Health | the same storage ping `/v1/health?db=1` already uses |
+| DAU / WAU (proven activity) | distinct non-test players with a finished duel, a territory claim, or a create on that UTC day / last 7 UTC days (`GET /v1/admin/analytics`) |
+| Create-day D1 / D7 | of players created on cohort day C, share with proven activity on C+1 / C+7 — **null until the observation window is complete** |
+| New-player funnel (28 d) | first finished match, first claim, invite sent/joined, rematch, repeat matches among non-test creates in the lookback |
 
 ### Unavailable, and shown as unavailable rather than guessed
 
-- **Active users, retention, engagement, DAU/MAU.** The database keeps no trustworthy per-player
-  last-seen history. `players` has no such column, and live-duel `presence_*` is current state, not a
-  history. The Overview screen says so in a labelled panel. **No such metric is displayed.**
+- **Browser sessions, page views, or a classic last-seen visit log.** The database has no per-day
+  presence history; live-duel `presence_*` is current state only. Analytics therefore defines
+  "active" from finished duels, claims and creates, and prints that definition on the screen.
+- **Incomplete D1 / D7 windows.** A cohort younger than the offset never shows a partial rate — the
+  cell is `—` / `null`, not a cheerful fraction of a half-day.
 - **Campaign/Training matches in the match counts.** They never create a `matches` row; they are
   counted on the Campaign screen from their reward receipts. The Overview panel says so.
 - **A level nobody has ever played.** It leaves no row anywhere, so the dashboard cannot distinguish
@@ -200,14 +294,15 @@ by that rule (a test asserts the literal message still appears in JSON).
 | Economy balance | Seeds & world | `seed_wallets` lifetime totals, `seed_ledger` by category, receipts/denials, and **minted-per-Seed-spent** (with the caps in force read from the economy's own constants) |
 | Worst-build view | Overview + Health & ops | `feedback_reports` grouped on the normalised build, crashes vs reports |
 | CSV export | Reports | the same authorized endpoint and field list, capped at 5,000 |
-| Report triage | Reports | the single mutation, with `admin_audit` |
+| Report triage | Reports | a mutation, with `admin_audit` |
+| Seeds and tile edits | Seeds and world | the owner's test edits (§3a), each with `admin_audit` |
 | Campaign reset (this browser) | Player | the game's own local campaign record — see §5a |
 
 ### 5a. Campaign reset — the one thing no server can reset
 
 Campaign progress is the single piece of player state the database does not hold. Unlocked levels,
 the best attempt per level and the unfinished campaign match live in the player's browser
-(`severgrow.campaign.progress.v2`, `severgrow.campaign.save.v2`, `severgrow.lastmode.v1`; see
+(`severgrow.campaign.progress.v3`, `severgrow.campaign.save.v3`, `severgrow.lastmode.v1`; see
 `src/campaign/progress.ts`). The server records only the Seeds a first clear paid.
 
 So the Player screen offers **“Reset campaign progress”**, which clears those keys in **the browser
@@ -250,6 +345,30 @@ npm run server:migrate                 # applies it (ONLY after approval)
 **Until it is applied**, the dashboard's triage and "seen" writes will fail (503/500 on those two calls)
 and the report list will read as if every report were `new` — the read screens otherwise work, because
 `feedback_triage` is only ever `LEFT JOIN`ed.
+
+### 6a. `0016_player_visibility.sql` — APPLIED (2026-10-24)
+
+Two **nullable** columns on `players` and nothing else, so every existing row keeps exactly the meaning
+it had (`null` override == follow `is_test`):
+
+| column | why |
+|---|---|
+| `test_reason text` | the evidence behind a bot call ("Tagged at creation by an automated test harness", or the backfill's burst sentence). Shown beside the account so the owner can judge it, never guessed |
+| `test_override boolean` | the owner's correction: `false` = always a real person, `true` = always a bot, `null` = follow `is_test`. Read by **every** admin query as `coalesce(test_override, is_test)` |
+
+Additive and idempotent (`add column if not exists`), no backfill inside the migration, no index
+(the table is small and the effective predicate is a `coalesce`), same RLS lock-down as its
+predecessors (P-21). Applied on the live project with `npm run server:migrate`; verified present in
+`information_schema.columns`.
+
+```sh
+npm run server:migrate -- --status   # 0016 shows "applied"
+```
+
+The history marking is a **data** change, done separately and reversibly:
+`npm run server:backfill-bots` (dry run) / `npm run server:backfill-bots -- --commit` — 118 rows on
+2026-10-24. It never deletes and never touches accounts. Revert one row from the Bots tab, or all of
+them with the `update` the script prints.
 
 ---
 
@@ -303,8 +422,10 @@ and the report list will read as if every report were `new` — the read screens
 | suite | covers |
 |---|---|
 | `server/tests/admin.test.ts` | authorization on **every** endpoint (no token → 401, player → 403, admin → 200); the empty allow-list locking everything; a second id in the list; the allow-list parser (and that junk can never become an admin); triage + audit; filters, keyset pagination, the limit clamp; the CSV header/cap/formula hardening; `normalizeBuild`; the economy ratio with no denominator; **the ledger reconciled entry by entry against the authoritative wallet** (including a replayed repeat clear and a zero-award denial); **the world replay bucketed against the stored claims**; the campaign shaper (recorded rows, opaque ids, incomplete list); and that no secret or hidden-state column can reach a payload |
+| `admin/tests/players-view.test.ts` | the human/bot split: the default is humans; a **human whose name looks generated is never hidden**; a marked account is hidden and counted as hidden; `humans + bots` equals the total; the "N hidden" count follows the same search; `traffic=all` / `bots`; an owner override moves the row between the lists |
+| `server/tests/admin-bots.test.ts` | `classificationOf` (override first, marker + reason, never a name; deterministic); the summary's separate human/bot counts and the 24 h testing signal; the in-memory override persisting and moving the row; a bot still absent from every other read; the real SQL being one scoped `update players set test_override …` plus its `admin_audit` row in one transaction |
 | `admin/tests/format.test.ts` | the pure formatting/replay logic; **no game source imports `admin/`**; the dashboard carries no key or connection string; its own Vite root and output; and a stylesheet check that it introduces no colour, radius or shadow outside the app's own tokens |
-| `web/e2e/admin-dashboard.ts` | the built page in Chromium against a real local API: the access-denied screen for a normal player, all six screens plus Health & ops, "since you last looked", triage + the note really stored, CSV 200/403, the 183-hex map and a cumulative replay, keyboard navigation, and no horizontal overflow at 390 px |
+| `web/e2e/admin-dashboard.ts` | the built page in Chromium against a real local API: the access-denied screen for a normal player, every screen (including **Bots**) plus Health & ops, "since you last looked", triage + the note really stored, CSV 200/403, the whole map (every cell in `server/src/world.ts`) and a cumulative replay, the Seeds and tile edits made by clicking, keyboard navigation, no horizontal overflow at 390 px, and the bot split end to end: the automated account hidden from All players with "1 bot hidden", a human with a generated name kept, the reason shown on the Bots tab, and an override that survives a reload and moves the account between the lists |
 | `tests/compose-futa05-preview.test.ts` | the composer publishes `/admin/` **only** when handed a build, puts it at the site root (never inside `/firststep/`), teaches the root worker to ignore it, and refuses a build that could not work from a subdirectory |
 
 ```sh

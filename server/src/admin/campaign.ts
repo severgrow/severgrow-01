@@ -77,6 +77,9 @@ export const shapeCampaign = (receipts: readonly CampaignReceipt[], paidLevels: 
   let deniedCount = 0;
 
   for (const receipt of receipts) {
+    // Territory achievements share the reward table (mode 'campaign', key `achievement:<id>`) but are
+    // not levels: leave them out of the Campaign screen.
+    if (receipt.sourceKey.startsWith('achievement:')) continue;
     const levelId = levelIdOfSourceKey(receipt.sourceKey);
     const tally = levels.get(levelId) ?? {
       levelId,

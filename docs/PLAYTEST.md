@@ -20,8 +20,8 @@ Live at **https://www.futasaku.com** — the real thing, a real server, real acc
 > **What to try, roughly in this order:**
 >
 > 1. **Tutorial** first if you've never played — it teaches one turn at a time.
-> 2. **PLAY → Training** for a game against the computer. Easy if you want to learn, Hard if you
->    want to be beaten up.
+> 2. **PLAY → Practice match** for a game against the computer. Easy if you want to learn, Hard if
+>    you want to be beaten up.
 > 3. **PLAY → LEVEL 1–30** — a campaign. Starts very gentle and gets nasty around level 11.
 > 4. **PLAY → Play online → Create a duel.** Share the 4-character code with someone else testing,
 >    or send them the link. Then play your turns — you each get 24 hours, so you can take your time.
@@ -107,7 +107,7 @@ Know these before they do. None of them should stop a game being played.
 | 7b | **The other per-IP limits do apply to the group** | Ten in one house share: **create 120/hour** (12 duels each), **join 400/hour** (40 each), **guests 200/hour**. Generous — and measured tonight: 11 creates + 21 guests + 20 joins from one IP in one hour, no refusals. Only a rematch marathon would reach the create ceiling. |
 | 8 | **No accounts beyond Google, and no password reset by design** | If someone clears their browser data without an account, their guest identity is gone. Sign in with Google first and this cannot happen. |
 | 9 | **A wrong invite code used to say "Something went wrong"** | **Fixed.** The join screen was mapping six error codes the server has never sent and missing all three it does send, so every failed join — the likeliest thing to go wrong tomorrow — read as a broken app. Now: a wrong code says "*That code is wrong or has expired*", a full duel says it is full, a finished one says it has finished. Two regression tests hold it: one drives the real server, one fails if the client ever maps a code the server cannot emit. Tests passed while the feature was broken, which is why this is now guarded rather than trusted. |
-| 10 | **A native browser confirm when you start a new game over a saved one** | Clicking **Training** with a saved game asks `window.confirm("Start a new game? The saved game will be lost.")`. It works, but it is the **only** piece of the app that looks like a browser alert instead of FUTASAKU. Cosmetic; not worth risking a change before the playtest. |
+| 10 | **A native browser confirm when you start a new game over a saved one** | Clicking **Practice match** with a saved game asks `window.confirm("Start a new game? The saved game will be lost.")`. It works, but it is the **only** piece of the app that looks like a browser alert instead of FUTASAKU. Cosmetic; not worth risking a change before the playtest. |
 | 11 | **On a tall phone the Territory cannot zoom out to the whole world** | You chose a map that fills the column, and the world is nearly square — so filling the height on a portrait phone crops the width. You see ~151 of 183 tiles and can **pan** to the rest (verified: it clamps at the world edge). Zoom-*out* stops at the framed view, so the entire map at once is desktop/landscape only. A deliberate trade for "no empty bands"; it can be changed back if seeing all 183 at a glance matters more. |
 | 12 | **Old test rows are still in the database** | ~228 throwaway guests and ~101 matches from testing, all auto-generated nature names. **Invisible to testers** (matches are per-player) — the only thing you would notice is inflated numbers on the admin dashboard. I left them in place deliberately: tidying them needs a multi-table delete against `RESTRICT` foreign keys, and I would rather not do that hours before a playtest. Say so and I will sweep them cleanly. |
 

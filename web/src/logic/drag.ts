@@ -13,10 +13,30 @@ import { comboFor, drawNext, paintEnter, paintMatch } from './draw.js';
 
 /** A move under this many pixels stays a tap: the drag never starts. */
 export const DRAG_THRESHOLD_PX = 10;
-/** Peak upward speed (px/ms) that turns a throw drag into a flick. */
-export const FLICK_SPEED_PX_PER_MS = 0.28;
-/** Upward travel (px) that, with enough peak speed, also counts as a flick. */
-export const FLICK_TRAVEL_PX = 64;
+/**
+ * A started Throw-step move shorter than this is still a tap (owner, 2026-10-25: a tap must
+ * deselect, never throw). It covers the 10px drag threshold plus a thumb's slop, and it also
+ * stops a tiny drift into the pile's 96px grab radius from counting as a drag onto the pile.
+ */
+export const SWIPE_TAP_PX = 24;
+/** Upward travel (px) a swipe must cover before it can mean a throw. */
+export const SWIPE_MIN_UP_PX = 48;
+/** The upward share of the total travel: at least this much before it is "up", not "sideways". */
+export const SWIPE_UP_DOMINANCE = 0.65;
+/**
+ * Peak upward speed (px/ms) that turns a throw drag into a swipe. 0.15 = 150 px/s.
+ *
+ * Owner, 2026-10-25 ("I don't see it at all"): the old 0.28 (280 px/s) was a brisk flick, not a
+ * considered thumb swipe, so a normal swipe fell through to "a deliberate drag that missed" and
+ * threw nothing. Measured on the real page, a 150px swipe over 300ms reads ~0.5 px/ms and a
+ * 60px flick ~0.19; a deliberately slow 120px drag over 1.3s reads ~0.12. 0.15 sits in the gap.
+ *
+ * The speed is measured over a window of at least FLICK_WINDOW_MS in `ui/drag-layer.ts`, so one
+ * jittery pointer frame cannot fake a swipe.
+ */
+export const FLICK_SPEED_PX_PER_MS = 0.15;
+/** The window (ms) the drag layer averages upward speed over before calling it a speed. */
+export const FLICK_WINDOW_MS = 36;
 /** How close (px) the pointer must come to the throw pile / cockpit throw zone. */
 export const PILE_GRAB_PX = 96;
 
@@ -54,15 +74,13 @@ export type DragInput = {
   overDiscardPile: boolean;
   /** The Bloom shape painted so far (the caller keeps it between moves). */
   shape: readonly string[];
-  /** Peak upward speed so far this gesture (px/ms, 0 when it never moved up). */
+  /**
+   * The fastest upward speed seen this gesture (px/ms, 0 when it never moved up). The page reads
+   * it over a window of at least FLICK_WINDOW_MS so a single jittery frame cannot fake a swipe.
+   */
   upSpeed: number;
   /** How far upward the pointer has travelled from the press (px, 0 when below start). */
   upTravel: number;
-  /**
-   * True when a fast upward swipe may commit a flick throw (most of the screen
-   * above the action buttons).
-   */
-  upperBoard: boolean;
   /** Bloom paint order (matches the board's Reverse toggle). */
   reverse?: boolean;
 };
@@ -82,6 +100,11 @@ export type DragResolution = {
   openOptions: boolean;
   /** The LED word while over a matching target, or null to leave the sign alone. */
   led: DragLedWord | null;
+  /**
+   * True when a started Throw-step move was too short / ambiguous to be a throw, so releasing it
+   * must run the same tap the click would have run (select, or deselect the picked card).
+   */
+  asTap?: boolean;
 };
 
 /** True when `a` uses a card identical (same suit and rank) to `card`: copies play the same. */
@@ -116,19 +139,37 @@ function resolveDiscardSource(input: DragInput): DragResolution {
   return { active: true, mode: 'draw-discard', commit: draw, hoverKey: null, hover: 'legal', shape: [], openOptions: false, led: 'DRAW' };
 }
 
-/** A hand card in the Throw step: onto the pile, or flicked up. Crossing the board does nothing. */
+/**
+ * A hand card in the Throw step: a swipe up, or a drag onto the Throw pile. Crossing the board
+ * does nothing. The source card is fixed at pointerdown, so a gesture that ends over a different
+ * card is still the original card's throw.
+ *
+ * The swipe is judged by its own shape (travel, direction, peak speed), never by where it is
+ * released: on a phone a clear 50px swipe is still inside the hand. That is the owner's "swipe up
+ * ... upward anywhere sensible in the hand" (2026-10-25), and it is what a thumb can actually do.
+ */
 function resolveThrow(input: DragInput, card: Card): DragResolution {
   const discard = input.legal.find((a) => a.t === 'Discard' && a.card === card.id)
     ?? input.legal.find((a) => a.t === 'Discard' && sameCard(input.view, a.card, card));
   if (!discard) return cancel(input);
-  // Peak speed + upper board, or a clear upward swipe (travel) with a softer peak — release
-  // often decelerates, so the last frame alone used to miss flicks.
-  const flick = (input.upSpeed >= FLICK_SPEED_PX_PER_MS && input.upperBoard)
-    || (input.upSpeed >= FLICK_SPEED_PX_PER_MS * 0.55 && input.upTravel >= FLICK_TRAVEL_PX);
-  if (flick) return { active: true, mode: 'flick', commit: discard, hoverKey: null, hover: 'flick', shape: [], openOptions: false, led: 'THROW' };
-  if (input.overDiscardPile) return { active: true, mode: 'discard', commit: discard, hoverKey: null, hover: 'pile', shape: [], openOptions: false, led: 'THROW' };
-  // A slow drag over a legal hex is never a throw: with no pile highlight nothing is committed.
-  return { active: true, mode: 'discard', commit: null, hoverKey: null, hover: 'none', shape: [], openOptions: false, led: null };
+  const up = Math.max(0, input.upTravel);
+  const upright = up >= SWIPE_MIN_UP_PX && up >= SWIPE_UP_DOMINANCE * Math.max(input.distance, 1);
+  // One rule (owner, 2026-10-25): a clearly upward swipe at 150 px/s or faster is a throw. The old
+  // second tier ("a softer peak still counts after 64px") existed because a single slow final
+  // frame could hide a flick; the speed is now read over a >=36ms window, so the last frame can no
+  // longer decide it and the extra tier would only let a deliberately slow drag throw.
+  const flick = upright && input.upSpeed >= FLICK_SPEED_PX_PER_MS;
+  if (flick) return { active: true, mode: 'flick', commit: discard, hoverKey: null, hover: 'flick', shape: [], openOptions: false, led: 'THROW', asTap: false };
+  // The pile is a drop target only once the move is a real drag, not a jitter inside its grab
+  // radius. Under SWIPE_TAP_PX it falls through to the tap below.
+  if (input.distance >= SWIPE_TAP_PX && input.overDiscardPile)
+    return { active: true, mode: 'discard', commit: discard, hoverKey: null, hover: 'pile', shape: [], openOptions: false, led: 'THROW', asTap: false };
+  // Nothing was thrown. A short, sloppy move is still a tap (so it deselects, never throws); a
+  // deliberate drag that missed its target simply flies back.
+  return {
+    active: true, mode: 'discard', commit: null, hoverKey: null, hover: 'none', shape: [], openOptions: false, led: null,
+    asTap: input.distance < SWIPE_TAP_PX,
+  };
 }
 
 /** A hand card in the Grow step: Mega Bomb, Bloom paint, one-tile place, or open options. */

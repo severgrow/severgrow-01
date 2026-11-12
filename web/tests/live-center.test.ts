@@ -1,5 +1,5 @@
 // Live duels — the challenge listener with a fake server, a fake channel and a fake clock.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ChallengeWire, LiveApi, MyChallengesWire } from '../src/online/live/api.js';
 import { POLL_MS, REALTIME_IDLE_POLL_MS, createChallengeCenter } from '../src/online/live/center.js';
 import type { PopupPort, Probe } from '../src/online/live/center.js';
@@ -142,6 +142,101 @@ describe('deferral rules', () => {
 });
 
 describe('challenge listener', () => {
+  it('still drains a notification when the older inbox request fails', async () => {
+    const t=setup({realtime:true});let reject!:(error:Error)=>void;let reads=0;
+    t.server.api.inbox=()=>++reads===1?new Promise((_resolve,fail)=>{reject=fail;}):Promise.resolve({incoming:[challenge()],outgoing:[],liveMatchId:null,challengesEnabled:true,serverNow:t.clock.now()});
+    t.center.start();t.ping();const pending=t.center.pollNow();reject(new Error('offline'));await pending;
+    expect(reads).toBe(2);expect(t.popup.shown).toEqual(['c1']);t.center.stop();
+  });
+  it('uses the existing fallback interval after a failed connected inbox read', async () => {
+    const t=setup({realtime:true});let reads=0;const read=t.server.api.inbox;
+    t.server.api.inbox=async()=>{if(++reads===1)throw new Error('offline');return read();};
+    t.center.start();await t.flush();await t.clock.advance(POLL_MS);await t.flush();
+    expect(reads).toBe(2);t.center.stop();
+  });
+  it('closes an expired invitation at its server deadline, before the next safety poll', async () => {
+    const t=setup({realtime:true});t.server.setInbox({incoming:[challenge({expiresAt:t.clock.now()+750})]});
+    t.center.start();await t.flush();expect(t.popup.open()).not.toBeNull();
+    await t.clock.advance(750);expect(t.popup.open()).toBeNull();t.center.stop();
+  });
+  it('announces acceptance once when the inbox beats the acceptance response', async () => {
+    const t=setup();let release!:(value:{challenge:ChallengeWire;liveMatchId:string})=>void;
+    const reply=new Promise<{challenge:ChallengeWire;liveMatchId:string}>(resolve=>{release=resolve;});
+    t.server.api.accept=()=>reply;t.server.setInbox({incoming:[challenge()]});
+    t.center.start();await t.flush();t.popup.open()!.accept();
+    t.server.setInbox({incoming:[],liveMatchId:'m1'});await t.center.pollNow();
+    release({challenge:challenge({status:'accepted'}),liveMatchId:'m1'});await reply;
+    expect(t.started).toEqual(['m1']);t.center.stop();
+  });
+  it('keeps hidden-page notifications quiet and recovers the invitation on return', async () => {
+    const t=setup({realtime:true});t.center.start();await t.flush();
+    const reads=t.server.calls.filter(c=>c==='inbox').length;
+    t.state.visible=false;t.server.setInbox({incoming:[challenge()]});t.ping();await t.flush();
+    expect(t.server.calls.filter(c=>c==='inbox')).toHaveLength(reads);
+    expect(t.popup.shown).toEqual([]);
+    t.state.visible=true;await t.center.pollNow();
+    expect(t.popup.shown).toEqual(['c1']);t.center.stop();
+  });
+  it('cannot navigate from an acceptance that finishes after the listener is stopped', async () => {
+    const t=setup();let release!:(value:{challenge:ChallengeWire;liveMatchId:string})=>void;
+    t.server.api.accept=()=>new Promise(resolve=>{release=resolve;});
+    t.server.setInbox({incoming:[challenge()]});t.center.start();await t.flush();
+    t.popup.open()!.accept();t.center.stop();
+    release({challenge:challenge({status:'accepted'}),liveMatchId:'old-account-match'});await t.flush();
+    expect(t.started).toEqual([]);
+  });
+  it('can retry a failed acceptance without losing the still-pending invitation', async () => {
+    const t=setup();const accept=t.server.api.accept;let attempts=0;
+    t.server.api.accept=async id=>{if(++attempts===1)throw new Error('offline');return accept(id);};
+    t.server.setInbox({incoming:[challenge()]});t.center.start();await t.flush();
+    t.popup.open()!.accept();await t.flush();
+    t.ping();await t.flush();
+    expect(t.popup.open()?.c.id).toBe('c1');
+    t.popup.open()!.accept();await t.flush();
+    expect(attempts).toBe(2);await vi.waitFor(()=>expect(t.started).toEqual(['m1']));t.center.stop();
+  });
+
+  it('serialises presence writes so an older idle heartbeat cannot overwrite a new state', async () => {
+    const t=setup();let release!:()=>void;const states:string[]=[];
+    t.server.api.presence=async status=>{states.push(status);if(states.length===1)await new Promise<void>(resolve=>{release=resolve;});};
+    t.center.start();t.state.tutorial=true;
+    const pending=t.center.heartbeatNow();
+    expect(states).toEqual(['idle']);
+    release();await pending;
+    expect(states).toEqual(['idle','tutorial']);t.center.stop();
+  });
+
+  it('ignores an inbox that finishes after stop, including an accepted challenge', async () => {
+    const t = setup();
+    t.center.start();await t.flush();
+    let release!: (value: MyChallengesWire) => void;
+    t.server.api.inbox = () => new Promise(resolve => { release = resolve; });
+    const pending = t.center.pollNow();
+    t.center.stop();
+    release({ incoming: [], outgoing: [], liveMatchId: 'old-account-match', challengesEnabled: true, serverNow: t.clock.now() });
+    await pending;
+    expect(t.started).toEqual([]);
+  });
+
+  it('rechecks after a ping during an older inbox read, coalescing repeated notifications', async () => {
+    const t = setup({ realtime: true });
+    let release!: (value: MyChallengesWire) => void;
+    let reads = 0;
+    t.server.api.inbox = () => {
+      reads++;
+      if (reads === 1) return new Promise(resolve => { release = resolve; });
+      return Promise.resolve({ incoming: [challenge()], outgoing: [], liveMatchId: null, challengesEnabled: true, serverNow: t.clock.now() });
+    };
+    t.center.start();
+    const pending = t.center.pollNow();
+    t.ping();t.ping();
+    release({ incoming: [], outgoing: [], liveMatchId: null, challengesEnabled: true, serverNow: t.clock.now() });
+    await pending;
+    expect(reads).toBe(2);
+    expect(t.popup.shown).toEqual(['c1']);
+    t.center.stop();
+  });
+
   it('heartbeats and polls while visible, pauses when hidden, cleans up on stop', async () => {
     const t = setup();
     t.center.start();
@@ -342,6 +437,27 @@ describe('return target', () => {
 });
 
 describe('player channel: connected only after a confirmed join', () => {
+  it('ignores late events from a replaced socket after reconnect', async () => {
+    vi.useFakeTimers();
+    const {createPlayerChannel}=await import('../src/online/live/channel.js');
+    const sockets: {emit:(type:string,data?:unknown)=>void}[]=[];
+    const ch=createPlayerChannel(()=>{
+      const listeners:Record<string,((e:{data?:unknown})=>void)[]>={};
+      const socket={readyState:1,send:()=>{},close:()=>{},addEventListener:(type:string,cb:(e:{data?:unknown})=>void)=>{(listeners[type]??=[]).push(cb);}};
+      sockets.push({emit:(type,data)=>{for(const cb of listeners[type]??[])cb({data});}});return socket;
+    },{url:'https://x.supabase.co',key:'anon'});
+    const stop=ch.subscribe('p1',()=>{});
+    try {
+      sockets[0]!.emit('error');await vi.advanceTimersByTimeAsync(1000);
+      expect(sockets).toHaveLength(2);
+      sockets[1]!.emit('open');
+      sockets[1]!.emit('message',JSON.stringify({topic:'realtime:player:p1',event:'phx_reply',payload:{status:'ok'}}));
+      expect(ch.connected?.()).toBe(true);
+      sockets[0]!.emit('close');
+      expect(ch.connected?.()).toBe(true);
+      await vi.advanceTimersByTimeAsync(2000);expect(sockets).toHaveLength(2);
+    } finally {stop();vi.useRealTimers();}
+  });
   it('reports connected after the server confirms the join, and not after the socket drops', async () => {
     const { createPlayerChannel } = await import('../src/online/live/channel.js');
     type L = (ev: { data?: unknown }) => void;
@@ -355,12 +471,16 @@ describe('player channel: connected only after a confirmed join', () => {
     };
     {
       const ch = createPlayerChannel(() => sock, { url: 'https://x.supabase.co', key: 'anon' });
-      const stop = ch.subscribe('p1', () => undefined);
+      let pings = 0;
+      const stop = ch.subscribe('p1', () => { pings++; });
       expect(ch.connected?.()).toBe(false);
       listeners.open!.forEach((f) => f({}));
       expect(ch.connected?.()).toBe(false); // an open socket is not a join
       listeners.message!.forEach((f) => f({ data: JSON.stringify({ topic: 'realtime:player:p1', event: 'phx_reply', payload: { status: 'ok' } }) }));
       expect(ch.connected?.()).toBe(true);
+      expect(pings).toBe(1); // joining recovers notifications missed before the subscription existed
+      listeners.message!.forEach((f) => f({ data: JSON.stringify({ topic: 'realtime:player:p1', event: 'phx_reply', payload: { status: 'ok' } }) }));
+      expect(pings).toBe(1); // duplicate acknowledgements are not new subscriptions
       listeners.close!.forEach((f) => f({}));
       expect(ch.connected?.()).toBe(false);
       stop();

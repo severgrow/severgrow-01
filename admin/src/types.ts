@@ -4,6 +4,7 @@
 // the server breaks this build's typecheck immediately, which is the point: the dashboard cannot
 // drift from the API it reads. Everything here is `import type`, so no server code is bundled.
 export type {
+  AdminAnalytics,
   AdminBuildRow,
   AdminCampaign,
   AdminDayCount,

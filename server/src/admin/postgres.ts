@@ -5,11 +5,14 @@
 // `player_tokens` (token hashes), `matches.invite_code`, `match_moves.events` payloads,
 // `player_identities.subject` (the Google subject) and any email. The API's response shapes in
 // types.ts are the whitelist; nothing here can widen them.
-import { WORLD_CELLS, WORLD_VERSION } from '../world.js';
+import { WORLD_CELLS, seenCellIds } from '../world.js';
 import { SEED_ECONOMY } from '../seeds/config.js';
 import { ApiError } from '../errors.js';
+import { newId } from '../ids.js';
 import { playerTag } from '../../../src/player-tag.js';
 import { shapeCampaign } from './campaign.js';
+import { classificationOf, shapePlayers, PLAYERS_LIMIT } from './players.js';
+import { shapeAnalytics, type AnalyticsPlayerFact } from './analytics.js';
 import type { PgPool } from '../storage/postgres.js';
 import type {
   AdminAuditEntry,
@@ -87,16 +90,22 @@ const requireAdminTables = async <T>(run: () => Promise<T>): Promise<T> => {
 //     the dashboard. Only the MATCH is hidden; the real player's own row is untouched.
 //
 // Every read below uses these so the rule cannot drift from the query. A test asserts the SQL.
+/**
+ * The owner's override (migration 0016 `players.test_override`) is part of the rule, not a UI
+ * decoration: when he says "this is a real person", that account is a real person on every screen.
+ * `coalesce(test_override, is_test)` is the effective marker; null means "follow the stored marker".
+ */
+export const EFFECTIVE_TEST = (alias: string): string => `coalesce(${alias}.test_override, ${alias}.is_test)`;
 /** A row that carries the flag itself (`players` / `matches`). */
-export const NOT_TEST = (alias: string): string => `${alias}.is_test = false`;
+export const NOT_TEST = (alias: string): string => `${EFFECTIVE_TEST(alias)} = false`;
 /** A row that OWNS/REFERENCES a player by id (wallets, ledger, receipts, claims, reports, links). */
 export const PLAYER_OF_NOT_TEST = (expr: string): string =>
-  `not exists (select 1 from players vis_p where vis_p.id = ${expr} and vis_p.is_test)`;
+  `not exists (select 1 from players vis_p where vis_p.id = ${expr} and ${EFFECTIVE_TEST('vis_p')})`;
 /** A match is visible only when neither it nor any of its participants is marked. */
 export const MATCH_VISIBLE = (alias: string): string =>
   `${alias}.is_test = false and not exists (` +
   `select 1 from match_participants vis_mp join players vis_pl on vis_pl.id = vis_mp.player_id ` +
-  `where vis_mp.match_id = ${alias}.id and vis_pl.is_test)`;
+  `where vis_mp.match_id = ${alias}.id and ${EFFECTIVE_TEST('vis_pl')})`;
 
 /**
  * Run the query thunks ONE AT A TIME, in order.
@@ -337,6 +346,77 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
       return overview;
     },
 
+    async analytics(now) {
+      const players = await pool.query(
+        `select p.id, p.created_at from players p where ${NOT_TEST('p')}`,
+      );
+      const finishes = await pool.query(
+        `select mp.player_id, m.finished_at, m.rematch_of
+           from match_participants mp
+           join matches m on m.id = mp.match_id
+          where m.status = 'finished' and m.finished_at is not null
+            and ${MATCH_VISIBLE('m')}`,
+      );
+      const claims = await pool.query(
+        `select c.owner_id, c.claimed_at from world_claims c where ${PLAYER_OF_NOT_TEST('c.owner_id')}`,
+      );
+      const invites = await pool.query(
+        `select mp.player_id as creator_id,
+                (select count(*)::int from match_participants mp2 where mp2.match_id = m.id) as seats
+           from matches m
+           join match_participants mp on mp.match_id = m.id and mp.seat = 0
+          where m.open_queue = false and m.live_since is null
+            and ${MATCH_VISIBLE('m')}`,
+      );
+      // Players who opened at least one guide lesson. A server without migration 0024 has no table:
+      // the guide step then reads as "nobody yet" rather than failing the whole dashboard.
+      const guides = await pool.query(
+        `select g.player_id from account_guide g
+          where jsonb_array_length(g.seen) > 0 and ${PLAYER_OF_NOT_TEST('g.player_id')}`,
+      ).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+
+      const facts = new Map<string, AnalyticsPlayerFact>();
+      for (const row of players.rows) {
+        const id = str(row.id);
+        const createdAt = num(row.created_at);
+        facts.set(id, {
+          playerId: id,
+          createdAt,
+          activityDays: new Set([utcDay(createdAt)]),
+          finishedMatchCount: 0,
+          invitesSent: 0,
+          invitesJoined: 0,
+          hasClaim: false,
+          rematchCount: 0,
+          guideOpened: false,
+        });
+      }
+      for (const row of guides.rows) {
+        const fact = facts.get(str(row.player_id));
+        if (fact) fact.guideOpened = true;
+      }
+      for (const row of finishes.rows) {
+        const fact = facts.get(str(row.player_id));
+        if (!fact) continue;
+        fact.finishedMatchCount += 1;
+        fact.activityDays.add(utcDay(num(row.finished_at)));
+        if (row.rematch_of !== null && row.rematch_of !== undefined) fact.rematchCount += 1;
+      }
+      for (const row of claims.rows) {
+        const fact = facts.get(str(row.owner_id));
+        if (!fact) continue;
+        fact.hasClaim = true;
+        fact.activityDays.add(utcDay(num(row.claimed_at)));
+      }
+      for (const row of invites.rows) {
+        const fact = facts.get(str(row.creator_id));
+        if (!fact) continue;
+        fact.invitesSent += 1;
+        if (num(row.seats) >= 2) fact.invitesJoined += 1;
+      }
+      return shapeAnalytics([...facts.values()], now);
+    },
+
     async reports(filter) {
       const limit = clampLimit(filter.limit);
       const where = reportWhere(filter);
@@ -406,6 +486,97 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
           client.release?.();
         }
       });
+    },
+
+    async grantSeeds(input) {
+      // One transaction, the same locking order as every other Seeds write (wallet row first), so a
+      // grant can never race a claim or a reward. Idempotent by its ledger key.
+      const client = await pool.connect();
+      try {
+        await client.query('begin');
+        const exists = await client.query('select 1 from players where id = $1', [input.playerId]);
+        if (exists.rows.length === 0) {
+          await client.query('rollback');
+          return null;
+        }
+        const sourceKey = `admin:${input.requestId}`;
+        await client.query('insert into seed_wallets(player_id) values ($1) on conflict do nothing', [input.playerId]);
+        const locked = await client.query('select balance from seed_wallets where player_id = $1 for update', [input.playerId]);
+        const prior = await client.query('select 1 from seed_ledger where player_id = $1 and source_key = $2', [input.playerId, sourceKey]);
+        if (prior.rows.length) {
+          await client.query('commit');
+          return { balance: num(locked.rows[0]?.balance), replayed: true };
+        }
+        const changed = await client.query(
+          `update seed_wallets set balance = balance + $2, lifetime_earned = lifetime_earned + $2
+            where player_id = $1 returning balance`, [input.playerId, input.amount],
+        );
+        const balance = num(changed.rows[0]?.balance);
+        await client.query(
+          `insert into seed_ledger(id,player_id,delta,balance_after,category,source_key,economy_version,created_at,metadata)
+           values($1,$2,$3,$4,'admin_grant',$5,$6,$7,$8::jsonb)`,
+          [newId(), input.playerId, input.amount, balance, sourceKey, SEED_ECONOMY.version, input.now,
+            JSON.stringify({ reason: input.reason, actorId: input.actorId })],
+        );
+        // An acknowledged payment must always have its audit record; either both commit or neither.
+        await client.query(
+          `insert into admin_audit (id, actor_id, action, target_type, target_id, detail, created_at)
+           values ($1,$2,$3,$4,$5,$6::jsonb,$7)`,
+          [newId(), input.actorId, 'seeds.grant', 'player', input.playerId,
+            JSON.stringify({ amount: input.amount, reasonLength: input.reason.length, balance, replayed: false }), input.now],
+        );
+        await client.query('commit');
+        return { balance, replayed: false };
+      } catch (error) {
+        await client.query('rollback').catch(() => undefined);
+        throw error;
+      } finally {
+        client.release?.();
+      }
+    },
+
+    async setPlayerVisibility(input) {
+      // The owner's correction lives on the player row (`test_override`), so it is one fact read by
+      // every screen: no join, no cache to go stale, and a reload cannot lose it. `null` clears the
+      // override and hands the row back to its stored marker.
+      const client = await pool.connect();
+      try {
+        await client.query('begin');
+        const updated = await client.query(
+          `update players set test_override = $2 where id = $1
+             returning is_test, test_reason, test_override`,
+          [input.playerId, input.override],
+        );
+        const row = updated.rows[0];
+        if (!row) {
+          await client.query('rollback');
+          return null;
+        }
+        // The audit row is written in the same transaction as the change it records.
+        await client.query(
+          `insert into admin_audit (id, actor_id, action, target_type, target_id, detail, created_at)
+           values ($1,$2,'player.visibility','player',$3,$4::jsonb,$5)`,
+          [newId(), input.actorId, input.playerId, JSON.stringify({ override: input.override }), input.now],
+        );
+        await client.query('commit');
+        const judged = classificationOf({
+          isTest: row.is_test === true,
+          testReason: nstr(row.test_reason),
+          testOverride: row.test_override === true ? true : row.test_override === false ? false : null,
+        });
+        return {
+          isTest: row.is_test === true,
+          testReason: nstr(row.test_reason),
+          testOverride: row.test_override === true ? true : row.test_override === false ? false : null,
+          classification: judged.classification,
+          reason: judged.reason,
+        };
+      } catch (error) {
+        await client.query('rollback').catch(() => undefined);
+        throw error;
+      } finally {
+        client.release?.();
+      }
     },
 
     async audit(entry: AdminAuditEntry) {
@@ -802,8 +973,19 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
         // or a guessed id cannot surface test data either.
         pool.query(`${MATCH_SELECT} where m.id = $1 and ${MATCH_VISIBLE('m')}`, [id]),
         pool.query(
+          // `events` is written as a JSON STRING around a JSON array (double-encoded): every row in
+          // the live table is `jsonb_typeof = 'string'`, so a bare `jsonb_array_length(events)`
+          // raises "cannot get array length of a scalar" and the whole match screen fails. Handle
+          // both shapes: an array as-is, a string that holds an array parsed, anything else counted
+          // as zero rather than crashing the page.
           `select revision, seat, player_id, action->>'type' as action_type, created_at,
-                  coalesce(jsonb_array_length(events), 0) as events
+                  coalesce(jsonb_array_length(
+                    case jsonb_typeof(events)
+                      when 'array' then events
+                      when 'string' then case when (events #>> '{}') like '[%' then (events #>> '{}')::jsonb else '[]'::jsonb end
+                      else '[]'::jsonb
+                    end
+                  ), 0) as events
              from match_moves where match_id = $1 order by revision asc limit ${clampLimit(moveLimit, 200)}`,
           [id],
         ),
@@ -876,7 +1058,8 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
       // until the platform's 150s idle timeout. It was reproduced with the PRE-filter SQL as well,
       // so it is a pre-existing runtime quirk, not the test filter — and one query at a time always
       // answers (~1.5s). Same rows, same order, no pipelining.
-      const meta = await pool.query('select revision from world_meta where version = $1', [WORLD_VERSION]);
+      // world_meta keeps ONE row, version 1 (its own check constraint), whatever the map's version.
+      const meta = await pool.query('select revision from world_meta where version = 1');
       const total = await pool.query(`select count(*)::int as n from world_claims c where ${PLAYER_OF_NOT_TEST('c.owner_id')}`);
       const owners = await pool.query(`select count(distinct c.owner_id)::int as n from world_claims c where ${PLAYER_OF_NOT_TEST('c.owner_id')}`);
       const byDay = await pool.query(
@@ -891,7 +1074,7 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
           where ${PLAYER_OF_NOT_TEST('c.owner_id')}
           order by c.claimed_at desc limit 20`,
       );
-      // Bounded by design: the v1 world is 183 hexes, so every claim fits in one page. The limit
+      // Bounded by design: the world is 275 hexes (v2), so every claim fits in one page. The limit
       // is a guard against a future expansion, not a silent truncation.
       const all = await pool.query(
         `select c.cell_id, c.owner_id, c.claimed_at from world_claims c
@@ -910,8 +1093,10 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
       return {
         serverNow: now,
         revision: num(meta.rows[0]?.revision),
-        cellsTotal: WORLD_CELLS.length,
-        cellIds: WORLD_CELLS.map((cell) => cell.id),
+        // The SEEN map (world v3): the v2 coast plus the land uncovered around every tile, the same
+        // set players see (server/src/world.ts), so a tile grown on new land shows here too.
+        cellsTotal: seenCellIds(all.rows.map((row) => str(row.cell_id))).size,
+        cellIds: [...seenCellIds(all.rows.map((row) => str(row.cell_id)))],
         totalClaims: num(total.rows[0]?.n),
         owners: num(owners.rows[0]?.n),
         claimsByDay: days.map((day) => ({ day, n: dayIndex.get(day) ?? 0 })),
@@ -949,6 +1134,77 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
           utcDay: str(row.utc_day),
         })),
         paid.rows.map((row) => ({ sourceKey: str(row.source_key), level: nnum(row.level) })),
+      );
+    },
+    async players(now) {
+      // One row per visible player, newest first, bounded. Every sub-read is keyed by the player id
+      // (indexed on each table) and never touches match_moves or matches.state. Campaign levels are
+      // parsed from the recorded `campaign:c<chapter>-<level>` key, exactly as the world map does.
+      // This read is deliberately NOT filtered to `is_test = false`: it is the one list that must be
+      // able to show the automated accounts (the Bots tab) and count them honestly beside the humans.
+      // The split is decided by `classificationOf` in players.ts; every OTHER read excludes bots.
+      const { rows } = await pool.query(
+        `select p.id, p.display_name, p.kind, p.created_at, p.presence_at,
+                p.is_test, p.test_reason, p.test_override,
+                exists (select 1 from player_identities i where i.player_id = p.id) as google,
+                mm.played, mm.finished, mm.wins, mm.last_at as match_last_at, mm.last_status as match_last_status,
+                cp.highest as campaign_highest, cp.clears as campaign_clears, cp.last_at as campaign_last_at, cp.last_level as campaign_last_level,
+                (select count(*)::int from feedback_reports f where f.player_id = p.id) as reports,
+                (select max(f.created_at) from feedback_reports f where f.player_id = p.id) as report_last_at,
+                (select count(*)::int from world_claims c where c.owner_id = p.id) as tiles,
+                (select max(c.claimed_at) from world_claims c where c.owner_id = p.id) as tile_last_at,
+                coalesce((select w.balance from seed_wallets w where w.player_id = p.id), 0) as seeds
+           from players p
+           left join lateral (
+             select count(*)::int as played,
+                    count(*) filter (where m.status = 'finished')::int as finished,
+                    count(*) filter (where m.status = 'finished' and m.result->>'winner' = mp.seat::text)::int as wins,
+                    max(m.updated_at) as last_at,
+                    (array_agg(m.status order by m.updated_at desc))[1] as last_status
+               from match_participants mp join matches m on m.id = mp.match_id
+              where mp.player_id = p.id and ${MATCH_VISIBLE('m')}
+           ) mm on true
+           left join lateral (
+             select max((substring(r.source_key from '^campaign:c[0-9]+-([0-9]+)$'))::int) as highest,
+                    count(*) filter (where r.awarded > 0)::int as clears,
+                    max(r.created_at) as last_at,
+                    (array_agg((substring(r.source_key from '^campaign:c[0-9]+-([0-9]+)$'))::int order by r.created_at desc))[1] as last_level
+               from seed_reward_receipts r
+              where r.player_id = p.id and r.mode = 'campaign'
+           ) cp on true
+          order by p.created_at desc
+          limit ${PLAYERS_LIMIT * 5}`,
+      );
+      return shapePlayers(
+        rows.map((row) => ({
+          id: str(row.id),
+          displayName: nstr(row.display_name),
+          kind: str(row.kind) === 'account' ? ('account' as const) : ('guest' as const),
+          createdAt: num(row.created_at),
+          google: row.google === true,
+          presenceAt: nnum(row.presence_at),
+          isTest: row.is_test === true,
+          testReason: nstr(row.test_reason),
+          testOverride: row.test_override === true ? true : row.test_override === false ? false : null,
+          matches: {
+            played: num(row.played),
+            finished: num(row.finished),
+            wins: num(row.wins),
+            lastAt: nnum(row.match_last_at),
+            lastStatus: nstr(row.match_last_status),
+          },
+          campaign: {
+            highest: nnum(row.campaign_highest),
+            clears: num(row.campaign_clears),
+            lastAt: nnum(row.campaign_last_at),
+            lastLevel: nnum(row.campaign_last_level),
+          },
+          reports: { count: num(row.reports), lastAt: nnum(row.report_last_at) },
+          tiles: { count: num(row.tiles), lastAt: nnum(row.tile_last_at) },
+          seeds: num(row.seeds),
+        })),
+        now,
+        PLAYERS_LIMIT,
       );
     },
   };

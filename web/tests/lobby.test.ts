@@ -21,7 +21,7 @@ import {
   trimLobbyList,
   yourTurnCount,
 } from '../src/online/lobby.js';
-import { ONLINE } from '../../src/strings.js';
+import { ONLINE, REPLAY } from '../../src/strings.js';
 import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
 import { ApiError } from '../../server/src/errors.js';
 import { MatchService } from '../../server/src/service.js';
@@ -92,9 +92,9 @@ describe('lobby buckets and sort', () => {
 
     const trimmed = trimLobbyList(list);
     expect(trimmed.filter((e) => lobbyBucket(e) === 'finished')).toHaveLength(10);
-    expect(trimmed.slice(0, 2).map((e) => e.matchId)).toEqual(['y2', 'y1']);
+    expect(trimmed.slice(0, 2).map((e) => e.matchId)).toEqual(['y1', 'y2']); // actual moves now lead unseen replay history (owner's quiet-polish brief)
     expect(yourTurnCount(trimmed)).toBe(2);
-    expect(pageTitleForLobby(2)).toBe('(2) FUTASAKU — your turn');
+    expect(pageTitleForLobby(2)).toBe('(2) FUTASAKU - your turn');
     expect(pageTitleForLobby(0)).toBe('FUTASAKU');
   });
 
@@ -134,8 +134,31 @@ describe('lobby buckets and sort', () => {
     expect(formatWaitingAge(0)).toBe('1m');
   });
 
-  it('surfaces a spent grace as a word and flags your own as at-risk', () => {
-    const now = 5_000_000;
+  // OWNER CHANGED THE RULE (2026-11-10): "remove 'watch replay' from finished games and put an icon
+  // next to challenge again for it. so it's just name of opp and 2 icons ... it should show the
+  // result of the game as well just 'Won' or 'Lost'".
+  it('a finished duel row says the result; the replay is its own key', () => {
+    const won = toLobbyRow(entry({ matchId: 'f', status: 'finished', turnPlayer: null, turnDeadlineAt: null, revision: 24, mySeat: 0, result: { winner: 0, reason: 'final', scores: [9, 4] } } as never), 0);
+    expect(won.bucket).toBe('finished');
+    expect(won.replayable).toBe(true);
+    expect(won.statusWord).toBe(ONLINE.rowWon);
+    expect(won.statusWord).not.toBe(REPLAY.pastRow);
+    const lost = toLobbyRow(entry({ matchId: 'g', status: 'finished', turnPlayer: null, turnDeadlineAt: null, revision: 24, mySeat: 0, result: { winner: 1, reason: 'resigned', scores: [2, 4] } } as never), 0);
+    expect(lost.statusWord).toBe(ONLINE.rowLost);
+    const draw = toLobbyRow(entry({ matchId: 'h', status: 'finished', turnPlayer: null, turnDeadlineAt: null, revision: 24, mySeat: 1, result: { winner: null, reason: 'final', scores: [5, 5] } } as never), 0);
+    expect(draw.statusWord).toBe(ONLINE.rowDraw);
+    expect([ONLINE.rowWon, ONLINE.rowLost, ONLINE.rowDraw]).toEqual(['Won', 'Lost', 'Draw']);
+  });
+
+  it('a finished duel with no moves has nothing to watch, so its row says Finished', () => {
+    const empty = toLobbyRow(entry({ matchId: 'f0', status: 'finished', turnPlayer: null, turnDeadlineAt: null, revision: 0 }), 0);
+    expect(empty.bucket).toBe('finished');
+    expect(empty.replayable).toBe(false);
+    expect(empty.statusWord).toBe(ONLINE.statusFinished);
+    expect(empty.statusIcon).toBe('check');
+  });
+
+  it('surfaces a spent grace as a word and flags your own as at-risk', () => {    const now = 5_000_000;
     const mine = toLobbyRow(entry({ matchId: 'g1', mySeat: 0, turnPlayer: 0, graceUsed: [1, 0] }), now);
     expect(mine.graceWord).toBe(ONLINE.graceYouUsed);
     expect(mine.atRisk).toBe(true);
@@ -319,9 +342,18 @@ describe('joining a duel shows the SPECIFIC message the server really sends', ()
 });
 
 describe('sortLobbyEntries stable buckets', () => {
+  it('puts actual moves before unseen history, then the nearest authoritative deadline',()=>{
+    const soon=entry({matchId:'soon',turnDeadlineAt:100,lastActivityAt:1});
+    const later=entry({matchId:'later',turnDeadlineAt:200,lastActivityAt:999});
+    const unseen=entry({matchId:'unseen',turnPlayer:1,unseenTurn:true,turnDeadlineAt:50});
+    const untimed=entry({matchId:'untimed',turnDeadlineAt:null,lastActivityAt:1000});
+    const input=[later,unseen,untimed,soon];
+    expect(sortLobbyEntries(input).map(e=>e.matchId)).toEqual(['soon','later','untimed','unseen']);
+    expect(input[0]).toBe(later);
+  });
   it('keeps activity order inside a bucket', () => {
-    const a = entry({ matchId: 'a', lastActivityAt: 10, turnPlayer: 0 });
-    const b = entry({ matchId: 'b', lastActivityAt: 20, turnPlayer: 0 });
+    const a = entry({ matchId: 'a', lastActivityAt: 10, turnPlayer: 0, turnDeadlineAt: 100 });
+    const b = entry({ matchId: 'b', lastActivityAt: 20, turnPlayer: 0, turnDeadlineAt: 100 });
     expect(sortLobbyEntries([a, b]).map((e) => e.matchId)).toEqual(['b', 'a']);
   });
 });

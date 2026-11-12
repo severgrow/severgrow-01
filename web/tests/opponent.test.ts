@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildSteps } from '../src/logic/anim.js';
 import type { Step } from '../src/logic/anim.js';
-import { NUDGE, REPLAY_SPEED, actorOf, involvedKeys, nudgeToward } from '../src/logic/opponent.js';
+import { NUDGE, REPLAY_BEAT_MS, REPLAY_SPEED, actorOf, involvedKeys, nudgeToward, replayDurationScale } from '../src/logic/opponent.js';
+import { MOTION } from '../src/logic/motion.js';
 import { playGame } from './ui-helpers.js';
 
 const steps = (): Step[] => {
@@ -14,8 +15,23 @@ const steps = (): Step[] => {
 describe("the opponent's turn", () => {
   const all = steps();
 
-  it('Replay is slower than live, not by much', () => {
-    expect(REPLAY_SPEED).toBe(0.75);
+  it('Replay is a RATE below live, and its duration scale is above live', () => {
+    // Owner, 2026-10-25: the replay read as rushed. It is a PLAYBACK RATE: 0.6 = 60% of live.
+    expect(REPLAY_SPEED).toBe(0.6);
+    expect(REPLAY_SPEED).toBeLessThan(1);
+    // `timeScale` is a DURATION multiplier, so the conversion is exactly one division, tested here
+    // rather than read backwards in a comment: 0.6 → a replay lasts ~1.67× as long as live.
+    expect(replayDurationScale(REPLAY_SPEED)).toBeCloseTo(1 / 0.6, 6);
+    expect(replayDurationScale(1)).toBe(1);
+    expect(replayDurationScale(0.5)).toBe(2);
+    // A nonsense rate can never collapse a replay to instant.
+    expect(replayDurationScale(0)).toBeLessThanOrEqual(5);
+  });
+
+  it('the beat between the enemy\'s actions is one of the game\'s own tempo tokens', () => {
+    // Not a second motion system: the beat IS a quick beat.
+    expect(REPLAY_BEAT_MS).toBe(MOTION.quick);
+    expect(REPLAY_BEAT_MS).toBeGreaterThan(0);
   });
 
   it('every board step names the hexes it is about; they are real board hexes', () => {

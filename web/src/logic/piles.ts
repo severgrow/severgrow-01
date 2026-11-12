@@ -6,8 +6,25 @@ import type { Action, Phase } from '../../../src/engine/index.js';
 export type PileLook = { enabled: boolean; glow: boolean; dim: boolean; hint: string | null };
 const OFF: PileLook = { enabled: false, glow: false, dim: true, hint: null };
 
-export const pileStates = (phase: Phase, myTurn: boolean, busy: boolean, legal: readonly Action[]): { deck: PileLook; discard: PileLook } => {
-  if (phase !== 'DRAW' || !myTurn || busy) return { deck: OFF, discard: OFF };
+export const pileStates = (
+  phase: Phase,
+  myTurn: boolean,
+  busy: boolean,
+  legal: readonly Action[],
+  /**
+   * The product's Throw step (owner, 2026-10-25): the Throw pile is the target for the picked
+   * card, so it must never be dimmed there. Opt-in, so the classic copies keep the old look.
+   */
+  throwPileLit = false,
+): { deck: PileLook; discard: PileLook } => {
+  if (phase !== 'DRAW' || !myTurn || busy) {
+    return {
+      deck: OFF,
+      // `busy` is still my Throw step: the EndAct reveal has not finished, and the pile the card
+      // is heading to must not dim while the player watches the last move settle.
+      discard: throwPileLit && phase === 'DISCARD' && myTurn ? { ...OFF, dim: false } : OFF,
+    };
+  }
   const can = (from: 'deck' | 'discard') => legal.some((a) => a.t === 'Draw' && a.from === from);
   const on = (hint: string): PileLook => ({ enabled: true, glow: true, dim: false, hint });
   return { deck: can('deck') ? on('Tap to draw') : OFF, discard: can('discard') ? on('Tap to take') : OFF };

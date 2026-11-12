@@ -1,6 +1,32 @@
-# FUTASAKU live duels (futa-test and the `/futa0.5/` preview)
+# FUTASAKU Blitz - current contract
 
-> **Status pointer:** [`ONLINE.md`](ONLINE.md) is the index; this is the reference for live duels.
+The live root and `/test/` use `CHANNEL=futa05`. See [ONLINE.md](ONLINE.md) and
+[RELEASE-FLOW.md](RELEASE-FLOW.md) for the current build and release paths.
+
+- Two participants in the same active online match can request Blitz when the server says both
+  are available. Client appearance is never authority for membership, presence or acceptance.
+- The per-turn limit comes from server configuration, default 30 seconds. The status endpoint
+  reports that limit before acceptance too; confirmation and incoming windows use it directly.
+- The cockpit LED clock replaces the old header timer and home ring. Moves remain optimistic
+  and are sent immediately; rejected moves retain the existing rollback path.
+- A connected player's expired clock completes that turn automatically. An extended absence
+  uses the existing reconnect rules and can lose the match. Explicit Leave forfeits.
+  This refinement changes none of those rules; inspect `server/src/live/service.ts` and its tests
+  for authoritative behaviour rather than the historical wording below.
+- Presence is published on identity/session entry, foreground and socket join, with the existing
+  inexpensive heartbeat retained. An authenticated entry hint goes only to the real opponent.
+  Ordinary heartbeat writes do not broadcast. The hint contains no private game data.
+- One existing player Realtime channel invalidates inbox/eligibility reads. In-flight hints drain
+  another read; reconnect repairs state; hidden pages pause reads. Polling remains the fallback.
+- Blitz windows share finite dark-glass motion, matte buttons, explicit consequences and keyboard
+  focus containment. Private chat uses its existing measured HUD-logo clearance.
+- This pass requires a server-first deployment. Rebuild `supabase/functions/duel/bundle.ts` with
+  `npm run server:build-edge`; no migration is required. Verify the server before publishing web.
+
+## Historical implementation notes
+
+The material below records earlier iterations. Its 45/60-second defaults, header clock, home ring,
+connected-timeout loss and old preview URLs are superseded by the current contract above.
 
 Branch `futa0.5-online` (merged; the live work came from `futa0.5-live`). Not in the locked build, not
 in `main`, `dev` or `futa0.4`. The product build (`CHANNEL=futa04`) never shows any of this.
@@ -35,8 +61,13 @@ leaving them is free, and their first missed turn only warns and extends.
    (you or them), **Not available**
    (they switched challenges off), **Busy** (they are in the tutorial), **Try real time again later** (too
    many tries). Hidden when they are offline.
-2. **Waiting.** Tapping it sends a challenge; the label becomes `Waiting 40s · Cancel` (on wide
-   screens `Waiting for <name>` with the seconds counting down and the animated ellipsis). One open challenge per match.
+2. **Confirming, then waiting.** Tapping it first opens the same glass window, asking **Real time
+   duel?** with the real per-move seconds, the forfeit warning and **Send challenge** / **Not now**
+   (owner, 2026-10-26: a tap must not send an invite by surprise). Only **Send challenge** sends it;
+   Escape and **Not now** close the question and return focus to the bolt. The label then becomes
+   `Waiting 40s · Cancel` (on wide screens `Waiting for <name>` with the seconds counting down and the
+   animated ellipsis). One open challenge per match; the incoming invitation and this confirmation
+   never stack.
 3. **The pop-up.** The other player sees it **anywhere** in the app — a computer game, another
    online match, the menu — in the same dark glass as Match Intel: their name, "wants a real time duel",
    "Same match · each turn has a countdown", a short **Leaving real time loses** warning (with the fuller rule
@@ -71,11 +102,14 @@ leaving them is free, and their first missed turn only warns and extends.
   "N seconds left" only at 10, 8, 6, 4, 2 and "Time's up".
 - **The server keeps the time.** A turn's clock starts the moment the previous turn was thrown
   (the replay allowance defaults to 0 since 2026-10-15). Draw / Grow / Throw inside a turn never reset it.
-- **The control is a bolt** (owner, 2026-10-15): one icon, no words, under the wordmark at the top
-  right (`web/src/ui/hud-rail.ts`), right edges aligned, with the full-screen icon to its left on a
-  computer. Outline = no real-time duel possible (the opponent is away, busy, or has real time off);
-  filled with a soft glow = the opponent is here, tap to invite; breathing = the invite waits, tap
-  to cancel; steady = the duel is live. The reconnect grace is never explained in the copy.
+- **The control is a bolt** (owner, 2026-10-15; re-homed 2026-10-26): one icon, no words, in the
+  HUD header **immediately right of the hamburger**, so it never competes with the chat controls in
+  the far corner or with the wordmark. (It used to sit in the rail under the wordmark, rightmost,
+  where on a phone it crowded an open chat's own ×.) Outline = no real-time duel possible (the
+  opponent is away, busy, or has real time off); filled with a soft glow = the opponent is here, tap
+  to confirm; breathing = the invite waits, tap to cancel; steady = the duel is live. The reconnect
+  grace is never explained in the copy. The full-screen icon still uses the rail on a computer; on a
+  phone the rail is empty and the board's corner tools keep their true corners.
 - **Going live mid-turn:** the turn clock starts at the full live limit — no extra seconds (owner, 2026-10-15: every turn is exactly 60 s; the allowance knobs below default to 0).
 - **Time's up:** the server plays the rest of that turn — Draw from the deck (the throw pile only if
   the deck is empty), skip Grow, throw the card just drawn — always choosing from the engine's own

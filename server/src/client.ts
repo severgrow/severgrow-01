@@ -1,3 +1,5 @@
+import type { TerritoryChatPage } from './chat/territory.js';
+import type { ChatContent, ChatResult } from './chat/types.js';
 // A small isomorphic client for the duel API. It depends only on an injected `fetch` and an
 // injected key/value store, so the same code runs in the browser (with localStorage), in a Node
 // test, or in another service. It carries no game logic: it sends semantic actions and renders
@@ -18,23 +20,51 @@ import type {
   MatchSummaryResponse,
   MatchViewPayload,
   MeResponse,
+  OfflineCounters,
+  OfflineSummaryResponse,
   ReconnectResponse,
+  ReplayResponse,
   ResignResponse,
   SubmitActionRequest,
   SubmitActionResponse,
   UpgradeResponse,
   WorldMapPayload,
 } from './protocol.js';
-import type { ClaimResult, RewardResult, SeedWallet } from './seeds/types.js';
-import type { Action } from '../../src/engine/index.js';
+import type {
+  ClaimResult,
+  SellResult,
+  RewardResult,
+  SeedWallet,
+  WorldChallengeWire,
+  WorldChallengesPayload,
+} from './seeds/types.js';
+import type { AchievementView } from './seeds/achievements.js';
+import type { Action, Event } from '../../src/engine/index.js';
 
 /** Protocol version the browser/build reports (P-5 handshake). */
 export const DUEL_CLIENT_VERSION = '0.5.0';
 
+/**
+ * A player's tile colour on the wire (`GET`/`POST /v1/world/colour`). `canChange` and
+ * `remainingMs` are the SERVER's answer to the one-change-per-24 h rule (owner, 2026-10-30), so the
+ * picker can say how long is left before a press and can never unlock itself on a wrong clock.
+ */
+export type WorldColour = {
+  colourId: number;
+  colour: string;
+  name: string;
+  chosen: boolean;
+  canChange: boolean;
+  /** Epoch ms of the next allowed change, or null when a change is available now. */
+  changeAvailableAt: number | null;
+  /** Milliseconds left on the 24 h window (0 when a change is available now). */
+  remainingMs: number;
+};
+
 /** The minimal transport shape this client needs (window.fetch, undici, or a test double). */
 export type FetchLike = (
   url: string,
-  init: { method: string; headers: Record<string, string>; body?: string },
+  init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal },
 ) => Promise<{ status: number; ok?: boolean; json(): Promise<unknown> }>;
 
 export type KeyValue = {
@@ -101,9 +131,37 @@ export type DuelClientOptions = {
   region?: string;
   /** Self-heal hook for a rejected token. See `UnauthorizedHandler`. */
   onUnauthorized?: UnauthorizedHandler;
+  /**
+   * Tag guests this client creates as automated test traffic (`x-futasaku-traffic: test`), so they
+   * are marked `is_test` at creation and never land on the owner's human views.
+   *
+   * Default: TRUE when there is no browser (`typeof window === 'undefined'`). A real player is always
+   * in a browser; a harness, an e2e suite and a soak script are Node processes. It is still an
+   * explicit option, so a browser-driven suite can opt in and any other caller can opt out.
+   */
+  testTraffic?: boolean;
 };
 
 export const DEFAULT_SESSION_KEY = 'severgrow.duel.session.v1';
+
+/**
+ * The opponent's last turn, from a public event history: everything from their last Draw, when no
+ * event of mine follows it (otherwise their turn is not the last thing that happened: nothing).
+ */
+export const lastOpponentTurn = (events: readonly Event[], seat: Player): Event[] => {
+  const opp = seat === 0 ? 1 : 0;
+  let start = -1;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (e.t === 'Draw' && e.player === seat) return [];
+    if (e.t === 'Draw' && e.player === opp) { start = i; break; }
+  }
+  return start < 0 ? [] : events.slice(start);
+};
+
+/** Per-match last-seen revisions (see `seenRevision`). */
+const SEEN_KEY = 'severgrow.duel.seen.v1';
+const SEEN_LIMIT = 40;
 
 export class DuelClient {
   private readonly baseUrl: string;
@@ -116,6 +174,8 @@ export class DuelClient {
    * The pinned Edge region, appended as `forceFunctionRegion`. See `DuelClientOptions.region`.
    */
   private readonly region: string | null;
+  /** Whether this client tags the guests it creates as test traffic (see `DuelClientOptions`). */
+  private readonly testTraffic: boolean;
   /**
    * Recovery hook for a rejected token. A public field (not just readonly options) so the owner of
    * this client can wire it after the identity store that the hook itself needs has been built.
@@ -137,6 +197,7 @@ export class DuelClient {
     this.clientVersion = options.clientVersion ?? DUEL_CLIENT_VERSION;
     this.rulesVersion = options.rulesVersion ?? CURRENT_RULES_VERSION;
     this.region = options.region && options.region.trim() ? options.region.trim() : null;
+    this.testTraffic = options.testTraffic ?? (globalThis as { window?: unknown }).window === undefined;
     this.onUnauthorized = options.onUnauthorized;
   }
 
@@ -145,11 +206,74 @@ export class DuelClient {
   createGuest(displayName?: string): Promise<CreateGuestResponse> {
     return this.request<CreateGuestResponse>('POST', '/v1/guests', {
       body: displayName === undefined ? {} : { displayName },
+      // Only ever sent for guest CREATION, and only by a harness (see `DuelClientOptions`). The
+      // server stores it as `players.is_test` — the marker the dashboard trusts.
+      traffic: this.testTraffic,
     });
   }
 
   getMe(token: string): Promise<MeResponse> {
     return this.request<MeResponse>('GET', '/v1/players/me', { token });
+  }
+
+  /** The account's OFFLINE record over every device (migration 0022). */
+  offlineStats(token: string): Promise<OfflineSummaryResponse> {
+    return this.request<OfflineSummaryResponse>('GET', '/v1/players/me/offline', { token });
+  }
+
+  /** Post THIS device's cumulative offline totals; the answer is the fresh account aggregate. */
+  putOfflineStats(token: string, counters: OfflineCounters): Promise<OfflineSummaryResponse> {
+    return this.request<OfflineSummaryResponse>('POST', '/v1/players/me/offline', { token, body: counters });
+  }
+
+  /**
+   * The account's campaign progress snapshot (migration 0023), or null when none was posted.
+   * Further-ahead merge lives on the server; Seeds / Territory / achievements are not touched.
+   */
+  async accountCampaignProgress(token: string, options: { signal?: AbortSignal } = {}) {
+    const response = await this.request<{ progress?: unknown }>(
+      'GET',
+      '/v1/players/me/campaign/progress',
+      { token, ...(options.signal ? { signal: options.signal } : {}) },
+    );
+    const progress = response.progress;
+    if (progress === null || progress === undefined) return null;
+    if (!progress || typeof progress !== 'object') return null;
+    const row = progress as { completed?: unknown; best?: unknown };
+    if (!Array.isArray(row.completed)) return null;
+    return {
+      completed: row.completed.filter((id): id is string => typeof id === 'string'),
+      best: row.best && typeof row.best === 'object' && !Array.isArray(row.best)
+        ? row.best as Record<string, { won: boolean; score: number; turns: number }>
+        : {},
+    };
+  }
+
+  /** Post this device's campaign snapshot; the answer is the further-ahead stored row. */
+  async putAccountCampaignProgress(
+    token: string,
+    wire: { completed: readonly string[]; best: Record<string, { won: boolean; score: number; turns: number }> },
+  ) {
+    const response = await this.request<{ progress: { completed: string[]; best: Record<string, { won: boolean; score: number; turns: number }> } }>(
+      'POST',
+      '/v1/players/me/campaign/progress',
+      { token, body: wire },
+    );
+    return response.progress;
+  }
+
+  /** The in-game guide's progress for this account, or null (none yet, or an odd answer). */
+  async accountGuide(token: string, options: { signal?: AbortSignal } = {}): Promise<{ seen: string[]; games: number } | null> {
+    const response = await this.request<{ guide?: unknown }>('GET', '/v1/players/me/guide', { token, ...(options.signal ? { signal: options.signal } : {}) });
+    const g = response.guide as { seen?: unknown; games?: unknown } | null | undefined;
+    if (!g || typeof g !== 'object' || !Array.isArray(g.seen)) return null;
+    return { seen: g.seen.filter((b): b is string => typeof b === 'string'), games: typeof g.games === 'number' ? g.games : 0 };
+  }
+
+  /** Post this device's guide progress; the answer is the joined account row. */
+  async putAccountGuide(token: string, wire: { seen: readonly string[]; games: number }): Promise<{ seen: string[]; games: number }> {
+    const response = await this.request<{ guide: { seen: string[]; games: number } }>('POST', '/v1/players/me/guide', { token, body: wire });
+    return response.guide;
   }
 
   upgrade(token: string, displayName: string): Promise<UpgradeResponse> {
@@ -172,6 +296,11 @@ export class DuelClient {
 
   createMatch(token: string): Promise<CreateMatchResponse> {
     return this.request<CreateMatchResponse>('POST', '/v1/matches', { token, body: {} });
+  }
+
+  /** A mutual rematch of a finished standard duel (POST /v1/matches/:id/rematch, migration 0015). */
+  rematch(token: string, finishedMatchId: string): Promise<JoinMatchResponse> {
+    return this.request<JoinMatchResponse>('POST', `/v1/matches/${encodeURIComponent(finishedMatchId)}/rematch`, { token, body: {} });
   }
 
   joinMatch(token: string, inviteCode: string): Promise<JoinMatchResponse> {
@@ -206,6 +335,14 @@ export class DuelClient {
     return this.request<GetViewResponse>('GET', `/v1/matches/${encodeURIComponent(matchId)}/view${query}`, { token });
   }
 
+  /**
+   * A FINISHED duel's replay payload: the rules snapshot, the seed, the starting seat and the
+   * ordered action log. The client rebuilds every position with the deterministic engine.
+   */
+  replay(token: string, matchId: string): Promise<ReplayResponse> {
+    return this.request<ReplayResponse>('GET', `/v1/matches/${encodeURIComponent(matchId)}/replay`, { token });
+  }
+
   /** Reconnect after a reload: same view, plus everything since the last revision seen. */
   reconnect(token: string, matchId: string, sinceRevision?: number): Promise<ReconnectResponse> {
     return this.request<ReconnectResponse>('POST', `/v1/matches/${encodeURIComponent(matchId)}/reconnect`, {
@@ -232,6 +369,56 @@ export class DuelClient {
 
   saveSession(session: DuelSession): void {
     this.storage?.set(this.sessionKey, JSON.stringify(session));
+    if (typeof session.revision === 'number') this.markSeen(session.matchId, session.revision);
+  }
+
+  // ---- how far THIS device has seen each match ----
+  //
+  // OWNER REPORT (2026-10-27): reopening an online match from the list "showed more moves than the
+  // last one" and flickered. The list fetched the WHOLE history and the driver replays every event a
+  // payload carries, so the entire game replayed over the finished board. The single session above
+  // remembers only the last match opened; this remembers each match, so a reopen asks for the gap.
+
+  private seenMap(): Record<string, number> {
+    try {
+      const data = JSON.parse(this.storage?.get(SEEN_KEY) ?? '{}') as unknown;
+      return data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, number>) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private markSeen(matchId: string, revision: number): void {
+    if (!this.storage || !Number.isInteger(revision) || revision < 0) return;
+    const map = this.seenMap();
+    if ((map[matchId] ?? -1) >= revision) return; // never backwards: a late, older view
+    delete map[matchId];
+    map[matchId] = revision; // most recent last
+    const ids = Object.keys(map);
+    for (const id of ids.slice(0, Math.max(0, ids.length - SEEN_LIMIT))) delete map[id];
+    try {
+      this.storage.set(SEEN_KEY, JSON.stringify(map));
+    } catch {
+      /* storage full or blocked: a reopen simply shows no catch-up */
+    }
+  }
+
+  /** The last revision of this match this device has seen, or undefined. */
+  seenRevision(matchId: string): number | undefined {
+    const value = this.seenMap()[matchId];
+    return typeof value === 'number' && Number.isInteger(value) ? value : undefined;
+  }
+
+  /**
+   * Open a match from a list: only the events this device has NOT seen come back (the turns played
+   * while away), so the page replays exactly those. When this device has never seen the match, only
+   * the opponent's LAST turn is kept (when it was the last thing that happened) — never the whole
+   * game, which replayed every turn over the current board.
+   */
+  async openView(token: string, matchId: string): Promise<GetViewResponse> {
+    const seen = this.seenRevision(matchId);
+    const res = await this.getState(token, matchId, seen);
+    return seen === undefined ? { ...res, player: { ...res.player, events: lastOpponentTurn(res.player.events, res.player.seat) } } : res;
   }
 
   loadSession(): DuelSession | null {
@@ -285,13 +472,120 @@ export class DuelClient {
     return response.wallet;
   }
 
+  /**
+   * THE PLAYER'S TILE COLOUR (owner, 2026-10-30): the stored choice, or the palette default derived
+   * from the player id. `chosen` is false when nothing has ever been saved — the picker still marks
+   * the current swatch, because the map is already drawing that colour.
+   */
+  async worldColour(token: string): Promise<WorldColour> {
+    const response = await this.request<{ colour: WorldColour }>('GET', '/v1/world/colour', { token });
+    return response.colour;
+  }
+
+  /** Save a palette choice so it follows the player to another device. */
+  async chooseWorldColour(token: string, colourId: number): Promise<WorldColour> {
+    const response = await this.request<{ colour: WorldColour }>(
+      'POST', '/v1/world/colour', { token, body: { colourId } });
+    return response.colour;
+  }
+
+  /**
+   * The account's place: the furthest Campaign level its verified first-clear receipts show. It
+   * rides the same authenticated wallet read, so no new route and no extra round trip is invented;
+   * `null` means the player has never cleared a level (or an older server did not send the field).
+   */
+  /**
+   * What the server can do that an older one could not (`GET /v1/health` `features`). An older server
+   * sends no list, which reads as "none", so a page keeps its old behaviour until the server is updated.
+   */
+  async serverFeatures(options: { signal?: AbortSignal } = {}): Promise<string[]> {
+    const response = await this.request<{ features?: unknown }>('GET', '/v1/health', options.signal ? { signal: options.signal } : {});
+    return Array.isArray(response.features) ? response.features.filter((f): f is string => typeof f === 'string') : [];
+  }
+
+  async accountCampaignLevel(token: string): Promise<number | null> {
+    const response = await this.request<{ campaignHighestLevel?: unknown }>('GET', '/v1/seeds/wallet', { token });
+    const level = response.campaignHighestLevel;
+    return typeof level === 'number' && Number.isFinite(level) && level >= 1 ? level : null;
+  }
+
+  /**
+   * The account's furthest verified Campaign level (owner brief, 2026-11-01). One authenticated GET
+   * scoped to the token, one store statement: the same `campaignHighestLevel` the wallet carries,
+   * which is a single indexed `max` over the player's campaign receipts. It is NOT the
+   * `campaign_clears` table (migration 0021): that is only written when a reward proof is
+   * submitted, so ordinary campaign wins never appear there. The caller owns the deadline and the
+   * cache.
+   */
+  async accountCampaignHighest(token: string, options: { signal?: AbortSignal } = {}): Promise<number | null> {
+    const response = await this.request<{ campaign?: { highestLevel?: unknown } }>(
+      'GET', '/v1/players/me/campaign', { token, ...(options.signal ? { signal: options.signal } : {}) });
+    const level = response.campaign?.highestLevel;
+    return typeof level === 'number' && Number.isInteger(level) && level >= 1 ? level : null;
+  }
+
   async claimWorld(token: string, cellId: string, requestId: string): Promise<ClaimResult> {
     const response = await this.request<{ claim: ClaimResult }>('POST', '/v1/world/claims', { token, body: { cellId, requestId } });
     return response.claim;
   }
 
+  /** Sell one of your own tiles back for its price. A refusal throws a DuelError with its code. */
+  async sellWorld(token: string, cellId: string, requestId: string): Promise<SellResult> {
+    const response = await this.request<{ sale: SellResult }>('POST', '/v1/world/sales', { token, body: { cellId, requestId } });
+    return response.sale;
+  }
+
+  /** Territory achievements: progress and which are paid (server/src/seeds/achievements.ts). */
+  async achievements(token: string): Promise<AchievementView[]> {
+    const response = await this.request<{ achievements: AchievementView[] }>('GET', '/v1/seeds/achievements', { token });
+    return response.achievements;
+  }
+
+  /** Claim one achievement's Seeds. Idempotent: a second claim replays the first payment. */
+  async claimAchievement(token: string, id: string): Promise<{ id: string; awarded: number; replayed: boolean; wallet: SeedWallet }> {
+    const response = await this.request<{ claim: { id: string; awarded: number; replayed: boolean; wallet: SeedWallet } }>(
+      'POST', '/v1/seeds/achievements/claim', { token, body: { id } });
+    return response.claim;
+  }
+
   async acknowledgeWorldInvitation(token: string): Promise<void> {
     await this.request('POST', '/v1/world/invitation', { token, body: {} });
+  }
+
+  // ---- Territory challenges (docs/TERRITORY-CHALLENGES.md) ----
+
+  async worldChallenges(token: string): Promise<WorldChallengesPayload> {
+    const response = await this.request<WorldChallengesPayload & { ok: true }>('GET', '/v1/world/challenges', { token });
+    return { incoming: response.incoming, outgoing: response.outgoing, serverNow: response.serverNow };
+  }
+
+  async sendWorldChallenge(token: string, cellId: string, requestId: string): Promise<{ challenge: WorldChallengeWire; replayed: boolean }> {
+    return await this.request('POST', '/v1/world/challenges', { token, body: { cellId, requestId } });
+  }
+
+  async respondWorldChallenge(
+    token: string,
+    challengeId: string,
+    accept: boolean,
+    requestId?: string,
+  ): Promise<{ challenge: WorldChallengeWire; matchId: string | null }> {
+    return await this.request('POST', `/v1/world/challenges/${encodeURIComponent(challengeId)}/respond`, {
+      token,
+      body: { accept, ...(requestId === undefined ? {} : { requestId }) },
+    });
+  }
+
+  async confirmWorldChallenge(token: string, challengeId: string, requestId?: string): Promise<{
+    settled: boolean;
+    winnerId: string | null;
+    cellId: string;
+    replayed: boolean;
+    challenge: WorldChallengeWire;
+  }> {
+    return await this.request('POST', `/v1/world/challenges/${encodeURIComponent(challengeId)}/confirm`, {
+      token,
+      body: requestId === undefined ? {} : { requestId },
+    });
   }
 
   async issueTrainingTicket(token: string, botLevel: number): Promise<{ id: string; seed: number; botLevel: number; expiresAt: number }> {
@@ -300,18 +594,65 @@ export class DuelClient {
     return response.ticket;
   }
 
-  async submitSeedProof(token: string, source: { levelId: string } | { ticketId: string }, actions: readonly Action[], botVersion: string): Promise<RewardResult> {
+  /**
+   * Submit one finished game's replay for payment. `options.signal` is what lets the CALLER put a
+   * deadline on it: a fetch that never settles is the mechanism behind the 2026-10-25 "Seeds
+   * pending verification" report (a backgrounded mobile tab, or a captured connection, leaves the
+   * promise pending forever). Only the seed proof takes a signal — every other request keeps the
+   * transport's own behaviour, so a slow match read is never cut short.
+   */
+  async submitSeedProof(
+    token: string,
+    source: { levelId: string; dealSeed?: number } | { ticketId: string },
+    actions: readonly Action[],
+    botVersion: string,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<RewardResult> {
     const campaign = 'levelId' in source;
     const response = await this.request<{ reward: RewardResult }>(
       'POST', campaign ? '/v1/seeds/campaign' : '/v1/seeds/training',
-      { token, body: { ...source, actions, botVersion } },
+      { token, body: { ...source, actions, botVersion }, ...(options.signal ? { signal: options.signal } : {}) },
     );
     return response.reward;
   }
 
   // ---- transport ----
 
-  private request<T>(method: string, path: string, options: { token?: string; body?: unknown } = {}): Promise<T> {
+  chatHistory(token: string, matchId: string, cursor: { after?: number; before?: number } = {}, signal?: AbortSignal): Promise<ChatResult> {
+    const query = cursor.after !== undefined ? `?after=${cursor.after}` : cursor.before !== undefined ? `?before=${cursor.before}` : '';
+    return this.request('GET', `/v1/matches/${encodeURIComponent(matchId)}/chat${query}`, { token, ...(signal ? { signal } : {}) });
+  }
+
+  chatSend(token: string, matchId: string, content: ChatContent, requestId: string, turnRevision: number, signal?: AbortSignal): Promise<ChatResult> {
+    return this.request('POST', `/v1/matches/${encodeURIComponent(matchId)}/chat`, { token, body: { ...content, requestId, turnRevision }, ...(signal ? { signal } : {}) });
+  }
+
+  chatAction(token: string, matchId: string, action: 'mute' | 'block' | 'report', body: { value: boolean } | { messageId: string; reason: 'abuse' | 'spam' | 'other' }, signal?: AbortSignal): Promise<ChatResult> {
+    return this.request('POST', `/v1/matches/${encodeURIComponent(matchId)}/chat/${action}`, { token, body, ...(signal ? { signal } : {}) });
+  }
+
+  // ---- Territory chat (server/src/chat/territory.ts): one shared channel, newest 30 ----
+  territoryChat(token: string, signal?: AbortSignal): Promise<TerritoryChatPage> {
+    return this.request('GET', '/v1/territory/chat', { token, ...(signal ? { signal } : {}) });
+  }
+
+  territoryChatSend(token: string, text: string, requestId: string): Promise<TerritoryChatPage> {
+    return this.request('POST', '/v1/territory/chat', { token, body: { text, requestId } });
+  }
+
+  territoryChatBlock(token: string, messageId: string): Promise<TerritoryChatPage> {
+    return this.request('POST', '/v1/territory/chat/block', { token, body: { messageId } });
+  }
+
+  territoryChatReport(token: string, messageId: string, reason: 'abuse' | 'spam' | 'other'): Promise<{ reported: true }> {
+    return this.request('POST', '/v1/territory/chat/report', { token, body: { messageId, reason } });
+  }
+
+  private request<T>(
+    method: string,
+    path: string,
+    options: { token?: string; body?: unknown; traffic?: boolean; signal?: AbortSignal } = {},
+  ): Promise<T> {
     return this.send<T>(method, path, options, true);
   }
 
@@ -336,7 +677,7 @@ export class DuelClient {
   private async send<T>(
     method: string,
     path: string,
-    options: { token?: string; body?: unknown },
+    options: { token?: string; body?: unknown; traffic?: boolean; signal?: AbortSignal },
     mayRecover: boolean,
   ): Promise<T> {
     const headers: Record<string, string> = {
@@ -344,12 +685,14 @@ export class DuelClient {
       'x-futasaku-client-version': this.clientVersion,
       'x-futasaku-rules-version': this.rulesVersion,
     };
+    if (options.traffic === true) headers['x-futasaku-traffic'] = 'test';
     if (options.token !== undefined) headers.authorization = `Bearer ${options.token}`;
-    const init: { method: string; headers: Record<string, string>; body?: string } = { method, headers };
+    const init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal } = { method, headers };
     if (options.body !== undefined) {
       headers['content-type'] = 'application/json';
       init.body = JSON.stringify(options.body);
     }
+    if (options.signal !== undefined) init.signal = options.signal;
     const response = await this.fetchImpl(this.urlFor(path), init);
     let data: unknown = null;
     try {

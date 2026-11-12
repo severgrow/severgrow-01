@@ -31,7 +31,7 @@ describe('normalising a display name', () => {
   });
 
   it('stores exactly the normalised value, never a generated name', () => {
-    expect(ok('  Renée   O\'Neill ')).toBe("Renée O'Neill");
+    expect(ok("  Renée   O' ")).toBe("Renée O'");
   });
 });
 
@@ -43,14 +43,30 @@ describe('what is allowed', () => {
   });
 
   it('accepts a name up to the bound and refuses one character more', () => {
+    expect(DISPLAY_NAME_MAX).toBe(8);
+    expect(ok('x'.repeat(8))).toHaveLength(8);
+    expect(problem('x'.repeat(9))).toBe('length');
     expect(ok('x'.repeat(DISPLAY_NAME_MAX))).toHaveLength(DISPLAY_NAME_MAX);
     expect(problem('x'.repeat(DISPLAY_NAME_MAX + 1))).toBe('length');
   });
 
+  it('leaves an EXISTING longer name alone: only new names and renames are limited', () => {
+    // A legacy account may keep the name it already has, and re-saving it unchanged is not a rename.
+    const legacy = 'BloomHeron';
+    expect(problem(legacy)).toBe('length'); // chosen as a NEW name: refused
+    expect(checkDisplayName(legacy, { current: legacy })).toEqual({ ok: true, value: legacy });
+    // ...but a DIFFERENT long name is still refused, even for that legacy account.
+    expect(problem('BloomHeronTwo')).toBe('length');
+    expect(checkDisplayName('BloomHeronTwo', { current: legacy })).toEqual({ ok: false, problem: 'length' });
+  });
+
   it('does not start refusing innocent names that merely contain a blocked fragment', () => {
-    for (const name of ['Cassandra Fox', 'Grapevine', 'Michelle', 'Blossom']) {
+    for (const name of ['Cass Fox', 'Grapery', 'Michelle', 'Blossom']) {
       expect(ok(name)).toBe(name);
     }
+    // The historic case, now a LEGACY name (over the 8-character limit): it is still allowed as the
+    // name the account already has, which is exactly what "existing names are left alone" means.
+    expect(checkDisplayName('Cassandra Fox', { current: 'Cassandra Fox' })).toEqual({ ok: true, value: 'Cassandra Fox' });
   });
 });
 

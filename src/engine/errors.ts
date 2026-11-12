@@ -42,6 +42,7 @@ export type IllegalActionCode =
   | 'OWN_TILE'
   | 'ROOT_IMMUNE'
   | 'NOT_STRONGER'
+  | 'OVERGROW_FORBIDDEN'
   | 'NOT_ADJACENT'
   | 'HEX_COUNT_MISMATCH'
   | 'DUPLICATE_HEX'

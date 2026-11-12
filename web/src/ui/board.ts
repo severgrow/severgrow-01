@@ -3,6 +3,8 @@
 // Also holds the board's animation effects. It never changes game state: it draws
 // whatever board it is given.
 import { FEATURES, IS_FUTA04 } from '../channel.js';
+import { outlinePath } from './outline.js';
+import { DENY_SHAKE, DENY_SHAKE_MS } from './feel.js';
 import { allNeighbors, boardCoords, connectedKeys, coordKey, hexDistance, homeCoord, parseKey } from '../../../src/engine/index.js';
 import type { Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
 import type { Ghost } from '../logic/preview.js';
@@ -10,7 +12,7 @@ import type { Spot } from '../logic/weakspots.js';
 import { looseEdges, networkEdges, veinLook } from '../logic/network.js';
 import type { ThemeStyle } from '../logic/themes.js';
 import type { MaterialLook } from '../logic/materials.js';
-import { FULL_LOOK, S, centerOf, cornerPts, el, hash, hexPath, noiseTile, star } from './geom.js';
+import { FULL_LOOK, S, boardBulge, centerOf, cornerPts, el, getPixelGrid, hash, hexPath, noiseTile, setBoardBulge, star } from './geom.js';
 import { drawMaterial, materialDefs } from './materials.js';
 import { WorldLayer } from './worldlayer.js';
 import { boardUnits } from '../logic/layout.js';
@@ -29,6 +31,7 @@ import { materialsOf } from '../logic/materials.js';
 import { drawSeedStone } from './seedstone.js';
 import { drawGoldFrame } from './goldframes.js';
 import { hexAtPoint } from '../logic/draw.js';
+import { EASE, MOTION } from '../logic/motion.js';
 
 export { FULL_LOOK, S, centerOf, el, noiseTile, star };
 
@@ -150,11 +153,25 @@ export class BoardView {
   private glowScale = 1;
   private glowKeys: Set<string> | null = null;
   protected tileEls = new Map<string, SVGGElement>();
+  private tileSignatures = new Map<string,string>();
+  /** The next render draws every tile again (a subclass's art arrived after tiles were drawn). */
+  protected redrawTiles() { this.tileSignatures.clear(); }
+  private contourSignature = '';
+  private glowSignature = '';
+  private richSignature = '';
+  private warmTimer: ReturnType<typeof setTimeout> | undefined;
   protected veinEls: { a: string; b: string; owner: Player; el: SVGElement }[] = [];
   protected shownVeins = new Set<string>(); // veins on screen last time, to draw new ones on
   private pressTimer: ReturnType<typeof setTimeout> | undefined;
   private pressed: string | null = null;
   private longPressed = false;
+  /**
+   * The screen→board transform for the CURRENT paint gesture. Read once on pointerdown and reused
+   * for every pointermove: reading `getScreenCTM()` per move after the ghost's own style writes
+   * forces a layout flush on each move (a read-after-write in the hottest input loop). The camera
+   * never moves while a Bloom is painted, and a rotation/resize cancels the pointer.
+   */
+  private drawInverse: DOMMatrix | null = null;
   protected look: MaterialLook = FULL_LOOK;
   /** Material pass 2: the world-space material picture (null without a canvas). */
   protected world: WorldLayer | null = null;
@@ -176,9 +193,9 @@ export class BoardView {
   ) {
     // drawing: the board itself listens, so a drag can run across hexes and gaps
     const at = (e: PointerEvent) => {
-      const ctm = svg.getScreenCTM();
-      if (!ctm) return { x: 0, y: 0 };
-      const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+      const inverse = this.drawInverse ?? svg.getScreenCTM()?.inverse();
+      if (!inverse) return { x: 0, y: 0 };
+      const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(inverse);
       return { x: p.x, y: p.y };
     };
     const inside = (e: PointerEvent) => {
@@ -187,6 +204,8 @@ export class BoardView {
     };
     svg.addEventListener('pointerdown', (e) => {
       if (!this.drawing || !this.drawHandlers) return;
+      // One geometry read per gesture, before any ghost node is written.
+      this.drawInverse = svg.getScreenCTM()?.inverse() ?? null;
       // capture every pointer (the mouse too), so a release outside the board still arrives
       svg.setPointerCapture?.(e.pointerId);
       this.drawHandlers.down(at(e), e);
@@ -196,14 +215,17 @@ export class BoardView {
     });
     svg.addEventListener('pointerup', (e) => {
       if (this.drawing && this.drawHandlers) this.drawHandlers.up(at(e), e, inside(e));
+      this.drawInverse = null;
     });
     svg.addEventListener('pointercancel', () => {
       if (this.drawing && this.drawHandlers) this.drawHandlers.cancel();
+      this.drawInverse = null;
     });
     svg.addEventListener('contextmenu', (e) => {
       if (!this.drawing || !this.drawHandlers) return;
       e.preventDefault();
       this.drawHandlers.cancel();
+      this.drawInverse = null;
     });
   }
 
@@ -211,6 +233,7 @@ export class BoardView {
   setDrawing(on: boolean, h: DrawHandlers | null) {
     this.drawing = on;
     this.drawHandlers = on ? h : null;
+    if (!on) this.drawInverse = null;
     this.svg.classList.toggle('drawing', on);
     if (!on) { this.layers?.draw.replaceChildren(); this.ghostPool.clear(); }
   }
@@ -221,7 +244,11 @@ export class BoardView {
    *  hex the player has just painted animates in. Every hex uses the flat grid on Futa04, so the
    *  painted shape matches the legal-move wells exactly. */
   ghost(g: GhostView | null) {
-    const layer = this.layers.draw;
+    // Before the board is mounted (the menu and the Territory screen both live above the game) a
+    // document-level pointer listener can still ask for a ghost clear. There is no layer to paint
+    // into: do nothing rather than throw on `layers` being undefined.
+    const layer = this.layers?.draw;
+    if (!layer) return;
     if (!g) {
       if (this.ghostPool.size > 0) { layer.replaceChildren(); this.ghostPool.clear(); }
       return;
@@ -235,7 +262,7 @@ export class BoardView {
       live.add(sig);
       const kept = this.ghostPool.get(sig);
       if (kept) { kept.classList.toggle('blocked', !!g.blocked); continue; }
-      const gg = el('g', { class: `ghost draw-ghost${t.ok ? '' : ' cant'}${g.blocked ? ' blocked' : ''}`, 'data-key': t.key }, layer);
+      const gg = el('g', { class: `ghost draw-ghost arrive${t.ok ? '' : ' cant'}${g.blocked ? ' blocked' : ''}`, 'data-key': t.key }, layer);
       el('path', { d: hexPath(t.key, IS_FUTA04 ? S - 3 : S * tileScale(t.strength, maxRank), shape), class: 'ghost-tile' }, gg);
       const { x, y } = centerOf(t.key);
       if (IS_FUTA04) drawSeedStone(gg, t.key, x, y, t.strength, 0);
@@ -255,14 +282,19 @@ export class BoardView {
     for (const [sig, node] of this.ghostPool) if (!live.has(sig)) { node.remove(); this.ghostPool.delete(sig); }
   }
 
-  /** A small shake of the ghost: lifting the finger on a shape that can't be placed does nothing else. */
+  /** One nudge home. A refused shape used to wag left and right; a refusal is a single click. */
   shake(reduceMotion: boolean) {
     if (reduceMotion) return;
-    this.layers.draw.animate?.([{ transform: 'translateX(0)' }, { transform: 'translateX(-4px)' }, { transform: 'translateX(4px)' }, { transform: 'translateX(0)' }], { duration: 220 });
+    // 0.85: a short head-shake that settles, not one nudge (ui/feel.ts).
+    this.layers?.draw.animate?.(DENY_SHAKE, { duration: DENY_SHAKE_MS, easing: 'linear' });
   }
 
   /** Builds the static parts (terrain) for a game and theme. */
   setup(config: RulesConfig, terrain: Record<string, Terrain>, style: ThemeStyle, look: MaterialLook = FULL_LOOK, paletteId: ThemeId = 'soil') {
+    this.world?.dispose();clearTimeout(this.warmTimer);
+    this.tileEls.clear();this.tileSignatures.clear();
+    this.contourSignature=this.glowSignature=this.richSignature='';this.glowKeys=null;
+    this.lastRender=null;
     this.paletteId = paletteId;
     this.config = config;
     this.style = style;
@@ -273,6 +305,8 @@ export class BoardView {
     svg.replaceChildren();
     const coords = boardCoords(config);
     this.keys = coords.map(coordKey);
+    // THE BOARD AS A SMALL PLANET (0.75): the live game's board bends on the Territory globe's curve.
+    setBoardBulge(FEATURES.space ? this.keys : null);
     this.richKeys = new Set(this.keys.filter(key => terrain[key] === 'rich'));
     // Step 3: just the tiles, a thin margin and headroom for the homes, in the board's orientation
     const u = boardUnits(config.boardRadius, getOrient());
@@ -286,6 +320,12 @@ export class BoardView {
       el('stop', { offset: '46%', 'stop-color': '#080906', 'stop-opacity': .19 }, shadow);
       el('stop', { offset: '100%', 'stop-color': '#080906', 'stop-opacity': 0 }, shadow);
       svg.style.setProperty('--seed-stone-shadow', this.url('seed-stone-shadow'));
+      // Beta 0.8: a speck of dust is a soft warm glow with no edge (effects.ts dust()).
+      const dust = el('radialGradient', { id: this.id('fx-dust') }, defs);
+      el('stop', { offset: '0%', 'stop-color': '#f3e9d2', 'stop-opacity': 1 }, dust);
+      el('stop', { offset: '45%', 'stop-color': '#e8ddc5', 'stop-opacity': .55 }, dust);
+      el('stop', { offset: '100%', 'stop-color': '#e8ddc5', 'stop-opacity': 0 }, dust);
+      svg.style.setProperty('--fx-dust', this.url('fx-dust'));
     }
     // Bot fill patterns (colour-blind safe: the bot's tiles always carry a pattern).
     const hatch = el('pattern', { id: this.id('pat-hatch'), width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
@@ -306,6 +346,13 @@ export class BoardView {
     el('feMergeNode', { in: 'b' }, merge);
     el('feMergeNode', { in: 'SourceGraphic' }, merge);
 
+    // NO light tint on a tile. A top-rank tile's glow is a property of the tile (its rank and its
+    // owner's moss/lava material), never of what the cockpit display happens to be showing: the
+    // display's tone swings amber/green/red through a turn, and a tint that followed it used to
+    // repaint every top tile at every outcome (owner, 2026-10-20: "the glow on the tiles ... looks
+    // a bit random at the end of turn, esp on enemies tiles changing from red to green and back").
+    // The owner halo below is the whole glow.
+
     materialDefs(defs, this.id, look);
     // Material pass 2: one world-space picture for every moss and lava tile (seamless).
     this.world = null;
@@ -325,8 +372,9 @@ export class BoardView {
       // UX pass: the tiles fade in with their landscape, never the plain look first
       svg.classList.add('warming');
       const warm = () => svg.classList.remove('warming');
-      setTimeout(warm, 1500);
+      this.warmTimer=setTimeout(warm, 1500);
       this.world.onFirst = () => {
+        clearTimeout(this.warmTimer);
         if (this.lastRender) this.render(...this.lastRender);
         warm();
       };
@@ -376,7 +424,63 @@ export class BoardView {
     }
     // Step 4: the homes as landmarks (my tree, the opponent's volcano), drawn once, kept across renders
     this.homeEls = ([0, 1] as const).map((p) => this.drawHome(p, coordKey(homeCoord(p, config))));
+    if (FEATURES.space) this.drawPlanetSkin(defs);
     this.afterSetup(terrain);
+  }
+
+  /**
+   * THE BOARD'S PLANET SKIN (0.75, owner 2026-11-04: "Board edges darken slightly, like the planet's
+   * rim. Tiles take the planet's matte slabs and fine grout lines" and "Turn rim: a thin glow around the
+   * board's edge like the planet's atmosphere: cream on the player's turn, dim on the opponent's").
+   * Drawn once per setup, above the tiles and homes and below every overlay, and never hit-tested:
+   *  - the slab: one soft top light and bottom shade per cell (the planet's chamfered, matte tiles);
+   *  - the grout: a fine dark line round every cell;
+   *  - the rim: a radial shade toward the board's edge, like the planet's limb;
+   *  - the turn rim: the board's outline, a hairline over a soft glow, lit by `body[data-turn]` (CSS).
+   */
+  private drawPlanetSkin(defs: SVGDefsElement) {
+    const pose = boardBulge();
+    if (!pose) return;
+    const shade = el('radialGradient', { id: this.id('planet-rim'), gradientUnits: 'userSpaceOnUse', cx: pose.cx, cy: pose.cy, r: pose.radius * 0.97 }, defs);
+    el('stop', { offset: 0.58, 'stop-color': '#000', 'stop-opacity': 0 }, shade);
+    el('stop', { offset: 1, 'stop-color': '#000', 'stop-opacity': 0.34 }, shade);
+    const slab = el('linearGradient', { id: this.id('planet-slab'), x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+    el('stop', { offset: 0, 'stop-color': '#f2ede4', 'stop-opacity': 0.07 }, slab);
+    el('stop', { offset: 0.42, 'stop-color': '#f2ede4', 'stop-opacity': 0 }, slab);
+    el('stop', { offset: 1, 'stop-color': '#000', 'stop-opacity': 0.16 }, slab);
+    const skin = el('g', { class: 'l-planet-skin', 'aria-hidden': 'true', 'pointer-events': 'none' });
+    this.svg.insertBefore(skin, this.layers.contour);
+    let cells = '';
+    for (const key of this.keys) cells += hexPath(key, S, 'flat');
+    el('path', { d: cells, fill: this.url('planet-slab'), class: 'planet-slab' }, skin);
+    el('path', { d: cells, fill: this.url('planet-rim'), class: 'planet-limb' }, skin);
+    // A PIECE OF PLANET IN SPACE (owner, 2026-11-04: "The board should feel like real piece of planet
+    // flying but lowkey"): the board's own silhouette, twice, offset below it at low alpha: a soft
+    // shadow drawn once beneath the entire board silhouette.
+    const shadow = el('g', { class: 'l-planet-shadow', 'aria-hidden': 'true', 'pointer-events': 'none' });
+    this.svg.insertBefore(shadow, this.layers.base);
+    // The outline: every cell side with no neighbour across it, as drawn (bent corners).
+    const set = new Set(this.keys);
+    const edges: (readonly [readonly [number,number],readonly [number,number]])[] = [];
+    for (const key of this.keys) {
+      const c = centerOf(key), pts = cornerPts(key, S);
+      for (let i = 0; i < 6; i++) {
+        const a = pts[i]!, b = pts[(i + 1) % 6]!;
+        const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+        const out = hexAtPoint(mx + (mx - c.x) * 0.9, my + (my - c.y) * 0.9, set, 1);
+        if (out) continue;
+        edges.push([a,b]);
+      }
+    }
+    const rim=outlinePath(edges,Math.max(.15,getPixelGrid()*1.5));
+    // Painted feathering stays cheap when the board's parent rises/scales. No filter re-raster
+    // on that moving ancestor, and no softening of tile art or digits (VISUAL-CONVENTIONS.md).
+    el('path',{d:rim,transform:'translate(0 6)',class:'planet-shadow-far',stroke:'#000','stroke-opacity':.04,'stroke-width':4,'stroke-linejoin':'round'},shadow);
+    el('path',{d:rim,transform:'translate(0 2)',class:'planet-shadow-near',stroke:'#000','stroke-opacity':.08,'stroke-width':2,'stroke-linejoin':'round'},shadow);
+    const glow=el('g',{class:'planet-turn-glow',fill:'none','stroke-linejoin':'round'},shadow);
+    for(const [width,opacity] of [[8,.12],[5,.35],[3,.5]])el('path',{d:rim,'stroke-width':width!,'opacity':opacity!},glow);
+    const turn = el('g', { class: 'planet-turn-rim' }, skin);
+    el('path', { d: rim, fill: 'none', class: 'planet-turn-line' }, turn);
   }
 
   // ---- drawing steps a skinned board (ui/skin/) can replace; these defaults are the board's own look ----
@@ -456,6 +560,9 @@ export class BoardView {
 
   /** Redraws the networks and overlays for `board`. */
   protected lastRender: [Record<string, Tile | null>, Overlay] | null = null;
+  /** The legal tiles the invitation breath is running for, and when they first appeared. */
+  private inviteKey = '';
+  private inviteT0 = 0;
   private previousContourEdges: [Set<string>, Set<string>] = [new Set(),new Set()];
 
   render(board: Record<string, Tile | null>, o: Overlay) {
@@ -467,11 +574,8 @@ export class BoardView {
       this.world.sync(paint, this.paletteId, this.look.textures ? 'normal' : 'low');
     }
     veins.replaceChildren();
-    tiles.replaceChildren();
     over.replaceChildren();
     scars.replaceChildren();
-    rich.replaceChildren();
-    this.tileEls.clear();
     this.veinEls = [];
 
     this.drawScars(board, o, scars);
@@ -479,17 +583,39 @@ export class BoardView {
     this.drawVeins(board, o, veins);
 
     const maxRank = this.config.maxRank;
+    let cursor=tiles.firstElementChild;
     for (const key of this.keys) {
       const t = board[key];
-      if (!t) continue;
-      this.tileEls.set(key, this.drawTile(tiles, key, t, maxRank));
+      if (!t) {
+        const old=this.tileEls.get(key);
+        if(old===cursor)cursor=cursor.nextElementSibling;
+        old?.remove();this.tileEls.delete(key);this.tileSignatures.delete(key);continue;
+      }
+      const signature=`${t.owner}:${t.strength}:${!!t.root}:${!!this.world?.ready}`;
+      let node=this.tileEls.get(key);
+      if(!node || this.tileSignatures.get(key)!==signature){
+        const next=this.drawTile(tiles,key,t,maxRank);
+        if(node){if(node===cursor)cursor=node.nextElementSibling;node.replaceWith(next);}
+        node=next;this.tileEls.set(key,node);this.tileSignatures.set(key,signature);
+      }
+      if(node===cursor)cursor=cursor.nextElementSibling;
+      else tiles.insertBefore(node,cursor);
     }
     this.drawGlows(board);
     if (IS_FUTA04) {
-      this.drawTerritoryContour(board);
-      for (const key of this.richKeys) {
-        const { x, y } = centerOf(key);
-        drawGoldFrame(rich, key, x, y, !!board[key]);
+      const contour=this.keys.map(key=>board[key]?.owner??'-').join('');
+      // A newly drawn wave compacts into the stable joined outline on the next paint,
+      // including the pump's final paint. Never cache its temporary grow-in nodes forever.
+      if(contour!==this.contourSignature || this.layers.contour.querySelector('.grow-in')){
+        this.contourSignature=contour;this.drawTerritoryContour(board);
+      }
+      const gold=[...this.richKeys].map(key=>Number(!!board[key])).join('');
+      if(gold!==this.richSignature || !rich.childElementCount){
+        this.richSignature=gold;rich.replaceChildren();
+        for (const key of this.richKeys) {
+          const { x, y } = centerOf(key);
+          drawGoldFrame(rich, key, x, y, !!board[key]);
+        }
       }
     }
     this.renderOverlays(board, o);
@@ -504,13 +630,14 @@ export class BoardView {
       try { joined = connectedKeys(board, this.config, owner); }
       catch { continue; }
       const segments: string[] = [];
+      const boundary: (readonly [readonly [number,number],readonly [number,number]])[] = [];
       const fresh: { path:string; distance:number }[] = [];
       const seen = new Set<string>();
       const hadContour = this.previousContourEdges[owner].size > 0;
       const home = parseKey(this.rootKey(owner));
       for (const key of joined) {
         const centre = centerOf(key);
-        const corners = cornerPts(key, S - 1.5);
+        const corners = cornerPts(key, S);
         const neighbors = allNeighbors(parseKey(key)).map(coordKey);
         for (let i = 0; i < 6; i++) {
           const a = corners[i]!, b = corners[(i + 1) % 6]!;
@@ -522,6 +649,7 @@ export class BoardView {
               (p.x - centre.x) * mx + (p.y - centre.y) * my ? candidate : best;
           });
           if (!joined.has(across)) {
+            boundary.push([a,b]);
             const edge = `${key}:${i}`;
             const path = `M${a[0].toFixed(2)},${a[1].toFixed(2)}L${b[0].toFixed(2)},${b[1].toFixed(2)}`;
             seen.add(edge);
@@ -530,7 +658,7 @@ export class BoardView {
           }
         }
       }
-      if (segments.length) el('path', { d: segments.join(''), class: `territory-contour p${owner}`, fill: 'none' }, layer);
+      if (segments.length) el('path', { d: outlinePath(boundary,Math.max(.15,getPixelGrid()*1.5)), class: `territory-contour p${owner}`, fill: 'none' }, layer);
       const nearest = Math.min(...fresh.map(edge=>edge.distance));
       // A Bloom wave: 45ms outward from the new edge, capped so the last vein draws on inside
       // one "moment" (600ms) with its tile.
@@ -601,10 +729,27 @@ export class BoardView {
         if (o.targets.has(key) || key === o.selectedHex) continue;
         el('path', { d: hexPath(key, S - 1.2, IS_FUTA04 ? 'flat' : st.tileShape), class: 'dim' }, over);
       }
+      // The invitation rolls out from the mover's own home: the nearer home to the legal tiles.
+      const targets = o.targets;
+      const [h0, h1] = [parseKey(this.rootKey(0)), parseKey(this.rootKey(1))];
+      const reach = (h: typeof h0) => [...targets].reduce((n, k) => n + hexDistance(parseKey(k), h), 0);
+      const from = reach(h0) <= reach(h1) ? h0 : h1;
+      // The overlay is rebuilt on every render; the breath keeps its own clock from the moment this
+      // set of legal tiles first appeared, so a re-render resumes it mid-breath instead of restarting.
+      const inviteKey = [...targets].sort().join('|');
+      const now = performance.now();
+      if (inviteKey !== this.inviteKey) { this.inviteKey = inviteKey; this.inviteT0 = now; }
+      const since = now - this.inviteT0;
       for (const key of o.targets) {
         const kind = o.targetKinds?.[key] ?? 'grow';
         // A legal empty socket gets a recessed inner edge beneath the existing target hitbox.
         if (IS_FUTA04) el('path', { d: hexPath(key, S - 5, 'flat'), class: `receptive-well kind-${kind}`, 'aria-hidden': 'true' }, over);
+        // ...and a soft light that breathes in it, a step later the further it is from home:
+        // "tap here", said quietly. Light only — no scale, so the board's proportions never move.
+        if (IS_FUTA04) el('path', {
+          d: hexPath(key, S - 3, 'flat'), class: `target-invite kind-${kind}`, 'aria-hidden': 'true',
+          style: `animation-delay:${(220 + Math.max(0, hexDistance(parseKey(key), from) - 1) * 160 - since).toFixed(0)}ms`,
+        }, over);
         el('path', { d: hexPath(key, S - 3, IS_FUTA04 ? 'flat' : st.tileShape), class: `target kind-${kind}${o.coachHexes.includes(key) ? ' coached' : ''}`, 'data-key': key, 'data-kind': kind }, over);
         // a shape, not only a colour: + strengthens my tile, ⇆ replaces a bot tile
         // (a Fruit card's targets keep a calm ring, no badge)
@@ -780,6 +925,11 @@ export class BoardView {
 
   /** The slight glow on top-rank tiles: a faint pre-rendered halo, above the tiles, under everything else. */
   protected drawGlows(board: Record<string, Tile | null>) {
+    const signature=JSON.stringify([this.glowOpts,this.glowScale,this.keys.map(key=>{
+      const t=board[key];return t&&!t.root?`${t.owner}:${t.strength}`:'';
+    })]);
+    if(signature===this.glowSignature)return;
+    this.glowSignature=signature;
     const layer = this.layers.glow;
     layer.replaceChildren();
     const now = new Set<string>();
@@ -794,6 +944,8 @@ export class BoardView {
       now.add(key);
       const { x, y } = centerOf(key);
       const e = sprite.extent;
+      // ONE halo for the tile: the owner's baked sprite, in the owner's own colour. Nothing here
+      // reads the display's light contract, so a tile cannot change colour with the display.
       const img = el('image', { href: sprite.url, x: x - e, y: y - e, width: e * 2, height: e * 2, class: `top-glow ${kind}`, 'data-key': key, style: `--op:${Math.min(1, glow.opacity * this.glowScale).toFixed(3)}` }, layer);
       // newly at the top (a Strengthen, or a tile grown at the top rank): fade in, nothing else
       if (this.glowKeys && !this.glowKeys.has(key)) img.classList.add('glow-in');
@@ -817,7 +969,7 @@ export class BoardView {
       old.setAttribute('fill', this.url('world-prev'));
       old.classList.add('world-prev');
       fill.after(old);
-      const a = old.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 420, easing: 'ease-out', fill: 'forwards' });
+      const a = old.animate([{ opacity: 1 }, { opacity: 0 }], { duration: MOTION.move, easing: EASE.out, fill: 'forwards' });
       a.onfinish = () => old.remove();
     }
   }
@@ -863,6 +1015,17 @@ export class BoardView {
   }
 
   /** Overhaul item 19: dim the board except these hexes (null: no dimming). */
+  /**
+   * Forget a press in progress: a sheet now covers the board, so the finger that pressed a tile is
+   * no longer pressing it. Without this a lift lost to a redraw let the long-press timer fire later
+   * and open a tile card nobody asked for.
+   */
+  releasePress() {
+    clearTimeout(this.pressTimer);
+    this.pressed = null;
+    this.longPressed = false;
+  }
+
   focus(keys: readonly string[] | null) {
     const g = this.layers.dim;
     if (!keys || keys.length === 0) {

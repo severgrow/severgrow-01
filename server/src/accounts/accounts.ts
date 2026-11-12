@@ -13,6 +13,8 @@ import type { PgPool } from '../storage/postgres.js';
 import type { PlayerRecord, Storage } from '../storage/types.js';
 import { playerSummary } from '../storage/types.js';
 
+// Historical database namespace: subjects have ALWAYS been Supabase user IDs, not Google IDs.
+// Keep the label so existing accounts, uniqueness and rolling server deploys need no migration.
 export type Provider = 'google';
 
 export type IdentityLink = { provider: Provider; subject: string; playerId: string; createdAt: number };
@@ -88,7 +90,7 @@ export const postgresIdentityLinkStore = (pool: PgPool): IdentityLinkStore => ({
 });
 
 /** Who a Supabase access token belongs to. `providers` lists how that user has signed in. */
-export type AuthUser = { id: string; email: string | null; providers: string[] };
+export type AuthUser = { id: string; email: string | null; providers: string[]; emailConfirmed?: boolean };
 
 export type AuthProvider = {
   /** Resolves a Supabase access token to its user, or null when it is not valid. */
@@ -108,14 +110,14 @@ export const supabaseAuthProvider = (opts: { url: string; anonKey: string; servi
   const f: FetchLike = opts.fetch ?? ((i, init) => fetch(i, init));
   return {
     async user(accessToken) {
-      const res = await f(`${base}/auth/v1/user`, { headers: { apikey: opts.anonKey, authorization: `Bearer ${accessToken}` } });
+      const res = await f(`${base}/auth/v1/user`, { headers: { apikey: opts.anonKey, authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(15_000) });
       if (res.status === 401 || res.status === 403) return null;
-      if (!res.ok) throw new ApiError('INTERNAL', 'Google sign-in is not available right now.');
-      const body = (await res.json()) as { id?: unknown; email?: unknown; app_metadata?: { providers?: unknown; provider?: unknown } };
+      if (!res.ok) throw new ApiError('INTERNAL', 'Sign-in is not available right now.');
+      const body = (await res.json()) as { id?: unknown; email?: unknown; email_confirmed_at?: unknown; app_metadata?: { providers?: unknown; provider?: unknown } };
       if (typeof body.id !== 'string' || body.id.length === 0) return null;
       const meta = body.app_metadata ?? {};
       const providers = Array.isArray(meta.providers) ? meta.providers.filter((p): p is string => typeof p === 'string') : typeof meta.provider === 'string' ? [meta.provider] : [];
-      return { id: body.id, email: typeof body.email === 'string' ? body.email : null, providers };
+      return { id: body.id, email: typeof body.email === 'string' ? body.email : null, providers, emailConfirmed: typeof body.email_confirmed_at === 'string' && Number.isFinite(Date.parse(body.email_confirmed_at)) };
     },
     async deleteUser(id) {
       const key = opts.serviceRoleKey?.trim();
@@ -123,7 +125,7 @@ export const supabaseAuthProvider = (opts: { url: string; anonKey: string; servi
       // Legacy service-role keys are JWTs and go in both headers; new secret keys go in `apikey` only.
       const headers: Record<string, string> = { apikey: key };
       if (key.startsWith('eyJ')) headers.authorization = `Bearer ${key}`;
-      const res = await f(`${base}/auth/v1/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE', headers });
+      const res = await f(`${base}/auth/v1/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE', headers, signal: AbortSignal.timeout(15_000) });
       return res.ok || res.status === 404;
     },
   };
@@ -143,6 +145,8 @@ export const createAccountsRouter = (deps: {
   storage: Storage;
   /** Null when this server has no Supabase project configured: the routes answer "not available". */
   auth: AuthProvider | null;
+  /** Switch on only after SMTP and the email-code template are configured. */
+  emailEnabled?: boolean;
   authenticate: (token: string | null) => Promise<PlayerRecord>;
   now: () => number;
   limits?: { signInPerIpPerHour: number; unlinkPerPlayerPerHour: number };
@@ -175,8 +179,9 @@ export const createAccountsRouter = (deps: {
     }
   };
 
-  const signIn = async (req: Request) => {
-    if (!deps.auth) throw new ApiError('FORBIDDEN', 'Google sign-in is not switched on yet.');
+  const signIn = async (req: Request, method: 'google' | 'email') => {
+    if (method === 'email' && !deps.emailEnabled) throw new ApiError('FORBIDDEN', 'Email sign-in is not switched on yet.');
+    if (!deps.auth) throw new ApiError('FORBIDDEN', 'Sign-in is not switched on yet.');
     await limit(`auth:google:ip:${pickClientIp(req.headers) ?? 'unknown'}`, limits.signInPerIpPerHour);
     let body: Record<string, unknown> = {};
     try {
@@ -186,9 +191,10 @@ export const createAccountsRouter = (deps: {
       throw new ApiError('INVALID_REQUEST', 'Sign-in request is not valid JSON.');
     }
     const accessToken = typeof body.accessToken === 'string' ? body.accessToken.trim() : '';
-    if (accessToken.length < 16 || accessToken.length > 8192) throw new ApiError('INVALID_REQUEST', 'A Google sign-in is required.');
+    if (accessToken.length < 16 || accessToken.length > 8192) throw new ApiError('INVALID_REQUEST', 'A verified sign-in is required.');
     const user = await deps.auth.user(accessToken);
-    if (!user || !user.providers.includes('google')) throw new ApiError('UNAUTHORIZED', 'Google sign-in did not work. Please try again.');
+    if (!user || (method === 'google' ? !user.providers.includes('google') : !user.email || user.emailConfirmed !== true))
+      throw new ApiError('UNAUTHORIZED', 'A verified sign-in is required. Please try again.');
 
     const current = await currentPlayer(req);
     // Up to two passes: a second device racing the same first sign-in loses the insert and then
@@ -234,9 +240,14 @@ export const createAccountsRouter = (deps: {
     const token = bearer(req);
     const player = await deps.authenticate(token);
     await limit(`auth:unlink:player:${player.id}`, limits.unlinkPerPlayerPerHour);
-    const removed = await deps.links.unlink(player.id, 'google');
+    const existing = await deps.links.byPlayer(player.id, 'google');
     let emailDeleted = false;
-    if (removed && deps.auth) emailDeleted = await deps.auth.deleteUser(removed.subject);
+    if (existing) {
+      emailDeleted = deps.auth ? await deps.auth.deleteUser(existing.subject) : false;
+      // Do not claim deletion or destroy recovery when the identity service is unavailable.
+      if (!emailDeleted) throw new ApiError('INTERNAL', 'Your account could not be deleted. Please try again.');
+    }
+    const removed = await deps.links.unlink(player.id, 'google');
     const guest: PlayerRecord = { ...player, kind: 'guest' };
     if (player.kind !== 'guest') await deps.storage.updatePlayer(guest);
     const signedOut = await deps.links.revokeOtherTokens(player.id, hashToken(token!), deps.now());
@@ -244,9 +255,11 @@ export const createAccountsRouter = (deps: {
   };
 
   return async (req, path) => {
-    if (path === '/v1/auth/google' && req.method === 'POST') return signIn(req);
+    if (path === '/v1/auth/methods' && req.method === 'GET') return { status: 200, body: { email: deps.auth !== null && deps.emailEnabled === true } };
+    if (path === '/v1/auth/google' && req.method === 'POST') return signIn(req, 'google');
+    if (path === '/v1/auth/email' && req.method === 'POST') return signIn(req, 'email');
     // POST, not DELETE: the API's CORS allow-list is GET/POST/PATCH (server/src/cors.ts).
-    if (path === '/v1/auth/google/delete' && req.method === 'POST') return unlink(req);
+    if ((path === '/v1/auth/google/delete' || path === '/v1/auth/email/delete') && req.method === 'POST') return unlink(req);
     return null;
   };
 };

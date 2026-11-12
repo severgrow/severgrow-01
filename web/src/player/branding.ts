@@ -1,8 +1,31 @@
-// Futasaku 0.4 uses the Futa04 presentation; historical channels keep their existing brand.
-import logoUrl from '../assets/futasaku-emblem.webp?url';
-import wordmarkUrl from '../assets/futasaku-white.webp?url';
+// Owner brand pack (2026-11-07): pure-vector SVGs — never redraw letterforms.
+//   PAINT  → home-screen menu only (true vector paint SVG; CSS drop-shadow OK)
+//   PLAIN  → small logos in menus / in-game / everywhere else
+//   HEX    → app icon + card back (SVG rasterised offline)
+//   FAVICON tree-hex → the page icon only (index.html). Do not import that PNG here: it is
+//   ~710KB and nothing in the app reads it, so an import would ship it inside the JS bundle.
+import paintUrl from '../assets/brand/paint-wordmark.svg?url';
+// The home menu shows the PAINT mark as ONE image rendered from that vector at 4x its largest size
+// (owner, 2026-11-08: the desktop menu showed the brush grain as rectangles behind the letters, which
+// "should never happen"). WebKit can paint the SVG's clipped grain group without its clip; a 4x render
+// of the same vector is just as sharp on a retina screen and cannot come apart. 107 KB (the SVG: 528 KB).
+import paintMenuUrl from '../assets/brand/paint-wordmark-4x.webp?url';
+// EXPERIMENT (owner, 2026-11-09: "replace the paint logo in main menu with the new plain one"): the
+// home menu shows the PLAIN mark, cropped to the paint mark's own box (27 59 1995 565) so the lockup
+// keeps its size and place. One solid fill, no grain group, so nothing can come apart in WebKit.
+// The PAINT render stays shipped (paintMenuUrl) so the experiment is one line to undo.
+import plainMenuUrl from '../assets/brand/plain-wordmark-menu.svg?url';
+import plainUrl from '../assets/brand/plain-wordmark.svg?url';
 import { bestFit, boardUnits } from '../logic/layout.js';
 import type { Layout, Viewport } from '../logic/layout.js';
+
+/** PLAIN wordmark URL — shared by replay video / poster exports and small HUD marks. */
+export const WORDMARK_URL: string = plainUrl;
+/** Home-menu PAINT mark (true vector SVG). */
+export const PAINT_URL: string = paintUrl;
+
+/** PLAIN wordmark viewBox width÷height (`-28 11 2106 662`). The home PAINT box is tighter: 1995×565. */
+export const WORDMARK_ASPECT = 2106 / 662;
 
 export const BRANDING_CSS = `
 html.futa04-branding.slim-hud .game > .hud {
@@ -17,32 +40,31 @@ html.futa04-branding.slim-hud .game > .hud {
 }
 html.futa04-branding .game > #race { display: none !important; }
 html.futa04-branding .game { max-width: none; margin: 0; }
-/* iOS home-screen apps expose the notch/home insets to the layout code. The
-   shared .screen padding would reserve the same insets again, shrinking the
-   board and leaving an unused band below the hand. Safari tabs keep it. */
+html.futa04-branding #hud-menu:focus-visible { outline-offset: -3px; }
 html.futa04-branding.home-screen-app #game { padding: 0; }
-/* Reserve the home indicator once, inside the play grid; its background still
-   paints to the physical screen edge while the dock stays above the gesture. */
 html.futa04-branding.home-screen-app #game > .play { padding-bottom: env(safe-area-inset-bottom); }
 html.futa04-branding.home-screen-app,
-html.futa04-branding.home-screen-app body { height:var(--futasaku-app-height,100dvh); }
-html.futa04-branding.home-screen-app :is(#game,#texture) {
-  height:var(--futasaku-app-height,100dvh); bottom:auto;
+html.futa04-branding.home-screen-app body { height:var(--futasaku-app-height,100lvh); }
+html.futa04-branding.home-screen-app #game {
+  height:var(--futasaku-app-height,100lvh); bottom:auto;
 }
+/* The background never stops short of the screen's bottom edge (owner, 2026-11-09: a black strip
+   below the deck): fixed edge to edge, and at least the app's measured height. */
+html.futa04-branding.home-screen-app #texture { inset:0; min-height:var(--futasaku-app-height,100lvh); }
 html.futa04-branding .play { --board-margin: 2px; }
 html.futa04-branding[data-layout='stack'] .board-wrap {
   margin-left: 2px;
   margin-right: 2px;
 }
-html.futa04-branding[data-layout='side'] .dock { align-self: end; row-gap: 8px; }
-/* The screen already reserves the notch/home-indicator insets. */
+html.futa04-branding[data-layout='side'] .dock { align-self: center; row-gap: 8px; }
 html.futa04-branding .dock { padding-bottom: 4px; }
 html.futa04-branding[data-thumb] .dock { padding: 0; }
 html.futa04-branding #hud-brand {
-  grid-column: 3;
-  justify-self: end;
+  position: fixed;
+  top: var(--futasaku-logo-top, 16px);
+  right: calc(env(safe-area-inset-right, 0px) + 6px);
+  z-index: 74;
   height: var(--futasaku-logo-height, 22px);
-  align-self: start; margin-top: var(--futasaku-logo-top, 18px);
   width: auto;
   max-width: 90px;
   display: block;
@@ -50,15 +72,52 @@ html.futa04-branding #hud-brand {
   pointer-events: none;
   user-select: none;
 }
-html.futa04-branding #hud-menu,
-html.futa04-branding #hud-brand { position: relative; top: 0; }
+html.futa04-branding:not(.brand-mark) #hud-brand { display: none; }
+html.futa04-branding.has-online-screen:not(#no-has):not(.no-has) #hud-brand { display:none !important; }
+html.futa04-branding.has-install-prompt:not(#no-has) #hud-brand { display: none; }
+html.futa04-branding #hud-menu { position: relative; top: 0; }
+html.futa04-branding #go-brand {
+  display: block;
+  height: var(--futasaku-logo-height, 22px);
+  width: auto;
+  max-width: 90px;
+  margin: 0 auto 12px;
+  opacity: .8;
+  pointer-events: none;
+  user-select: none;
+}
+html.futa04-branding #gameover[data-fresh='1'] #go-brand {
+  animation: go-brand-in var(--ix-open) var(--ix-ease-open) both;
+}
+@keyframes go-brand-in { from { opacity: 0; } }
+.reduce-motion #gameover #go-brand { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  #gameover #go-brand { animation: none !important; }
+}
+@media (max-height: 660px) {
+  html.futa04-branding #hud-brand,
+  html.futa04-branding #go-brand { height: calc(var(--futasaku-logo-height, 22px) * 0.82); }
+  html.futa04-branding #go-brand { margin-bottom: 9px; }
+}
 html.futa04-branding #menu #terrarium { display: none !important; }
 html.futa04-branding #menu #logo {
   display: block !important;
-  width: min(240px, 58vw, 29dvh);
-  margin: 0 auto 16px;
+  flex: none;
+  width: min(200px, 52vw, 22dvh);
+  aspect-ratio: 1995 / 565;
+  margin: 0 auto;
 }
-html.futa04-branding #menu #logo svg { display: block; width: 100%; height: auto; }
+html.futa04-branding #menu #logo img,
+html.futa04-branding #menu #logo svg {
+  display: block; width: 100%; height: auto;
+  image-rendering: auto;
+}
+/* PAINT on the home menu: a barely-noticeable almost-black drop shadow so it pops a tiny bit. */
+html.futa04-branding #menu #logo img.paint-mark,
+html.futa04-branding #menu #logo img.plain-mark,
+html.futa04-branding #menu #logo svg.paint-mark {
+  filter: drop-shadow(0 1px 1.5px rgba(8, 8, 10, .55));
+}
 `;
 
 /** Presentation-only boxes. Card sizes, hand order, tile coordinates and inputs are unchanged. */
@@ -77,7 +136,6 @@ export function polishLayout(layout: Layout, v: Viewport, radius: number): Layou
       band: { ...old.band, y: old.band.y - 2 * reclaim } };
     for (const name of ['deck','discard','piles','moves','undo','sort'] as const)
       l.parts[name] = { ...l.parts[name], y: l.parts[name].y + 8 + reclaim };
-    // Reserve the 104px cockpit without pushing the fan below the safe screen edge.
     const cockpitExtra = 24;
     l.dock.h += cockpitExtra; l.dock.y -= cockpitExtra; l.rows.hand = l.dock.h;
     l.thumb.fan.baseY += cockpitExtra;
@@ -85,10 +143,7 @@ export function polishLayout(layout: Layout, v: Viewport, radius: number): Layou
     l.parts.fan = { ...l.dock };
     l.zone = { x: left + 2, y: l.header.y + l.header.h, w: v.w-left-right-4, h: l.dock.y-l.header.y-l.header.h };
   } else {
-    // Two compact control rows plus clearance for the fan's rotated upper corners.
     l.rows.table = Math.max(124, l.parts.pileCard.h + 22);
-    // The curved/rotated desktop fan needs its original 20px clearance; remove only
-    // the surplus spacing, so its lower corners never cross the screen edge.
     l.rows.hand = l.card.h + 20;
     const gap = l.mode === 'side' ? 8 : 0;
     l.dock.h = l.rows.table + l.rows.hand + gap + 4;
@@ -108,49 +163,81 @@ export function polishLayout(layout: Layout, v: Viewport, radius: number): Layou
   return l;
 }
 
-// The exported PNG has faint alpha fringes in otherwise empty space. Render the mark as
-// uniformly cream, omit those fringes, and crop its transparent margins without stretching.
-function whiteLogo(id: string, accessible: boolean, wordmark = false): SVGSVGElement {
+/** Build an SVG wrapping a mark so existing callers that expect SVGSVGElement keep working. */
+function markSvg(id: string, href: string, accessible: boolean, wide: boolean, paint = false): SVGSVGElement {
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
-  const width = wordmark ? 2200 : 1254, height = wordmark ? 715 : 1254;
+  const width = wide ? 2106 : 1254, height = wide ? 662 : 1254;
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
   svg.setAttribute('width', String(width));
   svg.setAttribute('height', String(height));
   svg.setAttribute('focusable', 'false');
   if (accessible) { svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'Futasaku'); }
   else svg.setAttribute('aria-hidden', 'true');
-  svg.innerHTML = `<defs><filter id="${id}" color-interpolation-filters="sRGB"><feComponentTransfer result="logo-mask">
-    <feFuncR type="linear" slope="0" intercept="1"/><feFuncG type="linear" slope="0" intercept="1"/>
-    <feFuncB type="linear" slope="0" intercept="1"/><feFuncA type="discrete" tableValues="0 1"/>
-  </feComponentTransfer><feFlood style="flood-color:var(--c-accent)"/><feComposite operator="in" in2="logo-mask"/></filter></defs>`;
   const image = document.createElementNS(ns, 'image');
-  image.setAttribute('href', wordmark ? wordmarkUrl : logoUrl);
+  image.id = id;
+  image.setAttribute('href', href);
+  image.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  image.setAttribute('x', '0');
+  image.setAttribute('y', '0');
   image.setAttribute('width', String(width));
   image.setAttribute('height', String(height));
-  image.setAttribute('filter', `url(#${id})`);
+  if (paint) image.setAttribute('class', 'paint-mark');
   svg.append(image);
   return svg;
 }
 
-export function drawLogo() {
-  const container = document.getElementById('logo');
-  if (!container) return;
-  container.replaceChildren(whiteLogo('futasaku-menu-white', false));
+/** Home-menu PAINT mark as an <img> so the CSS drop-shadow filter applies cleanly. */
+function paintMarkImg(): HTMLImageElement {
+  const img = document.createElement('img');
+  img.className = 'paint-mark';
+  img.src = paintMenuUrl;
+  img.alt = '';
+  img.width = 2000;
+  img.height = 566;
+  img.setAttribute('aria-hidden', 'true');
+  img.decoding = 'async';
+  img.draggable = false;
+  return img;
 }
 
-/**
- * The small, treeless Futasaku wordmark the game HUD shows top-right (`#hud-brand`), built as a
- * standalone element so other surfaces (the online submenu header) can reuse the exact same asset,
- * filter and treatment instead of inventing one. `id` must be unique in the document: it names the
- * SVG filter that tints the image, exactly as `#hud-brand` does.
- */
-export function createHudBrandMark(id = 'futasaku-hud-white'): SVGSVGElement {
-  return whiteLogo(id, true, true);
+/** Home-menu PLAIN mark (the 2026-11-09 experiment), same box and shadow as the paint one. */
+function plainMarkImg(): HTMLImageElement {
+  const img = document.createElement('img');
+  img.className = 'plain-mark';
+  img.src = plainMenuUrl;
+  img.alt = '';
+  img.width = 1995;
+  img.height = 565;
+  img.setAttribute('aria-hidden', 'true');
+  img.decoding = 'async';
+  img.draggable = false;
+  return img;
 }
+/** The paint mark, kept for the experiment's undo. */
+export const homePaintMark = paintMarkImg;
+
+export function drawLogo(_kanji = false) {
+  const container = document.getElementById('logo');
+  if (!container) return;
+  // Home screen menu: the PLAIN mark (owner experiment, 2026-11-09; was PAINT since 2026-11-07).
+  container.replaceChildren(plainMarkImg());
+}
+
+export function createHudBrandMark(id = 'futasaku-hud-plain'): SVGSVGElement {
+  return markSvg(id, plainUrl, true, true);
+}
+
+export function createWordmarkMark(id = 'futasaku-wordmark-plain'): SVGSVGElement {
+  return markSvg(id, plainUrl, false, true);
+}
+
+/** The badge is measured from the HUD's own menu ink; main.ts asks for a re-measure on screen change. */
+let alignBrand: (() => void) | null = null;
 
 export function mountBranding() {
   document.documentElement.classList.add('futa04-branding');
+  document.documentElement.classList.remove('brand-mark');
   document.title = 'Futasaku';
   const title = document.querySelector('#menu .title');
   if (title) title.textContent = 'Futasaku';
@@ -160,30 +247,27 @@ export function mountBranding() {
   document.head.append(style);
   const race = document.getElementById('race');
   if (race) { race.hidden = true; race.setAttribute('aria-hidden', 'true'); }
-  const image = whiteLogo('futasaku-hud-white', true, true);
+  const image = createHudBrandMark('futasaku-hud-plain');
   image.id = 'hud-brand';
-  document.querySelector('#game > .hud')?.append(image);
-  // Match the visible ink, including the rounded stroke, rather than the 44px tap target.
+  document.body.append(image);
+  const cap = createHudBrandMark('futasaku-go-plain');
+  cap.id = 'go-brand';
+  document.querySelector('#gameover .go-summary')?.prepend(cap);
   const menuIcon = document.querySelector<HTMLElement>('#hud-menu .i');
+  const root = document.documentElement.style;
   const align = () => {
+    if (document.getElementById('game')?.hidden) return;
     const path = menuIcon?.querySelector<SVGGraphicsElement>('path');
     const matrix = path?.getScreenCTM();
     if (!path || !matrix) return;
     const stroke = parseFloat(getComputedStyle(path).strokeWidth) || 0;
-    const height = (path.getBBox().height + stroke) * Math.hypot(matrix.c, matrix.d);
-    if (height > 0) {
-      image.style.setProperty('--futasaku-logo-height', `${height * 1.82}px`);
-      // The taller logo also changes the grid row's height, which moves the menu ink.
-      // Re-measure both after each small correction until their tops meet, including safe areas.
-      for (let i = 0; i < 7; i++) {
-        const inkTop = path.getBoundingClientRect().top - stroke * Math.hypot(matrix.c, matrix.d) / 2;
-        const delta = inkTop - image.getBoundingClientRect().top;
-        if (Math.abs(delta) < .15) break;
-        const top = parseFloat(getComputedStyle(image).marginTop) || 0;
-        image.style.setProperty('--futasaku-logo-top', `${Math.max(0, top + delta)}px`);
-      }
-    }
+    const ink = (path.getBBox().height + stroke) * Math.hypot(matrix.c, matrix.d);
+    if (!(ink > 8)) return;
+    root.setProperty('--futasaku-logo-height', `${ink * 1.82}px`);
+    const inkTop = path.getBoundingClientRect().top - stroke * Math.hypot(matrix.c, matrix.d) / 2;
+    root.setProperty('--futasaku-logo-top', `${Math.max(0, inkTop)}px`);
   };
+  alignBrand = align;
   if (menuIcon) {
     new ResizeObserver(align).observe(menuIcon);
     new MutationObserver(align).observe(menuIcon, { childList: true, subtree: true });
@@ -191,4 +275,9 @@ export function mountBranding() {
   window.addEventListener('resize', align);
   requestAnimationFrame(align);
   drawLogo();
+}
+
+export function setBrandMark(on: boolean) {
+  document.documentElement.classList.toggle('brand-mark', on);
+  if (on) requestAnimationFrame(() => alignBrand?.());
 }

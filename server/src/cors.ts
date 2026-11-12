@@ -10,8 +10,11 @@
 // guest creation from the live site (P-17).
 import { PRODUCTION_CORS_ORIGIN } from './config.js';
 
+// `x-futasaku-traffic` is sent only by an automated harness when it creates a guest (so the row is
+// marked as test at creation). It is allow-listed so a browser-driven suite can send it too; the
+// game itself never does.
 export const CORS_ALLOWED_HEADERS =
-  'authorization, content-type, x-futasaku-client-version, x-futasaku-rules-version';
+  'authorization, content-type, x-futasaku-client-version, x-futasaku-rules-version, x-futasaku-traffic';
 
 export const CORS_ALLOWED_METHODS = 'GET, POST, PATCH, OPTIONS';
 

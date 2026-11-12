@@ -82,7 +82,9 @@ describe('live auto-play', () => {
     }
   });
 
-  it('throws the drawn card when the rules allow it', () => {
+  // OWNER CHANGED THE RULE (0.82, 2026-11-06: Blitz, "Turn ends, worst card thrown"): the auto-played
+  // turn throws the LOWEST number card (a Bomb only when nothing else is in hand), not the drawn card.
+  it('throws the lowest number card (a Bomb only when nothing else is in hand)', () => {
     let checked = 0;
     for (const { state } of ALL) {
       if (state.phase !== 'DRAW' || state.deck.length === 0) continue;
@@ -93,7 +95,9 @@ describe('live auto-play', () => {
       if (thrown && thrown.t === 'Discard') {
         const all = [...state.hands[seat], drawn];
         const card = all.find((c) => c.id === thrown.card)!;
-        expect([card.suit, card.rank]).toEqual([drawn.suit, drawn.rank]);
+        const numbers = all.filter((c) => c.suit !== null);
+        if (numbers.length) expect(card.rank).toBe(Math.min(...numbers.map((c) => c.rank)));
+        else expect(card.suit).toBeNull();
         checked += 1;
       }
     }

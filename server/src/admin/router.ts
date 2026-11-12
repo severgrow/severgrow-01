@@ -8,12 +8,15 @@
 //     and BOTH are refused before the store is touched, so no data can leak through an error shape;
 //   * the response shapes live in `./types.ts`; this router never widens them, and the CSV export
 //     uses the SAME field list as the JSON path (never "because CSV makes it easy");
-//   * the only writes are report triage, the admin's own "last looked" cursor, and the audit row
-//     that records them.
+//   * the only writes are report triage, the admin's own "last looked" cursor, adding Seeds to a
+//     player (owner, 2026-10-24: amount 1-1000, a reason, idempotent by request id), the owner's two
+//     test edits (Seeds and tiles, docs/ADMIN.md §3a), and the audit row that records each of them.
 import { ApiError } from '../errors.js';
 import { newId } from '../ids.js';
 import type { ServerConfig } from '../config.js';
 import type { PlayerRecord, Storage } from '../storage/types.js';
+import type { WorldEconomyStore } from '../seeds/types.js';
+import { ADMIN_SEED_ADJUST_MAX } from '../seeds/types.js';
 import { PLAYER_TAG_PATTERN, playerTag } from '../../../src/player-tag.js';
 import type {
   AdminLedgerFilter,
@@ -24,7 +27,7 @@ import type {
   AdminStore,
   AdminTriageStatus,
 } from './types.js';
-import { CSV_MAX_ROWS, MAX_PAGE, TAG_SCAN_LIMIT, normalizeBuild } from './types.js';
+import { ADMIN_GRANT_MAX, ADMIN_GRANT_REASON_MAX, CSV_MAX_ROWS, MAX_PAGE, TAG_SCAN_LIMIT, normalizeBuild } from './types.js';
 import { clampLimit } from './util.js';
 
 export type AdminOutcome = {
@@ -128,6 +131,8 @@ export type AdminRouterDeps = {
   log?: (line: string) => void;
   /** Admin reads per hour, per admin. A runaway client can never turn into a database flood. */
   readsPerHour?: number;
+  /** The Seeds/world store, for the owner's edits. Absent → those two routes answer 404. */
+  economy?: WorldEconomyStore | null;
 };
 
 /** True when `playerId` is on the allow-list. Compared case-insensitively as a uuid. */
@@ -229,6 +234,11 @@ export const createAdminRouter = (deps: AdminRouterDeps): AdminRouter => {
       return { status: 200, body: { ok: true, ...overview, rulesVersion: deps.rulesVersion, health } };
     }
 
+    if (req.method === 'GET' && path === '/v1/admin/analytics') {
+      const analytics = await deps.store.analytics(now);
+      return { status: 200, body: { ok: true, ...analytics } };
+    }
+
     if (req.method === 'GET' && path === '/v1/admin/ops') {
       // SEQUENTIAL, not Promise.all: two store methods in flight at once is the same parallel batch
       // that hangs the deployed Edge runtime (postgres.js + the transaction pooler) for the other
@@ -311,6 +321,46 @@ export const createAdminRouter = (deps: AdminRouterDeps): AdminRouter => {
       return { status: 200, body: { ok: true, reportId, status, noteLength: note.length, previous: result.previous, changed: result.changed, serverNow: now } };
     }
 
+    // ---------------------------------------------------------------- add Seeds (owner, 2026-10-24)
+    const grantRoute = /^\/v1\/admin\/players\/([^/]+)\/seeds$/.exec(path);
+    if (grantRoute && req.method === 'POST') {
+      const playerId = decodeURIComponent(grantRoute[1]!);
+      if (!UUID_PATTERN.test(playerId)) throw new ApiError('INVALID_REQUEST', 'That is not a player id.');
+      const body = asRecord(await req.json().catch(() => ({})));
+      const amount = body.amount;
+      if (typeof amount !== 'number' || !Number.isInteger(amount) || amount < 1 || amount > ADMIN_GRANT_MAX) {
+        throw new ApiError('INVALID_REQUEST', `Seeds must be a whole number from 1 to ${ADMIN_GRANT_MAX}.`);
+      }
+      const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, ADMIN_GRANT_REASON_MAX) : '';
+      if (reason.length < 3) throw new ApiError('INVALID_REQUEST', 'Write a short reason (it goes in the ledger).');
+      const requestId = typeof body.requestId === 'string' ? body.requestId : '';
+      if (!/^[A-Za-z0-9_-]{8,100}$/.test(requestId)) throw new ApiError('INVALID_REQUEST', 'A request id is required.');
+      const result = await deps.store.grantSeeds({ playerId: playerId.toLowerCase(), amount, reason, actorId: player.id, requestId, now });
+      if (result === null) throw new ApiError('NOT_FOUND', 'That player does not exist.');
+      // grantSeeds owns the payment and audit in one transaction, including idempotent retries.
+      log(`ADMIN_GRANT player:${player.id} to:${playerId} amount:${amount} replayed:${result.replayed}`);
+      return { status: 200, body: { ok: true, playerId: playerId.toLowerCase(), amount, balance: result.balance, replayed: result.replayed, serverNow: now } };
+    }
+
+    // ------------------------------------------------- human/bot correction (owner, 2026-10-24)
+    // "This is a real person, always show them" — and its reverse. Stored on the player row, so it
+    // survives a reload, and audited inside the same write (never a change without its record).
+    const visibilityRoute = /^\/v1\/admin\/players\/([^/]+)\/visibility$/.exec(path);
+    if (visibilityRoute && req.method === 'POST') {
+      const playerId = decodeURIComponent(visibilityRoute[1]!);
+      if (!UUID_PATTERN.test(playerId)) throw new ApiError('INVALID_REQUEST', 'That is not a player id.');
+      const body = asRecord(await req.json().catch(() => ({})));
+      const value = body.override;
+      if (value !== 'human' && value !== 'bot' && value !== 'auto') {
+        throw new ApiError('INVALID_REQUEST', 'override must be human, bot or auto.');
+      }
+      const override = value === 'human' ? false : value === 'bot' ? true : null;
+      const result = await deps.store.setPlayerVisibility({ playerId: playerId.toLowerCase(), override, actorId: player.id, now });
+      if (result === null) throw new ApiError('NOT_FOUND', 'That player does not exist.');
+      log(`ADMIN_VISIBILITY player:${player.id} target:${playerId} override:${value}`);
+      return { status: 200, body: { ok: true, playerId: playerId.toLowerCase(), ...result, serverNow: now } };
+    }
+
     // ---------------------------------------------------------------- player lookup
     if (req.method === 'GET' && path === '/v1/admin/player') {
       const q = strParam(url, 'q', 120);
@@ -387,6 +437,54 @@ export const createAdminRouter = (deps: AdminRouterDeps): AdminRouter => {
 
     if (req.method === 'GET' && path === '/v1/admin/campaign') {
       return { status: 200, body: { ok: true, campaign: await deps.store.campaign(), serverNow: now } };
+    }
+
+    // ---------------------------------------------------------------- owner edits (§3a)
+    if (req.method === 'POST' && (path === '/v1/admin/seeds/adjust' || path === '/v1/admin/world/cell')) {
+      if (!deps.economy) throw new ApiError('NOT_FOUND', 'Editing is not available on this server.');
+      const body = asRecord(await req.json().catch(() => ({})));
+      const knownPlayer = async (id: unknown): Promise<string> => {
+        if (typeof id !== 'string' || !UUID_PATTERN.test(id)) throw new ApiError('INVALID_REQUEST', 'Choose a player.');
+        const found = await deps.store.playerLookup({ id: id.toLowerCase() });
+        if (!found) throw new ApiError('NOT_FOUND', 'That player does not exist.');
+        return found.player.id;
+      };
+
+      if (path === '/v1/admin/seeds/adjust') {
+        const delta = body.delta;
+        if (typeof delta !== 'number' || !Number.isInteger(delta) || delta === 0 || Math.abs(delta) > ADMIN_SEED_ADJUST_MAX) {
+          throw new ApiError('INVALID_REQUEST', `The amount must be a whole number between -${ADMIN_SEED_ADJUST_MAX} and ${ADMIN_SEED_ADJUST_MAX}, and not 0.`);
+        }
+        const requestId = body.requestId;
+        if (typeof requestId !== 'string' || !/^[A-Za-z0-9_-]{8,100}$/.test(requestId)) throw new ApiError('INVALID_REQUEST', 'A request id is required.');
+        const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 200) : '';
+        const playerId = await knownPlayer(body.playerId);
+        const result = await deps.economy.adminAdjustSeeds({ playerId, delta, requestId, actorId: player.id, reason, now });
+        if (!result.ok) {
+          throw new ApiError('INVALID_REQUEST', `That would take the balance below zero (it is ${result.wallet.balance}).`);
+        }
+        if (!result.replayed) {
+          await audit({ actorId: player.id, action: 'seeds.adjust', targetType: 'player', targetId: playerId, detail: { delta, balanceAfter: result.wallet.balance, reason, requestId }, now });
+        }
+        return { status: 200, body: { ok: true, playerId, delta: result.delta, balance: result.wallet.balance, replayed: result.replayed, serverNow: now } };
+      }
+
+      const cellId = typeof body.cellId === 'string' ? body.cellId.slice(0, 20) : '';
+      const ownerId = body.ownerId === null ? null : await knownPlayer(body.ownerId);
+      const result = await deps.economy.adminSetCell({ cellId, ownerId, now });
+      if (!result.ok) throw new ApiError('INVALID_REQUEST', 'That is not a cell on the map.');
+      if (result.changed) {
+        await audit({
+          actorId: player.id, action: 'world.cell', targetType: 'world_cell', targetId: cellId,
+          detail: { from: result.previousOwnerId, to: result.ownerId, challengesClosed: result.challengesClosed, revision: result.revision }, now,
+        });
+      }
+      const { cellId: edited, previousOwnerId, ownerId: newOwner, changed, revision, challengesClosed } = result;
+      return { status: 200, body: { ok: true, cellId: edited, previousOwnerId, ownerId: newOwner, changed, revision, challengesClosed, serverNow: now } };
+    }
+
+    if (req.method === 'GET' && path === '/v1/admin/players') {
+      return { status: 200, body: { ok: true, ...(await deps.store.players(now)), serverNow: now } };
     }
 
     throw new ApiError('NOT_FOUND', 'Unknown endpoint.');

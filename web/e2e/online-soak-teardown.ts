@@ -23,6 +23,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { onlinePerspective } from '../src/online/perspective.js';
 import { openMenuEntry } from './helpers/menu-nav.js';
+import { expandYourMatches } from './helpers/lobby-matches.js';
+import { drawMeld } from './drawing.js';
+import type { Action } from '../../src/engine/index.js';
 import {
   type LocalDuel,
   type SeatSession,
@@ -32,6 +35,7 @@ import {
   statePhase,
   tapExposed,
   waitingFlag,
+  waitIdle,
 } from './helpers/local-duel.js';
 import {
   type ListenerCounts,
@@ -43,6 +47,7 @@ import {
   readResources,
   retainedHeap,
 } from './helpers/online-probe.js';
+import { type HeapSample, fitSlope, tailSamples } from './helpers/heap-slope.js';
 
 const OUT = new URL('../../docs/screens/online/', import.meta.url).pathname;
 const PORT = Number(process.env.PREVIEW_PORT ?? 4249);
@@ -139,7 +144,9 @@ const drawViaDeck = async (s: SeatSession): Promise<boolean> => {
       const start = Date.now();
       while (Date.now() - start < 8_000) {
         const phase = await statePhase(s);
-        if (phase === 'ACT' || phase === 'DISCARD') return true;
+        // The shadow phase changes before the drawn card's flight finishes. Inputs are still
+        // closed during that animation, so a phase-only wait races the next card/hex tap.
+        if (phase === 'ACT' || phase === 'DISCARD') return waitIdle(s);
         await sleep(80);
       }
     }
@@ -212,12 +219,13 @@ const toMenu = async (s: SeatSession): Promise<void> => {
       continue;
     }
     if (await isVisible(s, '#menu')) return;
-    if (await isVisible(s, '#game')) {
+    if (await isVisible(s, '#gameover')) {
+      // The finished board is still visible UNDER this modal; handle the topmost surface first.
+      await clickVisible(s, '#go-menu');
+    } else if (await isVisible(s, '#game')) {
       await clickVisible(s, '#hud-menu');
       await sleep(120);
       await clickVisible(s, '#gm-main');
-    } else if (await isVisible(s, '#gameover')) {
-      await clickVisible(s, '#go-other');
     } else if (await isVisible(s, '#levels')) {
       await clickVisible(s, '#levels-back');
     } else if (await isVisible(s, '#online-hub')) {
@@ -253,6 +261,7 @@ const enterDuel = async (s: SeatSession, matchId: string): Promise<void> => {
     await sleep(100);
   }
   if (await isVisible(s, '#online-first-ok')) await clickVisible(s, '#online-first-ok');
+  await expandYourMatches(s.page);
   const row = s.page.locator(`#online-matches li[data-match-id="${matchId}"]`);
   await row.waitFor({ state: 'visible', timeout: 25_000 });
   await row.click();
@@ -390,6 +399,15 @@ const apiTurn = async (duel: LocalDuel, matchId: string, token: string, maxSteps
 /** Tap the first card, then try lit hexes until a mid-turn draft exists. */
 const makeDraft = async (s: SeatSession): Promise<boolean> => {
   if (await hasDraft(s)) return true;
+  const confirmPendingMove = async (): Promise<boolean> => {
+    // Smart confirmation is a fixed product default. A risky legal Grow is still only a preview
+    // until the player accepts it; the old fallback mistook that preview for a missing draft.
+    if (await s.page.locator('#confirm-play').isVisible()) {
+      await s.page.click('#confirm-play');
+      await sleep(220);
+    }
+    return hasDraft(s);
+  };
   // Prefer the multi-tile Bloom path (the kind buttons), which is exact.
   if (await paintGrow(s, 2)) return true;
   // Otherwise take the exact legal Sprout: its own card, its own coordinate.
@@ -403,53 +421,36 @@ const makeDraft = async (s: SeatSession): Promise<boolean> => {
   if (!sp) return false;
   await tapExposed(s, `#hand [data-card="${sp.card}"]`);
   await sleep(180);
-  if (await hasDraft(s)) return true;
+  if (await confirmPendingMove()) return true;
   await tapExposed(s, `#board .hex-cell[data-key="${sp.key}"]`);
   await sleep(220);
-  if (await hasDraft(s)) return true;
+  if (await confirmPendingMove()) return true;
   // Last resort: the card is a fanned-out sliver — try the page's own card element directly.
   await s.page.click(`#hand [data-card="${sp.card}"]`, { force: true }).catch(() => undefined);
   await sleep(180);
   await tapExposed(s, `#board .hex-cell[data-key="${sp.key}"]`);
   await sleep(220);
-  return hasDraft(s);
+  return confirmPendingMove();
 };
 
 // ---- heavy-Bloom helper: the multi-tile sequential reveal path ---------------------------------
 
 const paintGrow = async (s: SeatSession, minHexes = 2): Promise<boolean> => {
-  const plan = (await s.page.evaluate(`(() => {
-    var legal = (window.__severgrow && window.__severgrow.legal) ? window.__severgrow.legal() : [];
-    var key = function (c) { return c.q + ',' + c.r; };
-    for (var i = 0; i < legal.length; i++) {
-      var a = legal[i];
-      if (a.t === 'Bloom' && a.hexes.length >= ${minHexes}) {
-        var cards = a.cards.slice().sort(function (x, y) { return x - y; });
-        return { kind: 'bloom-' + cards.length + '-' + cards.join('.'), hexes: a.hexes.map(key) };
-      }
-    }
-    return null;
-  })()`)) as { kind: string; hexes: string[] } | null;
-  if (!plan) return false;
-  const entered = (await s.page.evaluate(`(() => {
-    var k = ${JSON.stringify(plan.kind)};
-    var visible = function (el) { return !!el && el.offsetParent !== null; };
-    var btn = document.querySelector('#moves [data-kind="' + k + '"]');
-    if (visible(btn)) { btn.click(); return true; }
-    var toggle = document.querySelector('#moves .bloom-toggle');
-    if (toggle) {
-      toggle.click();
-      btn = document.querySelector('#moves [data-kind="' + k + '"]');
-      if (btn) { btn.click(); return true; }
-    }
-    return false;
-  })()`)) as boolean;
-  if (!entered) return false;
-  await sleep(150);
-  for (const key of plan.hexes) {
-    const p = await tapExposed(s, `#board .hex-cell[data-key="${key}"]`);
-    if (p && (await hasDraft(s))) return true;
-  }
+  const action = await s.page.evaluate((minimum) => {
+    const hook = (window as unknown as { __severgrow: { legal(): Action[] } }).__severgrow;
+    return hook.legal().find((a) => a.t === 'Bloom' && a.hexes.length >= minimum) ?? null;
+  }, minHexes);
+  if (!action) return false;
+  // This suite measures drafts/teardown, not the popup (covered by painting/propass). Select the
+  // exact legal group through the same hook as chooseBloom, without racing a poll's DOM redraw.
+  await s.page.evaluate((move) => {
+    if (move.t !== 'Bloom') return;
+    const kind = `bloom-${move.cards.length}-${[...move.cards].sort((a, b) => a - b).join('.')}`;
+    (window as unknown as { __severgrow: { pickKind(kind: string): void } }).__severgrow.pickKind(kind);
+  }, action);
+  if (!(await drawMeld(s.page, action))) return false;
+  if (await s.page.locator('#confirm-play').isVisible()) await s.page.click('#confirm-play');
+  await sleep(220);
   return hasDraft(s);
 };
 
@@ -497,6 +498,24 @@ try {
   // inbox poll are part of "boot" rather than looking like a per-duel leak later.
   const liveUp = [await waitLiveListener(seat0), await waitLiveListener(seat1)];
   console.log(`live listener mounted at boot: seat0=${liveUp[0]} seat1=${liveUp[1]}`);
+  // The app-level listener's Realtime socket retries with backoff (up to ~30 s) and then gives up,
+  // since this harness has no Realtime server. Its last attempt can be mid-connect at any later
+  // check and read as a duel's leftover socket. Wait until neither seat has opened a socket for 16 s
+  // (longer than its largest backoff) and none is open, so "boot" includes the settled listener.
+  {
+    const settleStart = Date.now();
+    let last = -1;
+    let quietSince = Date.now();
+    while (Date.now() - settleStart < 60_000) {
+      const r = await Promise.all([readResources(seat0.page), readResources(seat1.page)]);
+      const created = r[0].socketsCreated + r[1].socketsCreated;
+      const live = r[0].socketsLive + r[1].socketsLive;
+      if (created !== last || live > 0) { last = created; quietSince = Date.now(); }
+      if (Date.now() - quietSince >= 16_000) break;
+      await sleep(1000);
+    }
+    console.log(`app-level Realtime retries settled after ${Math.round((Date.now() - settleStart) / 1000)} s`);
+  }
   await sleep(400);
   const boot0 = await readResources(seat0.page);
   const boot1 = await readResources(seat1.page);
@@ -507,6 +526,10 @@ try {
   report.checkpoints.push({ label: 'boot', seat0Heap: bootHeap0, seat1Heap: bootHeap1, seat0: boot0, seat1: boot1 });
 
   let totalTurns = 0;
+  // OWNER RULE (2026-11-09): one open game per pair. These two seats play every match, and several
+  // exit routes leave the match unfinished, so the previous one is ended through the server (the
+  // pages have already left it) before the next is created.
+  let previousMatchId: string | null = null;
   const postTeardown: { match: number; exit: string; s0: ResourceSnapshot; s1: ResourceSnapshot }[] = [];
 
   for (let m = 1; m <= MATCHES; m++) {
@@ -514,8 +537,10 @@ try {
     const exit = EXIT_ROUTES[(m - 1) % EXIT_ROUTES.length]!;
     const wantsDraft = m % 4 === 2;
 
+    if (previousMatchId) await duel.api.resign(g0.token, previousMatchId).catch(() => undefined);
     const created = await duel.api.createMatch(g0.token);
     const matchId = created.match.matchId;
+    previousMatchId = matchId;
     await duel.api.joinMatch(g1.token, created.match.inviteCode);
     const seatOfPlayer: [0 | 1, 0 | 1] = [created.player.seat, other(created.player.seat)];
     const tokens: [string, string] = [g0.token, g1.token];
@@ -590,6 +615,21 @@ try {
           `      the page's polls in the last 8s: ${recent.length}; last ${JSON.stringify(recent.slice(-3).map((r) => r.path))}; api revision now ${apiRev.revision} (actor ${apiRev.actor}, my seat ${apiRev.seat})`,
         );
         await watching.page.screenshot({ path: `${OUT}soak-stall-m${m}-t${turn}.png` }).catch(() => undefined);
+        const timeline = await watching.page.evaluate(() => {
+          const hooks = (window as any).__severgrow;
+          return {
+            hidden: document.hidden,
+            visibility: document.visibilityState,
+            animations: document.getAnimations().map(a => ({ state: a.playState, time: String(a.currentTime) })),
+            recentAnimationSteps: hooks?.animLog?.().slice(-80) ?? [],
+            recentRenderCosts: hooks?.renderCosts?.().slice(-20) ?? [],
+          };
+        }).catch(() => null);
+        writeFileSync(`${OUT}soak-stall-m${m}-t${turn}.json`, JSON.stringify({
+          match: m, turn, mode, hook, timeline,
+          server: { revision: apiRev.revision, actor: apiRev.actor, seat: apiRev.seat },
+          recentRequests: recent.map(r => r.path),
+        }, null, 2));
       } else if (turn === 1 || turn % 5 === 0) {
         console.log(`    match ${m} (${mode}) turn ${turn}: seat ${seatOfPlayer[actor]} acted; seat ${seatOfPlayer[watcher]} open`);
       }
@@ -771,12 +811,36 @@ try {
   const midCp = report.checkpoints.find((c) => c.label === 'middle');
   const endCp = report.checkpoints.find((c) => c.label === 'end')!;
   const firstN = Math.max(1, Math.ceil(MATCHES / 3));
+
+  /**
+   * Least-squares slope of heap (bytes) against match number, over EVERY sample in the window.
+   *
+   * The heap is measured after every match, but this slope used to be a two-point difference
+   * (one sample at the end of the first third, one at the end) divided by the tail length. Two
+   * points carry all the measurement noise of a double-GC'd browser heap into the slope, and
+   * dividing a few MB of jitter by ten matches lands right on the 1024 KB/match guard: the
+   * 2026-10-24 release went red at 1172 KB/match and passed on the very next run with no code
+   * change. Fitting a line through the ten tail samples instead averages that noise out, and it
+   * DETECTS a real leak BETTER, because a leak is a consistent slope: the same threshold now
+   * needs a smaller total drift to be sure. This is a more sensitive estimator, not a looser one.
+   * The estimator itself lives in `helpers/heap-slope.ts` so its arithmetic is unit-tested.
+   *
+   * Falls back to the two-point difference when a short SOAK_MATCHES run leaves too few samples
+   * to fit, so a debugging run still reports something.
+   */
+  const tailOf = (seat: 'heap0' | 'heap1'): HeapSample[] =>
+    tailSamples(
+      report.matches.map((r) => ({ x: r.match, y: r[seat] })),
+      firstN,
+    );
+
   const slopeA0 = ((midCp?.seat0Heap ?? 0) - bootCp.seat0Heap) / firstN;
-  const slopeB0 = (endCp.seat0Heap - (midCp?.seat0Heap ?? 0)) / Math.max(1, MATCHES - firstN);
+  const slopeB0 = fitSlope(tailOf('heap0'));
   const slopeA1 = ((midCp?.seat1Heap ?? 0) - bootCp.seat1Heap) / firstN;
-  const slopeB1 = (endCp.seat1Heap - (midCp?.seat1Heap ?? 0)) / Math.max(1, MATCHES - firstN);
-  console.log(`retained-heap slope seat0: first third ${K(slopeA0)}/match, then ${K(slopeB0)}/match`);
-  console.log(`retained-heap slope seat1: first third ${K(slopeA1)}/match, then ${K(slopeB1)}/match`);
+  const slopeB1 = fitSlope(tailOf('heap1'));
+  const tailN = Math.max(0, MATCHES - firstN);
+  console.log(`retained-heap slope seat0: first third ${K(slopeA0)}/match, then ${K(slopeB0)}/match (fitted over ${tailN})`);
+  console.log(`retained-heap slope seat1: first third ${K(slopeA1)}/match, then ${K(slopeB1)}/match (fitted over ${tailN})`);
   console.log(`retained-heap growth over ${MATCHES} matches: seat0 ${mb(endCp.seat0Heap - bootCp.seat0Heap)} (${K((endCp.seat0Heap - bootCp.seat0Heap) / MATCHES)}/match), seat1 ${mb(endCp.seat1Heap - bootCp.seat1Heap)} (${K((endCp.seat1Heap - bootCp.seat1Heap) / MATCHES)}/match)`);
 
   // The heap settles at a CEILING (measured: ~6.2 MB after 4 matches and 5.2 MB after 15), not a
@@ -799,7 +863,7 @@ try {
   const driftPerMatch = Math.max(slopeB0, slopeB1) / 1024;
   if (driftPerMatch > 128) {
     console.log(
-      `WARN  retained heap still drifts ~${driftPerMatch.toFixed(0)} KB/match in the tail — below the ${GUARD_KB_PER_MATCH} KB/match guard, but a 500-match session would retain ~${((driftPerMatch * 500) / 1024).toFixed(0)} MB. See docs/ONLINE-POLISH.md.`,
+      `WARN  retained heap still drifts ~${driftPerMatch.toFixed(0)} KB/match in the tail — ${driftPerMatch < GUARD_KB_PER_MATCH ? "below" : "above"} the ${GUARD_KB_PER_MATCH} KB/match guard; a linear extrapolation to 500 matches would retain ~${((driftPerMatch * 500) / 1024).toFixed(0)} MB. See docs/ONLINE-POLISH.md.`,
     );
   }
 
@@ -893,11 +957,12 @@ async function leaveVia(s: SeatSession, route: string): Promise<void> {
     await sleep(150);
     await clickVisible(s, '#gm-main');
   } else if (route === 'pause-new') {
+    // Owner direction (2026-10-22): Restart is hidden in a duel (a server match cannot be
+    // restarted by one side), so this route leaves through the same quiet Main menu key. The
+    // teardown it exercises is identical; the route name stays for the soak's matrix.
     await clickVisible(s, '#hud-menu');
     await sleep(150);
-    await clickVisible(s, '#gm-new');
-    await sleep(200);
-    await clickVisible(s, '#levels-back');
+    await clickVisible(s, '#gm-main');
   } else if (route.startsWith('finish')) {
     // A real finish through the pause-menu Resign (one confirm, auto-accepted here).
     await s.page.evaluate('window.confirm = function () { return true; };');

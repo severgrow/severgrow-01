@@ -49,7 +49,7 @@ export const createLiveRouter = (deps: {
     if (method === 'POST' && path === '/v1/players/me/presence') {
       const player = await auth(req);
       const body = await readJson(req);
-      return ok(200, await live.presence(player, body.status, body.matchId));
+      return ok(200, await live.presence(player, body.status, body.matchId, body.announce));
     }
     if (method === 'PATCH' && path === '/v1/players/me') {
       // Only the live switch is ours; a display-name rename falls through to the base route.

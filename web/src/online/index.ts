@@ -18,7 +18,7 @@ export type { DraftEngine, DraftSnapshot } from './draft.js';
 export { createFakeChannel, createNoopChannel, createRealtimeChannel, realtimeChannelFromEnv, pingFromFrame } from './channel.js';
 export type { FakeChannelController, RealtimeFrame } from './channel.js';
 
-export { createSyncEngine, POLL_ACTIVE_MS, POLL_HIDDEN_MS, POLL_WAITING_MS } from './sync.js';
+export { createSyncEngine, POLL_ACTIVE_MS, POLL_HIDDEN_MS, POLL_WAITING_MS, POLL_PUSHED_MS, POLL_PUSHED_WAITING_MS } from './sync.js';
 export type { SyncEngine, SyncEngineOptions } from './sync.js';
 
 export { submitWithRetries, newRequestId } from './retries.js';
@@ -52,7 +52,6 @@ export type {
 export { duelApiUrl, duelRegion, onlineBuildEnabled, findOpponentEnabled, publicAppOrigin, parkedOfferMs } from './config.js';
 
 export {
-  FIRST_ONLINE_CARD_KEY,
   WARN_LAST_MS,
   PARKED_OFFER_MS,
   isSearchParked,
@@ -96,9 +95,20 @@ export { duelUiFromSnapshot, playScreenAction, renderDuelHud, turnStateFrom } fr
 export type { DuelUiModel } from './duel-bridge.js';
 
 export { OnlineSession, onlineSessionFromPayload, catchUpStepsFromDriver } from './duel-session.js';
-export type { FinishInfo, OnlinePlayResult } from './duel-session.js';
+export type { FinishInfo, OnlinePlayResult, OnlineTurnReplay, TurnReplayReason } from './duel-session.js';
 
-export { stepsFromEvent, stepsFromEvents, syncStep } from './steps-from-events.js';
+export {
+  groupTurns,
+  pickOpponentTurn,
+  sameBoard,
+  boardSignature,
+  openingBoard,
+  buildOpponentTurnReplay,
+} from './opponent-turn-replay.js';
+export type { LiveTurn, OpponentTurnReplay, ReplayBuild, ReplayReason, TurnGroup } from './opponent-turn-replay.js';
+
+export { stepsFromEvent, stepsFromEvents, stepContextFor, syncStep } from './steps-from-events.js';
+export type { StepContext } from './steps-from-events.js';
 
 export { isOnlineDuel, getOnlineSession, setOnlineSession, onlinePathsActive } from './duel-runtime.js';
 

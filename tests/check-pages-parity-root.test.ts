@@ -120,7 +120,7 @@ describe('check-pages-parity-root: refuses to publish a site that moves a protec
     expect(result.stdout).toContain('Main is still published at the root');
     expect(result.stdout).toContain('Published index.html: identical');
     expect(result.stdout).toContain('Published assets/index-MAIN.js: identical');
-    expect(result.stdout).toContain('Published test/assets/index-DEV.js: identical');
+    expect(result.stdout).toContain('Published test2/assets/index-CAND.js: identical');
   });
 
   it('passes once Main is published at /firststep/, comparing there instead of the root', () => {
@@ -147,7 +147,17 @@ describe('check-pages-parity-root: refuses to publish a site that moves a protec
     expect(gone.stderr).toMatch(/firststep/);
   });
 
-  it('fails when a deploy would change /test/ or /test2/', () => {
+  it('lets /test/ change: it is the staging copy now, rebuilt on every push (owner, 2026-10-29)', () => {
+    const f = fixture(true);
+    write(join(f.root, 'site', 'test', 'index.html'), '<!doctype html><title>TEST · Futasaku</title> the new staging build');
+    write(join(f.root, 'site', 'test', 'assets', 'index-DEV.js'), 'a different build');
+    const result = runGuard(f);
+    expect(result.stderr).toBe('');
+    expect(result.code).toBe(0);
+    expect(result.stdout).not.toContain('Published test/');
+  });
+
+  it('fails when a deploy would change /test2/', () => {
     const f = fixture(true);
     write(join(f.root, 'site', 'test2', 'index.html'), '<!doctype html><title>Futasaku</title> edited');
     const result = runGuard(f);

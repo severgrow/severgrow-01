@@ -1,5 +1,6 @@
 /** Standalone iPhone viewport and full-desktop composition regression checks. */
 import assert from 'node:assert/strict';
+import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import { servePreview } from './helpers/preview-port.js';
 
@@ -41,6 +42,25 @@ try {
   assert.equal(resized.game,852,'viewport correction remains stable after resize');
   assert.equal(resized.dock,818,'safe-area position remains stable after resize');
   await pwa.close();
+
+  // CSS's 100lvh may be newer than BOTH innerHeight and screen.height after iOS restores a PWA.
+  // The board's calculator must use that same height, not merely paint a taller background.
+  const restored=await browser.newPage({viewport:{width:393,height:874},isMobile:true,hasTouch:true});
+  await restored.addInitScript(()=>{
+    (window as any).__name=(fn:unknown)=>fn;
+    Object.defineProperty(navigator,'standalone',{get:()=>true});
+    Object.defineProperty(window,'innerHeight',{get:()=>806});
+    Object.defineProperty(screen,'height',{get:()=>852});
+  });
+  await restored.goto(base);await restored.waitForSelector('#deck.ready');
+  await restored.waitForFunction(()=>document.documentElement.style.getPropertyValue('--futasaku-app-height')==='874px');
+  const restoredFit=await restored.evaluate(()=>({height:document.querySelector('#game')!.getBoundingClientRect().height,
+    app:document.documentElement.style.getPropertyValue('--futasaku-app-height')}));
+  assert.equal(restoredFit.height,874,'restored PWA paints the CSS large viewport');
+  assert.equal(restoredFit.app,'874px','restored board layout agrees with the painted surface');
+  mkdirSync('/tmp/account-polish-shots',{recursive:true});
+  await restored.screenshot({path:'/tmp/account-polish-shots/installed-game-phone.png'});
+  await restored.close();
 
   const safari=await browser.newPage({viewport:{width:393,height:806},isMobile:true,hasTouch:true});
   await safari.addInitScript(()=>{(window as any).__name=(fn:unknown)=>fn;Object.defineProperty(screen,'height',{get:()=>852});});

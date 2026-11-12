@@ -9,6 +9,7 @@ import type { State, Tile } from '../../src/engine/index.js';
 import { hexCenter } from './drawing.js';
 import { positionSave } from './position.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
+import { contextKinds, pressContext } from './helpers/context-key.js';
 
 // The page is served on a FREE port (helpers/preview-port.ts) so this suite can run in two
 // worktrees at once without fighting over a hardcoded number.
@@ -32,10 +33,19 @@ const aligned = (r:Awaited<ReturnType<typeof rects>>,label:string) => {
   const width = Number.parseInt(label,10);
   const size = width >= 1500 ? 72 : 44;
   check(near(r.led.y,r.context.y)&&near(r.undo.y,r.tips.y)&&near(r.tips.y,r.sort.y),`${label}: exactly two aligned rows`);
-  check(near(r.led.width,r.undo.width+r.tips.width+(r.tips.x-r.undo.right))&&near(r.context.width,r.undo.width),`${label}: LED spans two buttons`);
+  // The bottom row follows the tools' side (owner, 2026-11-11: replay on the outer edge), so the LED
+  // spans whichever two bottom keys sit under it: the bulb and its left neighbour.
+  const leftKey = [r.undo,r.sort].reduce((a,b)=>a.x<b.x?a:b);
+  check(near(r.led.width,leftKey.width+r.tips.width+(r.tips.x-leftKey.right))&&near(r.context.width,r.undo.width),`${label}: LED spans two buttons`);
   check(near(r.led.width,2*size+4)&&near(r.led.height,size)&&near(r.context.width,size)&&near(r.context.height,size),`${label}: supplied shells fit their responsive coded footprints`);
   check([r.context,r.undo,r.tips,r.sort].every(b=>b.width>=44&&b.height>=44),`${label}: four 44px targets`);
-  check(near(r.context.x,r.sort.x)&&near(r.led.x,r.undo.x)&&near(r.led.right,r.tips.right),`${label}: fixed three-column grid`);
+  const rightKey = [r.undo,r.sort].reduce((a,b)=>a.x>b.x?a:b);
+  // Right hand (default): tools on the left, piles on the right, replay on the outer right.
+  // Left hand: the mirror (the pre-2026-11-11 arrangement).
+  const leftHand = / left\b/.test(label);
+  check(leftHand ? r.undo.x<r.sort.x && r.piles[1]!.pile.right<r.panel.left : r.undo.x>r.sort.x && r.piles[0]!.pile.x>r.panel.right,
+    `${label}: ${leftHand?'replay left, tools right':'piles right, tools left, replay outer right'}`);
+  check(near(r.context.x,rightKey.x)&&near(r.led.x,leftKey.x)&&near(r.led.right,r.tips.right),`${label}: fixed three-column grid`);
   check(r.piles.every(({card,count})=>near(card.x+card.width/2,count.x+count.width/2)),`${label}: meters centred under visible top cards`);
   check(r.panel.left>=r.box.left-1&&r.panel.right<=r.box.right+1,`${label}: panel remains inside cockpit`);
 };
@@ -43,6 +53,7 @@ const aligned = (r:Awaited<ReturnType<typeof rects>>,label:string) => {
 try {
   for (const [width,height,side] of [[360,640,'right'],[390,664,'right'],[390,664,'left'],[390,844,'right'],[430,932,'right'],[768,1024,'right'],[1280,800,'right'],[1440,900,'right'],[1600,980,'right'],[1920,1080,'right'],[390,844,'left']] as const) {
     const name=`${width}x${height} ${side}`, mobile=width<600;
+    console.log('ITERATION', name);
     const page=await browser.newPage({viewport:{width,height},isMobile:mobile,hasTouch:mobile});
     const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
     await page.addInitScript(which => {
@@ -64,7 +75,8 @@ try {
     check(await page.locator('#smart-led').evaluate(el=>getComputedStyle(el,'::before').backgroundSize)==='contain',`${name}: supplied display art keeps its proportions`);
     check(await page.locator('#deck-count').evaluate(el=>getComputedStyle(el,'::before').backgroundSize)==='contain',`${name}: supplied counter art keeps its proportions`);
     check(!await page.locator('#step-cue').isVisible(),`${name}: routine board prompt removed`);
-    check(await page.locator('#smart-context').isDisabled(),`${name}: neutral context during Draw`);
+    // OWNER CHANGED THE RULE (2026-11-11): "?" lives in the context key every turn (was: neutral during Draw).
+    check(JSON.stringify(await contextKinds(page))==='["guide"]',`${name}: "?" alone in the context key during Draw`);
     check(await page.locator('#tool-undo').isDisabled(),`${name}: Undo visible but unavailable at start`);
     check(await page.locator('#discard.futa04-bloom-draw').count()===0,`${name}: ordinary discard has no combo cue`);
     check(await page.locator('#discard .gd-fx').evaluate(el=>getComputedStyle(el).display)==='none',`${name}: no extra discard draw rectangle`);
@@ -95,16 +107,22 @@ try {
     })),`${name}: counter shells keep the 34×18px coded footprint through Draw transitions`);
     await page.waitForFunction(()=>document.getElementById('smart-led-text')?.textContent?.trim()==='0:0',undefined,{timeout:4000});
     check(await page.locator('#smart-led-text').innerText()==='0:0',`${name}: score rests in the LED during Grow`);
+    if (mobile && height >= 800) {
+      // Owner, 2026-11-11: smaller side margins — the camera frames the board's DRAWN rim, so on a tall
+      // phone the map reaches within a few px of both screen edges.
+      const rim = await page.evaluate(() => { const r = document.querySelector('#board .planet-turn-line')?.getBoundingClientRect(); return r ? { l: r.left, r: innerWidth - r.right } : null; });
+      if (rim) check(rim.l <= 8 && rim.r <= 8 && rim.l >= 0 && rim.r >= 0, `${name}: the map fills the width (${JSON.stringify(rim)})`);
+    }
     check((await page.locator('#hand .card.playable').first().evaluate(el=>getComputedStyle(el).boxShadow)).includes('88, 171, 86'),`${name}: green card-edge light`);
-    check(!await page.locator('#smart-context').isDisabled(),`${name}: Skip in context slot`);
+    check(JSON.stringify(await contextKinds(page))==='["skip","guide"]',`${name}: Skip leads the context key, "?" beside it in the menu`);
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-grow.png`});
-    await page.locator('#smart-context').click(); await waitPhase(page,'DISCARD');
+    await pressContext(page,'skip'); await waitPhase(page,'DISCARD');
     aligned(await rects(page),`${name} Throw`);
     await page.waitForFunction(()=>document.getElementById('smart-led-text')?.textContent?.trim()==='0:0',undefined,{timeout:4000});
     check(await page.locator('#smart-led-text').innerText()==='0:0',`${name}: score rests in the LED during Throw`);
     check(!await page.locator('#smart-led-cells').evaluate(el=>el.classList.contains('scrolling')),`${name}: short Throw message remains stationary`);
     check((await page.locator('#hand .card').first().evaluate(el=>getComputedStyle(el).boxShadow)).includes('190, 68, 47'),`${name}: red card-edge light`);
-    check(await page.locator('#smart-context').isDisabled(),`${name}: context neutral when throwing`);
+    check(JSON.stringify(await contextKinds(page))==='["guide"]',`${name}: only "?" in the context key when throwing`);
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-throw.png`});
     check(errors.length===0,`${name}: no browser errors: ${errors.join(' | ')}`);
     await page.close();
@@ -147,14 +165,30 @@ try {
   }
   // A real Bloom result owns the sign until its event → score sequence finishes.
   await page.waitForTimeout(2600);
-  await page.evaluate(()=>{const banner=document.getElementById('banner')!;banner.textContent='THIS IS A LONG MESSAGE TO TEST THE MECHANICAL LED WINDOW';});
+  const longLed = 'THIS IS A LONG MESSAGE TO TEST THE MECHANICAL LED WINDOW';
+  await page.evaluate(message=>{const banner=document.getElementById('banner')!;banner.textContent=message;},longLed);
   await page.waitForFunction(()=>document.querySelector('#smart-led-text')?.textContent?.startsWith('THIS IS A LONG'));
   check(await page.locator('#smart-led-cells').evaluate(el=>(el as HTMLCanvasElement).width/(window.devicePixelRatio||1)<76),'LED: reduced motion uses readable full-size static shorthand');
   check((await page.locator('#smart-led-cells').evaluate(el=>getComputedStyle(el).animationName))==='none','LED: reduced motion keeps long text still');
   await page.evaluate(()=>{document.documentElement.classList.remove('reduce-motion');window.dispatchEvent(new Event('resize'));});
-  await page.waitForFunction(()=>document.querySelector('#smart-led-cells')?.classList.contains('scrolling'));
-  check(await page.locator('#smart-led-cells').evaluate(el=>(el as HTMLCanvasElement).width/(window.devicePixelRatio||1)>400),'LED: long copy uses full-width cells and repeated marquee');
-  check((await page.locator('#smart-led-cells').evaluate(el=>getComputedStyle(el).animationName))==='smart-led-scroll','LED: long text scrolls with motion enabled');
+  // `setText` clears `.scrolling` synchronously and re-adds it a frame later, and any repaint of the
+  // strip (the reduce-motion flip does one) opens that one-frame gap again. Reading the class, the
+  // canvas width and the computed animation in separate round trips could land in the gap and see
+  // `animation-name: none` on a strip that was scrolling — the flake on ddc4d87, which passed on the
+  // next commit. A flash message also only owns the sign for 2.2 s, so re-publish the long line to
+  // start a fresh window, then wait for the REAL condition (long copy, a scrolling strip, full-width
+  // cells) and assert the ONE frame that satisfied it. The animation assertion is unchanged.
+  await page.evaluate(message=>{document.getElementById('banner')!.textContent=message;},longLed);
+  const marquee = await page.waitForFunction(()=>{
+    const cells=document.querySelector<HTMLCanvasElement>('#smart-led-cells');
+    const text=document.querySelector('#smart-led-text')?.textContent??'';
+    if(!cells||!text.startsWith('THIS IS A LONG')) return false;
+    const width=cells.width/(window.devicePixelRatio||1);
+    if(!cells.classList.contains('scrolling')||!(width>400)) return false;
+    return {animation:getComputedStyle(cells).animationName,width};
+  },undefined,{timeout:6000}).then(handle=>handle.jsonValue() as Promise<{animation:string;width:number}>);
+  check(marquee.width>400,'LED: long copy uses full-width cells and repeated marquee');
+  check(marquee.animation==='smart-led-scroll','LED: long text scrolls with motion enabled');
   await page.close();
   const discard=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   await discard.addInitScript(()=>{ (window as any).__name=(fn:unknown)=>fn; localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})); });
@@ -283,7 +317,14 @@ try {
     const state:State={...g,board,terrain,phase:'ACT',actor:0,turnPlayer:0};
     return positionSave({state});
   })());
-  await layers.goto(BASE); await layers.locator('#menu-continue').click();
+  await layers.goto(BASE);
+  // Boot first: the fixture click must land after main.ts has bound the control, or CI's slower
+  // runner clicks a button that is not wired yet.
+  await layers.waitForFunction(() => (window as any).__severgrow?.ready?.() === true, undefined, { timeout: 20000 });
+  // Owner decision (2026-10-19): the product main menu has NO Continue. This suite seeds a
+  // classic save only as a fixture for the overlay-geometry checks, so it invokes the hidden
+  // legacy control directly — it is not asserting that a player can reach it.
+  await layers.evaluate(() => (document.getElementById('menu-continue') as HTMLButtonElement | null)?.click());
   await layers.waitForFunction(()=>document.getElementById('board')?.querySelector('.hex') && !(window as any).__severgrow.busy());
   await layers.waitForTimeout(700);
   const overlay=await layers.evaluate(()=>{
@@ -301,14 +342,17 @@ try {
   check(await skipBloom.evaluate(()=>(window as any).__severgrow.playFor({t:'Sprout',card:9,coord:{q:-3,r:2}},0)),'Grow: setup move succeeds');
   await skipBloom.waitForFunction(()=>!(window as any).__severgrow.busy());
   check(await skipBloom.locator('#smart-bloom').isVisible(),'Grow: Bloom remains optional after Sprout');
-  // skip? ends optional Bloom (context slot mirrors the Skip control); then two taps confirm Throw.
-  await skipBloom.locator('#smart-context').click();
+  // skip? ends optional Bloom (context slot mirrors the Skip control); then pick + tap the pile.
+  await pressContext(skipBloom,'skip');
   check(await skipBloom.evaluate(()=>(window as any).__severgrow.state().phase==='DISCARD'),'Bloom skip: skip? enters Throw');
   const throwCard=await skipBloom.locator('#hand [data-card]').first().getAttribute('data-card');
   await skipBloom.locator(`#hand [data-card="${throwCard}"]`).click();
   check(await skipBloom.locator(`#hand [data-card="${throwCard}"].futa04-throw-picked`).count()===1,'Bloom skip: tapped card is selected for Throw');
   await skipBloom.locator(`#hand [data-card="${throwCard}"]`).click();
-  check(await skipBloom.evaluate(()=>(window as any).__severgrow.state().phase!=='DISCARD'),'Bloom skip: second card tap confirms discard');
+  check(await skipBloom.evaluate(()=>(window as any).__severgrow.state().phase==='DISCARD'),'Bloom skip: second card tap deselects, never throws');
+  await skipBloom.locator(`#hand [data-card="${throwCard}"]`).click();
+  await skipBloom.locator('#discard').click();
+  check(await skipBloom.evaluate(()=>(window as any).__severgrow.state().phase!=='DISCARD'),'Bloom skip: tapping the Throw pile throws the picked card');
   await skipBloom.close();
   const cameraPage=await browser.newPage({viewport:{width:1280,height:800}});
   await cameraPage.addInitScript(()=>{ (window as any).__name=(fn:unknown)=>fn; localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})); });
@@ -318,11 +362,11 @@ try {
   if(board) { await cameraPage.mouse.move(board.x+board.width/2,board.y+board.height/2); await cameraPage.mouse.wheel(0,-600); }
   await cameraPage.waitForFunction(()=>!(document.querySelector('.cam-whole') as HTMLButtonElement).hidden);
   check(!await cameraPage.locator('.cam-whole').isVisible(),'Camera: no extra top-screen button');
-  check(await cameraPage.locator('#smart-context').getAttribute('aria-label')==='Whole map','Camera: Whole map enters the context slot after manual zoom');
-  await cameraPage.locator('#smart-context').click();
-  check(await cameraPage.locator('#smart-context').getAttribute('aria-label')==='Back to play','Camera: Back to play replaces Whole map in the same slot');
-  await cameraPage.locator('#smart-context').click();
-  check(await cameraPage.locator('#smart-context').getAttribute('aria-label')!=='Back to play','Camera: context action restores play framing');
+  check((await contextKinds(cameraPage))[0]==='whole','Camera: Whole map enters the context slot after manual zoom');
+  await pressContext(cameraPage,'whole');
+  check((await contextKinds(cameraPage))[0]==='back','Camera: Back to play replaces Whole map in the same slot');
+  await pressContext(cameraPage,'back');
+  check(!(await contextKinds(cameraPage)).includes('back'),'Camera: context action restores play framing');
   await cameraPage.close();
   console.log(`${checks} smart cockpit checks passed; screenshots: ${dir}`);
 } finally { await browser.close(); if(server) await new Promise<void>(resolve=>server.httpServer.close(()=>resolve())); }

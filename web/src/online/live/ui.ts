@@ -1,16 +1,54 @@
 // Live duels — the DOM pieces. Same dark glass, moss and lava, same fonts; no new visual language.
 // Everything is created here and appended to existing containers; no shared markup is edited.
-import { hudRail } from '../../ui/hud-rail.js';
 import { LIVE } from '../../../../src/strings.js';
 import { glassBaseCss } from '../../player/glass-surface.js';
 import type { ChallengeWire } from './api.js';
 import type { PopupPort } from './center.js';
 import { WAIT_DOTS_CSS, waitDots } from './wait-dots.js';
+import { enterSurface, exitSurface } from '../../ui/interface-motion.js';
 
-const MOSS = '#8fbf6a';
-const MOSS_INK = '#0d100d';
+const focusReady = new WeakSet<HTMLElement>();
+const showLiveGlass = (panel: HTMLElement, scrim: HTMLElement) => {
+  if (!focusReady.has(panel)) {
+    focusReady.add(panel);
+    panel.tabIndex = -1;
+    panel.addEventListener('keydown', event => {
+      if (event.key !== 'Tab') return;
+      const keys = [...panel.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')].filter(el => el.getClientRects().length > 0);
+      const first = keys[0], last = keys.at(-1);
+      if (!first || !last) { event.preventDefault(); panel.focus(); return; }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === panel)) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || document.activeElement === panel)) { event.preventDefault(); first.focus(); }
+    });
+  }
+  scrim.hidden = panel.hidden = false;
+  panel.style.removeProperty('--live-top');
+  const baseTop = parseFloat(getComputedStyle(panel).top) || 14;
+  const badge = document.getElementById('hud-brand')?.getBoundingClientRect();
+  const menu = document.getElementById('hud-menu')?.getBoundingClientRect();
+  const clear = Math.max(baseTop,badge?.width ? badge.bottom+8 : 0,menu?.width ? menu.bottom+8 : 0);
+  panel.style.setProperty('--live-top',`${clear}px`);
+  enterSurface(scrim, {travel:0,scale:1});
+  enterSurface(panel, {travel:2,scale:1});
+  panel.focus({preventScroll:true});
+};
+const hideLiveGlass = (panel: HTMLElement, scrim: HTMLElement) => {
+  exitSurface(panel, {travel:2,scale:1,onDone:()=>{panel.hidden=true;}});
+  exitSurface(scrim, {travel:0,scale:1,onDone:()=>{scrim.hidden=true;}});
+};
+
 const LAVA = '#e0735c';
 const CREAM = '#f0e9dc';
+
+/**
+ * How long an INCOMING real-time challenge stays unarmed (owner, 2026-10-26: a duel started
+ * "automatically … no one requested it, no one accepted it"). Accepting is irreversible — it puts a
+ * server-configured turn clock and makes leaving a loss — and the window can surface under a finger
+ * already travelling toward the board. 600ms is longer than any tap that was in flight when the
+ * window appeared, so a stray touch can never accept a duel; a deliberate one loses nothing.
+ * Not a motion token: this is an input-safety beat, and it runs even under Reduce motion.
+ */
+const ARM_DELAY_MS = 600;
 
 const CSS = `
 ${glassBaseCss('.live-glass')}
@@ -18,36 +56,45 @@ ${WAIT_DOTS_CSS}
 .live-glass { z-index:90; }
 .live-glass[hidden], .live-scrim[hidden], .live-ring[hidden], .live-vignette[hidden] { display:none !important; }
 .live-scrim { position:fixed; inset:0; z-index:89; background:rgba(4,6,5,.34); touch-action:none; }
-.live-glass[data-mode='challenge'], .live-glass[data-mode='end'] { left:50%; top:max(14px, env(safe-area-inset-top, 0px)); transform:translateX(-50%);
-  width:min(360px, calc(100vw - 32px)); padding:14px 14px 12px; display:grid; grid-template-columns:44px 1fr; gap:4px 12px; align-items:center;
+.live-glass[data-mode='challenge'], .live-glass[data-mode='confirm'], .live-glass[data-mode='end'] { left:50%; top:var(--live-top,max(14px, env(safe-area-inset-top, 0px))); transform:translateX(-50%);
+  width:min(360px, calc(100vw - 32px)); padding:14px 14px 12px; display:grid; grid-template-columns:28px 1fr; gap:6px 12px; align-items:center;
+  max-height:calc(100dvh - var(--live-top,14px) - max(12px,env(safe-area-inset-bottom,0px))); overflow-y:auto;
   background:rgba(8,10,10,.78); }
 .live-glass[data-mode='note'] { left:50%; top:max(14px, env(safe-area-inset-top, 0px)); transform:translateX(-50%); padding:10px 16px;
   max-width:calc(100vw - 32px); background:rgba(8,10,10,.72); pointer-events:none; letter-spacing:.06em; }
-.live-glass .lg-ring { grid-row:1 / span 3; width:44px; height:44px; }
+.live-glass .lg-ring { grid-row:1 / span 3; width:28px; height:28px; }
 .live-glass .lg-ring circle { fill:none; stroke-width:3; }
 .live-glass .lg-ring .bg { stroke:rgba(214,204,177,.16); }
-.live-glass .lg-ring .fg { stroke:${MOSS}; stroke-linecap:round; transform:rotate(-90deg); transform-origin:50% 50%; }
+.live-glass .lg-ring .fg { stroke:#f2c879; stroke-linecap:round; transform:rotate(-90deg); transform-origin:50% 50%; }
 .live-glass .lg-dot { width:10px; height:10px; border-radius:50%; background:${LAVA}; box-shadow:0 0 10px ${LAVA}; justify-self:center; grid-row:1 / span 3; }
 .live-glass .lg-name { font:700 16px/1.2 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:${CREAM}; letter-spacing:.04em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.live-glass .lg-what { color:#e2d4b4; letter-spacing:.05em; }
+.live-glass .lg-what { color:#e2d4b4; letter-spacing:.08em; font-size:12px; text-transform:uppercase; }
 .live-glass .lg-terms { color:#b7a98a; font-size:12px; letter-spacing:.08em; }
 /* The real-time forfeit rule, said BEFORE it matters: one short line, then the fuller explanation
    in the same glass window (never a wall of text). */
 .live-glass .lg-warn { grid-column:1 / -1; margin-top:2px; color:#e2d4b4; font-size:12px; letter-spacing:.04em; line-height:1.35; }
 .live-glass .lg-warn .lg-warn-short { display:block; color:#f6d3c8; font-weight:700; letter-spacing:.06em; }
-.live-glass .lg-warn small { display:block; color:#b7a98a; font-size:11px; letter-spacing:.03em; }
+.live-glass .lg-warn small { display:block; color:#b7a98a; font-size:12px; letter-spacing:.03em; line-height:1.4; }
 .live-glass .lg-actions { grid-column:1 / -1; display:flex; gap:8px; margin-top:10px; }
-.live-glass .lg-actions button { flex:1; min-height:44px; min-width:44px; border-radius:10px; font:700 14px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
-  letter-spacing:.08em; cursor:pointer; border:1px solid rgba(214,204,177,.22); background:rgba(255,255,255,.04); color:${CREAM}; }
-.live-glass .lg-actions button.primary { background:${MOSS}; border-color:${MOSS}; color:${MOSS_INK}; }
+.live-glass .lg-actions button { flex:1; min-height:44px; min-width:44px; border-radius:10px; font:400 14px/1.2 var(--font-ui,'Fragment Mono',ui-monospace,monospace); text-transform:uppercase;
+  letter-spacing:.08em; cursor:pointer; border:1px solid rgba(214,204,177,.22); background:rgba(242, 237, 228,.04); color:${CREAM}; }
+.live-glass .lg-actions button.primary { background:rgba(242,237,228,.04); border-color:rgba(242,200,121,.28); color:${CREAM}; box-shadow:inset 0 1px 0 rgba(255,244,214,.06),0 0 12px rgba(242,200,121,.08); }
+.live-glass .lg-actions button:active { box-shadow:inset 0 2px 5px rgba(0,0,0,.45); }
+.live-glass .lg-actions button:disabled { opacity:.5; cursor:default; }
 .live-glass .lg-actions button:focus-visible { outline:2px solid ${CREAM}; outline-offset:2px; }
-/* The real-time BOLT (owner, 2026-10-15): one icon, no words, in the rail under the wordmark
-   (ui/hud-rail.ts), rightmost. An outline while a real-time duel is not possible (the opponent is
-   away, busy, or has real time switched off); filled and softly glowing when the opponent is here
-   and a tap invites them; breathing while the invite waits (a tap cancels it); steady while the
-   duel is live. Its words live only in the accessible name and a visually hidden label. */
-.live-pill { order:2; width:44px; height:44px; display:grid; place-items:center end; padding:0; border:0; border-radius:10px;
+/* The real-time BOLT (owner, 2026-10-15): one icon, no words. It now lives in the HUD header,
+   IMMEDIATELY to the right of the hamburger (owner, 2026-10-26: it used to sit rightmost in the rail
+   under the wordmark, where on a phone it crowded the open chat's own ×). An outline while a
+   real-time duel is not possible (the opponent is away, busy, or has real time switched off);
+   filled and softly glowing when the opponent is here and a tap asks to confirm; breathing while the
+   invite waits (a tap cancels it); steady while the duel is live. Its words live only in the
+   accessible name and a visually hidden label. */
+.live-pill { width:44px; height:44px; display:grid; place-items:center; padding:0; border:0; border-radius:10px;
   background:transparent; color:${CREAM}; cursor:pointer; position:relative; -webkit-tap-highlight-color:transparent; }
+/* The product HUD is the slim header (main.ts adds 'slim-hud'): menu | score lane | edge. Putting the
+   bolt in the second column, start-aligned, is exactly "directly right of the menu"; it can never
+   reach the wordmark or the chat's close key in the opposite corner. */
+html.slim-hud .game > .hud > .live-pill { grid-column:2; grid-row:1; justify-self:start; align-self:center; z-index:1; }
 .live-pill svg { width:24px; height:24px; overflow:visible; }
 .live-pill svg path { fill:transparent; stroke:currentColor; stroke-width:1.5; stroke-linejoin:round; transition:fill .3s ease, filter .3s ease, opacity .3s ease; }
 .live-pill:is([data-state='away'], [data-state='disabled']) { opacity:.6; cursor:default; }
@@ -63,7 +110,7 @@ ${WAIT_DOTS_CSS}
 .live-chip { order:-1; flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; min-height:24px; padding:0 8px; border-radius:6px;
   background:rgba(224,115,92,.14); border:1px solid rgba(224,115,92,.55); color:#f6d3c8;
   font:800 11px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.14em; font-variant-numeric:tabular-nums; white-space:nowrap; }
-.live-chip[data-urgent='1'] { background:rgba(224,115,92,.28); color:#fff; }
+.live-chip[data-urgent='1'] { background:rgba(224,115,92,.28); color:#f2ede4; }
 /* "Opponent reconnecting" in the strip: the words plus the SHARED animated dots. The order puts it
    just before the live clock; it is its own node, so the header's model never overwrites it. */
 .live-reconnect { order:2; flex:0 0 auto; display:inline-flex; align-items:center; color:#e2d4b4;
@@ -100,8 +147,21 @@ ${WAIT_DOTS_CSS}
 .live-ring .fg { stroke-linecap:butt; transform:rotate(-90deg); transform-origin:50% 50%; }
 .live-ring[data-urgent='1'] .sh { stroke:rgba(0,0,0,.5); }
 .live-ring.pulse { animation:live-pulse 600ms ease-out 1; }
+/* A WARM HALO behind the arc (owner, 2026-11-02: the timer "looks very plain"). A static radial
+   gradient whose OPACITY steps up with urgency: no filter, no per-frame work, and it sits behind the
+   home tile's own ink so the tile still reads. */
+.live-ring .halo { fill:url(#live-halo); opacity:.35; transition:opacity 400ms ease; }
+.live-ring[data-urgent='1'] .halo { opacity:.85; }
+/* THE EMBER: a small lit dot riding the arc's leading end, so the ring reads as a burning fuse
+   rather than a progress bar. Its angle comes from one CSS variable the frame already writes. */
+.live-ring .ember { fill:#ffe6b8; opacity:.9; transform:rotate(calc(var(--lap, 0) * 360deg)); transform-origin:50% 50%; transform-box:view-box; }
+.live-ring[data-urgent='1'] .ember { fill:#fff3d6; }
 .live-vignette { position:fixed; inset:0; z-index:6; pointer-events:none; box-shadow:inset 0 0 70px rgba(224,115,92,.0); transition:box-shadow .3s ease; }
-.live-vignette[data-on='1'] { box-shadow:inset 0 0 70px rgba(224,115,92,.22); }
+.live-vignette[data-on='1'] { box-shadow:inset 0 0 70px rgba(224,115,92,.22); animation:live-vignette-breathe 2.4s ease-in-out infinite; }
+/* A slow breath, opacity-ish only (box-shadow spread is constant per keyframe, so no per-frame cost):
+   it says "hurry" without flashing, and Reduce motion turns it off. */
+@keyframes live-vignette-breathe { 0%,100% { box-shadow:inset 0 0 70px rgba(224,115,92,.14); } 50% { box-shadow:inset 0 0 84px rgba(224,115,92,.30); } }
+.reduce-motion .live-vignette[data-on='1'] { animation:none; }
 .live-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
 .live-setting small { display:block; opacity:.7; font-size:.8em; }
 @keyframes live-breathe { 0%,100% { opacity:1 } 50% { opacity:.35 } }
@@ -159,6 +219,18 @@ const ringSvg = (cls: string, outerPx: number, strokes: { fg: number; track: num
   svg.setAttribute('class', cls);
   svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
   svg.setAttribute('aria-hidden', 'true');
+  // A soft warm halo (a static radial gradient, opacity only) so the ring sits on the tile like heat
+  // rather than a bare line — no filter, nothing per frame.
+  const defs = document.createElementNS(SVGNS, 'defs');
+  defs.innerHTML = `<radialGradient id="live-halo"><stop offset="0%" stop-color="#e0735c" stop-opacity="0"/><stop offset="62%" stop-color="#e0735c" stop-opacity=".16"/><stop offset="86%" stop-color="#e0735c" stop-opacity=".30"/><stop offset="100%" stop-color="#e0735c" stop-opacity="0"/></radialGradient>`;
+  svg.append(defs);
+  const halo = document.createElementNS(SVGNS, 'circle');
+  halo.setAttribute('class', 'halo');
+  halo.setAttribute('cx', String(size / 2));
+  halo.setAttribute('cy', String(size / 2));
+  halo.setAttribute('r', String(Math.max(1, outerPx)));
+  svg.append(halo);
+
   const order: { cls: string; stroke: number }[] = [
     { cls: 'sh', stroke: strokes.shadow },
     { cls: 'bg', stroke: strokes.track },
@@ -174,6 +246,12 @@ const ringSvg = (cls: string, outerPx: number, strokes: { fg: number; track: num
     svg.append(node);
     return node;
   });
+  const ember = document.createElementNS(SVGNS, 'circle');
+  ember.setAttribute('class', 'ember');
+  ember.setAttribute('cx', String(size / 2));
+  ember.setAttribute('cy', String(Math.max(1, outerPx - strokes.fg / 2)));
+  ember.setAttribute('r', String(Math.max(0.9, strokes.fg * 0.62)));
+  svg.append(ember);
   const [sh, , fg] = nodes as [SVGCircleElement, SVGCircleElement, SVGCircleElement];
   const length = 2 * Math.PI * Number(fg.getAttribute('r'));
   for (const node of nodes) node.style.strokeDasharray = `${length}`;
@@ -245,7 +323,9 @@ export const createChallengePopup = (opts: { localDeadline: (c: ChallengeWire) =
   panel.append(svg, name, what, terms, warn, actions);
   const titleId = 'live-challenge-title';
   name.id = titleId;
-  panel.setAttribute('aria-labelledby', titleId);
+  what.id = 'live-challenge-mode';terms.id = 'live-challenge-terms';warn.id = 'live-challenge-warning';
+  panel.setAttribute('aria-labelledby', `${titleId} ${what.id}`);
+  panel.setAttribute('aria-describedby', `${terms.id} ${warn.id}`);
   // The game beneath ignores every tap while the window is open.
   for (const type of ['pointerdown', 'pointerup', 'click', 'touchstart']) {
     scrim.addEventListener(type, (e) => {
@@ -256,8 +336,30 @@ export const createChallengePopup = (opts: { localDeadline: (c: ChallengeWire) =
   document.body.append(scrim, panel);
   let open = false;
   let raf = 0;
+  let armTimer: ReturnType<typeof setTimeout> | null = null;
   let current: ChallengeWire | null = null;
   let handlers: { accept: () => void; decline: () => void } | null = null;
+  /**
+   * Hold both keys for one deliberate beat, then hand them over. The DECLINE key is held too, so the
+   * rule is symmetric and the window cannot be dismissed by the same stray finger either — by the
+   * time the beat is over the tap that opened it has long since lifted. Focus is only moved once the
+   * keys are live, so a keyboard user cannot press Enter into an unarmed window.
+   */
+  const arm = (delay: number) => {
+    if (armTimer !== null) clearTimeout(armTimer);
+    accept.disabled = true;
+    decline.disabled = true;
+    panel.setAttribute('aria-busy', 'true');
+    armTimer = setTimeout(() => {
+      armTimer = null;
+      // The window may have been dismissed (or replaced) during the beat: never arm a closed one.
+      if (!open || panel.hidden) return;
+      accept.disabled = false;
+      decline.disabled = false;
+      panel.removeAttribute('aria-busy');
+      accept.focus({ preventScroll: true });
+    }, delay);
+  };
   accept.addEventListener('click', () => handlers?.accept());
   decline.addEventListener('click', () => handlers?.decline());
   panel.addEventListener('keydown', (e) => {
@@ -279,9 +381,17 @@ export const createChallengePopup = (opts: { localDeadline: (c: ChallengeWire) =
       name.textContent = c.fromName ?? '';
       what.textContent = c.kind === 'rematch' ? LIVE.wantsRematch : LIVE.wantsToGoLive;
       terms.textContent = LIVE.terms(Math.round(c.limitMs / 1000));
-      scrim.hidden = panel.hidden = false;
+      showLiveGlass(panel, scrim);
       open = true;
-      accept.focus({ preventScroll: true });
+      // A STRAY TAP MUST NOT ACCEPT A DUEL WHERE LEAVING FORFEITS THE MATCH (owner, 2026-10-26).
+      // Accepting is the one irreversible choice here — it starts the configured per-turn clock and
+      // makes leaving a loss — yet this window can appear under a finger already on its way down
+      // (the player was reaching for the board, or for the bolt beside the menu). So the window
+      // arrives with both keys inert for one deliberate beat (~600ms, longer than any tap that was
+      // already in flight) and says so: the scrim already eats board taps, and `aria-busy` keeps
+      // assistive tech from announcing a key that cannot yet be used. The countdown in the ring
+      // still runs, so the wait costs nothing.
+      arm(ARM_DELAY_MS);
       cancelAnimationFrame(raf);
       draw();
       opts.onShown?.();
@@ -289,10 +399,121 @@ export const createChallengePopup = (opts: { localDeadline: (c: ChallengeWire) =
     hide() {
       open = false;
       cancelAnimationFrame(raf);
-      scrim.hidden = panel.hidden = true;
+      if (armTimer !== null) {
+        clearTimeout(armTimer);
+        armTimer = null;
+      }
+      accept.disabled = false;
+      decline.disabled = false;
+      panel.removeAttribute('aria-busy');
+      hideLiveGlass(panel, scrim);
       current = null;
       handlers = null;
     },
+    isOpen: () => open,
+  };
+};
+
+/**
+ * The SENDER's confirmation (owner, 2026-10-26: "after tapping lightning show window saying ... do
+ * you want to challenge them ... confirm/cancel"). Same `.live-glass` material, ring slot, name,
+ * what, terms, warn and actions as the incoming window — but it is NOT an invitation to answer: it
+ * only decides whether an invite leaves this device. It carries its own `data-mode='confirm'` so it
+ * can never be mistaken for the incoming window.
+ *
+ * The seconds are the server's own `limitMs` (LIVE_TURN_MS, default 30 s and env-overridable), so
+ * the window never promises a clock the match is not using.
+ */
+export const createChallengeConfirm = (opts: {
+  onSend: () => void;
+  onClose: () => void;
+}) => {
+  const scrim = el('div', 'live-scrim');
+  scrim.hidden = true;
+  const panel = el('section', 'live-glass');
+  // Its OWN mode, never 'challenge': both windows live in the DOM at once (the incoming popup and
+  // this sender-side confirmation), so a shared mode made `[data-mode="challenge"]` ambiguous — a
+  // query could land on the hidden confirm while the real popup was on screen. The look is shared
+  // through the CSS selector list below, not through the attribute.
+  panel.dataset.mode = 'confirm';
+  panel.dataset.live = 'confirm';
+  panel.hidden = true;
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-modal', 'true');
+  // The same 44px mark slot as the incoming window, carrying the bolt instead of a countdown: there
+  // is no clock to show before the invite exists.
+  const mark = document.createElementNS(SVGNS, 'svg');
+  mark.setAttribute('class', 'lg-ring');
+  mark.setAttribute('viewBox', '0 0 24 24');
+  mark.setAttribute('aria-hidden', 'true');
+  const bolt = document.createElementNS(SVGNS, 'path');
+  bolt.setAttribute('d', 'M13.4 2.5 5 13.6h6.1l-1.3 7.9 8.6-11.3h-6.2z');
+  bolt.setAttribute('fill', 'none');
+  bolt.setAttribute('stroke', '#f2c879');
+  bolt.setAttribute('stroke-width', '1.6');
+  bolt.setAttribute('stroke-linejoin', 'round');
+  mark.append(bolt);
+  const name = el('div', 'lg-name');
+  const what = el('div', 'lg-what');
+  const terms = el('div', 'lg-terms');
+  const warn = el('div', 'lg-warn');
+  warn.append(
+    el('span', 'lg-warn-short', LIVE.leaveWarning),
+    el('small', '', LIVE.leaveWarningHelp),
+  );
+  const actions = el('div', 'lg-actions');
+  const send = el('button', 'primary', LIVE.sendChallenge);
+  const notNow = el('button', '', LIVE.notNow);
+  send.type = notNow.type = 'button';
+  send.dataset.live = 'confirm-send';
+  notNow.dataset.live = 'confirm-cancel';
+  actions.append(notNow, send);
+  panel.append(mark, name, what, terms, warn, actions);
+  name.id = 'live-confirm-title';
+  what.id = 'live-confirm-mode';terms.id = 'live-confirm-terms';warn.id = 'live-confirm-warning';
+  panel.setAttribute('aria-labelledby', `${name.id} ${what.id}`);
+  panel.setAttribute('aria-describedby', `${terms.id} ${warn.id}`);
+  // The game beneath ignores every tap while the window is open, exactly like the incoming one.
+  for (const type of ['pointerdown', 'pointerup', 'click', 'touchstart']) {
+    scrim.addEventListener(type, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+  }
+  document.body.append(scrim, panel);
+  let open = false;
+  const hide = () => {
+    open = false;
+    hideLiveGlass(panel, scrim);
+  };
+  send.addEventListener('click', () => {
+    if (!open) return;
+    hide();
+    opts.onSend();
+  });
+  notNow.addEventListener('click', () => {
+    if (!open) return;
+    hide();
+    opts.onClose();
+  });
+  panel.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    hide();
+    opts.onClose();
+  });
+  return {
+    element: panel,
+    show(opponent: string, secs: number) {
+      name.textContent = opponent;
+      what.textContent = LIVE.duelQuestion;
+      terms.textContent = LIVE.duelTerms(secs);
+      showLiveGlass(panel, scrim);
+      open = true;
+      send.focus({ preventScroll: true });
+    },
+    hide,
     isOpen: () => open,
   };
 };
@@ -324,10 +545,11 @@ export type PillModel =
 const BOLT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.4 2.5 5 13.6h6.1l-1.3 7.9 8.6-11.3h-6.2z"/></svg>';
 
 /**
- * The real-time bolt (owner, 2026-10-15): an icon-only control in the rail under the wordmark.
- * Outline = no real-time duel possible right now; filled and glowing = the opponent is here, tap to
- * invite; breathing = the invite is waiting, tap to cancel; steady = the duel is live. The state
- * words stay in a visually hidden `.label` and the accessible name, never on screen.
+ * The real-time bolt (owner, 2026-10-15): an icon-only control. It sits in the HUD header right of
+ * the hamburger, so it never competes with the chat controls in the far corner. Outline = no
+ * real-time duel possible right now; filled and glowing = the opponent is here, tap to ask for
+ * confirmation; breathing = the invite is waiting, tap to cancel; steady = the duel is live. The
+ * state words stay in a visually hidden `.label` and the accessible name, never on screen.
  */
 export const createPill = (onTap: () => void, onCancel: () => void) => {
   const pill = el('button', 'live-pill');
@@ -343,7 +565,11 @@ export const createPill = (onTap: () => void, onCancel: () => void) => {
     else if (state === 'ready') onTap();
   });
   const attach = () => {
-    if (!pill.parentElement) hudRail().append(pill);
+    if (pill.parentElement) return;
+    const menu = document.getElementById('hud-menu');
+    // Immediately right of the menu, in the header grid's own second column.
+    if (menu?.parentElement) menu.after(pill);
+    else document.getElementById('game')?.prepend(pill);
   };
   return {
     element: pill,
@@ -489,6 +715,8 @@ export const createHud = () => {
     // homes: green -> orange -> red. Nothing on this ring says whose turn it is; the home it sits
     // on already does (owner's rule).
     fg.style.strokeDashoffset = `${ringLength * (1 - frac)}`;
+    // The ember rides the arc's leading end: one CSS variable, no layout, no filter.
+    ring.style.setProperty('--lap', String(frac));
     fg.style.stroke = ringColour(frac);
     const secs = Math.ceil(left / 1000);
     const urgent = model.deadline !== null && left <= 10_000;
@@ -617,7 +845,7 @@ export const createEndWindow = () => {
   panel.append(dot, title, why, el('div', 'lg-terms'), actions);
   document.body.append(scrim, panel);
   const hide = () => {
-    scrim.hidden = panel.hidden = true;
+    hideLiveGlass(panel, scrim);
   };
   scrim.addEventListener('click', hide);
   return {
@@ -654,36 +882,15 @@ export const createEndWindow = () => {
         });
         actions.append(b);
       }
-      scrim.hidden = panel.hidden = false;
+      showLiveGlass(panel, scrim);
       (actions.lastElementChild as HTMLElement | null)?.focus({ preventScroll: true });
     },
   };
 };
 
-/** "Allow live challenges" in the Settings sheet (no `data-setting`, so main.ts's form ignores it). */
-export const mountSettingsSwitch = (initial: boolean, onChange: (on: boolean) => void): ((on: boolean) => void) => {
-  const sheet = document.querySelector('#sheet-settings .sheet-body') ?? document.getElementById('sheet-settings');
-  if (!sheet) return () => undefined;
-  const row = el('label', 'row live-setting');
-  const span = el('span', '', LIVE.allowChallenges);
-  span.append(el('small', '', LIVE.allowChallengesHelp));
-  const box = el('input');
-  box.type = 'checkbox';
-  box.id = 'live-allow';
-  box.checked = initial;
-  box.addEventListener('change', () => onChange(box.checked));
-  row.append(span, box);
-  const anchor = sheet.querySelector('[data-setting="vibration"]')?.closest('label');
-  if (anchor?.parentElement) anchor.parentElement.insertBefore(row, anchor.nextSibling);
-  else sheet.prepend(row);
-  return (on) => {
-    box.checked = on;
-  };
-};
-
 /** "Leave live" in the pause menu, shown only while this match is live. */
 export const mountLeaveItem = (onLeave: () => void): ((show: boolean) => void) => {
-  const btn = el('button', 'btn ghost', LIVE.leaveLive);
+  const btn = el('button', 'btn ghost gm-act', LIVE.leaveLive);
   btn.type = 'button';
   btn.id = 'gm-leave-live';
   btn.dataset.live = 'leave';
@@ -695,7 +902,7 @@ export const mountLeaveItem = (onLeave: () => void): ((show: boolean) => void) =
   });
   const resign = document.getElementById('gm-resign');
   if (resign?.parentElement) resign.parentElement.insertBefore(btn, resign);
-  else document.querySelector('#sheet-menu .sheet-body')?.append(btn);
+  else document.querySelector('#sheet-menu .gm-acts')?.append(btn);
   return (show) => {
     btn.hidden = !show;
   };

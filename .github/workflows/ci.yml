@@ -1,10 +1,11 @@
 name: CI
 
 on:
-  # every branch except dev: the test copy (dev) skips the strict checks for speed; they run
-  # on main, on pull requests and before anything is locked in (docs/RELEASES.md)
+  # every branch except dev and live. dev: the old test copy skips the strict checks for speed.
+  # live: it only ever moves to a commit that already passed CI on futa0.5-online (`npm run promote`,
+  # docs/RELEASE-FLOW.md), and the publish gate finds that run by commit, so re-running it is waste.
   push:
-    branches-ignore: [dev]
+    branches-ignore: [dev, live]
   pull_request:
 
 jobs:
@@ -21,15 +22,127 @@ jobs:
       - run: npm run web:build && node scripts/check-channel-assets.mjs
       - run: CHANNEL=futa-test npm run web:build && CHANNEL=futa-test node scripts/check-channel-assets.mjs
 
+  # Shared builds (owner, 2026-11-07: fast preview path). Was: each of ~18 matrix jobs rebuilt
+  # (~2–4 min each). Now: one futa04 + three futa05 env variants (lessons / sphere / challenges
+  # need different VITE_* stubs — a single futa05 artifact caused ERR_CONNECTION_REFUSED on
+  # territory-challenges). Measured saving: on the order of 30–50 minutes of redundant rebuild.
+  build-futa04:
+    name: build futa04 (browser)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: CHANNEL=futa04 npm run web:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-futa04
+          path: web/dist
+          retention-days: 1
+
+  build-futa05-sphere:
+    name: build futa05 sphere (browser)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # WebKit-safe closed port — constructors must not hit a reserved port.
+      - run: >
+          CHANNEL=futa05 VITE_FIND_OPPONENT=1
+          VITE_DUEL_API_URL=http://127.0.0.1:65530/functions/v1/duel
+          VITE_SUPABASE_URL=http://127.0.0.1:65530
+          VITE_SUPABASE_ANON_KEY=local
+          npm run web:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-futa05-sphere
+          path: web/dist
+          retention-days: 1
+
+  build-futa05-lessons:
+    name: build futa05 lessons (browser)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: >
+          CHANNEL=futa05 VITE_FIND_OPPONENT=1
+          VITE_DUEL_API_URL=https://ci.invalid/functions/v1/duel
+          VITE_SUPABASE_URL=https://ci.invalid
+          VITE_SUPABASE_ANON_KEY=ci-placeholder
+          npm run web:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-futa05-lessons
+          path: web/dist
+          retention-days: 1
+
+  build-futa05-challenges:
+    name: build futa05 challenges (browser)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # territory-challenges stubs every API call; build pointed at closed port 9 (ERR_UNSAFE_PORT filtered).
+      - run: >
+          CHANNEL=futa05
+          VITE_DUEL_API_URL=http://127.0.0.1:9/functions/v1/duel
+          VITE_SUPABASE_URL=http://127.0.0.1:9
+          VITE_SUPABASE_ANON_KEY=local
+          npm run web:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-futa05-challenges
+          path: web/dist
+          retention-days: 1
+
+  # Fast preview path (feature branches / PRs): suites that catch most product breaks.
+  # Full release path adds `browser-release` below. Promote/live still waits for the whole CI
+  # workflow on the futa0.5-online commit (docs/RELEASE-FLOW.md). Tests are never deleted.
+  # Two jobs (not one matrix + job-level `if: matrix.*`): GHA rejects `matrix` in job `if`.
   browser:
-    # Independent suites use separate runners, keeping their assertions and avoiding
-    # repeating successful suites when one driver fails.
+    needs: [build-futa04, build-futa05-sphere, build-futa05-lessons]
     strategy:
       fail-fast: false
       matrix:
-        # futa04-* suites build the product channel; the rest build the historic live channel.
-        suite: [smoke, painting, overhaul, monkey, emptyturn, fruitcards, propass, futa04-critical, futa04-information, futa04-tutorial-intel, futa04-tutorial-lock]
-    runs-on: ubuntu-latest
+        include:
+          - { suite: futa04-critical, artifact: futa04 }
+          - { suite: futa04-information, artifact: futa04 }
+          - { suite: futa04-motion, artifact: futa04 }
+          - { suite: turn-guide, artifact: futa04 }
+          - { suite: lessons-3, artifact: futa05-lessons }
+          - { suite: territory-menu, artifact: futa04 }
+          - { suite: territory-gestures, artifact: futa04 }
+          - { suite: territory-gestures-ios, artifact: futa04 }
+          - { suite: sphere-test, artifact: futa05-sphere }
+          - { suite: sphere-test-ios, artifact: futa05-sphere }
+          - { suite: planet-matte, artifact: futa05-sphere }
+          - { suite: art-lab, artifact: futa05-sphere }
+          - { suite: art-lab-ios, artifact: futa05-sphere }
+    # PINNED, not `ubuntu-latest`: GitHub moved `ubuntu-latest` to 26.04 during 2026-10-28, and
+    # Playwright 1.56.1 refuses it ("Playwright does not support chromium on ubuntu26.04-x64"),
+    # which failed EVERY browser job at `playwright-core install` before a single test ran. Pin the
+    # last image the pinned Playwright supports; unpin when Playwright ships 26.04 support.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -38,10 +151,114 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npx playwright-core install --with-deps chromium
-      # Legacy suites target the classic live channel. Default npm run web:build is futa04.
-      - if: ${{ !startsWith(matrix.suite, 'futa04-') }}
-        run: CHANNEL=live npm run web:build
-      - if: ${{ startsWith(matrix.suite, 'futa04-') }}
-        run: CHANNEL=futa04 npm run web:build
-      - run: node --import tsx web/e2e/${{ matrix.suite }}.ts ${{ matrix.suite == 'monkey' && '--steps=200' || '' }}
+      - name: Install the browser this suite drives
+        run: |
+          case "${{ matrix.suite }}" in
+            *-ios) bash scripts/install-browser.sh webkit ;;
+            *) bash scripts/install-browser.sh chromium ;;
+          esac
+      - name: Restore the shared ${{ matrix.artifact }} build
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ matrix.artifact }}
+          path: web/dist
+      - run: node --import tsx --import ./scripts/browser-ci-errors.mjs web/e2e/${{ matrix.suite }}.ts
+
+      - name: Keep 0.81 board and Match Intel visual evidence
+        if: always() && matrix.suite == 'futa04-information'
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-081-screens
+          path: |
+            /tmp/v081-intel/
+            /tmp/v081-board/
+            /tmp/main2-shots/
+          retention-days: 7
+
+      - name: Keep living Territory visual evidence
+        if: always() && (startsWith(matrix.suite, 'sphere-test') || matrix.suite == 'planet-matte')
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.suite }}-screens
+          path: ${{ matrix.suite == 'planet-matte' && '/tmp/planet-matte/' || '/tmp/sphere-test/' }}
+          retention-days: 7
+
+  browser-release:
+    name: browser (release gate)
+    # Full promote/release gate — only on futa0.5-online (and PRs into it / manual dispatch).
+    if: >
+      github.ref == 'refs/heads/futa0.5-online' ||
+      github.base_ref == 'futa0.5-online' ||
+      github.event_name == 'workflow_dispatch'
+    needs: [build-futa04, build-futa05-challenges]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { suite: futa04-tutorial-intel, artifact: futa04 }
+          - { suite: futa04-tutorial-lock, artifact: futa04 }
+          - { suite: futa04-lesson-9-free, artifact: futa04 }
+          - { suite: cut-severe, artifact: futa04 }
+          - { suite: territory-challenges, artifact: futa05-challenges }
+          - { suite: living-territory, artifact: futa04 }
+          - { suite: living-territory-ios, artifact: futa04 }
+          - { suite: territory-final-polish, artifact: futa04 }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Install the browser this suite drives
+        run: |
+          case "${{ matrix.suite }}" in
+            *-ios) bash scripts/install-browser.sh webkit ;;
+            *) bash scripts/install-browser.sh chromium ;;
+          esac
+      - name: Restore the shared ${{ matrix.artifact }} build
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ matrix.artifact }}
+          path: web/dist
+      - run: node --import tsx --import ./scripts/browser-ci-errors.mjs web/e2e/${{ matrix.suite }}.ts
+
+      - name: Keep living Territory visual evidence
+        if: always() && (startsWith(matrix.suite, 'living-territory') || matrix.suite == 'territory-final-polish')
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.suite }}-screens
+          path: ${{ matrix.suite == 'territory-final-polish' && '/tmp/territory-final-polish/' || '/tmp/living-territory/' }}
+          retention-days: 7
+
+  online-presence-journey:
+    name: Fresh guest / account online journey
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: bash scripts/install-browser.sh chromium
+      - name: Verify matchmaking, Realtime invitations, account seats and request rates
+        run: node --import tsx web/e2e/online-presence-journey.ts
+        env:
+          JOURNEY_METRICS: '1'
+      - name: Verify ritual centring through the actual menu
+        run: node --import tsx web/e2e/ritual-centering.ts
+        env:
+          RITUAL_DPR: '2'
+      - name: Keep journey measurements and visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: online-presence-journey-evidence
+          path: |
+            /tmp/online-presence-journey/
+            /tmp/ritual-centering/
+          retention-days: 7

@@ -1,7 +1,8 @@
 // Helpers for the server-core tests: real games played by real bots.
 import { apply, newMatch, viewFor } from '../../src/engine/index.js';
 import type { Action, RulesConfig, State } from '../../src/engine/index.js';
-import { botSeed, chooseLevelAction } from '../../src/bots/levels.js';
+import { botSeed } from '../../src/bots/levels.js';
+import { chooseBotAction } from '../../src/bots/versions.js';
 import type { Level } from '../../src/bots/levels.js';
 import type { LevelChooser } from '../../src/bots/versions.js';
 
@@ -14,7 +15,7 @@ export const playLogged = (
   botLevel: Level,
   humanLevel: Level = 9,
   rules: Partial<RulesConfig> = {},
-  choose: LevelChooser = chooseLevelAction,
+  choose: LevelChooser = chooseBotAction,
 ): { actions: Action[]; end: State } => {
   let s = newMatch(seed, rules);
   const actions: Action[] = [];
@@ -29,7 +30,7 @@ export const playLogged = (
 };
 
 /** The first seed from `from` where the human wins against `botLevel`. */
-export const winningGame = (botLevel: Level, from = 1, humanLevel: Level = 9, rules: Partial<RulesConfig> = {}, choose: LevelChooser = chooseLevelAction) => {
+export const winningGame = (botLevel: Level, from = 1, humanLevel: Level = 9, rules: Partial<RulesConfig> = {}, choose: LevelChooser = chooseBotAction) => {
   for (let seed = from; seed < from + 500; seed++) {
     const g = playLogged(seed, botLevel, humanLevel, rules, choose);
     if (g.end.result?.winner === 0) return { seed, ...g };

@@ -1,15 +1,18 @@
 // Approved player layout and guidance; no Lab panel or Watch tools.
 export const PLAYER_CSS = `
 /* The game rests on darker felt; the menu keeps its own backdrop. */
-html.futa04-information:has(#game:not([hidden])) #texture { filter:brightness(.92); }
-html.futa04-information:has(#game:not([hidden])) #texture::before {
+html.futa04-information.has-game:not(#no-has) #texture { filter:brightness(.92); }
+html.futa04-information.has-game:not(#no-has) #texture::before {
   display:block; opacity:.20;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.88' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .66  0 0 0 0 .64  0 0 0 0 .59  0 0 0 .52 -.21'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 html.futa04-information #game::before {
   content:''; position:fixed; inset:-12% -25%; pointer-events:none; z-index:8;
-  background:radial-gradient(ellipse 43% 55% at 50% 48%,rgba(255,219,164,.11),transparent 78%);
-  mix-blend-mode:screen; opacity:0; animation:futasaku-warm-pass 32s ease-in-out infinite;
+  /* Plain alpha, no blend mode (owner, 2026-11-08: during the opponent's moves the background changed
+     "only on the board section ... like a rectangle"). A screen blend can be composited against the
+     board's own layer only, which paints a lighter box exactly the size of the board's frame. */
+  background:radial-gradient(ellipse 43% 55% at 50% 48%,rgba(255,219,164,.075),transparent 78%);
+  opacity:0; animation:futasaku-warm-pass 32s ease-in-out infinite;
 }
 @keyframes futasaku-warm-pass {
   0%,36%,100% { opacity:0; transform:translate3d(-5%,0,0); }
@@ -19,8 +22,10 @@ html.futa04-information #game::before {
 html.futa04-information #game .play { position:relative; isolation:isolate; }
 html.futa04-information #game .play::before {
   content:''; position:absolute; inset:3% 2% 0; pointer-events:none; z-index:0;
-  background:radial-gradient(ellipse 55% 58% at 48% 57%,rgba(0,0,0,.43),rgba(0,0,0,.14) 58%,transparent 84%);
-  transform:translateY(22px); filter:blur(14px);
+  /* Already soft: no blur filter. A blurred layer under the board is re-composited with the board
+     while tiles animate, which can show as a lighter box the size of the board (owner, 2026-11-08). */
+  background:radial-gradient(ellipse 57% 60% at 48% 57%,rgba(0,0,0,.40),rgba(0,0,0,.14) 56%,rgba(0,0,0,.04) 76%,transparent 90%);
+  transform:translateY(22px);
 }
 html.futa04-information #game .board-wrap,
 html.futa04-information #game .dock { z-index:1; }
@@ -36,13 +41,12 @@ html.futa04-information #game .dock::before {
 }
 @media (prefers-reduced-motion:reduce) { html.futa04-information #game::before { animation:none; opacity:.025; transform:none; } }
 html.futa04-information.reduce-motion #game::before { animation:none; opacity:.025; transform:none; }
-/* While a move is animating — including an online enemy turn replay — drop the two full-screen
-   additive passes (the animated warm wash and the LED spill). They are the phone's most expensive
-   composited layers (mix-blend-mode + mask + filter) and they add nothing while tiles are landing.
-   Nothing else changes: the board, the cards and the dimming are untouched, so the replay looks
-   identical at rest, only smoother. */
+/* While a move is animating — including an online enemy turn replay — drop the full-screen
+   animated warm wash. It is the phone's most expensive composited layer and it adds nothing
+   while tiles are landing. The display's baked bloom KEEPS its light during a move: it is one
+   pre-built alpha sprite whose only animated properties are transform/opacity, so the display
+   does not blink off while the board moves. */
 html.futa04-information.futa04-move-active #game::before { animation:none; opacity:0; }
-html.futa04-information.futa04-move-active #smart-led-spill { opacity:0; }
 /* ---- desktop (side layout): the coach and first-time tips get the empty space above the
    piles, at full size, instead of a squeezed strip over the deck. Test copy only for now:
    on docs/LIST-TO-IMPLEMENT.md to bring to the main game. ---- */
@@ -276,8 +280,13 @@ html[data-thumb] .dock-overlays > .coach {
 .idle-tip.instant.on {
   transition: none;
 }
-.thumb-settings h3 {
+.thumb-settings:not(.thumb-settings-last) h3 {
   margin-top: 4px;
+}
+/* On the Futasaku channels the Phone group comes after Comfort (owner, 2026-10-23): it takes the
+   sheet's own heading and row spacing, like the groups above it. */
+.thumb-settings.thumb-settings-last {
+  display: contents;
 }
 
 /* ---- thumb layout v2 ---- */
@@ -477,59 +486,9 @@ html.slim-hud .game > .race .race-fill::after {
   top: -3px;
   height: 12px;
 }
-/* the menu: the scores and the turn on top (no player marks: the colours say who is who) */
-.gm-status {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
-  padding-bottom: 12px;
-  margin-bottom: 4px;
-  border-bottom: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
-}
-.gm-scores {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-.gm-scores > span {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.gm-scores b {
-  font-size: 2rem;
-  line-height: 1;
-}
-.gm-scores small {
-  font-size: 0.95rem;
-  opacity: 0.85;
-}
-.gm-you b {
-  color: var(--c-you);
-}
-.gm-bot b {
-  color: var(--c-bot);
-}
-.gm-turn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 2px;
-}
-.gm-turn b {
-  font-size: 1.05rem;
-}
-.gm-turn.you b {
-  color: var(--c-you);
-}
-.gm-turn.bot b {
-  color: var(--c-bot);
-}
-.gm-turn small {
-  opacity: 0.8;
-}
+/* The menu's read-out (scores + turn) is part of the pause panel's face: it lives in the
+   #sheet-menu .gm-readout rules in style.css, so the panel has ONE set of rules. The slim header
+   only decides WHERE the player reads the scores - the pause panel is the only place they exist. */
 
 /* ---- thumb dock v4: the move buttons stacked in the middle of the control row ---- */
 html[data-thumb] .dock .table-row > .moves {
@@ -659,7 +618,7 @@ html[data-guide='off'] .step-cue {
   padding: 7px 14px 7px 7px;
   border-radius: 999px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(180deg, rgba(242, 237, 228, 0.07), rgba(242, 237, 228, 0) 55%),
     rgba(17, 19, 17, 0.62);
   -webkit-backdrop-filter: blur(10px) saturate(1.25);
   backdrop-filter: blur(10px) saturate(1.25);
@@ -667,7 +626,7 @@ html[data-guide='off'] .step-cue {
     0 0 0 1px rgba(var(--cue-c), 0.22),
     0 10px 28px -8px rgba(0, 0, 0, 0.6),
     0 2px 6px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    inset 0 1px 0 rgba(242, 237, 228, 0.08);
   white-space: nowrap;
   overflow: hidden;
 }
@@ -676,7 +635,7 @@ html[data-guide='off'] .step-cue {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(105deg, transparent 30%, rgba(var(--cue-c), 0.22) 48%, rgba(255, 255, 255, 0.18) 50%, transparent 66%);
+  background: linear-gradient(105deg, transparent 30%, rgba(var(--cue-c), 0.22) 48%, rgba(242, 237, 228, 0.18) 50%, transparent 66%);
   transform: translateX(-110%);
   pointer-events: none;
 }
@@ -811,7 +770,7 @@ html[data-onboard='1'] .available {
   border-radius: 999px;
   border: 1px solid rgba(var(--gd-cream), 0.2);
   background: rgba(18, 16, 14, 0.84);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(242, 237, 228, 0.06);
   color: #f6f1e4;
   font-family: var(--font-display, inherit);
   font-size: 12px;
@@ -858,7 +817,7 @@ html[data-onboard='1'] .available {
   gap: 5px;
   margin-left: 4px;
   padding-left: 11px;
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  border-left: 1px solid rgba(242, 237, 228, 0.1);
   align-self: stretch;
   align-items: center;
 }
@@ -866,7 +825,7 @@ html[data-onboard='1'] .available {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  box-shadow: inset 0 0 0 1.2px rgba(255, 255, 255, 0.32);
+  box-shadow: inset 0 0 0 1.2px rgba(242, 237, 228, 0.32);
 }
 .step-cue[data-step='opp'] .cue-pips {
   display: none;
@@ -874,7 +833,7 @@ html[data-onboard='1'] .available {
 .step-cue[data-step='grow'] .cue-pips i[data-p='draw'],
 .step-cue[data-step='throw'] .cue-pips i[data-p='draw'],
 .step-cue[data-step='throw'] .cue-pips i[data-p='grow'] {
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(242, 237, 228, 0.4);
   box-shadow: none;
 }
 .step-cue[data-step='draw'] .cue-pips i[data-p='draw'],

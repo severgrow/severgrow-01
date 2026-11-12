@@ -108,7 +108,7 @@ const lessons: TutorialLesson[][] = [
     L('rock-gold', 'ROCK AND GOLD', 'Gold: 2 points, others 1. Nothing grows on rock. Most points wins.', 'explainer', 'Next', {
       cta: 'NEXT', closesGrow: true,
     }),
-    L('throw', 'THROW', 'End your turn: tap a card twice, or drag it to the Throw pile.', 'hand', 'Discard', {
+    L('throw', 'THROW', 'End your turn: swipe up, drag it to the Throw pile, or tap the pile.', 'hand', 'Discard', {
       cta: 'TAP A CARD',
     }),
   ],
@@ -123,10 +123,10 @@ const lessons: TutorialLesson[][] = [
     L('bloom-set-after', 'CARD POWER', 'Each tile keeps its card number. Save 8s and 9s for strong tiles.', 'explainer', 'Next', {
       cta: 'NEXT', closesGrow: true,
     }),
-    L('bloom-set-throw', 'THROW', 'Tap a card twice, or drag it to the Throw pile.', 'hand', 'Discard', {
+    L('bloom-set-throw', 'THROW', 'Swipe up, drag it to the Throw pile, or tap the pile.', 'hand', 'Discard', {
       autoDiscard: true,
     }),
-    L('bloom-opponent', 'THEIR TURN', 'They grow on their side.', 'none', 'Opponent'),
+    L('bloom-opponent', 'WAIT', 'They grow on their side.', 'none', 'Opponent'),
   ],
   // 4 STRENGTHEN (a way to use your Grow)
   [
@@ -145,7 +145,7 @@ const lessons: TutorialLesson[][] = [
     L('skip', 'SKIP GROW', 'Nothing good to play? Tap » to skip Grow and go to Throw.', 'context', 'EndAct', {
       cta: 'SKIP »',
     }),
-    L('skip-throw', 'THROW', 'Tap a card twice, or drag it to the Throw pile.', 'hand', 'Discard', {
+    L('skip-throw', 'THROW', 'Swipe up, drag it to the Throw pile, or tap the pile.', 'hand', 'Discard', {
       cta: 'TAP A CARD',
     }),
   ],
@@ -203,7 +203,7 @@ const lessons: TutorialLesson[][] = [
     L('final-throw', 'LAST THROW', 'Throw your last card. Then most points wins.', 'hand', 'Discard', {
       cta: 'TAP A CARD',
     }),
-    L('final-opponent', 'THEIR LAST', 'They get the same last turn.', 'none', 'Opponent'),
+    L('final-opponent', 'WAIT', 'They get the same last turn.', 'none', 'Opponent'),
   ],
   // 13 FREE
   [
@@ -261,9 +261,9 @@ export const freeTurnGuide = (s: {
   phase: State['phase']; mine: boolean; picked: boolean; grew: boolean; bloomReady: boolean;
 }): { title: string; line: string } => {
   if (s.phase === 'GAME_OVER') return { title: 'DONE', line: 'Well played.' };
-  if (!s.mine) return { title: 'THEIR TURN', line: 'Watch what they grow and throw.' };
+  if (!s.mine) return { title: 'WAIT', line: 'Watch what they grow and throw.' };
   if (s.phase === 'DRAW') return { title: 'DRAW', line: 'Tap the Draw pile, or take the top Throw pile card.' };
-  if (s.phase === 'DISCARD') return { title: 'THROW', line: 'Tap a card twice, or drag it to the Throw pile.' };
+  if (s.phase === 'DISCARD') return { title: 'THROW', line: 'Swipe up, drag it to the Throw pile, or tap the pile.' };
   if (s.picked) return { title: 'GROW', line: 'Now tap a lit tile.' };
   if (s.grew) return s.bloomReady
     ? { title: 'BLOOM?', line: 'You can still Bloom. Or tap » to go to Throw.' }

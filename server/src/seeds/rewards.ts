@@ -1,5 +1,13 @@
-import { SEED_ECONOMY, campaignSeedReward } from './config.js';
+import { BETA_PAYOUT_MULTIPLIER, LESSON_SEED_REWARD, SEED_ECONOMY, campaignSeedReward } from './config.js';
 import type { RewardInput } from './types.js';
+
+/**
+ * Every award is multiplied by `BETA_PAYOUT_MULTIPLIER` HERE, at the one place an amount is
+ * decided, so no paying path can be forgotten and reverting the beta is one constant (see its note
+ * in `config.ts`). `Math.round` keeps a future fractional multiplier from producing a fraction of a
+ * Seed; with the current 2 it is a no-op.
+ */
+const pay = (seeds: number): number => Math.round(seeds * BETA_PAYOUT_MULTIPLIER);
 
 /** Called inside a locked settlement transaction using server-owned completed match facts. */
 export const planSeedReward = (input: RewardInput, day: {
@@ -7,10 +15,23 @@ export const planSeedReward = (input: RewardInput, day: {
   pairPaid: number;
   totalEarned: number;
 }): { amount: number; reason: string | null } => {
+  // TERRITORY ACHIEVEMENTS (owner, 2026-10-29): a fixed, one-time amount the service verified
+  // (server/src/seeds/achievements.ts). Outside the daily cap like a campaign clear, and not multiplied:
+  // the number on the card is the number paid.
+  if (input.mode === 'campaign' && input.achievementSeeds !== undefined) {
+    return Number.isInteger(input.achievementSeeds) && input.achievementSeeds > 0 && input.outcome === 'win'
+      ? { amount: input.achievementSeeds, reason: null }
+      : { amount: 0, reason: 'not_earned' };
+  }
+  if (input.mode === 'campaign' && input.lessonLevel !== undefined) {
+    return input.lessonLevel === LESSON_SEED_REWARD.level && input.outcome === 'win'
+      ? { amount: pay(LESSON_SEED_REWARD.seeds), reason: null }
+      : { amount: 0, reason: 'not_a_first_clear' };
+  }
   if (input.mode === 'campaign') {
     const reward = campaignSeedReward(input.campaignLevel ?? 0);
     return reward && input.outcome === 'win'
-      ? { amount: reward.firstWin + reward.chapter, reason: null }
+      ? { amount: pay(reward.firstWin + reward.chapter), reason: null }
       : { amount: 0, reason: 'not_a_first_clear' };
   }
   const rules = SEED_ECONOMY.online[input.mode];
@@ -18,9 +39,10 @@ export const planSeedReward = (input: RewardInput, day: {
   if (rules.pairDailyMatches > 0 && input.opponentId && day.pairPaid >= rules.pairDailyMatches) {
     return { amount: 0, reason: 'opponent_daily_limit' };
   }
-  const amount = rules[input.outcome];
+  const amount = pay(rules[input.outcome]);
   if (!amount) return { amount: 0, reason: 'no_draw_reward' };
-  const available = Math.max(0, SEED_ECONOMY.utcDailyRepeatableCap - day.totalEarned);
+  // The ceiling moves with the awards, or the doubling is taken back at the top end.
+  const available = Math.max(0, pay(SEED_ECONOMY.utcDailyRepeatableCap) - day.totalEarned);
   return available > 0
     ? { amount: Math.min(amount, available), reason: null }
     : { amount: 0, reason: 'global_daily_limit' };

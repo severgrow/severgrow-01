@@ -353,6 +353,7 @@ const main = async (): Promise<void> => {
     rateLimits: {
       guestPerIpPerHour: 10_000_000,
       joinPerPlayerPerHour: 10_000_000,
+      cancelSearchPerPlayerPerHour: 10_000_000,
       joinPerIpPerHour: 10_000_000,
       createPerPlayerPerHour: 10_000_000,
       createPerIpPerHour: 10_000_000,

@@ -1,6 +1,6 @@
 // The ONE doorway through the product main menu (owner restructure, 2026-10-15).
 //
-// On the product channels (`futa04` / `futa05`) main.ts MOVES Play online, LEVEL <n> and Training
+// On the product channels (`futa04` / `futa05`) main.ts MOVES Play online, LEVEL <n> and Practice match
 // OUT of the flat menu and INTO the PLAY submenu (`#play-menu` → `#play-actions`). They are real
 // children of that section, so while the menu is on show they sit inside a `hidden` subtree and a
 // bare `page.click('#menu-online')` can never see them: Playwright waits forever for an element the
@@ -15,8 +15,9 @@
 // not need to know which channel it is pointed at.
 import type { Page } from 'playwright-core';
 
-/** The entries main.ts moves into the PLAY submenu on product channels (PLAY_MENU_ENTRIES). */
-export const PLAY_MENU_IDS = ['menu-online', 'menu-campaign', 'menu-new'] as const;
+/** The entries main.ts moves into the PLAY submenu on product channels (PLAY_MENU_ENTRIES), in the
+ *  order they are shown: LEVEL first, then Play online (owner, 2026-10-20). */
+export const PLAY_MENU_IDS = ['menu-campaign', 'menu-online', 'menu-new'] as const;
 
 /** True when the entry element currently lives inside the PLAY submenu in this build. */
 export const entryIsInPlayMenu = (page: Page, id: string): Promise<boolean> =>
@@ -59,6 +60,22 @@ const waitMenuShape = (page: Page, id: string, timeout: number): Promise<void> =
 export const openMenuEntry = async (page: Page, id: string, options: MenuEntryOptions = {}): Promise<void> => {
   const timeout = options.timeout ?? 40_000;
   await waitMenuShape(page, id, timeout);
+  // The flat menu is on show for a few frames BEFORE main.ts moves the entry behind PLAY, and that
+  // frame looks exactly like a legacy flat menu. So read the route only once the shape has held
+  // still for 400 ms: where the entry lives, and whether it (or PLAY) can be tapped.
+  await page.waitForFunction((entryId) => {
+    const el = document.getElementById(entryId);
+    if (!el) return false;
+    const play = document.getElementById('play-menu');
+    const inPlay = !!play && play.contains(el);
+    const doorway = document.getElementById('menu-play');
+    const ready = inPlay ? (!play!.hidden || (!!doorway && !doorway.hidden && !!doorway.offsetParent)) : (!el.hidden && !!el.offsetParent);
+    const key = `${inPlay}:${ready}`;
+    const w = window as unknown as { __menuShape?: { key: string; since: number } };
+    const now = performance.now();
+    if (!w.__menuShape || w.__menuShape.key !== key) w.__menuShape = { key, since: now };
+    return ready && now - w.__menuShape.since >= 400;
+  }, id, { timeout, polling: 50 });
   if (await entryIsInPlayMenu(page, id)) {
     if (!(await page.locator('#play-menu').isVisible().catch(() => false))) {
       await page.waitForSelector('#menu-play:not([hidden])', { timeout });
@@ -68,6 +85,29 @@ export const openMenuEntry = async (page: Page, id: string, options: MenuEntryOp
   }
   await page.waitForSelector(`#${id}:not([hidden])`, { timeout });
   await page.click(`#${id}`);
+};
+
+/**
+ * Resume the saved match from the product main menu as the app itself does.
+ *
+ * Owner decision (2026-10-19, commit 76546c1b): the PRODUCT main menu has NO Continue/resume.
+ * `web/src/main.ts` keeps `#menu-continue` `hidden` forever on `futa04` / `futa05`
+ * (`FEATURES.campaign`), while the control, its aria-label and its handler stay bound. A
+ * `page.click('#menu-continue')` can therefore never work on a product build — not because the
+ * resume is broken, but because the button is deliberately invisible. A suite that needs a saved
+ * position resumes the way the app's own code path does: once the app is ready, invoke that
+ * control's click handler directly. Legacy channels keep the visible button, so they still click.
+ */
+export const resumeSavedGame = async (page: Page, options: MenuEntryOptions = {}): Promise<void> => {
+  const timeout = options.timeout ?? 40_000;
+  await page.waitForFunction(() => !!(window as any).__severgrow?.ready?.(), undefined, { timeout });
+  const button = page.locator('#menu-continue');
+  await button.waitFor({ state: 'attached', timeout });
+  const visible = await button.isVisible().catch(() => false);
+  if (visible) await button.click({ timeout });
+  // Hidden on the product channel: the bound handler is the only door, and it is the real one
+  // (bind('menu-continue', () => continueGame()) in main.ts) — nothing is faked or stubbed.
+  else await button.evaluate((el) => (el as HTMLButtonElement).click());
 };
 
 /** Play online: the PLAY doorway then the Play online entry, and wait for the duel lobby. */

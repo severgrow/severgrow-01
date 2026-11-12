@@ -22,6 +22,7 @@ describe('DEFAULT_CONFIG', () => {
       maxTurnsPerPlayer: 30,
       allowStrengthen: true,
       strengthenLimitPerGame: -1, // each turn can still use only one Sprout or Strengthen
+      allowOvergrow: true, // Futasaku 0.4: a stronger tile may take a weaker enemy non-root tile
       fruitCardCount: 4, // v0.6: 4 Fruit cards in the deck
       fruitRootCountsAsTouch: true, // v0.6: my root counts as touching a Fruit target
       fruitUsesSprout: true, // v0.8: a Fruit card uses the turn's Sprout

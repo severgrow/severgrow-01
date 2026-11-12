@@ -1,5 +1,492 @@
 # Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
+## 2026-11-06 — A dark cover in the first paint (no half-built menu on load)
+
+Owner: "in live .com version when opening the website first thing it loads the old logo, the old
+territory view background all for 0.5s and then to our screen. on /test version there is short black
+fade in loading screen that takes you straight to beautiful loaded menu ... the solution from /test
+should be on live too".
+
+Both addresses served byte-identical files (the publish copies one build to both when the commits
+match); what differs is what each address has in the browser (the root carries weeks of saves, an
+account and caches from older builds). A local film of the same build showed a half-styled menu for
+a few frames before the code ran. So the cover is made deliberate for every visit: index.html paints a
+#030404 cover first (CSS in <head>, element before every screen, live game only via html.space-first),
+and web/src/player/boot-cover.ts fades it out (220 ms) once the kanji lockup is in place and the
+planet draws, never later than 1.2 s (a hidden tab lifts by timer). Reduce motion removes it at once.
+
+## 2026-11-05 (night) — Sound narrowed: a small fixed palette, one sound at a time
+
+Owner, after hearing /test: "The sounds sound too real, Velcro sound is out ... Zip out too ...
+Wine glass tap on each round sound too much like glass. We need to narrow down all to nice click and
+taps ... Synth stabs completely out for now ... It's okay if the sounds are a bit repetitive ...
+never play 2 at once, add some effect on turn glass to sound better"; "don't rotate - group - and
+certain type of buttons should always make a similar sound ... not variety". Asked: a new sound cuts
+the old; keep the coins at the end and the short, quiet metal and glass taps; turn glass warm and
+soft; the planet's keys the same as the menu's.
+
+- web/src/ui/recorded.ts is now a FIXED PALETTE: ~25 takes, one per group, no rotation, no pitch
+  wobble (a Bloom's cards and the Seeds count still step up: a count, not variety). Every take is
+  short (<= ~0.5 s) except the turn ring. Velcro, zip, gritty, shaky, long metal, slides, chalk and
+  the stabs are never played (the stab files stay in audio/stabs/, unused, not fetched).
+- One sound at a time: a new sound fades the ringing one in 8 ms; two in the same instant (30 ms)
+  keep the more important (moment > move > key), so a Bloom card wins over its own tile landing.
+- Turn: only YOUR turn rings: glass_ring_01, two semitones lower, quieter, through a 2.2 kHz low-pass
+  and a short soft room (0.7 s decaying-noise impulse). Their turn is silent.
+- Every key (menu, submenus, sheets, the planet's buttons, PLAY, Back) is ui_press_04 on the finger;
+  the lift is silent. Cards and tiles play their own pick.
+- Silent now: rich-tile chime, cascades, rustle, sparks, thud, rumble, grind, the old turn tone.
+- Only the palette's files are fetched (was all 270).
+- SOUND OFF BY DEFAULT (owner: "make sound disabled by default but on main menu in corner make a low
+  opacity cream icon with the sound showing that its disabled"). The choice is saved as `soundOn`; an
+  old saved `sound: true` was only the old default and is not read. The menu's top-left corner (the
+  fullscreen key's mirror) holds a 44 px cream speaker at 0.3 opacity, crossed out while off; one tap
+  turns sound on (0.55, plain speaker). With sound off no take is fetched at all.
+
+## 2026-11-05 (later) — Synth stabs on top of Cut, Bloom, Bomb and Blast
+
+Owner (futasaku-sfx-2): 96 stabs in 8 packs (web/public/audio/stabs/), rules in ui/sfx-map.json
+`stabs`. Asked and answered: Bloom notes follow the tiles as they land; keep the current sounds and
+ADD the stab on top; stabs at 0.6 (a bit under); every cut, both sides.
+
+- Packs: the player draws from p2/p4/p8 + shared p5/p7, the opponent from p1/p3/p6 + p5/p7; an action
+  takes one pack, never the one its side used last nor one the other side is ringing.
+- Cut (every size, yours) = a grow note of your pack; being cut = a grow note of theirs. Bloom = one
+  pack, run notes 1,2,3,4 (5+ cards wrap), the LAST note the grow file of that number (full tail).
+  Bomb / Blast = the pack's bomb / blast. Max 4 copies of one stab file. Stabs load after all effects.
+- Bloom pace (owner: "you can slow down a bit blooming animation"): a Bloom's tiles land 0.8 of a
+  move apart (PINNED.bloomGap, ~211 ms; was 0.5, ~132 ms), so each stab note has its own tile.
+
+## 2026-11-05 — Sound returns: the owner's own recordings
+
+Owner: "download the file, upload to repo ... let's do some sound work - 10/10 tactile responsive fun
+and excellent". Asked: /test first, ON by default, "you pick" for the moments the map leaves open,
+vibration "light and rare".
+
+- 174 takes (web/public/audio/sfx/, 2.0 MB) and the owner's map (web/src/ui/sfx-map.json) are played
+  by web/src/ui/recorded.ts through the engine's existing cues (ui/sound.ts): one take per moment,
+  never the same twice in a row, the map's volume and pitch wobble, max 4 copies of a set, semitone
+  steps for the Seeds count and a Bloom's cards. MP3's silent lead-in is skipped per take.
+- Loading: the 13 key takes (~40 KB) decode while the menu is idle (an offline context, no sound), so
+  even the FIRST tap is a recording; everything else loads after that tap, once, shared by the game
+  and the live-duel screen. Until a take is decoded its cue falls back to the old synthesized click.
+- Keys: press on the finger, release on the lift; big keys (PLAY, Find match) one clack; Back keys the
+  dull click. Cards and hexes play their own pick sounds (no generic tick on top).
+- My picks for the gaps: Cut = velcro (+ metal / heavy wood / gritty + big metal as it grows), being
+  cut = metal_big quiet, Bomb = heavy wood drop, Blast = big metal + gritty, Strengthen = wood click,
+  Surround finish = glass ring + coins, final turns = glass ring a fifth lower.
+- Haptics: only your tile landing, a Cut and win/lose buzz by default (pulses <= 24 ms, patterns
+  < 250 ms); the rest only with Effects High.
+- Settings: Sound switch, Effects volume and Test sound are shown again; music stays hidden.
+
+## 2026-11-04 (later) — No bot skips its grow (bots-v0.11)
+
+Owner: "Remove the skipping growth in all levels really". The gentler bot levels ended turns
+ungrown on purpose (`skipGrowth`: 57% of steps at level 1, 33% at level 4). bots-v0.11
+(`src/bots/keeps-growing.ts`): a turn never ends without its grow while one is legal; where the level
+would have skipped, it makes the most modest grow (strengthen its weakest tile at the back with its
+lowest card, else spread one tile near home). Everything else is the level's own move. A full best
+move instead would have made the gentle levels far harder (lesson 9, bot 3 standing in: 55 -> 24
+wins of 120); the modest grow keeps them close (55 -> 45).
+
+The server verifies Seeds proofs by replaying the bot by VERSION, so v0.10 stays accepted, the server
+lists its versions in `features`, and the page holds a v0.11 proof until its server lists v0.11
+(no Seeds lost before the server deploy). Level 9's lesson-only `keepsPlaying` was folded into this.
+
+## 2026-11-04 — The lesson opponent always takes its turn
+
+Owner: beta testers said "levels 2-9 feel broken because the ai opp is not doing much - make sure it
+makes more actions especially from lesson 4 onwards ... Don't change much but improve that in a very
+smart way not breaking anything".
+
+Measured first (200 casual games a level): levels 2-8 grew exactly one tile every turn, never more;
+level 9's real bot (level 4) did NOTHING on 39% of its turns (the campaign ladder's deliberate "lazy"
+stop, `skipGrowth`).
+
+- Levels 4-8 (`contests`): the scripted opponent's grow heads for an open hex beside YOUR tiles, so
+  every turn visibly answers yours. Random players win slightly more often than before (its tiles
+  are within reach).
+- Levels 5-8 (`blooms`, Bloom is taught at 5): after its grow it also plays a Bloom it holds, on open
+  ground only, never on a key hex, never surrounding your home, and never one that would put it level
+  with you or ahead (without that rule, following the light LOST levels 5 and 7).
+- Level 9 (`keepsPlaying`): the bot plays its level exactly, but a turn it would end having done
+  nothing becomes a modest move (strengthen its weakest tile at the back, else a gentle grow).
+  Removing the lazy stop outright made it far harder (bot level 3 standing in for you: 55 -> 24 wins
+  of 120); the modest move keeps it close (55 -> 45; bot 2: 36 -> 31; bot 5: 111 -> 101).
+- NOT changed: levels 1-3, level 10 and every shared bot level. Level 10's Seeds proof, Campaign and
+  Training are replayed by the server against the shared bots, so changing them would break rewards.
+  Level 9 pays no Seeds and sends no proof.
+
+## 2026-11-04 — 0.75, "the planet standard": one space, metal keys, the board as a small planet
+
+Owner-approved polish pass (live game only: `html.v075` written by the build for CHANNEL=futa05,
+`web/src/polish-075.css`; `FEATURES.space`). What changed and why it is built the way it is:
+
+- **One shared space.** The planet's SPACE shader moved to `web/src/sphere/space.ts` and is used by
+  both the planet and the new backdrop (`web/src/player/space-backdrop.ts`) behind the Play submenu,
+  the game and the menu until the planet draws. Without a planet the shader gets a vanishing radius,
+  so the halo and glow fall away by their own maths. The star offset is shared (`spaceDrift`), so the
+  stars carry on between the menu's planet and a game without a cut.
+- **Space backdrop cost** (`web/e2e/perf-phone.ts`, 390x844, DPR 3, 4x CPU, idle game, means of the
+  runs; this host is shared and noisy):
+
+  | idle game | before | shader every frame, 10/s | ~15/s (menu pace) | shipped |
+  | --- | --- | --- | --- | --- |
+  | game rAF/s | 0.0 | 8.6 | 15.1 | **0.0** |
+  | main-thread task ms/s | 12.1 | 565 | 928 | **11.1** |
+  | style recalcs/s | 0.3 | 9.0 | 15.1 | **0.3** |
+  | a move: fps / p95 | 41.0 / 41.7 ms | 25.8 / 208 ms | 16.5 / 250 ms | **42.3 / 41.7 ms** |
+
+  Redrawing the shader per frame was significant (and on this probe stuttered a move), so it is
+  drawn RARELY: each star layer once onto a canvas a little larger than the screen, slid by the
+  compositor at the menu's own pace (two layers, the far one at 0.35 of the near: the same parallax),
+  and redrawn exactly one slide further on every 20 s. Two moving full-screen layers still cost a
+  move ~6 fps here, so IN GAME the stars stand still, painted once as a background image of the
+  backdrop (no layer of their own): measured equal to the build without stars (8 runs each: idle
+  task 11.1 vs 12.1 ms/s, a move 42.3 vs 41.0 fps; the p95 guard reads 41.7 ms for BOTH builds on
+  this host). The Play submenu and the menu keep the slow slide. Hidden tab: the slide pauses (0
+  animations running); Reduce motion: still stars.
+- **No flash at start-up.** The built HTML carries `space-first`: a still CSS star field on the page
+  background until the shader's stars have drawn (`space-lit`).
+- **The board as a small planet.** The Territory globe's spread curve (`k(u) = 1 - f*u^1.25`) at 5%
+  bends the game board (`web/src/ui/geom.ts`). Every hex CORNER is bent (as on the Territory globe),
+  so neighbours share their corners and the board stays one seamless surface (owner, same day: "gaps
+  in the map between empty piles - should never happen"; a first cut that shrank each tile about its
+  centre opened hairline gaps and was replaced). A soft two-step shadow under the board's silhouette
+  (no filter) floats it over space. The hit test un-bends the point and tests the flat cell;
+  `web/tests/board-bulge.test.ts` pins the shared corners and taps every tile's centre, sides and
+  corners.
+- **In game the game's own background stays** (owner: "put the black and stars on top of existing one
+  with like 35% opacity"): the backdrop's sky and stars lie over it at 35%. Measured with that
+  layer: idle main thread 8.5 ms/s, a move 42.2 fps, p95 26.7 ms (5 runs).
+- **Every menu key is the same key** (owner: "no more highlight diff style for play or level1"): no
+  lead outline and no suggestion halo in the menu and submenus.
+- **Sharper in-game motion.** Tempo 96/336 -> 80/264 ms, the pinned beats about a fifth shorter,
+  the cut's own table with them, and the settle curve's overshoot 1.1 -> 1.03 (a click, not a
+  bounce). Reading time (the display's 1 s and lessons' 2 s dwells) is unchanged.
+
+## 2026-11-04 — THE PLANET replaces the flat map on /test/
+
+Owner: *"geometry of hexes is wrong ... replace and call it THE PLANET instead of TERRITORY ... Full
+Territory actions"*. The sphere test's lopsided hexes came from projecting a flat grid and using
+circumcentre corners (median side ratio 1.124, worst 1.634); an evenly relaxed frequency-24 mesh with
+centroid corners gives 1.054 / 1.175. The flat Territory map is laid on the planet tile for tile, so
+Territory's own selection and actions drive it unchanged. The twelve pentagons are black,
+uninhabitable ground. Only `/test/` (`FEATURES.planet`); live keeps the flat map. Details:
+[PLANET.md](PLANET.md).
+
+## 2026-11-03 — The projection stays one shared map; the release does nothing
+
+Owner: *"evaluate a cleaner implementation before committing to the current solution … a
+camera-centred, continuous fisheye projection that gives the impression of physically rotating a
+globe … no snapping, stepping, delayed updates or changes that happen only when dragging ends"*.
+
+**The architecture was measured, not assumed.** Three candidates were compared on the real page at
+390x844 (Chromium, DPR 2, `data-warp-*` counters plus a per-frame probe, CDP CPU throttle 1x/4x):
+
+| candidate | live warp | verdict |
+| --- | --- | --- |
+| per-tile `d` rebuild, shared-corner projection (shipped) | 0.8-1.0ms, 369 writes, 163-183 cells at 1x; 3.0ms at 4x | **chosen** |
+| per-tile `transform` (local-space `d` + affine) | *not cheaper*: writing `transform` measured 1.40ms against 1.30ms for `d` over the same 696 nodes at 1x (2.6 vs 2.7 at 4x) | rejected |
+| one group transform / nested affines | a single affine cannot express a falloff that varies with distance from the view centre; concentric rings are the old per-tile falloff with visible steps | rejected |
+| canvas / WebGL | no budget to win: the warp is 1-3ms of a 16.7ms frame and the frame p95 is 16.7ms at 4x | rejected |
+
+**Why the affine loses on more than speed.** A best-fit affine per hexagon leaves a **0.151px**
+worst corner residual and a **0.261px** worst neighbour seam at the reference view (mean 0.150px over
+1514 shared corners) — sub-pixel, so it is a *good* approximation, but it is a different map per
+tile and the neighbours no longer meet exactly. The shipped projection draws every shared CORNER
+once, so the seam is **0.000px** by construction, at every camera including mid-drag. The affine also
+buys nothing measurable: the DOM write is the cost, not the length of the string. `web/tests/
+map-globe.test.ts` now pins both numbers so a future "just use transforms" change has to argue with
+them.
+
+**What changed in this pass (the other agent's per-frame work is kept).**
+
+- **The release runs no warp pass at all.** It used to end with the authoritative 279-cell pass
+  (232 writes, 3.6-10.2ms at 4x) on the exact frame the eye is watching for the jump. It cannot
+  change a visible pixel — the live warps already stood on that pose — so it moved to the existing
+  `SETTLE_MS` (140ms) soft-focus timer, where the camera has rested. The release now flushes the
+  pending frame with the SAME live pass a gesture frame uses.
+- **The warp's node list is collected once per paint** instead of re-matched on every frame
+  (0.018ms at 1x / 0.085ms at 4x over 711 nodes). Small, but it was pure per-frame overhead.
+- `data-warp-live` publishes live passes separately from the settle, so a proof can tell them apart.
+
+**Measured after the change** (`web/e2e/dynamic-globe.ts`, which now also drags diagonally, drags at
+the world's rim and samples a tile every frame across the opening): 18 live warps in an 18-move drag,
+**0.8ms** median / 0.9ms worst at 1x and **3.0ms** median / 3.4ms worst at 4x, 369 writes; frames
+**16.7ms p95 / 16.8ms worst at both throttles**; **0 of 140 visible tiles move at the release**; the
+release performs **0 passes**. Diagonal drag seam 0.000px over 371 pairs; rim drag finite and
+uninverted with a 0.000px seam; a tracked tile moves **0.000px over 122 sampled frames** of the
+menu → Territory opening; tile rects 0.000px menu vs panel and 0.000px after a reload.
+
+**Cost accepted.** The off-screen margin is on the previous pose for 140ms after a release. It is
+outside the panel, and the first live pass that brings it into view re-poses it, so nothing visible
+depends on it.
+
+## 2026-11-03 — The bend rides the drag, one live warp per painted frame
+
+Owner: *"on the test one its kinda working, but jumpy -- doesnt change while dragging but only when
+'drag' is released - it should work smoothly with no time taken and also while dragging"*.
+
+**What was wrong.** The pose was re-derived only when the camera SETTLED: during a pan the code
+wrote the `viewBox` and nothing else, so every tile rode the camera rigidly, and the release then
+rewarped all of them to the new pose in one step. That single step is the jump he saw.
+
+**What happens now.** `WorldView.queueView` writes the camera and then calls `liveWarp` in the SAME
+animation frame, so the `viewBox` and a fresh pose land in one paint and cannot disagree by a frame.
+Several `pointermove` events inside one frame still produce one warp, because the pending frame is
+never rescheduled. The live pass (`rewarp(live)`) re-poses only the ground whose DRAWN hexagon can
+touch the view (the drawn centre plus the hexagon's own reach), while the release's `settleWarp`
+remains the authoritative pass over the visible cells plus the half-view margin a live pass skips
+(`warpStale` records that debt, so an unchanged pose cannot let it be dropped). A glide re-poses per
+frame the same way, and `prefers-reduced-motion` settles in the same task instead of arriving
+un-posed.
+
+**Measured** (`web/e2e/dynamic-globe.ts`, 390x844, 18-move drag at one move per 16ms, on the
+`data-warp-*` counters the warp already publishes): **1.1-1.6ms median / 1.8-3.4ms worst per live
+warp, 367 attribute writes, 163-181 cells** (of 279) on Chromium desktop; **4.2-5.4ms median /
+5.4-7.4ms worst at 4x CPU throttle**. Frames during the drag: 16.7ms p95 both unthrottled and at 4x
+(one 33-50ms outlier at 4x in some runs) versus 16.8ms for the old settle-only pan, so the live pass
+costs no frame at 60Hz on desktop and stays at 60Hz p95 when throttled. The release settle measured
+against the last drag frame moves **0 of 137 visible tiles** (it used to move all of them — the
+jump); afterwards the settle covers only the margin (212-230 writes, down from 507-581).
+
+**Cost was taken from honest work, not shortcuts.** (a) ONE `d` string per cell is shared by that
+cell's face and edge (it was built twice per cell); (b) a live pass touches only the visible ground,
+restoring the margin at the settle; (c) an empty frontier no longer sweeps 279 tiles with a class
+toggle and an empty dispute layer no longer rebuilds a 279-entry map on every painted frame. The
+shared-corner guarantee is untouched: the projection still bends the shared CORNERS, and the seam is
+measured on the bent paths mid-drag (**0.000px over 362 visible neighbour pairs**).
+
+## 2026-11-03 (later) — The globe at 15% on a spread curve; every edge reachable; the fog posed live
+
+Owner brief ("TERRITORY GLOBE: FINAL CAMERA, GEOMETRY & INTERACTION POLISH"): a stronger globe,
+"ideally around 0.15", every edge tile able to reach the middle of the visible panel, and the
+disconnected fog hexes fixed.
+
+- **Strength 0.15, curve `k(u) = 1 - 0.15 * u^1.25`** (`GLOBE_SHAPE`), replacing the sphere's own
+  `sin` at 0.08. Rendered and measured at 0.12, 0.135 and 0.15 on the real page (all pass the camera,
+  fog and seam proofs in `web/e2e/globe-camera.ts`). The sphere's curve at 0.15 put all its squeeze at
+  the rim: the panel's outer tiles measured 1.42-1.65 edge ratio at 34-46% of their area, i.e.
+  slivers. The spread curve keeps the same rim but distributes the squeeze inward: 1.24-1.27 and
+  53-55% (reference panel 1.2406, 51 tiles past the 1.10 product bar). Radially a tile is squeezed
+  2.25x its tangential narrowing (the sphere's ~3x), so it still turns away rather than shrinking.
+  A sphere-like power 2 at 0.15 failed 5 of the proof checks. The hexagon bar is now measured on the
+  tiles the PANEL shows, at four cameras; every world tile must still be a positive, finite hexagon.
+- **Pan limit on the focus** (the world point under the middle of the visible panel), not the box:
+  every cell centre plus one cell of overscan (`web/src/online/world-pan.ts`). The product's own
+  automatic first frame keeps the old inside-the-world rule so it opens full of land.
+- **Feel:** soft edge (rubber band, max 15% of the view, 280ms return), flick carry (tau 220ms, from
+  0.3 px/ms), none of it under reduced motion or in a pinch.
+- **Fog:** posed with the same pose in the same pass as the land, live during a drag (it used to keep
+  its paint-time pose: up to 21px off its neighbours). The far ring sinks toward the background.
+- Measured cost: live warp writes +4% (the fog is now included); 1x drag frames p95 16.8ms. The 4x-CPU
+  60fps check in `dynamic-globe.ts` fails on this machine for the unchanged baseline too (p95 66.7ms),
+  so it is not a regression of this pass.
+
+## 2026-11-03 — The globe is drawn at 8%, the owner's choice over the 5% recommendation
+
+Owner decision, after being shown the strength ladder for the bent lattice in
+`web/src/online/map-globe.ts`: **the shipped strength is `GLOBE_FALLOFF = 0.08`** (8% smaller at the
+rim), replacing the 5% that had just merged.
+
+**What was said before he chose.** 8% is past the repo's own hexagon-shape rule, `HEX_TOLERANCE = 1.10`
+(no edge more than 10% from the tile's longest). Measured on the frozen world, the worst tile is the
+outer corner `8,-10`:
+
+| strength | worst max/min edge | shortest vs longest | sharpest interior angle | tiles past 1.10 |
+| --- | --- | --- | --- | --- |
+| 0.04 (recommended) | 1.0687 | 6.4% | 116.2° | 0 |
+| 0.05 (was shipped) | 1.0877 | 8.1% | 115.2° | 0 |
+| **0.08 (this)** | **1.1499** | **13.0%** | **111.7°** | **56 / 274** |
+| 0.12 (rejected) | 1.2469 | 19.8% | 106.3° | — |
+| 0.20 | 1.5056 | 33.6% | 91.4° | — |
+
+He was also told that 8% is the same intensity as the earlier `fisheye-a` attempt he rejected — but
+that the technique now is a **true sphere projection with no added contours**: the lattice itself
+bends, nothing is drawn on top. He chose 8% anyway.
+
+**The visual trade accepted.** Rim tiles are visibly compressed: at the map's edge a tile's two radial
+edges are about 13% shorter than its four tangential ones, so it reads as a hexagon turning away from
+the viewer rather than a regular one. Interior angles stay between 111.7° and 125.7° (regular 120°).
+The middle of the map is untouched, and neighbours still share every corner exactly (no seams). The
+median tile is 1.0571 and the 90th percentile 1.1188, so the compression is concentrated at the rim.
+
+**The guard was re-pointed, not deleted.** `web/tests/map-globe.test.ts` used to assert that 8% fails
+`HEX_TOLERANCE` and that the shipped strength passes it. It now pins a **hard floor of 1.20** — the
+last rung before the tiles shear into trapezoids — for the shipped strength, and still fails for 0.12,
+0.2 and 0.4. `HEX_TOLERANCE` keeps its 1.10 meaning and the test counts how many tiles exceed it (56),
+so the cost cannot be quietly widened later. A 0.05 strength remains reachable by changing the one
+constant; `globe-subtle` (0.04) is the previous recommendation.
+
+**Superseded the same day:** the pose became view-centred ("Later the same day — the globe is
+VIEW-CENTRED, and the panel is a CROP"), so the measured worst tile moved from 1.1499 to 1.2234 and
+the hard floor to 1.30. The 8% and the reasoning above are unchanged; only the reference view is.
+
+### Later the same day — the globe is VIEW-CENTRED, and the panel is a CROP
+
+Owner: *"position still jumps, map still isnt the same on main menu and in territory -- we need a
+diffrent approach to fixing this"*; *"the geometry was supposed to be dynamic - when edge of the map
+is in the centre of the view, those tiles on the edge becoming larger - and what's around it on edges
+is getting 'squished' ... so going through map almost feels like turning a globe ball object"*; and
+*"so always the middle of the view - what's currently in the centre of the view is 'larger'"*. The
+strength stays 8%; he explicitly did not want it talked down.
+
+**The anchor is no longer a second viewBox.** The old `anchoredView` calculated what viewBox the
+Territory panel needed to reproduce the menu's mapping. The panel now keeps the menu's physical
+canvas (origin, pixel size) and its viewBox, and is clipped to its own frame with
+`clip-path: inset(... round 14px)`; `WorldView` measures the panel's frame from the layout offset
+chain, not from a transform-sensitive rect. A tile's absolute screen rect is therefore the same on
+both surfaces by construction. Measured: **0.000px max rect delta over 279 tiles** in Chromium,
+0.007px in WebKit (layout rounding), and **0.000px after a reload**.
+
+**The globe is posed by the camera.** `viewGlobePose(box)` puts the sphere's centre under the view
+centre and takes the view's half-diagonal as its rim, so the middle of the view is the fat point and
+the edges recede; panning carries the fat point with the finger, zooming keeps the on-screen effect
+the same size. The projection maths and `GLOBE_FALLOFF = 0.08` are unchanged. (Superseded the same
+day: geometry used to be re-posed only on camera settle, "never per move" — that is exactly what made
+the map jump at the release. It is now re-posed once per painted frame during a gesture; see "The
+bend rides the drag" above. The settle still rewrites the visible cells plus half a view of margin.)
+
+Measured on the reference 390x844 view: worst max/min edge at 8% = **1.2234** (91/274 tiles past the
+1.10 product bar); 0.12 = 1.3870. The hard floor in `web/tests/map-globe.test.ts` is re-pointed from
+1.20 to **1.30** (0.10 = 1.2995 still inside; 0.12 fails). The worst tile *visible in the Territory
+window* measures 1.11-1.19 across the camera positions and viewports tested, so rim tiles read as
+compressed hexagons, not slivers. Cost per settle: 2.4-4.2ms and 507-581 attribute writes on
+Chromium desktop, 8.5-12.2ms at 4x CPU throttle; a pan is 0.006-0.03ms per viewBox write.
+
+**The CI failure was not the flat-centre hit test.** The 8% commit already resolved taps against
+`drawnAt` (the bent centres). On `cefe8521` the failing tap landed on the tile that was ALREADY
+selected, and the product deliberately toggles a second tap off — so the suite read "selected
+nothing". The hit test is now a pure `nearestCell` used by both the paint and the tap (the same pose
+that is standing on screen), with unit tests proving a tap at a drawn tile's centre selects it at the
+view centre and near the edge, and that the old flat-centre rule would have selected `-1,8` instead
+of `-1,9` at the edge. The WebKit suite now taps a different tile's drawn centre and asserts the
+selected cell is the one drawn under the finger.
+
+## 2026-11-02 — The menu paints before the module; no filter on an animating part
+
+Owner: "run couple extra smoothness checks and smoothness pack … making sure everything appears as
+quickly as possible, all animations and transitions are smooth and satisfying … focus on efficiency
+and reliability."
+
+**The menu is static, so it is painted statically.** The product menu has a fixed shape (emblem,
+wordmark, beta line, PLAY, TERRITORY, Settings); only labels and numbers are data. `vite.config.ts`
+now fills the beta line (from `src/strings.ts`), drops PLAY's `hidden`, and adds `world-reserved`
+only when the build has an online endpoint. `style.css` shows the product keys from the first frame
+and reserves TERRITORY's 50px slot invisibly; `layoutMenu` reveals the key into the slot it already
+occupies. The emblem paints from the same silhouette as a CSS mask until the SVG replaces it. This
+is why the column no longer moves: measured at 390x844, PLAY's y is 568.06px both before and after
+layout (0.00px), and the beta line/logo are on the first frame instead of arriving last. The legacy
+channels keep the old gate; no skeleton state and no invented words are shown.
+
+**A filter never rides an animating element.** Owner rule, already in `docs/UX.md` and this file; this
+pass found four violations and removed them: the idle hint's `brightness` on the hand, the Throw
+step's `grayscale` on every breathing card, the Bloom recipe's animated `drop-shadow`, and a primary
+key's `brightness` on press/hover. They now use opacity/colour/background. Measured on the Throw
+step: compositor raster 186.9 → 168.6ms per 2.5s at DPR 3. The Throw e2e assertion was changed with
+it (it had pinned the old grayscale; the design intent — readable colour plus the ember edge — is
+unchanged and now pinned by the absence of the filter).
+
+**Two hot-path reads moved out of the loop.** Painting a Bloom reads the board transform once per
+gesture; the drag ghost uses its written size, sampling the box only during the 180ms mini/full
+morph.
+
+**Deliberately not touched.** The Territory map's `world-glint` (an infinite filter on every owned
+tile) and `world-lamp` box-shadow breath, and everything in `world-view.ts` / `world-camera.ts` /
+`living-territory*.ts`: a concurrent change owns that map. The race bar's registered-property
+transition and the hand's designed Throw breath are reported, not changed.
+
+**Pre-existing test drift corrected, not hidden.** `web/e2e/hand-life.ts` still looked for a single
+`hand-breath` animation and a `--breath-scale` property that the five-baked-amplitude pass replaced;
+`web/e2e/online-lobby-check.ts` measured the wordmark→buttons slot on `.menu-inner` after that group
+moved into `.menu-stack`, so it could not see the beta line it exists to guard. Both now measure the
+current structure (the same intent, stronger). `hand-life`'s final Speed Off assertion remains the
+documented pre-existing failure; every breath/reduce-motion check before it passes.
+
+## 2026-11-02 — Transactional mail wears the brand, and lives in the repo
+
+Owner: "if you do design emails sent to people to confirm account / remember password etc, make sure
+they're FUTASAKU, with branding, lowkey nice design, simple wording etc, matching the game and language."
+
+**The templates are files.** Supabase Auth's six templates (confirmation, recovery, magic link, email
+change, invite, reauthentication) live in `server/email-templates/`;
+`scripts/apply-email-templates.mjs` PATCHes the project's `mailer_subjects_*` /
+`mailer_templates_*_content` and reads them back. The dashboard is not the source of truth: a change
+made only there leaves no reviewable copy and no history.
+
+**Why it is plain HTML and not the game's glass.** Email is not a browser: Gmail strips `<style>`,
+most clients ignore CSS variables, `backdrop-filter` does not exist, and inline SVG is stripped. So
+the brand is carried by type and colour taken from `web/src/style.css`
+(`#18191a` ground, `#eeebe4` ink, `#efe5cb` accent, `#b7a98a` for the quiet brass label already
+used by the privacy page). There is one cream button with the raw link underneath for clients that
+drop it. No hexagon is drawn: a CSS hexagon needs transforms or pseudo-elements that clients drop.
+
+**Honesty about time.** The copy says "valid for one hour" because `mailer_otp_exp` is 3600. The
+apply script warns when the two disagree instead of letting the email promise a duration the server
+does not honour. Notification templates are disabled on this project and are not branded. The old
+hand-paste `server/templates/email-signin.html` was removed as a second, conflicting copy; history
+keeps it.
+
+### Later the same day — the real wordmark, and an image that is not a dependency
+
+Owner: *"the emails sent should contain FUTASAKU logo (no tree one) and be more futasaku, by default
+in dark mode."*
+
+The first pass used a letter-spaced type wordmark because "an image would arrive broken". That was
+right about the risk and wrong about the conclusion: an image is only fragile when it is the only
+carrier. This pass uses the game's own treeless mark (the HUD badge / Profile nameplate asset) as a
+hosted PNG at a stable absolute URL — `https://www.futasaku.com/email/futasaku-wordmark.png`, 300×92
+(2× of a 150×46 box), tinted `#efe5cb` on the card's ink by
+`scripts/build-email-wordmark.mjs` from `web/src/assets/futasaku-wordmark-silhouette.webp` — and
+keeps the type wordmark as the fallback instead of deleting it:
+
+- fixed `width`/`height` attributes **and** inline sizes, so a blocked image reserves its box and the
+  header does not collapse;
+- `alt="FUTASAKU"` styled in the same cream, serif and letter-spacing as the type wordmark, so an
+  images-off inbox still shows a deliberate wordmark rather than an empty band;
+- `--blocked` in the render script makes that state reviewable, and the measurement reports the box.
+
+More FUTASAKU without clutter: the game's serif display voice for headings (Georgia, the email-safe
+relative of Besley), the cockpit's monospaced readout for the code digits, and "VALID FOR ONE HOUR"
+as the one quiet brass instrument label. Nothing decorative was added; no gradients, clipart or new
+mark was invented.
+
+The cost is honest: the PNG lives at the site root, so it resolves only when this commit is promoted.
+Between the push and the promote, real mail shows the alt-text wordmark — by design, not by accident.
+`/test/email/futasaku-wordmark.png` proves the file is published before the promote.
+
+Images: [confirmation](screens/email/confirmation.png),
+[images off](screens/email/confirmation-images-off.png), [320px](screens/email/confirmation-320.png),
+[recovery](screens/email/recovery.png), [magic link](screens/email/magic_link.png),
+[email change](screens/email/email_change.png), [invite](screens/email/invite.png),
+[reauthentication](screens/email/reauthentication.png).
+
+## 2026-11-02 — Windows keep no interior hairline divider
+
+Owner: "i also dont like the hairline divisions in profile (and if shows up anywhere else) - id
+remove and not add in new widnows iin future".
+
+**The rule.** A window separates its rows and blocks with space, a size/weight step or a muted
+label, never with a 1px rule between them. The plate's own outer edge is the glass material and is
+not covered by this rule. The standing version lives in [UX.md](UX.md#design-rules), and
+`tests/window-dividers.test.ts` fails on a new directional hairline inside any window (or on a
+pseudo-element line, which is the same thing in another coat). A genuinely necessary divider is
+allowed only with a `divider-ok: <reason>` comment at the rule.
+
+**What changed.** The Profile lost its header rule, the rules between the four identity rows, the
+rule above the record and the rule between the offline and online records; the six record tiles
+now use a neutral fill instead of a 1px contour. The same interior rules were removed from the
+pause plate (header, tool row and the centred score rule), Settings rows, "What happened", the
+finish card's stat rows, the Territory window's head and standing block, Match Intel's stat strip
+and tip accents, the tutorial Bloom groups, and the match chat's head/foot/message separators.
+
+**What was kept, and why.** The 2px+ coloured marks that carry meaning rather than divide blocks:
+the observation's margin rule in Match Intel, the card combo edge, the score-pop accent and the
+gameplay HUD edge. Buttons, inputs, form fields and the record tiles keep their own contour (or
+fill) because that is a control's edge, not a rule between two rows. The glass plate's own edge is
+untouched. The Profile plate's measured opacity guard (the "Matches won" band) is unchanged.
+
 ## 2026-10-16 — The shared link preview showed the old name (owner report; fixed)
 
 Owner: "when sending a link with an invite to game - the graphic that shows up is an outdated severor
@@ -357,3 +844,56 @@ same player; nothing is ever merged or overwritten (DB unique keys both ways). "
 removes the link and the Supabase user and signs out other devices. Privacy policy at
 `futasaku.com/#privacy`. Nothing appears until the owner switches Google on in Supabase — release order
 and clicks in [`ACCOUNTS.md`](ACCOUNTS.md).
+
+### 2026-10-19 — The root .com build gets the lessons tutorial, and the campaign reset is ACCEPTED
+
+Owner direction: "newest levels tutorial update can be pushed to .com and merge". `futa0.5-online`
+was an ancestor of `futa0.5-onboarding-3`, so the merge is clean (`--no-ff`, no conflict
+resolution); the root build is now the lessons line's tree, unchanged.
+
+**The storage decision.** The root (`CHANNEL=futa05`, path `/`) uses the `futa05:` storage prefix;
+`/3/` uses `futa05-3:`. The lessons line moved the campaign's progress and match save to
+`severgrow.campaign.progress.v3` / `severgrow.campaign.save.v3`, so **an existing root player starts
+the campaign at level 1 again**. We accept that reset, for the reason already written in
+[`CAMPAIGN.md`](CAMPAIGN.md): the onboarding polish changed several authored boards and the lesson
+scripts, and a `.v2` "completed" list would unlock levels whose teaching has moved on — the player
+would skip the new lessons rather than replay them. This is the owner's earlier written direction,
+not a new choice made here.
+
+Nothing is destroyed on the device. The old `.v2` progress, match save and lesson-mastery keys stay
+in storage, unread and unwritten; no migration runs and no key is removed. The root and `/3/` have
+different prefixes, so a player who tested `/3/` does not carry that progress into the root either
+way. If the owner later wants "keep completed", it must be an explicit, visible migration (a one-time
+`completed` import into the `.v3` record), never a silent read of the old key — reading it silently
+would unlock levels nobody has been taught in the new script.
+
+### 2026-10-24 — The Territory shows YOUR level, not the last one the server was paid for
+
+Owner report: *"on my account - im at level 23 - but on territory it says im level 11 - should never
+happen"*. Confirmed rather than assumed. The map's `ownerLevel` is not campaign progress: it is
+`max(campaign level in seed_reward_receipts)` — the highest clear the server was ever **told about**
+(`server/src/seeds/postgres.ts`, the lateral over `seed_reward_receipts`; `server/src/seeds/memory.ts`
+computes the same thing on read). A receipt is written once per level, when a proof is settled, and
+proofs are queued on the device until the next menu visit — so the number is a **lower bound** on
+progress, and on the owner's account (paid through 11, actually on 23, because levels 12–22 were
+never submitted) it understated by twelve.
+
+The honest source of truth for "my level" is the device's own campaign record
+(`severgrow.campaign.progress.v3`), the same record the PLAY entry reads. So the viewer's own ground
+now takes `max(this device's level, the server's recorded level)`:
+
+- both numbers are statements of *"at least this far"*, so the larger one is the strongest true
+  answer and can never show an older number than either source already knows;
+- the `max` matters in the other direction too — progress is per device, so a second phone or a
+  cleared browser must not pull a player who is at 22 back down to `LEVEL 1`;
+- somebody else's ground is **untouched**: no client can know another account's progress, so their
+  line keeps the server's recorded figure (and shows none when there is none).
+
+No data to recalculate: there is no `owner_level` column — `world_claims` holds only `cell_id`,
+`owner_id`, `claimed_at`, `purchase_request_key`, `source`; the number is derived on every read. The
+owner's number corrects itself the moment this web build is live, with **no server deploy** (the
+payload did not change).
+
+Known limit, stated plainly: another player's figure can still understate their real progress while
+their proofs are queued or if they were never submitted. Closing that needs the server to record
+submitted progress rather than paid clears — a separate change, not made here.

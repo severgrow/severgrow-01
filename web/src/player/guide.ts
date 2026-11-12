@@ -27,6 +27,8 @@ const ICON: Record<Step, string> = {
 };
 
 const loadMode = (): GuideMode => {
+  // The Futasaku channels keep Settings to the essentials (owner, 2026-10-23): guidance is always Full.
+  if (IS_FUTA04) return 'full';
   try {
     const v = localStorage.getItem(KEY);
     return v === 'subtle' || v === 'off' ? v : 'full';
@@ -166,6 +168,9 @@ export const mountGuide = (hooks: { reduceMotion: () => boolean }) => {
 
   const show = () => {
     if (!step || mode === 'off' || document.hidden) return level('off');
+    // The product cockpit replaces this legacy plate (information.ts hides it permanently).
+    // Keep root step/picked guidance, but never flush layout for an invisible entrance.
+    if (IS_FUTA04 && root.classList.contains('futa04-information')) return level('off');
     fill(step);
     cue.classList.remove('faint');
     place();

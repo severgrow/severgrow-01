@@ -76,9 +76,10 @@ describe('campaign levels: the definition is well formed', () => {
     for (const [id, c] of checks) {
       const number = CAMPAIGN_LEVELS.find((l) => l.id === id)!.number;
       // The small tutorial map (19 hexes) cannot hold 20 open; its floor is that minus the four
-      // hexes it may lose to rock. Levels 1-3 use it; levels 4-30 keep the product board's original
-      // floor of 20.
-      expect(c.openCells, id).toBeGreaterThanOrEqual(number <= 3 ? 15 : 20);
+      // hexes it may lose to rock. Levels 1-3 and the level-9 real game use it; every other level
+      // keeps the product board's original floor of 20.
+      const small = number <= 3 || number === 9;
+      expect(c.openCells, id).toBeGreaterThanOrEqual(small ? 15 : 20);
       expect(c.minHomeOpenNeighbours, id).toBeGreaterThanOrEqual(3);
     }
   });
@@ -263,17 +264,30 @@ describe('campaign levels: the definition is well formed', () => {
     }
   });
 
-  it('keeps the difficulty ramp NON-DECREASING for 1-30: the teaching ladder never slips', () => {
+  it('keeps the difficulty ramp NON-DECREASING for 1-30, apart from the one deliberate spike at 13', () => {
     const teaching = CAMPAIGN_LEVELS.filter((l) => l.number <= 30).map((l) => l.botLevel);
     // The conceptual guard. The old curve rose to bot 5 at level 20 and then dropped back to bot 4
     // at level 21 — a silently descending difficulty curve, invisible in code and obvious to a
     // player, which nothing pinned. Through the teaching levels, a bot level may never fall.
+    //
+    // ONE sanctioned exception (owner, 2026-10-20): level 13 "The Detour" is a DELIBERATE spike to
+    // bot 8, two rungs above its neighbours. It is pinned here by level number, and the ramp must
+    // resume at the rung it left: level 14 returns to level 12's bot, so only that one level is
+    // raised. Every other step still never falls — a second spike or a permanent lift fails below.
+    const SPIKE = 13;
+    expect(teaching[SPIKE - 1], 'level 13 is a deliberate spike to bot 8').toBe(8);
     for (let i = 1; i < teaching.length; i++) {
+      const levelNumber = i + 1;
+      // Skip only the two steps the spike touches: climbing into 13, and dropping back out at 14.
+      if (levelNumber === SPIKE || levelNumber === SPIKE + 1) continue;
       expect(
         teaching[i]!,
-        `level ${i + 1} (bot ${teaching[i]}) is easier than level ${i} (bot ${teaching[i - 1]})`,
+        `level ${levelNumber} (bot ${teaching[i]}) is easier than level ${i} (bot ${teaching[i - 1]})`,
       ).toBeGreaterThanOrEqual(teaching[i - 1]!);
     }
+    // The spike really is a spike (up then straight back), not the start of a raised plateau.
+    expect(teaching[SPIKE - 1]!).toBeGreaterThan(teaching[SPIKE - 2]!);
+    expect(teaching[SPIKE]!).toBe(teaching[SPIKE - 2]!);
     // Anchored at both ends: the campaign opens on the easiest bot and tops out on the hardest.
     expect(teaching[0]).toBe(1);
     expect(teaching.at(-1)).toBe(9);
@@ -353,12 +367,14 @@ describe('campaign levels: the definition is well formed', () => {
   it('ships the approved bot ladder exactly, so the rebalance cannot be quietly undone', () => {
     // Owner-approved 2026-10-16: L1-3 the deliberately easy intro, then short rungs of 2-6 levels,
     // each step worth roughly 63-72% to the stronger bot, up to bot 9 at the top.
+    // Owner exception 2026-10-20: level 13 is a deliberate spike to bot 8 (the 12-14 rung is 5,
+    // except that one level); level 14 returns to 5. The rest of the ladder is unchanged.
     expect(CAMPAIGN_LEVELS.filter((l) => l.number <= 30).map((l) => l.botLevel)).toEqual([
       1, 1, 1,
       2, 2,
       3, 3, 3,
       4, 4, 4,
-      5, 5, 5,
+      5, 8, 5,
       6, 6, 6,
       7, 7, 7,
       8, 8, 8, 8,
@@ -381,15 +397,15 @@ describe('campaign levels: the definition is well formed', () => {
     ]);
   });
 
-  it('levels 1-3 use the tutorial small map (radius 2); levels 4+ the product hexagon (radius 3)', () => {
+  it('levels 1-3 and level 9 use the tutorial small map (radius 2); the rest the product hexagon', () => {
     for (const level of CAMPAIGN_LEVELS) {
       const board = level.config.board!;
-      // Owner direction 2026-10-17, after playing the guided levels: only the three discovery levels
-      // use the tutorial's map. On the 19-hex board a corner home has three neighbours and one Bloom
-      // places three tiles, so a single Bloom strangulates it — that map cannot carry a real match.
-      // Chapters IV-VII stay on the product hexagon (a bigger map was considered and set aside:
-      // 61 hexes at 360 px gives ~36 px hexes, under the 44 px tap target the cockpit uses).
-      const small = level.number <= 3;
+      // Owner direction 2026-10-17, after playing the guided levels: the three discovery levels use
+      // the tutorial's map. Level 9 joined them on 2026-11-01, when it became a real game from
+      // scratch on the small map (the /2/ line's opening for this level). Chapters IV-VII stay on
+      // the product hexagon (a bigger map was considered and set aside: 61 hexes at 360 px gives
+      // ~36 px hexes, under the 44 px tap target the cockpit uses).
+      const small = level.number <= 3 || level.number === 9;
       const expectedRadius = small ? TUTORIAL_BOARD_RADIUS : 3;
       const expectedCells = small ? CAMPAIGN_SMALL_CELLS : CAMPAIGN_CELLS;
       const expectedHomes = small ? CAMPAIGN_SMALL_HOMES : CAMPAIGN_HOMES;

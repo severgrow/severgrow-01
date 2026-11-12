@@ -196,6 +196,8 @@ export const setLandmarkState = (g: SVGGElement, s: { sides: boolean[]; enemy: b
   g.classList.toggle('show-ring', show);
   g.classList.toggle('ring-soft', show && s.blocked <= 3);
   g.classList.toggle('ring-strong', show && s.blocked >= 4);
+  // HOW HEM IN the home is, as data: the constricting ring thickens with it (owner, 2026-11-02).
+  g.dataset.blocked = String(s.blocked);
   g.classList.toggle('strangled', s.strangled);
   g.classList.toggle('won', s.won);
   g.querySelectorAll('.lm-seg').forEach((seg, i) => {

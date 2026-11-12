@@ -7,10 +7,13 @@
 // invite codes or hidden hands — the field lists below are the whole contract, and the router
 // returns exactly these.
 import type { FeedbackKind } from '../feedback/feedback.js';
+import type { AdminAnalytics } from './analytics.js';
+import type { AdminPlayers, PlayerClassification } from './players.js';
+
+export type { AdminAnalytics, AdminAnalyticsFunnel, AdminRetentionCohort } from './analytics.js';
 
 export type AdminTriageStatus = 'new' | 'reviewing' | 'resolved';
 
-/** A day bucket keyed by UTC day (`YYYY-MM-DD`), the same key the Seeds economy stores. */
 /** A day bucket keyed by UTC day (`YYYY-MM-DD`), the same key the Seeds economy stores. */
 export type AdminDayCount = { day: string; n: number };
 export type AdminValueCount = { value: string; n: number };
@@ -271,15 +274,50 @@ export type AdminFunnel = {
   upgradedAtMayBeUnpopulated: boolean;
 };
 
+export type AdminSeedGrant = { playerId: string; amount: number; reason: string; actorId: string; requestId: string; now: number };
+
+/** The owner's correction to the human/bot call. `null` hands the row back to its stored marker. */
+export type AdminPlayerOverride = boolean | null;
+
+export type AdminPlayerVisibility = {
+  isTest: boolean;
+  testReason: string | null;
+  testOverride: AdminPlayerOverride;
+  classification: PlayerClassification;
+  /** The same sentence the screen shows, produced by the one classification function. */
+  reason: string;
+};
+/** The largest single grant, so a slipped digit can never mint a fortune. */
+export const ADMIN_GRANT_MAX = 1000;
+export const ADMIN_GRANT_REASON_MAX = 200;
+
 export interface AdminStore {
   readSeen(adminId: string): Promise<number | null>;
   writeSeen(adminId: string, at: number): Promise<void>;
   /** New rows since `since`, for the "since you last looked" counters. */
   countsSince(since: number, now: number): Promise<{ reports: number; crashes: number; claims: number; matches: number }>;
   overview(now: number): Promise<AdminOverview>;
+  /**
+   * Retention and funnel figures from stored activity (finished duels, claims, creates).
+   * Test accounts are excluded. Incomplete D1/D7 windows are null, never partial.
+   */
+  analytics(now: number): Promise<AdminAnalytics>;
   reports(filter: AdminReportFilter): Promise<AdminPage<AdminReportRow>>;
   triage(input: { reportId: string; status: AdminTriageStatus; note: string; actorId: string; now: number }): Promise<{ changed: boolean; previous: AdminTriageStatus | null } | null>;
   audit(entry: AdminAuditEntry): Promise<void>;
+  /**
+   * The dashboard's one Seeds write (owner, 2026-10-24): add Seeds to a player's wallet, recorded in
+   * the ledger as `admin_grant` under `admin:<requestId>` (so a repeated request never pays twice),
+   * with the reason and the admin's id in its metadata. The audit record is committed in the same
+   * transaction, once per successful grant. Null when the player does not exist.
+   */
+  grantSeeds(input: AdminSeedGrant): Promise<{ balance: number; replayed: boolean } | null>;
+  /**
+   * Move one account between the human list and the Bots tab (owner, 2026-10-24). `false` = "this is
+   * a real person, always show them", `true` = "this is a bot", `null` = follow the stored marker.
+   * Returns null when the player does not exist. The audit row is committed with the change.
+   */
+  setPlayerVisibility(input: { playerId: string; override: AdminPlayerOverride; actorId: string; now: number }): Promise<AdminPlayerVisibility | null>;
   stuck(now: number, windows: { guestMaxAgeMs: number; waitingExpireMs: number; turnTimeoutMs: number }): Promise<AdminStuck>;
   rulesVersionCounts(): Promise<AdminValueCount[]>;
   funnel(now: number): Promise<AdminFunnel>;
@@ -290,6 +328,8 @@ export interface AdminStore {
   ledger(filter: AdminLedgerFilter): Promise<AdminPage<AdminLedgerRow>>;
   world(now: number): Promise<AdminWorld>;
   campaign(): Promise<AdminCampaign>;
+  /** Every player the server knows, with the last recorded activity of each (players.ts). */
+  players(now: number): Promise<AdminPlayers>;
 }
 
 /** Bounded scan for a tag search: the tag is a hash of the id, so it is not indexable. */

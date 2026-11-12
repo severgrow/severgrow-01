@@ -168,7 +168,9 @@ describe('the real-time reconnect ladder (one player drops)', () => {
     expect(live.reconnectSince[seat]).toBe((await h.liveStore.player(actor.id)).presenceAt);
   });
 
-  it('a CONNECTED player who simply lets the clock run out still loses outright (the strict rule stands)', async () => {
+  // OWNER CHANGED THE RULE (0.82 Blitz, 2026-11-06): a CONNECTED player who lets the clock run out
+  // no longer loses: the turn is played out and the match goes on. Still never a grace for them.
+  it('a CONNECTED player who simply lets the clock run out: the turn is played out at once, no grace', async () => {
     const h = makeLiveHarness();
     const { a, b, matchId } = await h.pair();
     await h.goLive(a, b, matchId);
@@ -183,11 +185,12 @@ describe('the real-time reconnect ladder (one player drops)', () => {
     await h.presence(other, 'in_live');
     const s = await h.live.status(other, matchId);
     const after = await match(h, matchId);
-    expect(after.status).toBe('finished');
-    expect(after.result).toEqual({ winner: seat === 0 ? 1 : 0, reason: 'timeout', scores: scores(stateBefore.state) });
+    expect(after.status).toBe('active');
+    expect(after.state.turnPlayer).not.toBe(seat);
     expect(s.opponent.reconnecting).toBe(false);
-    // Never a grace for someone who is present.
-    expect(await h.memory.movesOf(matchId, 0)).toHaveLength(0);
+    // The turn was played out (moves recorded), not extended by a grace.
+    expect((await h.memory.movesOf(matchId, 0)).length).toBeGreaterThan(0);
+    void scores;
   });
 });
 

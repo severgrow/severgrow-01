@@ -86,6 +86,8 @@ try {
   const ready = await waitFor(async () => (await seatA.page.locator('[data-live="pill"]').getAttribute('data-state')) === 'ready', 25_000);
   check('the real-time pill is ready', ready);
   await seatA.page.locator('[data-live="pill"]').click();
+  // The bolt asks first now (owner, 2026-10-26): the second tap is what sends.
+  await seatA.page.locator('[data-live="confirm-send"]').click();
   check('the challenge reaches the other device', await waitFor(() => vis(seatB, '[data-mode="challenge"]'), 15_000));
   await seatB.page.locator('[data-live="accept"]').click();
   check('both devices are live', await waitFor(async () => !!(await dbg(seatA))?.status?.live && !!(await dbg(seatB))?.status?.live, 20_000));

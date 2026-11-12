@@ -190,7 +190,7 @@ for (const vp of VIEWPORTS) {
     buttonsColumn: '#menu .menu-buttons',
   });
 
-  // ---- 2. Difficulty pick (Training is behind the PLAY doorway on product channels) ----
+  // ---- 2. Difficulty pick (Practice match is behind the PLAY doorway on product channels) ----
   await openMenuEntry(page, 'menu-new');
   await ready(page, '#levels:not([hidden])');
   await shootClipped(page, 'levels', vp.key);

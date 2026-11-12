@@ -1,10 +1,20 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
+import type { Page } from 'playwright-core';
 import { preview } from 'vite';
 import { PREVIOUS_RULES_VERSION, apply, coordKey, legalActions, viewFor } from '../../src/engine/index.js';
 import { fruitPosition, NINE_CHAIN } from './fruitcards-pos.js';
 import { positionSave } from './position.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
+
+// Owner decision (2026-10-19): the PRODUCT main menu has NO Continue — a saved match is offered
+// when the player enters its level. These fixtures only need the resume itself, so boot first and
+// invoke the still-bound hidden control, exactly as futa04-critical/motion do. Waiting for it to be
+// VISIBLE (page.click) can never succeed on this channel: `[hidden]` is display:none by design.
+const resumeSave = async (page: Page) => {
+  await page.waitForFunction(() => (window as any).__severgrow?.ready?.() === true, undefined, { timeout: 20000 });
+  await page.evaluate(() => (document.getElementById('menu-continue') as HTMLButtonElement | null)?.click());
+};
 
 const port = 4199;
 const server = await preview({ configFile: 'web/vite.config.ts', preview: { port, strictPort: true }, logLevel: 'silent' });
@@ -25,7 +35,7 @@ try {
   },JSON.stringify(oldSave));
   await page.goto(`http://localhost:${port}/`);
   await assertDistChannel(page);   // loud if the served dist was built for another channel
-  await page.locator('#menu-continue').click();
+  await resumeSave(page);
   await page.waitForFunction(() => !(window as any).__severgrow.busy());
   assert.deepEqual(await page.evaluate(() => (window as any).__severgrow.state()), before);
   // The live Grow pulse intentionally keeps the card moving, so Playwright's

@@ -14,6 +14,7 @@ import { DEFAULT_SERVER_CONFIG } from '../src/config.js';
 import { MemoryStorage } from '../src/storage/memory.js';
 import { MemoryFeedbackStore } from '../src/feedback/feedback.js';
 import { MemoryWorldEconomyStore } from '../src/seeds/memory.js';
+import { BETA_PAYOUT_MULTIPLIER, SEED_ECONOMY } from '../src/seeds/config.js';
 import { MemoryIdentityLinkStore } from '../src/accounts/accounts.js';
 import { memoryAdminStore } from '../src/admin/memory.js';
 import { postgresAdminStore } from '../src/admin/postgres.js';
@@ -155,7 +156,7 @@ describe('a marked player and a marked match are invisible on every admin read',
     // --- economy / ledger / campaign -----------------------------------------
     const economy = await t.store.economy(NOW);
     expect(economy.totals.wallets).toBe(1);
-    expect(economy.totals.lifetimeEarned).toBe(120);
+    expect(economy.totals.lifetimeEarned).toBe(4 * SEED_ECONOMY.online.queue.win * BETA_PAYOUT_MULTIPLIER);
     expect(economy.totals.lifetimeSpent).toBe(100);
     expect(economy.receipts.awarded).toBe(4);
     const ledger = await t.store.ledger({ limit: 200 });
@@ -196,6 +197,7 @@ describe('the real SQL store filters test data in every read', () => {
     const reads: [string, () => Promise<unknown>][] = [
       ['countsSince', () => store.countsSince(NOW - DAY, NOW)],
       ['overview', () => store.overview(NOW)],
+      ['analytics', () => store.analytics(NOW)],
       ['reports', () => store.reports({ limit: 5 })],
       ['stuck', () => store.stuck(NOW, windows)],
       ['rulesVersionCounts', () => store.rulesVersionCounts()],
@@ -227,5 +229,13 @@ describe('the real SQL store filters test data in every read', () => {
     const matchQuery = sql.find((s) => /\bfrom matches m\b/.test(s));
     expect(matchQuery, 'matchDetail did not read the match row').toBeTruthy();
     expect(matchQuery!).toMatch(/is_test/);
+    // The move timeline must survive the double-encoded `events` column: every live row is a JSON
+    // STRING around an array, and a bare jsonb_array_length() raised "cannot get array length of a
+    // scalar", failing the whole screen. The read now handles the array, the string, and neither.
+    // (the match read also counts moves in a subquery, so pick the timeline read itself)
+    const movesQuery = sql.find((s) => /\bfrom match_moves where match_id = \$1\b/.test(s));
+    expect(movesQuery, 'matchDetail did not read the moves').toBeTruthy();
+    expect(movesQuery!).toMatch(/jsonb_typeof\(events\)/);
+    expect(movesQuery!).toMatch(/#>> '\{\}'/);
   });
 });

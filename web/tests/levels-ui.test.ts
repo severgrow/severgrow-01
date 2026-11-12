@@ -23,6 +23,8 @@ describe('the level screen', () => {
     const raw = JSON.parse(encodeSave({ seed: s.seed, actions: [], coach: null, level: 4 }));
     expect(decodeSave(JSON.stringify(raw))!.level).toBe(4);
     expect(decodeSave(JSON.stringify({ ...raw, level: undefined }))!.level).toBe(7);
-    expect(decodeSave(JSON.stringify({ ...raw, level: 12 }))!.level).toBe(7);
+    // 13: one past the last bot (12 is a rival since 2026-11-12, and a save against it keeps it).
+    expect(decodeSave(JSON.stringify({ ...raw, level: 13 }))!.level).toBe(7);
+    expect(decodeSave(JSON.stringify({ ...raw, level: 12 }))!.level).toBe(12);
   });
 });

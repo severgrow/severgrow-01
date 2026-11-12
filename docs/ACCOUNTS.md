@@ -1,3 +1,5 @@
+> Current email-code sign-in and rollout: [EMAIL-ACCOUNTS.md](EMAIL-ACCOUNTS.md). Google remains available.
+
 # Accounts — "Continue with Google" (FUTASAKU 0.5, branch `futa0.5-online`)
 
 The proposed world economy attaches wallets and claims to the same canonical player ID preserved by guest upgrade and account recovery; see [WORLD-MAP.md](WORLD-MAP.md). A nickname change does not transfer ownership.
@@ -378,7 +380,7 @@ overriding):
 
 - You parked **Google sign-in as "Recover with Google" until after the playtest**, and you decided
   **names + accounts are one piece of work, not two**. Nothing here changes that. The
-  two-phone playtest (`docs/PLAYTEST-0.5.md`) has **not been run** as far as this repo shows (its
+  two-phone playtest (`docs/history/PLAYTEST-0.5.md`) has **not been run** as far as this repo shows (its
   results table is blank), so "after playtest" has not arrived — which is exactly why I do not
   recommend building the OAuth integration tonight.
 - Option 1 is the **interim guard** that makes sharing safer now, without pre-empting the Google
@@ -508,5 +510,5 @@ do not treat the name as "me".
 - `server/src/storage/postgres.ts` — single-use redemption, the 30-day no-match guest sweep.
 - `web/src/online/identity.ts`, `web/src/online/lobby-ui.ts`, `src/strings.ts`, `web/index.html` —
   the Settings link-code block, the self-heal path and its wording.
-- `docs/DEPLOY-ONLINE.md`, `docs/ONLINE-PLAN.md`, `docs/ONLINE-SHIP-STATUS.md`,
-  `docs/PLAYTEST-0.5.md` — JWT gate off, free-tier limits, "matches live on the device".
+- `docs/DEPLOY-ONLINE.md`, `docs/ONLINE-PLAN.md`, `docs/history/ONLINE-SHIP-STATUS.md`,
+  `docs/history/PLAYTEST-0.5.md` — JWT gate off, free-tier limits, "matches live on the device".

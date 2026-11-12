@@ -3,10 +3,11 @@
 
 import type { Action, Event, Player, View } from '../../../src/engine/index.js';
 import { DuelClient } from '../../../server/src/client.js';
-import type { MatchViewPayload } from '../../../server/src/protocol.js';
+import type { MatchViewPayload, ReplayPayload } from '../../../server/src/protocol.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { ONLINE } from '../../../src/strings.js';
 import { mark } from '../logic/timing.js';
+import type { SettledSeeds } from '../ui/seed-reveal.js';
 import { remainingMs } from './clock.js';
 import type { ClockState } from './clock.js';
 import { createDraftEngine } from './draft.js';
@@ -16,6 +17,7 @@ import { onlinePerspective } from './perspective.js';
 import type { Perspective } from './perspective.js';
 import { newRequestId, submitWithRetries } from './retries.js';
 import { createSyncEngine } from './sync.js';
+import { subscribeOpponentStatus } from './live/opponent-status.js';
 import type { SyncEngine, ViewReason } from './sync.js';
 import type {
   ConnectionStatus,
@@ -47,6 +49,11 @@ export type OnlineDriver = {
   snapshot(): MatchDriverSnapshot;
   /** Commit Draw immediately to the server. */
   draw(action: Action): Promise<{ ok: boolean; message?: string }>;
+  /**
+   * BLITZ (0.82): commit one mid-turn move (Grow / Bloom / Bomb / Blast) at once, so the opponent sees
+   * it the moment it is made. Blitz never drafts, so there is nothing local to send with it.
+   */
+  commitNow(action: Action, options?: { rebase?: boolean }): Promise<{ ok: boolean; message?: string }>;
   /** Local draft mid-turn move (Grow / Bloom / …). */
   draftPlay(action: Action): boolean;
   draftUndo(): boolean;
@@ -69,6 +76,11 @@ export type OnlineDriver = {
    * highlights. Never replays or changes the live view; the caller decides when to ask.
    */
   history(): Promise<readonly Event[]>;
+  /**
+   * The finished duel's replay payload — one fetch, and the deterministic engine rebuilds every
+   * position from it. Refused by the server while the duel is still being played.
+   */
+  replay(): Promise<ReplayPayload>;
   /** Map screen taps / draft hexes back to engine coords before send. */
   toEngineAction(screenAction: Action): Action;
   /** Perspective for this seat (Me=moss, Opponent=lava). */
@@ -85,6 +97,8 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
   let player: MatchViewPayload | null = options.initial ?? null;
   let connection: ConnectionStatus = 'online';
   let presence: PresenceStatus = 'unknown';
+  let authoritativePresence: PresenceStatus = 'unknown';
+  let stopPresence: (() => void) | null = null;
   let notice: string | null = null;
   let pendingEvents: Event[] = [];
   /** See `pendingOrigin()`: how the buffered events arrived. */
@@ -104,7 +118,7 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
   const isAftermath = (e: Event): boolean =>
     e.t === 'Sever' || e.t === 'Rot' || e.t === 'Strangle' || e.t === 'GameEnd' || e.t === 'Discard';
 
-  const applyView = (next: MatchViewPayload, _serverNow: number, reason: ViewReason = 'refresh') => {
+  const applyView = (next: MatchViewPayload, _serverNow: number, reason: ViewReason = 'refresh', rebase: readonly Action[] = []) => {
     if (player && next.revision > player.revision && next.events.length > 0) {
       // Opponent turns: buffer all public events for catch-up replay.
       // Own Draw: skip (local buildSteps already animates).
@@ -123,6 +137,7 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     player = next;
     refreshPerspective();
     draft.syncFromServer(next.view, next.revision);
+    for (const a of rebase) if (!draft.play(a)) break;
     draft.persist();
     emit();
   };
@@ -154,10 +169,31 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
       emit();
     },
     onPresence: (p) => {
+      if (authoritativePresence !== 'unknown') return;
       presence = p;
       emit();
     },
   });
+
+  /**
+   * The award this seat was paid for the duel, if the server told us. Read DEFENSIVELY: the field is
+   * not in `MatchViewPayload` today, so this is normally absent and the finish card shows no Seeds
+   * line (see `MatchDriverSnapshot.seeds` for the one server change that fills it). Never inferred
+   * from the mode or the outcome — a daily cap pays 0 and a resignation pays nothing.
+   */
+  const readSettledSeeds = (view: MatchViewPayload): Pick<MatchDriverSnapshot, 'seeds'> => {
+    const reported = (view as MatchViewPayload & { seeds?: SettledSeeds }).seeds;
+    if (!reported || typeof reported.awarded !== 'number') return {};
+    return { seeds: { awarded: reported.awarded, reason: reported.reason ?? null } };
+  };
+
+  /** One shared "no moves" list, so an opponent's turn keeps hitting the screen-mapping cache. */
+  const NO_ACTIONS: Action[] = [];
+  const screenMemo: {
+    view: unknown; viewPerspective: unknown; screenView: View | null;
+    legal: unknown; legalPerspective: unknown; screenLegal: Action[] | null;
+    events: unknown; eventsPerspective: unknown; screenEvents: MatchDriverSnapshot['screenEvents'] | null;
+  } = { view: undefined, viewPerspective: undefined, screenView: null, legal: undefined, legalPerspective: undefined, screenLegal: null, events: undefined, eventsPerspective: undefined, screenEvents: null };
 
   const snapshot = (): MatchDriverSnapshot => {
     if (!player) {
@@ -165,10 +201,28 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     }
     const clock: ClockState = sync.clock();
     const view: View = draft.hasDraft() ? draft.view() : player.view;
-    const legal: Action[] = draft.hasDraft() || player.actor === player.seat ? draft.legal() : [];
-    const screenView = perspective.toScreenView(view);
-    const screenLegal = legal.map((a) => perspective.mapActionToScreen(a));
-    const screenEvents = player.events.map((e) => perspective.mapEventToScreen(e));
+    const legal: Action[] = draft.hasDraft() || player.actor === player.seat ? draft.legal() : NO_ACTIONS;
+    // Each mapping is redone only when its input or the perspective is a different object (the
+    // draft and the server view are replaced, never edited): a render asks for the snapshot many
+    // times (tests/online-snapshot-cache.test.ts).
+    if (screenMemo.view !== view || screenMemo.viewPerspective !== perspective) {
+      screenMemo.view = view;
+      screenMemo.viewPerspective = perspective;
+      screenMemo.screenView = perspective.toScreenView(view);
+    }
+    if (screenMemo.legal !== legal || screenMemo.legalPerspective !== perspective) {
+      screenMemo.legal = legal;
+      screenMemo.legalPerspective = perspective;
+      screenMemo.screenLegal = legal.map((a) => perspective.mapActionToScreen(a));
+    }
+    if (screenMemo.events !== player.events || screenMemo.eventsPerspective !== perspective) {
+      screenMemo.events = player.events;
+      screenMemo.eventsPerspective = perspective;
+      screenMemo.screenEvents = player.events.map((e) => perspective.mapEventToScreen(e));
+    }
+    const screenView = screenMemo.screenView!;
+    const screenLegal = screenMemo.screenLegal!;
+    const screenEvents = screenMemo.screenEvents!;
     return {
       kind: 'online',
       matchId: player.matchId,
@@ -186,6 +240,7 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
       screenEvents,
       turnDeadlineAt: player.turnDeadlineAt,
       result: player.result,
+      ...readSettledSeeds(player),
       opponentName: player.opponent?.displayName ?? null,
       connection,
       presence,
@@ -211,14 +266,62 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     return res;
   };
 
+  /** One action committed to the server at once (Draw, and every Blitz move). */
+  const commitOne = async (action: Action, kind: 'draw' | 'move', rebase = false): Promise<{ ok: boolean; message?: string }> => {
+    if (!player || submitting) return { ok: false, message: ONLINE.errBusy };
+    submitting = true;
+    try {
+      mark('req:sent', { kind });
+      const outcome = await submitWithRetries({
+        client: options.client,
+        token: options.token,
+        matchId: options.matchId,
+        expectedRevision: player.revision,
+        requestId: newRequestId(),
+        actions: [action],
+        rulesVersion: player.rulesVersion || CURRENT_RULES_VERSION,
+        refetch,
+      });
+      if (!outcome.ok) {
+        if (outcome.player) applyView(outcome.player, outcome.player.serverNow);
+        notice = outcome.message;
+        emit();
+        return { ok: false, message: outcome.message };
+      }
+      catchUpMode = 'none';
+      try {
+        // BLITZ sends the local draft one move at a time (oldest first). The server's new view
+        // replaces the draft, so the moves still waiting to be sent are laid back on top of it in
+        // the SAME update: the board never flickers back while the next one is in flight.
+        const keep = rebase ? draft.actions().slice(1) : [];
+        applyView(outcome.response.player, outcome.response.serverNow, 'refresh', keep);
+      } finally {
+        catchUpMode = 'all';
+      }
+      mark('res:got', { kind, ok: true });
+      mark('server:commit', { kind, serverNow: outcome.response.serverNow });
+      return { ok: true };
+    } finally {
+      submitting = false;
+    }
+  };
+
   return {
     kind: 'online',
 
     start() {
+      stopPresence ??= subscribeOpponentStatus(options.matchId, value => {
+        authoritativePresence = value;
+        if (presence === value) return;
+        presence = value;
+        if (player) emit();
+      });
       return sync.start();
     },
 
     stop() {
+      stopPresence?.();
+      stopPresence = null;
       sync.stop();
       draft.persist();
     },
@@ -226,41 +329,14 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     snapshot,
 
     async draw(action) {
-      if (!player || submitting) return { ok: false, message: ONLINE.errBusy };
       if (action.t !== 'Draw') {
         return { ok: false, message: ONLINE.errDrawOnly };
       }
-      submitting = true;
-      try {
-        mark('req:sent', { kind: 'draw' });
-        const outcome = await submitWithRetries({
-          client: options.client,
-          token: options.token,
-          matchId: options.matchId,
-          expectedRevision: player.revision,
-          requestId: newRequestId(),
-          actions: [action],
-          rulesVersion: player.rulesVersion || CURRENT_RULES_VERSION,
-          refetch,
-        });
-        if (!outcome.ok) {
-          if (outcome.player) applyView(outcome.player, outcome.player.serverNow);
-          notice = outcome.message;
-          emit();
-          return { ok: false, message: outcome.message };
-        }
-        catchUpMode = 'none';
-        try {
-          applyView(outcome.response.player, outcome.response.serverNow);
-        } finally {
-          catchUpMode = 'all';
-        }
-        mark('res:got', { kind: 'draw', ok: true });
-        mark('server:commit', { kind: 'draw', serverNow: outcome.response.serverNow });
-        return { ok: true };
-      } finally {
-        submitting = false;
-      }
+      return commitOne(action, 'draw');
+    },
+
+    async commitNow(action, opts) {
+      return commitOne(action, 'move', !!opts?.rebase);
     },
 
     draftPlay(action) {
@@ -352,6 +428,16 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     async history() {
       const res = await options.client.getState(options.token, options.matchId);
       return res.player.events;
+    },
+
+    /**
+     * The finished duel's REPLAY payload (owner brief, 2026-10-25): rules snapshot, seed, starting
+     * seat and the ordered action log. One fetch; the engine rebuilds every position from it. The
+     * server refuses this for an unfinished match, so the finish screen is its only caller.
+     */
+    async replay() {
+      const res = await options.client.replay(options.token, options.matchId);
+      return res.replay;
     },
 
     skipCatchUp() {

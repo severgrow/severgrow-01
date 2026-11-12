@@ -21,6 +21,7 @@ import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { DuelClient } from '../../server/src/client.js';
 import type { FetchLike } from '../../server/src/client.js';
 import { openMenuEntry } from './helpers/menu-nav.js';
+import { expandYourMatches } from './helpers/lobby-matches.js';
 
 const CHROME =
   process.env.PW_CHROMIUM ??
@@ -174,6 +175,7 @@ const openDuel = async (page: Page): Promise<void> => {
   await openMenuEntry(page, 'menu-online', { timeout: 40_000 });
   await page.waitForSelector('#online-hub:not([hidden])', { timeout: 25_000 });
   if (await page.locator('#online-first-ok').isVisible().catch(() => false)) await page.click('#online-first-ok');
+  await expandYourMatches(page);
   const row = page.locator(`#online-matches li[data-match-id="${matchId}"]`);
   await row.waitFor({ state: 'visible', timeout: 25_000 });
   await row.click();
@@ -199,6 +201,9 @@ try {
   const placed = await playStarterTurn();
 
   // A real mid-replay frame: poll while the enemy turn animates and grab the first changed board.
+  // The duel lane says "Replaying their turn" once the playback starts (it used to stay
+  // "Opponent's turn"); both labels belong to the closed-gate window.
+  const enemyTurn = (turn: string): boolean => turn !== 'Your turn';
   let midShot = false;
   let lastTiles = -1;
   const deadline = Date.now() + 8_000;
@@ -207,7 +212,7 @@ try {
       turn: ((document.querySelector('[data-duel-turn]') || {}).textContent || '').trim(),
       tiles: document.querySelectorAll('.l-tiles .tile[data-key]').length,
     }))()`)) as { turn: string; tiles: number };
-    if (now.turn === "Opponent's turn" && lastTiles >= 0 && now.tiles !== lastTiles) {
+    if (enemyTurn(now.turn) && lastTiles >= 0 && now.tiles !== lastTiles) {
       await waitPage.screenshot({ path: `${OUT}replay-mid-turn-1280x800.png` });
       midShot = true;
       console.log(`    mid-replay frame captured (tiles ${lastTiles} -> ${now.tiles})`);
@@ -222,9 +227,9 @@ try {
   const samples = (await waitPage.evaluate('window.__gate')) as Sample[];
   await waitPage.evaluate('clearInterval(window.__gateTimer)');
 
-  const gated = samples.filter((s) => s.turn === "Opponent's turn" && !s.canAct);
+  const gated = samples.filter((s) => enemyTurn(s.turn) && !s.canAct);
   const unlocked = samples.filter((s) => s.canAct && s.turn === 'Your turn');
-  const animating = samples.some((s, i) => i > 0 && s.turn === "Opponent's turn" && s.tiles !== samples[i - 1]!.tiles);
+  const animating = samples.some((s, i) => i > 0 && enemyTurn(s.turn) && s.tiles !== samples[i - 1]!.tiles);
   const final = samples.at(-1)!;
 
   // Compact timeline: only where turn / canAct / tiles change (diagnostics for the report).
@@ -240,7 +245,7 @@ try {
 
   check('the watcher starts on the opponent turn and cannot act', before.turn === "Opponent's turn" && !before.canAct, JSON.stringify(before));
   check('there is a window where the enemy turn is playing and controls are closed', gated.length > 0, `${gated.length} of ${samples.length} samples`);
-  check('the board is actually animating during that window', animating, `${samples.filter((s) => s.turn === "Opponent's turn").length} enemy-turn samples`);
+  check('the board is actually animating during that window', animating, `${samples.filter((s) => enemyTurn(s.turn)).length} enemy-turn samples`);
   check('once it drains the watcher can act, on their own turn', unlocked.length > 0 && final.canAct && final.turn === 'Your turn', JSON.stringify(final));
   check('the replay places the tiles the opponent placed', placed === 0 || final.tiles > before.tiles, `placed=${placed} before=${before.tiles} after=${final.tiles}`);
 

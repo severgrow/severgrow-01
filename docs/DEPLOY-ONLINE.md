@@ -26,7 +26,7 @@ The game site stays on GitHub Pages. The API runs as a **Supabase Edge Function*
 
 ### Why the Transaction pooler
 
-The free-tier project allows **`max_connections = 60`** Postgres backends, of which **3** are
+The project (Pro plan since 2026-11-11; with the default Micro compute the limit is the same as the free tier) allows **`max_connections = 60`** Postgres backends, of which **3** are
 reserved for the superuser, and Supabase's own services (PostgREST, pg_cron, pg_net, the exporter and
 Supavisor itself) hold ~6. That leaves roughly **50 usable client connections**.
 

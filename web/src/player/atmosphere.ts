@@ -1,6 +1,8 @@
 // Futa04-only presentation. The grain is a static CSS background and the rim is baked once; no live
 // noise/blur filter, animation clock, gameplay input, state or per-frame drawing.
 import { cornerPts, S } from '../ui/geom.js';
+import { publishLight, restoreDisplayLight } from './light.js';
+
 export const ATMOSPHERE_CSS = `
 /* THE ANALOGUE FILM GRAIN. This is the ONE grain in the app, and it goes on top of EVERYTHING,
    always (owner's rule, 2026-10-16: "always on top top top layer - even when we add new things").
@@ -9,6 +11,8 @@ export const ATMOSPHERE_CSS = `
    - mountAtmosphere keeps it as the LAST body child (pinGrain), so a later sibling cannot sit above
      it at an equal z-index - that is what makes the rule survive new UI;
    - pointer-events: none, or a full-screen layer would swallow every tap in the app;
+   - its OWN compositor layer (isolation + translateZ(0)). A filtered mark — the menu paint's
+     drop-shadow — can otherwise punch through a fixed overlay that never left the root layer;
    - NORMAL blending, not soft-light. Soft-light over these near-black surfaces is invisible - which
      is why the grain once read as a background texture with the interface cut out of it;
    - the grain must NOT go back on #texture::before: #texture sets a z-index, so it is a stacking
@@ -34,6 +38,7 @@ export const ATMOSPHERE_CSS = `
    noise degenerates to flat grey - sd 0.61 - so .7 keeps a margin below the ceiling.) */
 #futa04-film-grain {
   position: fixed; inset: 0; z-index: 2147483646; pointer-events: none !important;
+  isolation: isolate; transform: translateZ(0);
   opacity: .085; background-repeat: repeat; background-size: 1024px 1024px;
   mix-blend-mode: normal; user-select: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1024' height='1024'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.7' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .75  0 0 0 0 .75  0 0 0 0 .75  0 0 0 1.1 -.42'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
@@ -44,7 +49,7 @@ export const ATMOSPHERE_CSS = `
 @media (min-resolution: 2dppx) { #futa04-film-grain { background-size: 512px 512px; } }
 @media (min-resolution: 3dppx) { #futa04-film-grain { background-size: 341.33px 341.33px; } }
 /* ONE OPACITY EVERYWHERE (owner, 2026-10-16). There used to be a stronger in-match value
-   (body:has(#game:not([hidden])) #futa04-film-grain { opacity: ... }) so the flecks stayed
+   (body.has-game:not(#no-has) #futa04-film-grain { opacity: ... }) so the flecks stayed
    readable on the board. The owner asked for a single uniform value instead, so that rule is
    DELETED rather than left at the same number - one value, one place, nothing to drift. Do not
    reintroduce a per-screen bump. Lineage: .16 -> .141 -> .124 -> .085.
@@ -52,21 +57,41 @@ export const ATMOSPHERE_CSS = `
    they terminate the string and break the build. */
 /* Ink is flat near-black paper: no grain at all. */
 [data-theme='ink'] #futa04-film-grain { display: none; }
-#futa04-board-backdrop { position: absolute; inset: 0; background: #000; opacity: .235; display: none; }
-body:has(#game:not([hidden])) #futa04-board-backdrop { display: block; }
-#futa04-outcome-light { position:absolute; inset:0; pointer-events:none; opacity:0; display:none; }
-body:has(#game:not([hidden])) #futa04-outcome-light { display:block; }
-#futa04-outcome-light[data-tone='good'] {
-  background:radial-gradient(ellipse 59% 63% at 43% 53%,rgba(89,177,107,.19),rgba(63,119,76,.06) 50%,transparent 83%),
-             radial-gradient(ellipse 35% 48% at 79% 73%,rgba(92,164,102,.09),transparent 82%);
-}
+/* EDGE TO EDGE, ALWAYS (owner, 2026-11-09: the action light "on desktop still only the board half ...
+   on mobile a black strip at the bottom below the deck - should always flash across the entire
+   background covering everything, on all screen sizes"). These two room layers are their OWN fixed
+   viewport layers, placed right after #texture (same z-index 0, later in the DOM: above the
+   background, below every screen). They used to live INSIDE #texture, whose box an installed app
+   gives its measured height (shorter than the screen on some phones) and whose in-game filter would
+   pin a fixed child to that box. */
+#futa04-board-backdrop { position: fixed; inset: 0; z-index: 0; pointer-events: none; background: #000; opacity: .235; display: none; }
+body.has-game:not(#no-has) #futa04-board-backdrop { display: block; }
+#futa04-outcome-light { position:fixed; inset:0; z-index:0; pointer-events:none; opacity:0; display:none; }
+body.has-game:not(#no-has) #futa04-outcome-light { display:block; }
+/* The outcome light speaks the same LIGHT vocabulary as the display: the tone is published on
+   the root when the result appears, so this is the display's own bloom colour.
+   ONE ROOM (owner, 2026-10-20: "when colour of background behind the map changes colour it
+   should change across the whole background, also under cockpit and the hand and all"). The tint
+   used to be two ellipses under the map, so the colour stopped at a soft edge halfway down the
+   screen. It is now a FULL-BLEED wash (the linear-gradient covers the box edge to edge, so there
+   is no boundary to see) plus the same soft pool around the board for depth. Both layers are the
+   same low-alpha ink: the area behind the map keeps its strength while the rest of the screen
+   picks up the same light. Still one element and one opacity animation; no per-frame work. */
+#futa04-outcome-light[data-tone='good'],
 #futa04-outcome-light[data-tone='bad'] {
-  background:radial-gradient(ellipse 59% 63% at 43% 53%,rgba(188,79,61,.18),rgba(113,54,45,.06) 50%,transparent 83%),
-             radial-gradient(ellipse 35% 48% at 79% 73%,rgba(164,77,54,.08),transparent 82%);
+  /* One EVEN wash over the whole screen. The pool that used to sit behind the board (45% across)
+     made the light read as "the board half only" once the desktop board moved to the left half. */
+  background:linear-gradient(color-mix(in srgb,var(--light-bloom,rgba(89,177,107,.30)) 52%,transparent),color-mix(in srgb,var(--light-bloom,rgba(89,177,107,.30)) 52%,transparent));
 }
 #futa04-map-rim { pointer-events: none; }
 #board .hex-cell.normal.futa04-empty { filter: brightness(1.15); }
 `;
+/** THE ONE FILM GRAIN: the tile and its strength, read from the film rule above (one place, nothing
+ *  to drift). The replay's video (replay/poster.ts) paints exactly these, so a shared video has the
+ *  grain the player saw. */
+export const FILM_GRAIN_URL: string = /#futa04-film-grain \{[^}]*background-image: url\("([^"]+)"\)/.exec(ATMOSPHERE_CSS)![1]!;
+export const FILM_GRAIN_OPACITY: number = Number(/#futa04-film-grain \{[^}]*opacity: ([.\d]+);/.exec(ATMOSPHERE_CSS)![1]);
+
 
 export type OutcomeLight = { pulse: (tone: 'good' | 'bad', strength: number) => void; reset: () => void };
 let mounted: OutcomeLight | null = null;
@@ -103,7 +128,10 @@ export function mountAtmosphere(): OutcomeLight {
   const outcome = document.createElement('div');
   outcome.id = 'futa04-outcome-light';
   outcome.setAttribute('aria-hidden', 'true');
-  document.getElementById('texture')?.append(backdrop,outcome);
+  // Right after the background (see the CSS note): full-screen, above it, below every screen.
+  const texture = document.getElementById('texture');
+  if (texture) texture.after(backdrop, outcome);
+  else document.body.prepend(backdrop, outcome);
   let running: Animation | null = null;
   let lastStart = 0;
   let lastStrength = 0;
@@ -116,11 +144,16 @@ export function mountAtmosphere(): OutcomeLight {
       lastStart = now; lastStrength = strength;
       running?.cancel();
       outcome.dataset.tone = tone;
+      // One contract: the room's light becomes the outcome's tone (green/red) for this beat,
+      // then hands back to whatever the display is showing. Two writes, never a per-frame loop.
+      publishLight(tone === 'good' ? 'green' : 'red');
       const peak = Math.min(.82, Math.max(.22, strength * .75));
-      running = outcome.animate([
+      const beat = outcome.animate([
         { opacity: 0, offset: 0 }, { opacity: peak, offset: .23 },
         { opacity: peak * .46, offset: .49 }, { opacity: 0, offset: 1 },
       ], { duration: 880, easing: 'cubic-bezier(.2,.55,.4,1)' });
+      running = beat;
+      beat.onfinish = () => { if (running === beat) restoreDisplayLight(); };
       if (strength >= .68) {
         const panel = document.getElementById('smart-panel');
         if (panel) {
@@ -132,6 +165,7 @@ export function mountAtmosphere(): OutcomeLight {
     },
     reset() {
       running?.cancel(); running = null; lastStart = 0; lastStrength = 0;
+      restoreDisplayLight();
       cancelAnimationFrame(reflectFrame);
       document.getElementById('smart-panel')?.classList.remove('hardware-reflect');
     },
@@ -140,13 +174,29 @@ export function mountAtmosphere(): OutcomeLight {
   const board = document.querySelector<SVGSVGElement>('#board');
   if (!board) return mounted;
   let signature = '';
+  /** The last finished rim picture and where it goes. */
+  let placed: { href: string; x: number; y: number; w: number; h: number } | null = null;
+  const attach = (p: NonNullable<typeof placed>) => {
+    const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+    image.id = 'futa04-map-rim';
+    image.setAttribute('aria-hidden', 'true');
+    image.setAttribute('x', String(p.x)); image.setAttribute('y', String(p.y));
+    image.setAttribute('width', String(p.w)); image.setAttribute('height', String(p.h));
+    image.setAttribute('href', p.href);
+    board.querySelector('#futa04-map-rim')?.remove();
+    board.insertBefore(image, board.querySelector('.l-base'));
+  };
   const rim = () => {
     const paths = [...board.querySelectorAll<SVGPathElement>('.l-base .hex-cell > .hex')];
     if (!paths.length) return;
     const shape = paths.map(path => path.getAttribute('d') ?? '').join(' ');
-    if (shape === signature && board.querySelector('#futa04-map-rim')) return;
+    if (shape === signature) {
+      // same map, new board children (setup): put the finished picture back, no second bake
+      if (!board.querySelector('#futa04-map-rim') && placed) attach(placed);
+      return;
+    }
     const boxes = paths.map(path => path.getBBox());
-    const pad = 24;
+    const pad = 48;
     const x = Math.min(...boxes.map(box => box.x)) - pad;
     const y = Math.min(...boxes.map(box => box.y)) - pad;
     const w = Math.max(...boxes.map(box => box.x + box.width)) - x + pad;
@@ -154,10 +204,13 @@ export function mountAtmosphere(): OutcomeLight {
     const scale = Math.min(1, 1024 / Math.max(w, h));
     const mask = document.createElement('canvas');
     mask.width = Math.ceil(w * scale); mask.height = Math.ceil(h * scale);
-    const m = mask.getContext('2d');
+    // CPU canvases (willReadFrequently): the bake ends in a read-back, and a GPU canvas would make
+    // that read-back finish the blur on the main thread first (measured 2026-11-11: up to 1.9 s of
+    // frozen page at board entry on software graphics; a stutter on slow phones).
+    const m = mask.getContext('2d', { willReadFrequently: true });
     const baked = document.createElement('canvas');
     baked.width = mask.width; baked.height = mask.height;
-    const b = baked.getContext('2d');
+    const b = baked.getContext('2d', { willReadFrequently: true });
     if (!m || !b) return;
     m.scale(scale, scale); m.translate(-x, -y);
     m.fillStyle = m.strokeStyle = '#fff'; m.lineWidth = 2;
@@ -177,15 +230,39 @@ export function mountAtmosphere(): OutcomeLight {
     b.drawImage(mask, -b.shadowOffsetX, 0);
     b.shadowOffsetX = 0; b.shadowBlur = 0; b.globalCompositeOperation = 'destination-out';
     b.drawImage(mask, 0, 0);
-    const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-    image.id = 'futa04-map-rim';
-    image.setAttribute('aria-hidden', 'true');
-    image.setAttribute('x', String(x)); image.setAttribute('y', String(y));
-    image.setAttribute('width', String(w)); image.setAttribute('height', String(h));
-    image.setAttribute('href', baked.toDataURL());
-    board.querySelector('#futa04-map-rim')?.remove();
-    board.insertBefore(image, board.querySelector('.l-base'));
+    /* Feather the baked glow to nothing before it reaches the image's own border.
+     *
+     * Owner report (2026-10-23): after a big action the glow read as a slightly brighter grey that
+     * "cut off in a clean line just under the board". The baked glow is painted into a canvas whose
+     * rectangle ends a fixed number of units past the map, so any light that reached that border was
+     * clipped by it — a straight edge belongs to the canvas, never to the map. Erasing the last few
+     * pixels with a gradient means the glow fades out on its own terms and the image's rectangle can
+     * no longer be seen, whatever the zoom. Bake-time only: nothing here runs per frame. */
+    const feather = Math.max(6, Math.round(Math.min(baked.width, baked.height) * 0.08));
+    const fade = (x0: number, y0: number, x1: number, y1: number) => {
+      const g = b.createLinearGradient(x0, y0, x1, y1);
+      g.addColorStop(0, 'rgba(0,0,0,1)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      b.fillStyle = g;
+    };
+    // Each strip runs from the border (fully erased) inward (untouched).
+    fade(0, 0, feather, 0); b.fillRect(0, 0, feather, baked.height);
+    fade(baked.width, 0, baked.width - feather, 0); b.fillRect(baked.width - feather, 0, feather, baked.height);
+    fade(0, 0, 0, feather); b.fillRect(0, 0, baked.width, feather);
+    fade(0, baked.height, 0, baked.height - feather); b.fillRect(0, baked.height - feather, baked.width, feather);
+    b.globalCompositeOperation = 'source-over';
     signature = shape;
+    const place = (href: string) => {
+      // a newer shape was baked meanwhile: this picture is out of date
+      if (signature !== shape) { if (href.startsWith('blob:')) URL.revokeObjectURL(href); return; }
+      if (placed?.href.startsWith('blob:')) URL.revokeObjectURL(placed.href);
+      placed = { href, x, y, w, h };
+      attach(placed);
+    };
+    // The picture is encoded off the main thread (toBlob); the rim fades in a moment later instead
+    // of freezing the board's first frame.
+    if (typeof baked.toBlob === 'function') baked.toBlob((blob) => place(blob ? URL.createObjectURL(blob) : baked.toDataURL()));
+    else place(baked.toDataURL());
   };
   // Setup replaces the SVG children. Moves only update later layers, never rebake the rim.
   new MutationObserver(rim).observe(board, { childList: true });

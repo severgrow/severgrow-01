@@ -1,0 +1,179 @@
+/* ================================================================================================
+   0.75 — THE PLANET STANDARD (owner-approved polish pass, 2026-11-04)
+   "The planet sets the new standard: modern, sharp, smooth, while staying true to the tactile,
+   premium, minimalist hardware inspiration (teenage engineering / Nintendo). No extra text."
+
+   The live game only: every rule is scoped to html.v075, which the build writes into the page for
+   CHANNEL=futa05 (web/vite.config.ts), so it is on the very first paint and the locked 0.4 line never
+   sees it. CSS only: no new imagery or idle animation. Shared button blur is owner-restored.
+   ================================================================================================ */
+
+/* ---- H. ONE GLASS -----------------------------------------------------------------------------
+   Every sheet and panel: the same blur, no frame (the owner's standing rule: "no frames around the
+   glass ever"), the same 15px corner. Each surface keeps its own shade and its own drop shadow. */
+html.v075 :is(.sheet, #sheet-menu, #gameover .go-card, #play-menu .levels-inner, #levels .levels-inner,
+  #futasaku-glass, #tutorial-chapter-menu, #tutorial-bloom-demo .tutorial-bloom-stage,
+  .world-panel, .world-chat, .fb-glass, .acct-glass, .live-glass, #install-prompt .install-sheet) {
+  -webkit-backdrop-filter: var(--dark-glass-blur) !important;
+  backdrop-filter: var(--dark-glass-blur) !important;
+  border: 0 !important;
+  border-radius: 15px !important;
+}
+
+/* One matte key material. Recommendation is a quiet amber halo, never a different fill,
+   outline or weight. Semantic primary classes still describe actions to the application. */
+html.v075 {
+  --matte-key: linear-gradient(180deg, #ffffff06, transparent 48%, #00000016) var(--dark-glass);
+  --matte-key-line: color-mix(in srgb, var(--fu-cream, #e8ddc5) 22%, transparent);
+  --matte-key-shadow: inset 0 1px 0 #ffffff10, inset 0 -1px 0 #0005, 0 1px 2px #0004;
+}
+html.v075 :is(.btn:not(.link), .difficulty-tile, .campaign-tile, .world-invitation-card button,
+  .world-chat-send, .world-chat-mod button, :where(.world-key.world-key-text.armed)) {
+  --press-drop: 1px; --press-depth: 1;
+  background: var(--matte-key) !important;
+  border: 1px solid var(--matte-key-line) !important;
+  box-shadow: var(--matte-key-shadow) !important;
+  -webkit-backdrop-filter: var(--dark-glass-blur) !important; backdrop-filter: var(--dark-glass-blur) !important;
+}
+/* Cream-filled legacy primaries used dark ink. Their new matte surface needs the same ivory. */
+html.v075 :is(.btn.primary, #levels .difficulty-tile.on, .campaign-tile[data-state='current'],
+  .world-invitation-card button, .world-chat-send, .world-chat-mod button,
+  .world-key.world-key-text.armed) { color: var(--control-ivory, #f5edda) !important; }
+html.v075 :is(#menu,#play-menu,#levels,#campaign,#online-hub,#online-waiting,#online-join) .btn {
+  color: var(--control-ivory, #f5edda) !important; font-weight: 500;
+}
+/* Full menu keys share their engraved label too, including the legacy utility footer. */
+html.v075 :is(#menu .menu-buttons,#menu .menu-footer,#play-menu .menu-buttons) button.btn:not(.link),
+html.v075 #levels .level-grid button.difficulty-tile:not(.link) {
+  font-size: 1rem !important;
+  font-weight: var(--w-ui-regular,400) !important;
+  letter-spacing: .14em !important;
+}
+html.v075 #menu .menu-territory-label { font-size: inherit !important; letter-spacing: inherit !important; }
+/* Menu keys wear no frame (owner, 2026-11-11: "for all menu buttons also get rid of contour frame -
+   leave only on the suggested glowed button"). The 1px stays transparent so no key moves. */
+html.v075 :is(#menu,#play-menu,#levels,#campaign,#online-hub,#online-waiting,#online-join,#sheet-menu)
+  :is(.btn:not(.link):not(.suggest), .difficulty-tile, .campaign-tile:not([data-state='current'])),
+html.v075 :is(.world-challenge-primary, .world-challenge-secondary, .world-invitation-primary, .world-invitation-secondary):not(.link):not(.suggest) {
+  border-color: transparent !important;
+}
+html.v075 :is(#menu,#play-menu) .btn.suggest::before,
+html.v075 :is(#menu,#play-menu) .btn.suggest::after { content: none !important; }
+html.v075 :is(#menu,#play-menu) .btn.suggest,
+html.v075 .campaign-tile[data-state='current'] {
+  box-shadow: var(--matte-key-shadow), 0 0 15px color-mix(in srgb, var(--turn-rim-ink,#f5d8a4) 24%, transparent) !important;
+}
+html.v075 :is(#menu,#play-menu) .btn[data-pressed='true'],
+html.v075 :is(.btn:not(.link), .difficulty-tile, .campaign-tile, .world-invitation-card button,
+  .world-chat-send, .world-chat-mod button)[data-pressed='true'],
+html.v075 #levels .difficulty-tile.on {
+  box-shadow: inset 0 2px 4px #0008, inset 0 0 0 1px #0003 !important;
+}
+html.v075 .campaign-tile[data-state='current'] * { color: inherit; }
+/* Compact actions keep their scale, with the same material and quiet ivory engraving. */
+html.v075 :is(.world-invitation-card button,.world-chat-send,.world-chat-mod button) {
+  font-weight: var(--w-ui-regular,400); border-radius: 10px; filter: none;
+}
+html.v075 .world-colour-swatch.current {
+  background: var(--dark-glass); box-shadow: inset 0 2px 4px #0008, inset 0 0 0 1px #0003;
+}
+html.v075 :is(.world-challenge-meta,.world-challenge-notice) {
+  font-size: var(--instrument-label-size); letter-spacing: var(--instrument-tracking);
+  color: var(--instrument-muted);
+}
+
+
+/* ---- C. STEADY NUMBERS ------------------------------------------------------------------------
+   Scores and counters use fixed-width digits everywhere in play, so a 9 becoming a 10 never nudges
+   its neighbours. */
+html.v075 :is(#game, #gameover, #sheet-menu, .hud, .dock, #board, .pile, .go-score, #levels, #campaign) {
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* ---- 4. THE BOARD AS A SMALL PLANET (the skin; the bend itself is geometry, web/src/ui/geom.ts) --
+   One seamless surface (the bent corners are shared, so no gap opens between tiles), the slab light
+   and the limb shade drawn once, and a soft shadow beneath: a piece of planet floating in space. */
+html.v075 #board .planet-shadow-far { fill: rgba(0, 0, 0, .22); }
+html.v075 #board .planet-shadow-near { fill: rgba(0, 0, 0, .34); }
+
+/* ---- B. TURN RIM -------------------------------------------------------------------------------
+   The board's own edge carries a thin atmosphere: amber on the player's turn, dim on the opponent's.
+   Immediate state paint, independent of queued announcements; never a loop. */
+html.v075 #board .planet-turn-glow { fill: none; stroke: var(--turn-rim-ink); stroke-width: 6; stroke-linejoin: round; opacity: .0286; }
+html.v075 #board .planet-turn-line { fill: none; stroke: var(--turn-rim-ink); stroke-width: 1.1; stroke-linejoin: round; opacity: .85; }
+/* Quiet until it is your turn. The line below stays bright; this group is the dimmer,
+   so their move reads as a trace and yours as the lamp. Do not raise this without
+   lowering the line, or both turns look lit. */
+html.v075 #board .planet-turn-rim { opacity: .1; }
+html.v075 body[data-turn='you'] #board .planet-turn-rim { opacity: 1; }
+html.v075 body[data-turn='you'] #board .planet-turn-glow { opacity: .13; }
+
+/* ---- A. SEAMLESS MENU -> GAME ------------------------------------------------------------------
+   The stars carry on (one shared offset, web/src/sphere/space.ts); the board rises into the place the
+   planet held, once, as the game screen appears. Compositor only. */
+@keyframes v075-board-rise {
+  from { opacity: 0; translate: 0 18px; scale: .955; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+html.v075 #game:not([hidden]) #board-wrap {
+  animation: v075-board-rise calc(var(--dur-consequence) * 2) var(--ease-standard) both;
+}
+
+/* ---- D. GAME OVER INTO SPACE -------------------------------------------------------------------
+   The board eases back a little into the stars; the result sits over open space, not over a wash. */
+html.v075 #game #board-wrap { transition: scale var(--dur-consequence) var(--ease-standard), opacity var(--dur-consequence) var(--ease-standard); }
+html.v075 body.has-gameover:not(#no-has) #game #board-wrap { scale: .93; opacity: .55; }
+html.v075.futasaku-product #gameover { background: transparent; }
+
+/* Reduce motion: no rise, no easing back; the states simply are. */
+html.v075.reduce-motion #game:not([hidden]) #board-wrap { animation: none; }
+html.v075.reduce-motion #game #board-wrap { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  html.v075 #game:not([hidden]) #board-wrap { animation: none; }
+  html.v075 #game #board-wrap { transition: none; }
+}
+
+/* Desktop only: lower the whole instrument together; keep short landscape layouts untouched. */
+@media (min-width: 1000px) and (min-height: 650px) {
+  html.v075.futa04-branding[data-layout='side'] .dock {
+    translate: var(--side-dock-shift, 0px) clamp(16px, 3vh, 32px);
+  }
+}
+/* Existing seven motes: varied depth, a small lateral drift and invisible loop boundaries.
+   Their cached compositor layers stay; no extra particles, filters or render loop. */
+html.v075 #spores i {
+  --dust-size: 5px; --dust-ink: .075;
+  width: var(--dust-size); height: var(--dust-size); margin: -2.5px 0 0 -2.5px;
+  animation-name: v075-dust;
+}
+html.v075 #spores i:nth-child(3n + 1) { --dust-size: 3px; --dust-ink: .045; }
+html.v075 #spores i:nth-child(3n + 2) { --dust-size: 7px; --dust-ink: .105; }
+@keyframes v075-dust {
+  0% { opacity: 0; transform: translate(0,0); }
+  15% { opacity: var(--dust-ink); transform: translate(3px,-19.5vh); }
+  40% { opacity: var(--dust-ink); transform: translate(10px,-52vh); }
+  65% { opacity: var(--dust-ink); transform: translate(-5px,-84.5vh); }
+  85% { opacity: var(--dust-ink); transform: translate(2px,-110.5vh); }
+  100% { opacity: 0; transform: translate(12px,-130vh); }
+}
+@media(prefers-reduced-motion:reduce) { html.v075 #spores { display:none; } }
+
+/* A recessed territory edge, using the existing continuous connected perimeter.
+   Ownership stays in the material and home art, with no cream/red graphic contour. */
+html.v075.futa04-information #board .l-territory-contour .territory-contour:is(.p0,.p1) {
+  stroke: rgba(0,0,0,.48); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+  filter: drop-shadow(0 .65px .45px rgba(240,233,220,.12));
+}
+/* Active-turn LED strip (owner, 2026-11-07): FUTASAKU amber, continuous hardware hairline —
+   bright core + soft outer wash. Not dashed (dashes read cheap); not neon. */
+html.v075 #board .planet-turn-line {
+  stroke-width: 1.15; opacity: .88;
+  stroke-dasharray: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter:
+    drop-shadow(0 0 .45px color-mix(in srgb, var(--turn-rim-ink) 88%, #f2ede4))
+    drop-shadow(0 0 1.6px color-mix(in srgb, var(--turn-rim-ink) 55%, transparent));
+}
+html.v075 body[data-turn='you'] #board .planet-turn-glow { opacity: .18; }
+html.v075 body[data-turn='you'] #board .planet-turn-line { opacity: .95; }

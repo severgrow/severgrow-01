@@ -14,9 +14,13 @@ export type ApiErrorCode =
   | 'MATCH_FULL'
   | 'MATCH_FINISHED'
   | 'MATCH_NOT_ACTIVE'
+  | 'MATCH_NOT_FINISHED'
   | 'MATCH_EXPIRED'
   | 'NOT_A_PARTICIPANT'
   | 'TOO_MANY_MATCHES'
+  // Territory challenges: private to their two participants, so "not yours" is a 404.
+  | 'CHALLENGE_NOT_FOUND'
+  | 'CHALLENGE_CLOSED'
   // concurrency / idempotency
   | 'STALE_REVISION'
   | 'REQUEST_ID_CONFLICT'
@@ -34,6 +38,14 @@ export type ApiErrorCode =
   // setup: the admin tables (migration 0012) are not present yet. Distinct from DB_UNAVAILABLE so
   // the dashboard can say "triage is not enabled yet" instead of "the database is unreachable".
   | 'ADMIN_MIGRATION_PENDING'
+  // setup: migration 0019 (the challenge tile stake) has not been applied. Sends are refused rather
+  // than guessed, so a deploy can never silently apply the wrong property rule.
+  | 'CHALLENGE_MIGRATION_PENDING'
+  // setup: migration 0020 (a player's tile colour) has not been applied. The choice is refused
+  // rather than silently dropped, and the map keeps working on the derived colour.
+  | 'COLOUR_MIGRATION_PENDING'
+  // the one-change-per-24 h rule (owner, 2026-10-30). 409: the request is valid, the clock is not.
+  | 'COLOUR_COOLDOWN'
   // everything else
   | 'INTERNAL';
 
@@ -46,9 +58,12 @@ const STATUS: Record<ApiErrorCode, number> = {
   MATCH_FULL: 409,
   MATCH_FINISHED: 409,
   MATCH_NOT_ACTIVE: 409,
+  MATCH_NOT_FINISHED: 409,
   MATCH_EXPIRED: 409,
   NOT_A_PARTICIPANT: 403,
   TOO_MANY_MATCHES: 409,
+  CHALLENGE_NOT_FOUND: 404,
+  CHALLENGE_CLOSED: 409,
   STALE_REVISION: 409,
   REQUEST_ID_CONFLICT: 409,
   TOO_MANY_MOVES: 409,
@@ -64,6 +79,9 @@ const STATUS: Record<ApiErrorCode, number> = {
   // 503: the feature exists but its schema is not deployed yet, so it is temporarily unavailable —
   // not a client error, and not the catch-all 500 that hides the cause.
   ADMIN_MIGRATION_PENDING: 503,
+  CHALLENGE_MIGRATION_PENDING: 503,
+  COLOUR_MIGRATION_PENDING: 503,
+  COLOUR_COOLDOWN: 409,
   INTERNAL: 500,
 };
 

@@ -11,11 +11,14 @@ import {
   apply, coordKey, hexDistance, homeCoord, isStrangled, legalActions, neighbors, parseKey, viewFor,
 } from '../../../src/engine/index.js';
 import type { Action, Card, Coord, Event, State } from '../../../src/engine/index.js';
-import type { Level } from '../../../src/bots/levels.js';
 import { LESSON as W } from '../../../src/strings.js';
 import { authoredState } from './authored.js';
+import { FINAL_LESSON, finalLessonOpening } from './final.js';
+import { campaignLevelByNumber } from '../../../src/campaign/levels.js';
+import { campaignDeal, campaignOpening } from '../../../src/campaign/play.js';
 import type { PositionSpec } from './authored.js';
-import type { OpponentScript } from './opponent.js';
+import type { LessonOpponent } from './opponent.js';
+import type { ActionKind, LessonTier, PowerKind } from './mastery.js';
 
 const YOU = 0 as const;
 const THEM = 1 as const;
@@ -33,8 +36,7 @@ export type Goal =
   | { t: 'bomb'; key: string }
   | { t: 'blast'; key: string }
   | { t: 'blastGrow' }
-  | { t: 'pileBloom' }
-  | { t: 'skip' };
+  | { t: 'pileBloom' };
 
 export type Lesson = {
   level: number;
@@ -43,44 +45,106 @@ export type Lesson = {
    * restarted (never resumed into a position it no longer matches); a completed level stays done.
    */
   version: number;
-  position: PositionSpec;
-  /** The scripted opponent, or a real bot level (level 10 is a normal game). */
-  opponent: { script: OpponentScript } | { bot: Level };
+  /**
+   * `guide` (the default): a hand-held lesson that opens from an authored position.
+   * `free`: a real game from scratch — the engine's own deal on the campaign level's board (level
+   * 9 pins its deal so its Throw-pile sentence is true), the real bot, every legal move, played to
+   * a real result. The live display still coaches each action as it happens. Only level 9
+   * (`docs/LESSON-SCRIPTS.md`).
+   */
+  kind?: 'guided' | 'free';
+  /** A guided lesson's authored opening; a free lesson has none (its deal is fixed separately). */
+  position?: PositionSpec;
+  /**
+   * A fixed deal of the lesson's own, instead of an authored position: a guided lesson that is
+   * nonetheless a real game from scratch (level 10), or a free lesson whose opening must be pinned
+   * so its one sentence is true (level 9).
+   */
+  deal?: () => State;
+  /** The scripted opponent, or a real bot level (levels 9 and 10 are normal games). */
+  opponent: LessonOpponent;
   /** Levels 1-3: only the lit thing (and its quiet alternatives) answers a tap. */
   locked: boolean;
   /** The ideas this lesson is for, in order. */
   goals: readonly Goal[];
-  /** Explanations shown once before the first draw (tap anywhere to move on). */
-  intro: readonly ('tree' | 'their-home' | 'rock' | 'bloom-cards' | 'surround')[];
-  /** How much the window says once the lesson's ideas are done: every step, one word, or only on idle. */
-  guide: 'full' | 'word' | 'idle';
-  /** The finish card's title and line on a win. */
-  finish: { title: string; line: string };
+  /**
+   * Explanations shown once, tap anywhere to move on. Board facts and the first draw come before the
+   * first draw; a move (gold, Bloom, surround, Bomb, Blast) is explained after the draw, the moment it
+   * can be played (ACT_INTROS — owner, 2026-10-22: "every step has a playable example straight away").
+   */
+  intro: readonly IntroKind[];
+  /** Level 10 keeps its hints for an idle moment; every other level guides every step (the fade decides how much). Level 9's live cue always shows. */
+  guide: 'always' | 'idle';
+  /**
+   * The actions this level introduces. From level 2 a spotlight may fire only for one of these,
+   * and only one new-idea spotlight is spent per level (lessons/mastery.ts).
+   */
+  newActions: readonly ActionKind[];
+  /** The finish card: title, the one idea learned (YOU LEARNED: …), and its small mark. */
+  finish: { title: string; line: string; learned: string; icon: string };
 };
+
+/** The one-time concepts a lesson explains in its info box before the first move. */
+export type IntroKind =
+  | 'tree' | 'their-home' | 'first-draw' | 'rock' | 'gold'
+  | 'bloom-cards' | 'surround' | 'bomb' | 'blast' | 'pile-gold'
+  /**
+   * Level 10's send-off, said once before the first draw of the first real game (owner,
+   * 2026-10-24). It explains nothing on the board: nothing is lit, a tap anywhere dismisses it,
+   * and it never comes back.
+   */
+  | 'first-game';
+
+/**
+ * The level that first teaches each power. Before it the lesson never offers that move; a hello
+ * only fires after it, never in its own lesson.
+ */
+const POWER_TAUGHT_AT: Readonly<Record<PowerKind, number>> = Object.freeze({ bloom: 5, bomb: 7, blast: 8 });
 
 // ---------- the lessons ----------
 
 const SET3: readonly (readonly [0 | 1 | 2 | 3, number])[] = [[0, 3], [1, 3], [2, 3]];
 
+/**
+ * LEVEL 9'S ONE DEAL SEED (owner, 2026-11-12). The level is still a real game from scratch — the
+ * campaign level's board, rules, bot and every legal move — but it opens on this fixed deal, chosen
+ * so the Throw pile's top card really completes a Bloom in the dealt hand. That makes the sentence
+ * level 9 says before the first draw true, by the light's own rule (`logic/pile-glow.ts`), instead
+ * of guarding the words.
+ */
+const LESSON_NINE_DEAL_SEED = 95017;
+
+const lessonNineOpening = (): State => {
+  const level = campaignLevelByNumber(9);
+  if (!level) throw new Error('campaign level 9 is missing');
+  return campaignDeal(level, LESSON_NINE_DEAL_SEED);
+};
+
 export const LESSONS: readonly Lesson[] = Object.freeze([
   {
-    level: 1, version: 1, locked: true, guide: 'full',
-    intro: ['tree', 'their-home'],
+    level: 1, version: 4, locked: true, guide: 'always',
+    intro: ['tree', 'their-home', 'first-draw'],
     goals: [{ t: 'grow' }],
+    newActions: ['draw', 'grow', 'throw'],
     position: {
       seed: 96001,
+      // Taking their ground is explained in level 2, so level 1 withholds it (owner, 2026-10-24:
+      // "i dont want anyone to take opp's tile before its explained"). Grows on empty ground stay.
+      rules: { allowOvergrow: false },
       hand: [[0, 8], [1, 2], [1, 5], [2, 4], [1, 3], [2, 6], [3, 5]],
       opponent: [[1, 2], [2, 2], [3, 3], [0, 2], [3, 2], [2, 3], [3, 4]],
       deck: [[2, 7], [0, 4], [0, 5], [0, 6], [1, 7], [3, 6], [3, 7], [3, 2], [0, 7], [1, 6], [2, 8], [1, 4]],
       discard: [[3, 1]],
     },
+    // The first game is calm: it grows once, on its 2nd turn, and never takes anything (owner, 2026-10-23).
     opponent: { script: { growOn: [2] } },
-    finish: { title: W.youWin, line: W.wonOnPoints },
+    finish: { title: W.learnedTitle(1), line: W.wonOnPoints, learned: 'DRAW, GROW, THROW', icon: '✦' },
   },
   {
-    level: 2, version: 1, locked: true, guide: 'word',
+    level: 2, version: 3, locked: true, guide: 'always',
     intro: [],
     goals: [{ t: 'strengthen', key: '-1,1', card: 8 }, { t: 'take', key: '0,0' }],
+    newActions: ['strengthen', 'take'],
     position: {
       seed: 96002,
       tiles: [['-1,1', YOU, 2], ['0,0', THEM, 4], ['1,-1', THEM, 5]],
@@ -89,13 +153,14 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       deck: [[3, 5], [2, 7], [2, 6], [0, 6], [0, 3], [1, 5], [0, 7], [1, 7], [3, 7], [2, 4], [1, 4], [3, 6]],
       discard: [[3, 1]],
     },
-    opponent: { script: { growOn: [3], avoid: ['0,0'] } },
-    finish: { title: W.youWin, line: W.wonOnPoints },
+    opponent: { script: { avoid: ['0,0'] } },
+    finish: { title: W.learnedTitle(2), line: W.wonOnPoints, learned: 'STRONGER TILES WIN', icon: '↑' },
   },
   {
-    level: 3, version: 1, locked: true, guide: 'word',
-    intro: ['rock'],
+    level: 3, version: 3, locked: true, guide: 'always',
+    intro: ['rock', 'gold'],
     goals: [{ t: 'gold', key: '0,0' }],
+    newActions: [],
     position: {
       seed: 96003,
       rock: ['-1,0'],
@@ -107,13 +172,14 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       discard: [[3, 1]],
     },
     // It heads for the gold first: if you leave it, it takes it (and the lesson shows why).
-    opponent: { script: { growOn: [1, 3], prefer: ['0,0'] } },
-    finish: { title: W.youWin, line: W.goldDecided },
+    opponent: { script: { prefer: ['0,0'] } },
+    finish: { title: W.learnedTitle(3), line: W.goldDecided, learned: 'GOLD COUNTS DOUBLE', icon: '◆' },
   },
   {
-    level: 4, version: 1, locked: false, guide: 'word',
+    level: 4, version: 3, locked: false, guide: 'always',
     intro: [],
     goals: [{ t: 'cut', key: '1,-1' }],
+    newActions: ['cut'],
     position: {
       seed: 96004,
       tiles: [['-1,1', YOU, 4], ['0,0', YOU, 3], ['1,-1', THEM, 2], ['0,-1', THEM, 5], ['-1,-1', THEM, 3]],
@@ -122,13 +188,14 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       deck: [[3, 5], [1, 7], [1, 5], [2, 6], [1, 4], [0, 6], [3, 6], [2, 4], [0, 7], [0, 3]],
       discard: [[3, 1]],
     },
-    opponent: { script: { growOn: [2] } },
-    finish: { title: W.youWin, line: W.wonOnPoints },
+    opponent: { script: { contests: true } },
+    finish: { title: W.learnedTitle(4), line: W.wonOnPoints, learned: 'CUT THEIR ROOT', icon: '✂' },
   },
   {
-    level: 5, version: 1, locked: false, guide: 'word',
+    level: 5, version: 3, locked: false, guide: 'always',
     intro: ['bloom-cards'],
     goals: [{ t: 'bloom' }],
+    newActions: ['bloom'],
     position: {
       seed: 96005,
       tiles: [['-1,1', YOU, 2], ['1,-2', THEM, 9], ['1,-1', THEM, 9], ['2,-1', THEM, 9]],
@@ -137,13 +204,14 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       deck: [[0, 4], [1, 4], [3, 5], [0, 6], [1, 5], [2, 4], [3, 6], [0, 7], [1, 7], [2, 7], [3, 8], [2, 8]],
       discard: [[3, 1]],
     },
-    opponent: { script: { growOn: [2] } },
-    finish: { title: W.youWin, line: W.wonOnPoints },
+    opponent: { script: { contests: true, blooms: true } },
+    finish: { title: W.learnedTitle(5), line: W.wonOnPoints, learned: 'BLOOM THREE AT ONCE', icon: '✿' },
   },
   {
-    level: 6, version: 1, locked: false, guide: 'word',
+    level: 6, version: 3, locked: false, guide: 'always',
     intro: ['surround'],
     goals: [{ t: 'strangle' }],
+    newActions: ['surround'],
     position: {
       seed: 96006,
       tiles: [['-1,1', YOU, 4], ['0,0', YOU, 5]],
@@ -152,30 +220,32 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       deck: [[0, 6], [1, 4], [3, 5], [0, 4], [1, 5], [2, 4], [3, 6], [0, 7], [1, 7], [2, 6], [3, 7], [2, 8]],
       discard: [[3, 1]],
     },
-    // It leaves its own home's sides to you: the lesson is the surround.
-    opponent: { script: { growOn: [1, 2, 3], avoid: ['1,-1', '1,-2', '2,-1'] } },
-    finish: { title: W.youWin, line: W.wonByKo },
+    // It grows like any player, onto a side of its own home when that is all it has; the
+    // surround then takes that tile back (owner, 2026-10-22: a level that never moves feels broken).
+    opponent: { script: { contests: true, blooms: true } },
+    finish: { title: W.learnedTitle(6), line: W.wonByKo, learned: 'SURROUND THEIR HOME', icon: '◎' },
   },
   {
-    level: 7, version: 1, locked: false, guide: 'word',
-    intro: [],
+    level: 7, version: 3, locked: false, guide: 'always',
+    intro: ['bomb'],
     goals: [{ t: 'bomb', key: '0,0' }],
+    newActions: ['bomb'],
     position: {
       seed: 96007,
       tiles: [['-1,1', YOU, 3], ['0,0', THEM, 9], ['1,-1', THEM, 9]],
       hand: [[null, 0], [0, 3], [1, 4], [2, 5], [3, 6], [0, 7], [1, 8]],
       opponent: [[1, 1], [2, 2], [3, 3], [0, 2], [3, 2], [2, 1], [3, 4]],
-      deck: [[0, 4], [1, 5], [3, 5], [0, 6], [1, 6], [2, 4], [3, 7], [0, 8], [2, 7]],
+      deck: [[0, 4], [1, 5], [3, 5], [0, 6], [1, 6], [2, 4], [3, 7], [0, 8], [2, 7], [1, 7], [3, 8]],
       discard: [[3, 1]],
     },
-    // The Bomb is the whole margin here, so it holds its ground and does not grow.
-    opponent: { script: { growOn: [] } },
-    finish: { title: W.youWin, line: W.wonOnPoints },
+    opponent: { script: { contests: true, blooms: true } },
+    finish: { title: W.learnedTitle(7), line: W.wonOnPoints, learned: 'BOMB ONE TILE', icon: '●' },
   },
   {
-    level: 8, version: 1, locked: false, guide: 'word',
-    intro: [],
+    level: 8, version: 3, locked: false, guide: 'always',
+    intro: ['blast'],
     goals: [{ t: 'blast', key: '0,-1' }, { t: 'blastGrow' }],
+    newActions: ['blast'],
     position: {
       seed: 96008,
       tiles: [
@@ -187,46 +257,63 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       deck: [[0, 4], [1, 5], [3, 5], [0, 6], [1, 6], [2, 4], [3, 7], [0, 8], [2, 7], [1, 7]],
       discard: [[3, 1]],
     },
-    opponent: { script: { growOn: [2] } },
-    finish: { title: W.youWin, line: W.wonOnPoints },
+    opponent: { script: { contests: true, blooms: true } },
+    finish: { title: W.learnedTitle(8), line: W.wonOnPoints, learned: 'BLAST A HOLE', icon: '✹' },
   },
   {
-    level: 9, version: 1, locked: false, guide: 'word',
-    intro: [],
-    goals: [{ t: 'pileBloom' }, { t: 'skip' }],
-    position: {
-      seed: 96009,
-      tiles: [['-1,1', YOU, 4], ['1,-2', THEM, 9], ['1,-1', THEM, 9], ['2,-1', THEM, 9]],
-      hand: [[0, 3], [0, 4], [1, 2], [2, 6], [3, 7], [1, 8], [2, 9]],
-      opponent: [[1, 1], [2, 2], [3, 3], [0, 2], [3, 2], [2, 1], [3, 4]],
-      deck: [[3, 2], [1, 4], [3, 5], [0, 6], [1, 5], [2, 4], [3, 6], [0, 7], [1, 7], [2, 7], [3, 8], [2, 8]],
-      discard: [[3, 1], [0, 5]],
-    },
-    opponent: { script: { growOn: [2] } },
-    finish: { title: W.youWin, line: W.wonOnPoints },
-  },
-  {
-    level: 10, version: 1, locked: false, guide: 'idle',
-    intro: [],
+    // A FULL game from scratch (owner, 2026-11-01): a real deal, the real engine, every legal
+    // action, played to a real result on the small map. The opening ritual says who starts (the
+    // starter ritual begins at this level), and the same live beats coach each action as it
+    // happens — no scripted opening, no forced move. The Throw-pile sentence is still said once
+    // before the first draw, so what the old lesson taught is not lost.
+    level: 9, version: 4, kind: 'free', locked: false, guide: 'always',
+    intro: ['pile-gold'],
     goals: [],
-    position: {
-      seed: 96010,
-      gold: ['0,0'],
-      rock: ['0,1'],
-      // A normal opening: both sides have grown a little, and their home already has cover.
-      tiles: [['-1,1', YOU, 4], ['1,-1', THEM, 4], ['1,-2', THEM, 6], ['2,-1', THEM, 7]],
-      hand: [[0, 4], [0, 5], [1, 5], [2, 5], [3, 7], [null, 0], [1, 8]],
-      opponent: [[1, 1], [2, 2], [3, 3], [0, 2], [3, 2], [2, 1], [3, 4]],
-      deck: [[0, 6], [1, 4], [3, 5], [0, 3], [1, 6], [2, 4], [3, 6], [0, 8], [1, 7], [2, 7], [3, 8], [2, 8], [0, 7], [1, 3]],
-      discard: [[3, 1]],
-    },
-    opponent: { bot: 1 },
-    finish: { title: W.canPlay, line: W.canPlayLine },
+    newActions: [],
+    // ONE FIXED DEAL (owner, 2026-11-12): the same real game, opened from a seed whose Throw-pile
+    // top really completes a Bloom in the dealt hand — the sentence is true, not guarded.
+    deal: lessonNineOpening,
+    // The campaign level's own bot (4); `web/tests/lesson-9-free.test.ts` pins the two together.
+    opponent: { bot: 4 },
+    finish: { title: W.learnedTitle(9), line: W.wonOnPoints, learned: 'PLAY A FULL GAME', icon: '↦' },
+  },
+  {
+    level: 10, version: 4, locked: false, guide: 'idle',
+    // The last level opens like a real game (the ritual plays from level 9 on), then says this one
+    // thing before the first draw: you know the game now, go and play it (owner, 2026-10-24).
+    intro: ['first-game'],
+    goals: [],
+    newActions: [],
+    // A REAL FIRST GAME (owner, 2026-11-04: "Real first game, big board"): campaign level 10's own
+    // match on the full board, the same opening the Seeds verifier replays. Its coaching is
+    // unchanged: quiet, lit only when the player waits.
+    deal: finalLessonOpening,
+    opponent: { bot: FINAL_LESSON.botLevel },
+    finish: { title: W.canPlay, line: W.canPlayLine, learned: 'THE WHOLE GAME', icon: '★' },
   },
 ] satisfies Lesson[]);
 
 export const lessonFor = (level: number): Lesson | null => LESSONS.find((l) => l.level === level) ?? null;
-export const lessonOpening = (lesson: Lesson): State => authoredState(lesson.position);
+
+/** Is this lesson a real game from scratch rather than an authored teaching position? */
+export const lessonIsFree = (lesson: Pick<Lesson, 'kind'>): boolean => lesson.kind === 'free';
+
+/**
+ * The opening a lesson starts from. A lesson with its own `deal` (level 9's pinned deal, level 10's
+ * final game) uses it. A guided lesson lays its authored position on the small map. A free lesson
+ * without one deals the campaign level's own real match — `campaignOpening`, the same `newMatch`
+ * call the campaign uses, so the deal, the board and who starts are the engine's, never a script.
+ */
+export const lessonOpening = (lesson: Lesson): State => {
+  if (lesson.deal) return lesson.deal();
+  if (lessonIsFree(lesson)) {
+    const level = campaignLevelByNumber(lesson.level);
+    if (!level) throw new Error(`free lesson ${lesson.level} has no campaign level`);
+    return campaignOpening(level);
+  }
+  if (!lesson.position) throw new Error(`guided lesson ${lesson.level} has no opening`);
+  return authoredState(lesson.position);
+};
 
 // ---------- reading the live game ----------
 
@@ -244,6 +331,13 @@ const myTurns = (s: State): Event[][] => {
   }
   return turns;
 };
+
+/**
+ * Levels 1-3 lock every tap to the lit one — but only on the FIRST turn. From turn 2 the player is
+ * free to choose; the light still guides by its mastery tier. A completed turn is a Discard.
+ */
+export const lessonLocked = (lesson: Lesson, s: State): boolean =>
+  lesson.locked && myTurns(s).filter((t) => t.some((e) => e.t === 'Discard')).length === 0;
 
 const GROWTH = new Set<Event['t']>(['Sprout', 'Strengthen', 'Overgrow', 'FruitCard']);
 
@@ -270,8 +364,6 @@ export const goalDone = (g: Goal, s: State): boolean => {
       const turn = myTurns(s).find((t) => t.some((e) => e.t === 'Draw' && e.from === 'discard'));
       return !!turn && turn.some((e) => e.t === 'Bloom');
     }
-    case 'skip':
-      return myTurns(s).some((t) => t.some((e) => e.t === 'Bloom') && t.some((e) => e.t === 'Discard') && !t.some((e) => GROWTH.has(e.t)));
   }
 };
 
@@ -315,35 +407,83 @@ const bloomCardsFor = (hand: readonly Card[]): Card[] => {
   return [];
 };
 
-/** The plain Grow a careful beginner makes: gold first, then forward, with the lowest card that does it. */
-const plainGrow = (s: State, legal: readonly Action[]): Sprout | null => {
+/** Taking one of their tiles is taught in level 2; before it the light never points at one. */
+const takesTaught = (lesson: Pick<Lesson, 'level'>): boolean => lesson.level >= 2;
+
+/**
+ * The plain Grow a careful beginner makes: gold first, then one of their tiles it can take (a
+ * two-point swing, and the opponent grows every turn — owner, 2026-10-22), then forward, with the
+ * lowest card that does it. `takes` is false before the lesson that teaches taking a tile (level 2):
+ * the light never suggests a move the player has not been shown.
+ */
+const plainGrow = (s: State, legal: readonly Action[], takes = true): Sprout | null => {
   const theirs = homeCoord(THEM, s.config);
-  const sprouts = legal.filter((a): a is Sprout => a.t === 'Sprout' && !s.board[coordKey(a.coord)]);
+  const sprouts = legal.filter((a): a is Sprout => a.t === 'Sprout'
+    && (takes ? s.board[coordKey(a.coord)]?.owner !== YOU : !s.board[coordKey(a.coord)]));
   if (!sprouts.length) return null;
   const gold = (a: Sprout) => (s.terrain[coordKey(a.coord)] === 'rich' ? 0 : 1);
+  const take = (a: Sprout) => (s.board[coordKey(a.coord)]?.owner === THEM ? 0 : 1);
   return [...sprouts].sort((a, b) =>
     gold(a) - gold(b)
+    || take(a) - take(b)
     || hexDistance(a.coord, theirs) - hexDistance(b.coord, theirs)
     || rankOf(s, b.card) - rankOf(s, a.card)
     || coordKey(a.coord).localeCompare(coordKey(b.coord)))[0]!;
 };
 
-/** A Grow onto `key`, with the lowest card that does it (or the named rank). */
-const growOnto = (s: State, legal: readonly Action[], key: string, rank?: number): Sprout | null =>
+/** A Grow onto `key`, with the lowest card that does it (or the named rank, or the strongest). */
+const growOnto = (s: State, legal: readonly Action[], key: string, rank?: number, pick: 'lowest' | 'strongest' = 'lowest'): Sprout | null =>
   [...legal.filter((a): a is Sprout => a.t === 'Sprout' && coordKey(a.coord) === key)]
     .filter((a) => rank === undefined || rankOf(s, a.card) === rank)
-    .sort((a, b) => rankOf(s, a.card) - rankOf(s, b.card) || a.card - b.card)[0] ?? null;
+    .sort((a, b) => (pick === 'strongest' ? rankOf(s, b.card) - rankOf(s, a.card) : rankOf(s, a.card) - rankOf(s, b.card)) || a.card - b.card)[0] ?? null;
 
 /** The Bloom that grows forward: three tiles toward their home, deterministic. */
-const bestBloom = (s: State, legal: readonly Action[]): Extract<Action, { t: 'Bloom' }> | null => {
+const bestBloom = (s: State, legal: readonly Action[], allowKo = false): Extract<Action, { t: 'Bloom' }> | null => {
   const theirs = homeCoord(THEM, s.config);
   const blooms = legal.filter((a): a is Extract<Action, { t: 'Bloom' }> => a.t === 'Bloom' && a.cards.length === 3);
   const reach = (a: Extract<Action, { t: 'Bloom' }>) => Math.min(...a.hexes.map((h) => hexDistance(h, theirs)));
   const strangles = (a: Action) => { try { return isStrangled(apply(s, a), THEM); } catch { return false; } };
-  return [...blooms].filter((a) => !strangles(a)).sort((a, b) =>
+  return [...blooms].filter((a) => allowKo || !strangles(a)).sort((a, b) =>
     reach(a) - reach(b)
     || a.hexes.map(keyOf).join('|').localeCompare(b.hexes.map(keyOf).join('|'))
     || a.cards.join(',').localeCompare(b.cards.join(',')))[0] ?? null;
+};
+
+/** The Blast that removes the most enemy tiles (deterministic tie-break by target key). */
+const bestBlast = (s: State, legal: readonly Action[]): Extract<Action, { t: 'MegaBomb' }> | null => {
+  const blasts = legal.filter((a): a is Extract<Action, { t: 'MegaBomb' }> => a.t === 'MegaBomb');
+  const removes = (a: Extract<Action, { t: 'MegaBomb' }>) => {
+    try {
+      const n = apply(s, a);
+      let count = 0;
+      for (const [k, t] of Object.entries(s.board)) {
+        if (t && t.owner === THEM && !t.root && !n.board[k]) count++;
+      }
+      return count;
+    } catch { return 0; }
+  };
+  return [...blasts].sort((a, b) => removes(b) - removes(a) || keyOf(a.target).localeCompare(keyOf(b.target)))[0] ?? null;
+};
+
+/** The Bomb on the strongest enemy tile it can take (lowest card on ties). */
+const bestBomb = (s: State, legal: readonly Action[]): Extract<Action, { t: 'PlayFruit' }> | null => {
+  const bombs = legal.filter((a): a is Extract<Action, { t: 'PlayFruit' }> => a.t === 'PlayFruit');
+  return [...bombs].sort((a, b) =>
+    (s.board[keyOf(b.target)]?.strength ?? 0) - (s.board[keyOf(a.target)]?.strength ?? 0)
+    || keyOf(a.target).localeCompare(keyOf(b.target))
+    || a.card - b.card)[0] ?? null;
+};
+
+/**
+ * A legal extra power, strongest first. When the lesson's goal is done the light must never fall
+ * through to » while one of these is playable: it either gives the one-time hello or stays quiet.
+ */
+const bestPower = (s: State, legal: readonly Action[], allowKo: boolean): Action | null => {
+  const blast = bestBlast(s, legal);
+  if (blast) return blast;
+  const bloom = bestBloom(s, legal, allowKo);
+  if (bloom) return bloom;
+  return bestBomb(s, legal);
 };
 
 const strangleMove = (s: State, legal: readonly Action[]): Action | null =>
@@ -357,7 +497,7 @@ const surroundStep = (s: State, legal: readonly Action[]): Action | null => {
   const around = new Set(neighbors(homeCoord(THEM, s.config), s.config.boardRadius).map(keyOf));
   const onSide = legal.filter((a): a is Sprout => a.t === 'Sprout' && around.has(keyOf(a.coord)) && s.board[keyOf(a.coord)]?.owner !== YOU)
     .sort((a, b) => keyOf(a.coord).localeCompare(keyOf(b.coord)) || rankOf(s, a.card) - rankOf(s, b.card))[0];
-  return onSide ?? plainGrow(s, legal);
+  return onSide ?? plainGrow(s, legal);  // the surround lesson (6) comes after taking is taught
 };
 
 /** The throw: the lowest card that no remaining idea needs (Bombs and Bloom cards are kept). */
@@ -417,30 +557,76 @@ export const opensBloom = (s: State, legal: readonly Action[], card: number): bo
 };
 
 /** The same Grow (same hex) with a card that taps as a Grow, else the best plain Grow that does. */
-const asTappableGrow = (s: State, legal: readonly Action[], a: Action | null, notKo: (x: Action | null) => Action | null): Action | null => {
+const asTappableGrow = (s: State, legal: readonly Action[], a: Action | null, notKo: (x: Action | null) => Action | null, takes: boolean): Action | null => {
   if (!a || a.t !== 'Sprout' || !opensBloom(s, legal, a.card)) return a;
   const plain = legal.filter((x): x is Sprout => x.t === 'Sprout' && !opensBloom(s, legal, x.card));
   const sameHex = plain.filter((x) => keyOf(x.coord) === keyOf(a.coord))
     .sort((x, y) => rankOf(s, y.card) - rankOf(s, x.card) || x.card - y.card)[0];
   // A Strengthen keeps its number when it can (the lesson names a card); otherwise any plain card.
-  return sameHex ?? notKo(plainGrow(s, plain.filter((x) => notKo(x) !== null))) ?? a;
+  return sameHex ?? notKo(plainGrow(s, plain.filter((x) => notKo(x) !== null), takes)) ?? a;
 };
 
+// Your legal moves in a position, worked out once (read-only: nothing here changes the list).
+const legalCache = new WeakMap<State, readonly Action[]>();
+const engineLegal = (s: State): readonly Action[] => {
+  let legal = legalCache.get(s);
+  if (!legal) legalCache.set(s, legal = legalActions(viewFor(s, YOU)));
+  return legal;
+};
+
+/**
+ * A power is not offered before the lesson that teaches it (owner, 2026-10-22: "make it impossible
+ * to have bloom in hand before the bloom lesson — things shouldn't confuse a first-time player").
+ * The cards stay the engine's; the lesson simply never offers the move, so its button, its glow and
+ * its hints never appear. Every move it does offer is still a legal engine move.
+ */
+export const lessonAllows = (lesson: Pick<Lesson, 'level'>, a: Action): boolean =>
+  a.t === 'Bloom' ? lesson.level >= POWER_TAUGHT_AT.bloom
+  : a.t === 'PlayFruit' ? lesson.level >= POWER_TAUGHT_AT.bomb
+  : a.t === 'MegaBomb' ? lesson.level >= POWER_TAUGHT_AT.blast
+  : true;
+
+/** Is a Bloom part of this lesson's game yet? (The UI asks before it shows any Bloom hint.) */
+export const lessonOffersBloom = (lesson: Pick<Lesson, 'level'>): boolean => lesson.level >= POWER_TAUGHT_AT.bloom;
+
+const allowedCache = new WeakMap<State, Map<number, readonly Action[]>>();
+/** Your legal moves in this lesson: the engine's, less any power the lesson has not taught yet. */
+export const lessonLegal = (lesson: Pick<Lesson, 'level'>, s: State): readonly Action[] => {
+  let byLevel = allowedCache.get(s);
+  if (!byLevel) allowedCache.set(s, byLevel = new Map());
+  let legal = byLevel.get(lesson.level);
+  if (!legal) byLevel.set(lesson.level, legal = engineLegal(s).filter((a) => lessonAllows(lesson, a)));
+  return legal;
+};
+
+// States are immutable engine values, so a position's suggestion never changes: the screen asks
+// several times per tap (the window, the lit card, the answer), and each answer searches moves.
+const suggested = new WeakMap<State, Map<Lesson, Action | null>>();
+
 export const suggestMove = (lesson: Lesson, s: State): Action | null => {
-  const legal = s.phase === 'ACT' && s.actor === YOU ? legalActions(viewFor(s, YOU)) : [];
+  let byLesson = suggested.get(s);
+  if (!byLesson) suggested.set(s, byLesson = new Map());
+  if (byLesson.has(lesson)) return byLesson.get(lesson)!;
+  const a = suggestFresh(lesson, s);
+  byLesson.set(lesson, a);
+  return a;
+};
+
+const suggestFresh = (lesson: Lesson, s: State): Action | null => {
+  const legal = s.phase === 'ACT' && s.actor === YOU ? lessonLegal(lesson, s) : [];
   const a = suggestRaw(lesson, s);
   if (!a || a.t !== 'Sprout') return a;
-  const koAllowed = currentGoal(lesson, s)?.t === 'strangle' || lesson.level === 10;
+  const koAllowed = currentGoal(lesson, s)?.t === 'strangle' || lesson.level === 10 || lessonIsFree(lesson);
   const notKo = (x: Action | null): Action | null => {
     if (!x || koAllowed) return x;
     try { return isStrangled(apply(s, x), THEM) ? null : x; } catch { return null; }
   };
-  return asTappableGrow(s, legal, a, notKo);
+  return asTappableGrow(s, legal, a, notKo, takesTaught(lesson));
 };
 
 const suggestRaw = (lesson: Lesson, s: State): Action | null => {
   if (s.phase === 'GAME_OVER' || s.actor !== YOU) return null;
-  const legal = legalActions(viewFor(s, YOU));
+  const legal = lessonLegal(lesson, s);
   if (!legal.length) return null;
   const goal = currentGoal(lesson, s);
   if (s.phase === 'DRAW') {
@@ -452,9 +638,10 @@ const suggestRaw = (lesson: Lesson, s: State): Action | null => {
   const grew = (s.sproutsThisTurn ?? 0) > 0;
   const end = legal.find((a) => a.t === 'EndAct') ?? null;
   const pick = (a: Action | null | undefined): Action | null => a ?? null;
-  // A KO is the lesson only on level 6, and part of the game on level 10. Elsewhere the light never
-  // points at a move that ends the game by surround: the lesson ends on points, as most games do.
-  const koAllowed = goal?.t === 'strangle' || lesson.level === 10;
+  // A KO is the lesson only on level 6, and part of the game on level 10 and in a free game.
+  // Elsewhere the light never points at a move that ends the game by surround: the lesson ends on
+  // points, as most games do.
+  const koAllowed = goal?.t === 'strangle' || lesson.level === 10 || lessonIsFree(lesson);
   const win = koAllowed ? strangleMove(s, legal) : null;
   const notKo = (a: Action | null): Action | null => {
     if (!a || koAllowed) return a;
@@ -462,28 +649,33 @@ const suggestRaw = (lesson: Lesson, s: State): Action | null => {
   };
   if (goal) {
     switch (goal.t) {
-      case 'strengthen': if (!grew) { const m = growOnto(s, legal, goal.key, goal.card) ?? growOnto(s, legal, goal.key); if (m) return m; } break;
+      // Without the lesson's own card, the strongest one: a strengthen with a 3 teaches nothing
+      // (owner, 2026-10-24: "it wasn't a strong card at all").
+      case 'strengthen': if (!grew) { const m = growOnto(s, legal, goal.key, goal.card) ?? growOnto(s, legal, goal.key, undefined, 'strongest'); if (m) return m; } break;
       case 'take': case 'cut': case 'gold': if (!grew) { const m = growOnto(s, legal, goal.key); if (m) return m; } break;
       case 'bloom': { const m = bestBloom(s, legal); if (m) return m; break; }
       case 'pileBloom': { const m = bestBloom(s, legal); if (m && s.drawnFromDiscard !== null) return m; break; }
-      case 'skip': {
-        // The lesson: after the Bloom, end the turn without the Grow.
-        const bloomedNow = myTurns(s).at(-1)?.some((e) => e.t === 'Bloom');
-        if (bloomedNow && !grew && end) return end;
-        break;
-      }
       case 'strangle': { const m = win ?? (!grew ? surroundStep(s, legal) : null); if (m) return m; break; }
       case 'bomb': if (!grew) { const m = legal.find((a) => a.t === 'PlayFruit' && keyOf(a.target) === goal.key); if (m) return m; } break;
       case 'blast': { const m = legal.find((a) => a.t === 'MegaBomb' && keyOf(a.target) === goal.key) ?? legal.find((a) => a.t === 'MegaBomb'); if (m) return m; break; }
-      case 'blastGrow': if (!grew) { const m = plainGrow(s, legal); if (m) return m; } break;
+      case 'blastGrow': if (!grew) { const m = plainGrow(s, legal, takesTaught(lesson)); if (m) return m; } break;
       case 'grow': break;
     }
   }
   if (win) return win;
+  // Never steer past a power: » is not the suggestion while a Bloom, Bomb or Blast is legal; the
+  // light points at the strongest power instead (or the beat goes quiet once its one-time hello
+  // has been shown — see lessonBeat).
+  {
+    const power = bestPower(s, legal, false);
+    if (power) return power;
+  }
   if (!grew) {
-    const g = notKo(plainGrow(s, legal.filter((a) => notKo(a) !== null)));
+    const g = notKo(plainGrow(s, legal.filter((a) => notKo(a) !== null), takesTaught(lesson)));
     if (g) return g;
   }
+  // Level 10 is a real game: the light never nudges toward ending the turn.
+  if (lesson.level === 10) return null;
   return pick(end) ?? legal[0]!;
 };
 
@@ -506,20 +698,39 @@ export type Lit =
   /** The cockpit's score display (taught once, level 1). */
   | { t: 'score' }
   /** The Draw pile together with its count (taught once, level 1). */
-  | { t: 'deckCount' };
+  | { t: 'deckCount' }
+  /** The Undo key (taught once, level 9). */
+  | { t: 'undo' };
 
 export type Beat = {
   /** Stable id (an explanation is shown once; seen ids are kept with the lesson's save). */
   id: string;
-  title: string;
+  /**
+   * THE DISPLAY (the cockpit's LED): what to do now, as a short action line — never a lone word.
+   * Only action, status and warning beats carry this.
+   */
+  say?: string;
+  /**
+   * THE INFO BOX (#lesson-plate): one explanation, as a full sentence. Explanations are shown once
+   * per lesson and are never faded; the box never carries an action label or a button.
+   */
   line?: string;
   lit: Lit;
-  /** An explanation: a tap anywhere (or NEXT / ») moves on. */
+  /** An explanation: a tap anywhere (or on the lit thing) moves on. */
   explain?: boolean;
-  /** A short LED message beside it (the display, never the board). */
-  led?: string;
+  /** Their turn (a status, not an instruction): shown while the opponent plays, never faded. */
+  status?: boolean;
   /** Show only after a few idle seconds (the late levels' quiet guide). */
   idleOnly?: boolean;
+  /**
+   * A free lesson (level 9): this is live coaching on a real action, so its action line shows at
+   * once, whatever the per-action mastery tier. The light still fades by tier.
+   */
+  always?: boolean;
+  /** The action this step teaches, so the UI can fade its light by the player's mastery. */
+  kind?: ActionKind;
+  /** A power's one-time hello: remembered on this device, never shown twice. */
+  hello?: PowerKind;
 };
 
 /** What the UI knows beyond the game state: what is picked, and which explanations were seen. */
@@ -528,29 +739,130 @@ export type BeatCtx = {
   card: number | null;
   /** A Bloom / Blast is being placed (its tiles are the next touch). */
   placing: 'bloom' | 'blast' | null;
-  /** A throw is waiting for its second tap (the card id). */
+  /** A card is picked; the throw is the swipe up or the Throw pile (the card id). */
   throwPending: number | null;
-  /** The » step was already spelled out once on this device: from then on it is one word. */
-  doneTaught?: boolean;
   seen: ReadonlySet<string>;
+  /** Bloom / Bomb / Blast hellos already shown on this device. */
+  powerSeen?: ReadonlySet<PowerKind>;
 };
 
-const explain = (id: string, title: string, line: string, lit: Lit, led?: string): Beat =>
-  ({ id, title, line, lit, explain: true, ...(led ? { led } : {}) });
+const GOAL_POWER: Readonly<Record<string, PowerKind | undefined>> = Object.freeze({
+  bloom: 'bloom', pileBloom: 'bloom', bomb: 'bomb', blast: 'blast', blastGrow: 'blast',
+});
 
-const introBeat = (lesson: Lesson, s: State, seen: ReadonlySet<string>): Beat | null => {
-  if (s.phase !== 'DRAW' || myTurns(s).length > 0) return null;
+const legalPowers = (legal: readonly Action[]): PowerKind[] => {
+  const out: PowerKind[] = [];
+  if (legal.some((a) => a.t === 'Bloom')) out.push('bloom');
+  if (legal.some((a) => a.t === 'PlayFruit')) out.push('bomb');
+  if (legal.some((a) => a.t === 'MegaBomb')) out.push('blast');
+  return out;
+};
+
+/** The cards to glow for a power's hello (a card in the fan, never the map). */
+const powerCards = (s: State, legal: readonly Action[], power: PowerKind): number[] => {
+  if (power === 'bloom') {
+    const bloom = bestBloom(s, legal, true);
+    return bloom ? [...bloom.cards] : [];
+  }
+  if (power === 'bomb') {
+    const bomb = legal.find((a) => a.t === 'PlayFruit');
+    return bomb && bomb.t === 'PlayFruit' ? [bomb.card] : [];
+  }
+  const blast = legal.find((a) => a.t === 'MegaBomb');
+  return blast && blast.t === 'MegaBomb' ? [...blast.cards] : [];
+};
+
+/**
+ * The first time a power is legal AFTER its lesson, glow its card(s) and say what to do with it —
+ * once ever. It is skipped in the power's own lesson (that lesson is already teaching it) and while
+ * the lesson's goal is still open. Once a hello has been seen the state is silent, never nagging.
+ */
+const helloBeat = (lesson: Lesson, s: State, ctx: BeatCtx, goal: Goal | null, legal: readonly Action[]): Beat | null => {
+  if (goal) return null;
+  // The hello is a notification; once the player has picked a card or started placing, the normal
+  // step takes over so the lit tiles can be tapped.
+  if (ctx.card !== null || ctx.placing !== null) return null;
+  const taughtHere = new Set(lesson.goals.map((g) => GOAL_POWER[g.t]).filter((p): p is PowerKind => !!p));
+  const legalNow = legalPowers(legal);
+  for (const power of ['blast', 'bomb', 'bloom'] as const) {
+    if (!legalNow.includes(power)) continue;
+    if (lesson.level <= POWER_TAUGHT_AT[power]) continue;
+    if (taughtHere.has(power)) continue;
+    if (ctx.powerSeen?.has(power)) continue;
+    const ids = powerCards(s, legal, power);
+    if (!ids.length) continue;
+    const say = power === 'bloom' ? W.bloomHello : power === 'bomb' ? W.bombHello : W.tapBlast;
+    return { id: `hello:${power}`, say, lit: { t: 'cards', ids }, kind: power, hello: power };
+  }
+  return null;
+};
+
+/** An explanation: one sentence in the info box, dismissed by a tap anywhere (never faded). */
+const explain = (id: string, line: string, lit: Lit): Beat => ({ id, line, lit, explain: true });
+
+/** The intros that explain a MOVE: shown after the draw, the first time that move can be played. */
+const ACT_INTROS: ReadonlySet<IntroKind> = new Set<IntroKind>(['gold', 'bloom-cards', 'surround', 'bomb', 'blast']);
+
+/** The explanation for one intro, or null while it has nothing to point at yet. */
+const introFor = (s: State, which: IntroKind, id: string, legal: readonly Action[]): Beat | null => {
+  switch (which) {
+    // Level 1's opening: while the box is read, the display scrolls a welcome, not an action.
+    case 'tree': return { ...explain(id, W.yourHomeLine, { t: 'home', player: YOU }), say: W.welcome };
+    case 'their-home': return { ...explain(id, W.theirHomeLine, { t: 'home', player: THEM }), say: W.welcome };
+    case 'first-draw': return { ...explain(id, W.tapDrawLine, { t: 'deck' }), say: W.welcome };
+    case 'rock': {
+      const rock = Object.keys(s.terrain).find((k) => s.terrain[k] === 'rock');
+      return rock ? explain(id, W.rocksBlockLine, { t: 'rock', key: rock }) : null;
+    }
+    case 'pile-gold': return explain(id, W.pileGoldLine, { t: 'discard' });
+    // Level 10's send-off: no target, no action word — the box speaks and a tap anywhere starts play.
+    case 'first-game': return explain(id, W.firstGameLine, { t: 'none' });
+    case 'gold': {
+      const gold = Object.keys(s.terrain).find((k) => s.terrain[k] === 'rich' && legal.some((a) => a.t === 'Sprout' && keyOf(a.coord) === k));
+      return gold ? explain(id, W.goldDoubleLine, { t: 'hex', key: gold }) : null;
+    }
+    case 'bloom-cards': {
+      const bloom = bestBloom(s, legal, true);
+      return bloom ? explain(id, W.cardsThatBloomLine, { t: 'cards', ids: [...bloom.cards] }) : null;
+    }
+    case 'surround': {
+      const around = new Set(neighbors(homeCoord(THEM, s.config), s.config.boardRadius).map(keyOf));
+      return legal.some((a) => a.t === 'Sprout' && around.has(keyOf(a.coord)))
+        ? explain(id, W.surroundLine, { t: 'home', player: THEM }) : null;
+    }
+    case 'bomb': {
+      const bomb = legal.find((a) => a.t === 'PlayFruit');
+      return bomb && bomb.t === 'PlayFruit' ? explain(id, W.bombLine, { t: 'card', id: bomb.card }) : null;
+    }
+    case 'blast': {
+      const blast = legal.find((a) => a.t === 'MegaBomb');
+      return blast && blast.t === 'MegaBomb' ? explain(id, W.blastLine, { t: 'cards', ids: [...blast.cards] }) : null;
+    }
+  }
+};
+
+/**
+ * What the display says before the lesson's first sentence is on screen (the stage intro and the
+ * opening deal): level 1 welcomes from its very first frame, never a step word (owner, 2026-10-22:
+ * "the first second it still says DRAW"). Null: the display keeps its own calm face.
+ */
+export const openingDisplay = (lesson: Lesson, s: State, seen: ReadonlySet<string>): string | null =>
+  lesson.level === 1 && s.phase === 'DRAW' && myTurns(s).length === 0
+    && lesson.intro.some((which) => (which === 'tree' || which === 'their-home' || which === 'first-draw') && !seen.has(`${lesson.level}:intro:${which}`))
+    ? W.welcome : null;
+
+const introBeat = (lesson: Lesson, s: State, ctx: BeatCtx): Beat | null => {
+  const beforeFirstDraw = s.phase === 'DRAW' && myTurns(s).length === 0;
+  // A move's explanation waits for the draw and for a free hand: nothing picked, nothing placing.
+  const canExplainMove = s.phase === 'ACT' && ctx.card === null && ctx.placing === null && !!currentGoal(lesson, s);
+  if (!beforeFirstDraw && !canExplainMove) return null;
+  const legal = canExplainMove ? lessonLegal(lesson, s) : [];
   for (const which of lesson.intro) {
     const id = `${lesson.level}:intro:${which}`;
-    if (seen.has(id)) continue;
-    if (which === 'tree') return explain(id, W.yourTree, W.yourTreeLine, { t: 'home', player: YOU });
-    if (which === 'their-home') return explain(id, W.theirHome, W.theirHomeLine, { t: 'home', player: THEM });
-    if (which === 'rock') {
-      const rock = Object.keys(s.terrain).find((k) => s.terrain[k] === 'rock')!;
-      return explain(id, W.rocksBlock, W.rocksBlockLine, { t: 'rock', key: rock });
-    }
-    if (which === 'bloom-cards') return explain(id, W.cardsThatBloom, W.cardsThatBloomLine, { t: 'cards', ids: bloomCardsFor(s.hands[YOU]).map((c) => c.id) });
-    if (which === 'surround') return explain(id, W.surround, W.surroundLine, { t: 'home', player: THEM });
+    if (ctx.seen.has(id)) continue;
+    if (ACT_INTROS.has(which) !== canExplainMove) continue;
+    const beat = introFor(s, which, id, legal);
+    if (beat) return beat;
   }
   return null;
 };
@@ -560,95 +872,210 @@ const momentBeat = (lesson: Lesson, s: State, seen: ReadonlySet<string>): Beat |
   if (s.actor !== YOU || s.phase === 'GAME_OVER') return null;
   const once = (id: string) => !seen.has(`${lesson.level}:${id}`);
   const ev = mine(s);
-  if (lesson.level === 1 && ev.some((e) => e.t === 'Sprout') && once('grew'))
-    return explain(`${lesson.level}:grew`, W.youGrew, W.youGrewLine, { t: 'score' }, 'YOU 1 : THEM 0');
+  // "Tiles keep the rank of the card used" is about the NUMBER ON THE TILE that was just placed,
+  // so the light goes to that hex — not to the display (owner, 2026-10-20: it lit the score
+  // display and pointed the arrow at it, which taught the wrong thing). The newest Sprout in the
+  // history is the tile just placed; the words are unchanged, and the score keeps its own face.
+  if (lesson.level === 1 && once('grew')) {
+    const grew = [...ev].reverse().find((e): e is Extract<Event, { t: 'Sprout' }> => e.t === 'Sprout');
+    if (grew) return explain(`${lesson.level}:grew`, W.youGrewLine, { t: 'hex', key: coordKey(grew.coord) });
+  }
   if (lesson.level === 4 && goalDone({ t: 'cut', key: '1,-1' }, s) && once('withered'))
-    return explain(`${lesson.level}:withered`, W.withered, W.witheredLine, { t: 'led' });
+    return explain(`${lesson.level}:withered`, W.witheredLine, { t: 'led' });
   if (lesson.level === 5 && goalDone({ t: 'bloom' }, s) && once('bloomed'))
-    return explain(`${lesson.level}:bloomed`, W.bloomed, W.bloomedLine, { t: 'led' });
-  // The clock: the Draw pile is nearly gone (levels with a points ending say it once).
+    return explain(`${lesson.level}:bloomed`, W.bloomedLine, { t: 'led' });
+  // Right after the Bloom from the Throw pile: neither the Bloom nor the Grow is ever required, and
+  // » keeps the cards. Said once, pointing at »; the light then carries on as usual (owner,
+  // 2026-10-20: taught here, never forced).
+  // (» is lit only when no power is playable: the light never points at » past a power.)
+  if (lesson.level === 9 && s.phase === 'ACT' && goalDone({ t: 'pileBloom' }, s) && once('optional'))
+    return explain(`${lesson.level}:optional`, W.optionalLine,
+      legalPowers(lessonLegal(lesson, s)).length ? { t: 'none' } : { t: 'end' });
+  // Straight after the skip: everything since the draw can still be taken back, until the Throw
+  // (owner, 2026-10-22). The Undo key is lit.
+  if (lesson.level === 9 && s.phase === 'ACT' && goalDone({ t: 'pileBloom' }, s) && !once('optional') && once('undo'))
+    return explain(`${lesson.level}:undo`, W.undoLine, { t: 'undo' });
+  // The clock: the Draw pile is nearly gone. The warning belongs on the display, not in the box.
   if (lesson.level === 1 && s.phase === 'DRAW' && s.deck.length > 0 && s.deck.length <= 3 && once('pile-low'))
-    return explain(`${lesson.level}:pile-low`, W.pileLow, W.pileLowLine, { t: 'deckCount' }, 'LAST CARDS');
+    return { id: `${lesson.level}:pile-low`, say: W.lastCards, lit: { t: 'deckCount' }, explain: true };
   if (s.deckFinal && s.phase === 'ACT' && (s.sproutsThisTurn ?? 0) === 0 && once(`last-turn`))
-    return explain(`${lesson.level}:last-turn`, W.lastTurn, W.lastTurnLine, { t: 'led' }, 'LAST TURN');
+    return { id: `${lesson.level}:last-turn`, say: W.lastTurn, line: W.lastTurnLine, lit: { t: 'led' }, explain: true };
   return null;
 };
 
-/** The words for a step: spelled out while the lesson's idea is new, one word once it is not. */
-const words = (lesson: Lesson, s: State, full: [string, string], word: string): { title: string; line?: string } => {
-  const firstTurn = myTurns(s).filter((t) => t.some((e) => e.t === 'Discard')).length === 0;
-  if (lesson.guide === 'full' && firstTurn) return { title: full[0], line: full[1] };
-  return { title: word };
+/**
+ * The one-time explanations that belong to an idea as it is about to be used (the Grow and Throw
+ * sentences, a stronger card, a cut, the free Grow after a Blast, skipping). They are a separate
+ * beat from the action, so the box is an explanation and the display is the action — never both
+ * saying the same thing. Shown once per lesson, never faded.
+ */
+const ideaBeat = (
+  lesson: Lesson, s: State, ctx: BeatCtx, goal: Goal | null, move: Action,
+): Beat | null => {
+  // An explanation comes directly before its move, every time: a card already picked does not skip
+  // it when that card is the one the move uses (owner, 2026-10-22: the cut sentence was lost when
+  // the player picked the card first).
+  const pickedOther = ctx.card !== null && !('card' in move && move.card === ctx.card);
+  if (pickedOther || ctx.placing !== null || ctx.throwPending !== null) return null;
+  const once = (id: string) => !ctx.seen.has(`${lesson.level}:idea:${id}`);
+  if (lesson.level === 1 && s.phase === 'ACT' && once('first-grow')
+    && !mine(s).some((e) => e.t === 'Sprout') && move.t === 'Sprout')
+    return explain(`${lesson.level}:idea:first-grow`, W.growLine, { t: 'card', id: move.card });
+  if (lesson.level === 1 && s.phase === 'DISCARD' && once('first-throw') && move.t === 'Discard')
+    return explain(`${lesson.level}:idea:first-throw`, W.throwLine, { t: 'card', id: move.card });
+  // The lesson's own idea is explained every turn its move is lit, never left as a bare light: a
+  // turn that passes without it brings the sentence back with the light (owner, 2026-10-24: "a 3
+  // card twice in a row… no lesson attached to it"). One id per turn: `2:idea:strengthen`, then
+  // `2:idea:strengthen@2` on the second turn, and so on.
+  const turn = myTurns(s).length;
+  const each = (idea: string) => `${idea}${turn > 1 ? `@${turn}` : ''}`;
+  if (lesson.level === 2 && goal?.t === 'strengthen' && once(each('strengthen')) && move.t === 'Sprout')
+    return explain(`${lesson.level}:idea:${each('strengthen')}`, W.biggerWinsLine, { t: 'card', id: move.card });
+  // A take or a cut is explained the turn it can be played, right before the tap (owner,
+  // 2026-10-22: level 2's cut sentence came straight after the strengthen, a turn too early).
+  const playsGoal = s.phase === 'ACT' && move.t === 'Sprout' && !!goal && 'key' in goal && keyOf(move.coord) === goal.key;
+  if (lesson.level === 2 && goal?.t === 'take' && playsGoal && once(each('take')))
+    return explain(`${lesson.level}:idea:${each('take')}`, W.takeTileLine, { t: 'hex', key: goal.key });
+  if (lesson.level === 4 && goal?.t === 'cut' && playsGoal && once(each('cut')))
+    return explain(`${lesson.level}:idea:${each('cut')}`, W.cutLinkLine, { t: 'hex', key: goal.key });
+  if (lesson.level === 8 && goal?.t === 'blastGrow' && once('free-grow') && move.t === 'Sprout')
+    return explain(`${lesson.level}:idea:free-grow`, W.freeGrowLine, { t: 'card', id: move.card });
+  return null;
 };
 
+const kindForMove = (goal: Goal | null, move: Action): ActionKind | null => {
+  switch (move.t) {
+    case 'Draw': return 'draw';
+    case 'Discard': return 'throw';
+    case 'Bloom': return 'bloom';
+    case 'PlayFruit': return 'bomb';
+    case 'MegaBomb': return 'blast';
+    case 'Sprout':
+      return goal?.t === 'strengthen' ? 'strengthen'
+        : goal?.t === 'take' ? 'take'
+        : goal?.t === 'cut' ? 'cut'
+        : goal?.t === 'strangle' ? 'surround'
+        : 'grow';
+    case 'EndAct': return 'throw';
+    default: return null;
+  }
+};
+
+/** Is this move the lesson's own step (the idea it teaches), rather than an ordinary suggestion? */
+const servesGoal = (goal: Goal | null, move: Action): boolean => {
+  if (!goal) return false;
+  switch (goal.t) {
+    case 'grow': return move.t === 'Sprout';
+    case 'strengthen': case 'take': case 'cut': case 'gold':
+      return move.t === 'Sprout' && keyOf(move.coord) === goal.key;
+    case 'bloom': return move.t === 'Bloom';
+    case 'pileBloom': return move.t === 'Bloom' || (move.t === 'Draw' && move.from === 'discard');
+    case 'strangle': return move.t === 'Sprout';
+    case 'bomb': return move.t === 'PlayFruit';
+    case 'blast': return move.t === 'MegaBomb';
+    case 'blastGrow': return move.t === 'MegaBomb' || move.t === 'Sprout';
+  }
+};
+
+/** The action beat: the display says what to do. No explanation lives here (the box is separate). */
 const lightFor = (lesson: Lesson, s: State, ctx: BeatCtx, move: Action, legal: readonly Action[]): Beat => {
   const goal = currentGoal(lesson, s);
-  // Only the finale waits for a quiet moment; levels 1-9 keep their hint on screen (owner, 2026-10-19).
-  const idleOnly = lesson.guide === 'idle';
-  const beat = (id: string, w: { title: string; line?: string }, lit: Lit): Beat => ({ id, ...w, lit, ...(idleOnly ? { idleOnly } : {}) });
+  // The lesson's own step is lit at once; every other suggestion waits for a few idle seconds
+  // (owner, 2026-10-24: "cards suggested should be after a few seconds of idle… and be actually a
+  // good move"). Level 1 teaches the whole turn, so every step there is its own. Level 10 waits
+  // for a quiet moment on every hint. A FREE lesson coaches a real game: its cue for the action
+  // happening now always shows, with no idle wait.
+  const free = lessonIsFree(lesson);
+  const idleOnly = !free && (lesson.guide === 'idle' || (lesson.level !== 1 && !servesGoal(goal, move)));
+  const kind = kindForMove(goal, move);
+  const beat = (id: string, say: string, lit: Lit): Beat => ({
+    id, say, lit, ...(idleOnly ? { idleOnly } : {}), ...(free ? { always: true } : {}), ...(kind ? { kind } : {}),
+  });
   switch (move.t) {
     case 'Draw':
-      if (move.from === 'discard') return { id: 'pile', title: W.pileGold, line: W.pileGoldLine, lit: { t: 'discard' } };
-      return beat('draw', words(lesson, s, [W.tapDraw, W.tapDrawLine], W.draw), { t: 'deck' });
+      if (move.from === 'discard') return beat('pile', W.tapThrowPile, { t: 'discard' });
+      return beat('draw', W.tapDraw, { t: 'deck' });
     case 'Sprout': {
       const key = keyOf(move.coord);
-      const goalWords = goal?.t === 'strengthen' ? [W.biggerWins, W.biggerWinsLine]
-        : goal?.t === 'take' ? [W.takeTile, W.takeTileLine]
-        : goal?.t === 'cut' ? [W.cutLink, W.cutLinkLine]
-        : goal?.t === 'gold' ? [W.goldDouble, W.goldDoubleLine]
-        : goal?.t === 'strangle' ? (strangleMove(s, legal) ? [W.canWin, W.canWinLine] : [W.surround, W.surroundLine])
-        : goal?.t === 'blastGrow' ? [W.freeGrow, W.freeGrowLine]
-        : null;
-      if (ctx.card !== move.card) {
-        const w = goalWords ? { title: goalWords[0]!, line: goalWords[1]! } : words(lesson, s, [W.pickCard, W.pickCardLine], W.grow);
-        return beat(`pick:${move.card}`, w, { t: 'card', id: move.card });
-      }
+      if (ctx.card !== move.card) return beat(`pick:${move.card}`, W.chooseCard, { t: 'card', id: move.card });
       const others = legal.filter((a): a is Sprout => a.t === 'Sprout' && a.card === move.card).map((a) => keyOf(a.coord)).filter((k) => k !== key);
-      const w = goalWords ? { title: goalWords[0]!, line: goalWords[1]! } : words(lesson, s, [W.tapTile, W.tapTileLine], W.grow);
-      return beat(`tile:${key}`, w, { t: 'hex', key, ...(goal ? {} : { quiet: others }) });
+      if (goal?.t === 'strangle' && strangleMove(s, legal)) return beat('can-win', W.tapLastSide, { t: 'hex', key });
+      // Their tile (a lesson's cut, or the light taking one of theirs) is named as theirs.
+      const say = goal?.t === 'take' || goal?.t === 'cut' || s.board[key]?.owner === THEM ? W.tapTheirTile : W.tapTile;
+      return beat(`tile:${key}`, say, { t: 'hex', key, ...(goal ? {} : { quiet: others }) });
     }
     case 'Bloom': {
       // Two steps: tap Bloom to pick it, then tap (or draw) its lit tiles.
-      if (ctx.placing === 'bloom') return beat('bloom-tiles', { title: W.bloomTiles, line: W.bloomTilesLine }, { t: 'hexes', keys: move.hexes.map(keyOf) });
-      if (goal?.t === 'pileBloom') return { id: 'bloom', title: W.tapBloom, line: W.tapBloomLine, lit: { t: 'bloom' } };
-      return beat('bloom', { title: W.tapBloom, line: W.playLitLine }, { t: 'bloom' });
+      if (ctx.placing === 'bloom') return beat('bloom-tiles', W.tapTiles, { t: 'hexes', keys: move.hexes.map(keyOf) });
+      return beat('bloom', W.tapBloom, { t: 'bloom' });
     }
     case 'PlayFruit':
-      if (ctx.card !== move.card) return beat('bomb-card', { title: W.bombTile, line: W.bombTileLine }, { t: 'card', id: move.card });
-      return beat('bomb-tile', { title: W.bombTile, line: W.bombTileLine }, { t: 'hex', key: keyOf(move.target) });
+      if (ctx.card !== move.card) return beat('bomb-card', W.chooseBomb, { t: 'card', id: move.card });
+      return beat('bomb-tile', W.bombTile, { t: 'hex', key: keyOf(move.target) });
     case 'MegaBomb':
-      if (ctx.placing === 'blast') return beat('blast-tile', { title: W.blast, line: W.blastLine }, { t: 'hex', key: keyOf(move.target) });
-      return beat('blast', { title: W.blast, line: W.blastLine }, { t: 'bloom' });
+      if (ctx.placing === 'blast') return beat('blast-tile', W.tapTile, { t: 'hex', key: keyOf(move.target) });
+      return beat('blast', W.tapBlast, { t: 'bloom' });
     case 'EndAct':
-      if (goal?.t === 'skip') return { id: 'skip', title: W.skipGrow, line: W.skipGrowLine, lit: { t: 'end' } };
-      // Spelled out once (so the player knows » is there to skip on); after that one word.
-      if (ctx.doneTaught) return beat('end', { title: W.throwWord }, { t: 'end' });
-      return beat('end', { title: W.done, line: W.doneLine }, { t: 'end' });
+      return beat('end', W.tapThrow, { t: 'end' });
     case 'Discard':
-      if (ctx.throwPending === move.card) return beat('throw-pile', words(lesson, s, [W.throwPile, W.throwPileLine], W.throwWord), { t: 'discard' });
-      return beat(`throw:${move.card}`, words(lesson, s, [W.throwCard, W.throwCardLine], W.throwWord), { t: 'card', id: move.card });
+      if (ctx.throwPending === move.card) return beat('throw-pile', W.tapThrowPile, { t: 'discard' });
+      return beat(`throw:${move.card}`, W.throwCard, { t: 'card', id: move.card });
     default:
-      return beat('wait', { title: W.notYet }, { t: 'none' });
+      return beat('wait', W.notYet, { t: 'none' });
   }
 };
 
 /**
- * What the window says and what is lit, from the live game. Null when the window should be empty
- * (the game is over).
+ * What the display says, what the box explains, and what is lit — read from the live game.
+ * Null when there is nothing to show (the game is over).
  */
 export const lessonBeat = (lesson: Lesson, s: State, ctx: BeatCtx): Beat | null => {
   if (s.phase === 'GAME_OVER') return null;
   if (s.actor !== YOU) {
-    const first = myTurns(s).length <= 1 && lesson.guide === 'full';
-    return { id: 'their-turn', title: W.theirTurn, ...(first ? { line: W.theirTurnLine } : {}), lit: { t: 'none' }, ...(lesson.guide === 'idle' ? { idleOnly: true } : {}) };
+    const first = myTurns(s).length <= 1 && lesson.guide === 'always';
+    return {
+      id: 'their-turn', say: W.theirTurn, status: true,
+      // A free lesson (level 9) is live coaching on a real game: WAIT is its action line for the
+      // opponent's turn, so it gets the same "never silenced by mastery" guarantee as DRAW/GROW.
+      ...(lessonIsFree(lesson) ? { always: true } : {}),
+      ...(first ? { line: W.theirTurnLine } : {}), lit: { t: 'none' },
+      ...(lesson.guide === 'idle' ? { idleOnly: true } : {}),
+    };
   }
-  const intro = introBeat(lesson, s, ctx.seen);
+  const intro = introBeat(lesson, s, ctx);
   if (intro) return intro;
   const moment = momentBeat(lesson, s, ctx.seen);
   if (moment) return moment;
+  const legal = lessonLegal(lesson, s);
+  const goal = currentGoal(lesson, s);
+  const hello = helloBeat(lesson, s, ctx, goal, legal);
+  if (hello) return hello;
+  // The goal is done and a power is still playable: its one-time hello has been shown (or was not
+  // due here), so the light stays quiet. It never falls through to » and never nudges repeatedly.
+  if (!goal && legalPowers(legal).length && ctx.card === null && ctx.placing === null) return null;
   const move = suggestMove(lesson, s);
   if (!move) return null;
-  return lightFor(lesson, s, ctx, move, legalActions(viewFor(s, YOU)));
+  const idea = ideaBeat(lesson, s, ctx, goal, move);
+  if (idea) return idea;
+  return lightFor(lesson, s, ctx, move, legal);
+};
+
+/**
+ * The same beat, faded to the tier the player has earned. Explanations, a status line and a power's
+ * one-time hello are never faded (they are exactly the moment being taught); an ordinary move is:
+ *   spotlight — the action, full light
+ *   guide     — the action, soft pointer and glow
+ *   whisper   — the action instruction, a gentle pulse on the target (never a single word)
+ *   silent    — nothing, the calm neutral display
+ */
+export const presentedLessonBeat = (beat: Beat | null, tier: LessonTier): Beat | null => {
+  if (!beat) return null;
+  if (beat.explain || beat.hello || beat.status) return beat;
+  // A free lesson's live coach: the action line belongs to the game happening now, so mastery
+  // may soften the light but never silence the cue (level 9's whole point).
+  if (beat.always) return beat;
+  if (tier === 'silent') return null;
+  return beat;
 };
 
 /** Unused-for-now helper kept beside the board reader: the key of a coordinate string. */

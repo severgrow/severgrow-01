@@ -1,10 +1,20 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
+import type { Page } from 'playwright-core';
 import { servePreview } from './helpers/preview-port.js';
 import { allNeighbors, coordKey, newGame } from '../../src/engine/index.js';
 import type { Player, State } from '../../src/engine/index.js';
 import { positionSave } from './position.js';
 import { hexCenter } from './drawing.js';
+
+// Owner decision (2026-10-19): the PRODUCT main menu has NO Continue — a saved match is offered
+// when the player enters its level. These fixtures only need the resume itself, so boot first and
+// invoke the still-bound hidden control, exactly as futa04-critical/motion do. Waiting for it to be
+// VISIBLE (page.click) can never succeed on this channel: `[hidden]` is display:none by design.
+const resumeSave = async (page: Page) => {
+  await page.waitForFunction(() => (window as any).__severgrow?.ready?.() === true, undefined, { timeout: 20000 });
+  await page.evaluate(() => (document.getElementById('menu-continue') as HTMLButtonElement | null)?.click());
+};
 
 const base = newGame(3107);
 const target = {q:-1,r:2};
@@ -38,7 +48,7 @@ try {
       }
     },positionSave({state:game}));
     await page.goto(BASE);
-    await page.click('#menu-continue');
+    await resumeSave(page);
     await page.waitForFunction(() => !(window as any).__severgrow.busy());
     assert(await page.locator('#board').evaluate(board => {
       const svg = board.tagName.toLowerCase()==='svg' ? board : board.querySelector('svg');

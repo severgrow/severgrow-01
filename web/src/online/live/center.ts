@@ -36,12 +36,14 @@ export type PopupPort = {
 
 /** Per-player ping channel: a hint to poll now. */
 export type PlayerChannel = {
-  subscribe(playerId: string, onPing: () => void): () => void;
+  subscribe(playerId: string, onPing: (reason?: 'connected' | 'notification') => void): () => void;
   /** True while the Realtime channel is joined (pings can arrive). Absent = never connected. */
   connected?(): boolean;
 };
 
 export type CenterEvents = {
+  onActionError?(error: unknown): void;
+  onPing?(reason?: 'connected' | 'notification'): void;
   /** A live session began for this player (as the accepter OR as the sender whose challenge was accepted). */
   onLiveStarted?(liveMatchId: string, via: ChallengeWire | null): void;
   /** Every fresh inbox (the controller uses outgoing statuses for the sender's window). */
@@ -76,6 +78,7 @@ export const createChallengeCenter = (deps: {
   let pollTimer: unknown = null;
   let beatTimer: unknown = null;
   let deferTimer: unknown = null;
+  let expiryTimer: unknown = null;
   let unsubscribe: (() => void) | null = null;
   let unVisibility: (() => void) | null = null;
   let current: ChallengeWire | null = null; // shown or waiting to be shown
@@ -83,21 +86,39 @@ export const createChallengeCenter = (deps: {
   let accepting = false;
   const closed = new Set<string>();
   let live: string | null = null;
+  let announcedLive: string | null = null;
   let polling: Promise<void> | null = null;
+  let pollAgain = false;
+  let generation = 0;
+  let beating: Promise<void> | null = null;
+  let beatAgain = false;
+  let announceNext = false;
   /** The first inbox is the baseline (a reload while live must not replay the go-live moment). */
   let baseline = true;
 
   const clear = (id: unknown) => {
     if (id !== null) clock.clearTimeout(id);
   };
+  const announceLive = (matchId: string, via: ChallengeWire | null) => {
+    if (announcedLive === matchId) return;
+    announcedLive = matchId;
+    deps.events?.onLiveStarted?.(matchId,via);
+  };
 
-  const heartbeatNow = async (): Promise<void> => {
-    try {
-      const p = probe.presence();
-      await api.presence(p.status, p.matchId);
-    } catch (error) {
-      deps.events?.onError?.(error);
-    }
+  const heartbeatNow = async (announce = true): Promise<void> => {
+    announceNext ||= announce;
+    if (beating) { beatAgain = true; return beating; }
+    const requestGeneration = generation;
+    beating = (async () => {
+      do {
+        beatAgain = false;
+        const notify = announceNext;announceNext = false;
+        const p = probe.presence();
+        try { await api.presence(p.status,p.matchId,notify); }
+        catch (error) { if (generation === requestGeneration) deps.events?.onError?.(error); }
+      } while (beatAgain && generation === requestGeneration && running && probe.visible());
+    })();
+    try { await beating; } finally { if (generation === requestGeneration) beating = null; }
   };
 
   const scheduleBeat = () => {
@@ -105,7 +126,7 @@ export const createChallengeCenter = (deps: {
     beatTimer = null;
     if (!running || !probe.visible()) return;
     beatTimer = clock.setTimeout(() => {
-      void heartbeatNow().finally(scheduleBeat);
+      void heartbeatNow(false).finally(scheduleBeat);
     }, HEARTBEAT_MS);
   };
 
@@ -120,22 +141,35 @@ export const createChallengeCenter = (deps: {
 
   /** Fast only when it matters: Realtime down, a pop-up open/queued, or my challenge awaiting an answer. */
   let outgoingPending = false;
+  let inboxFailed = false;
   const pollDelay = (): number => {
     const realtime = deps.channel?.connected?.() === true;
-    if (!realtime || current !== null || accepting || outgoingPending) return POLL_MS;
+    if (!realtime || inboxFailed || current !== null || accepting || outgoingPending) return POLL_MS;
     return REALTIME_IDLE_POLL_MS;
   };
 
   const hidePopup = () => {
     clear(deferTimer);
+    clear(expiryTimer);
+    expiryTimer = null;
     deferTimer = null;
     if (popup.isOpen()) popup.hide();
     current = null;
   };
+  const expireCurrent = () => {
+    expiryTimer = null;
+    if (!running || !current) return;
+    const left = current.expiresAt-clock.now();
+    if (left > 0) { expiryTimer=clock.setTimeout(expireCurrent,left);return; }
+    closed.add(current.id);
+    hidePopup();
+    if (probe.visible()) void pollNow();
+  };
 
   const tryShow = () => {
     deferTimer = null;
-    if (!running || !current || popup.isOpen()) return;
+    if (!running || !probe.visible() || !current || popup.isOpen()) return;
+    if (clock.now() > current.expiresAt) { hidePopup(); return; }
     const d = deferDecision(probe.screen(), clock.now() - waitingSince);
     if (d === 'show') {
       const c = current;
@@ -150,15 +184,19 @@ export const createChallengeCenter = (deps: {
     if (accepting || closed.has(c.id)) return; // a double tap sends once
     accepting = true;
     closed.add(c.id);
+    const requestGeneration = generation;
     try {
       const res = await api.accept(c.id);
+      if (generation !== requestGeneration) return;
       hidePopup();
       live = res.liveMatchId;
       baseline = false;
-      deps.events?.onLiveStarted?.(res.liveMatchId, res.challenge);
+      announceLive(res.liveMatchId, res.challenge);
     } catch (error) {
+      if (generation !== requestGeneration) return;
+      closed.delete(c.id);
       hidePopup();
-      deps.events?.onError?.(error);
+      deps.events?.onActionError?.(error);
     } finally {
       accepting = false;
     }
@@ -168,46 +206,65 @@ export const createChallengeCenter = (deps: {
     if (closed.has(c.id)) return;
     closed.add(c.id);
     hidePopup();
+    const requestGeneration = generation;
     try {
       await api.decline(c.id);
     } catch (error) {
-      deps.events?.onError?.(error);
+      if (generation !== requestGeneration) return;
+      closed.delete(c.id);
+      deps.events?.onActionError?.(error);
     }
   };
 
   const applyInbox = (inbox: MyChallengesWire) => {
     deps.events?.onInbox?.(inbox);
     const wasPending = outgoingPending;
-    outgoingPending = inbox.outgoing.some((c) => c.status === 'pending' && clock.now() <= c.expiresAt);
+    outgoingPending = inbox.outgoing.some((c) => c.status === 'pending' && clock.now() < c.expiresAt);
     // A challenge just went out: switch to the fast check now, not after the slow timer fires.
     if (outgoingPending && !wasPending && running && pollTimer !== null) schedulePoll();
     const was = live;
     live = inbox.liveMatchId;
     const first = baseline;
     baseline = false;
+    if (first || !live) announcedLive = live;
     if (live && live !== was && !first) {
       const via = inbox.outgoing.find((c) => c.status === 'accepted' && (c.newMatchId ?? c.matchId) === live) ?? null;
       hidePopup();
-      deps.events?.onLiveStarted?.(live, via);
+      announceLive(live, via);
     }
-    const open = inbox.incoming.filter((c) => c.status === 'pending' && !closed.has(c.id) && clock.now() <= c.expiresAt);
+    const open = inbox.incoming.filter((c) => c.status === 'pending' && !closed.has(c.id) && clock.now() < c.expiresAt);
     if (current && !open.some((c) => c.id === current!.id)) hidePopup(); // expired / cancelled / answered elsewhere
     if (!current && open.length > 0 && !accepting && !live) {
       current = [...open].sort((a, b) => a.createdAt - b.createdAt)[0]!;
       waitingSince = clock.now();
+      expiryTimer = clock.setTimeout(expireCurrent,Math.max(0,current.expiresAt-clock.now()));
       tryShow();
     }
   };
 
   const pollNow = async (): Promise<void> => {
-    if (polling) return polling;
+    // A ping can describe a change newer than the request already travelling back. Share that
+    // request, but drain one fresh read afterwards rather than losing the notification.
+    if (polling) { pollAgain = true; return polling; }
+    const requestGeneration = generation;
     polling = (async () => {
       try {
-        applyInbox(await api.inbox());
-      } catch (error) {
-        deps.events?.onError?.(error);
+        do {
+          pollAgain = false;
+          try {
+            const inbox = await api.inbox();
+            if (generation !== requestGeneration) return;
+            inboxFailed = false;
+            applyInbox(inbox);
+          } catch (error) {
+            if (generation !== requestGeneration) return;
+            inboxFailed = true;
+            deps.events?.onError?.(error);
+          }
+          if (running) schedulePoll();
+        } while (pollAgain && running && probe.visible());
       } finally {
-        polling = null;
+        if (generation === requestGeneration) polling = null;
       }
     })();
     return polling;
@@ -217,7 +274,7 @@ export const createChallengeCenter = (deps: {
     if (!running) return;
     if (probe.visible()) {
       void heartbeatNow();
-      void pollNow();
+      void pollNow().then(tryShow);
       scheduleBeat();
       schedulePoll();
     } else {
@@ -231,12 +288,22 @@ export const createChallengeCenter = (deps: {
     start() {
       if (running) return;
       running = true;
-      unsubscribe = deps.channel?.subscribe(deps.playerId, () => void pollNow()) ?? null;
+      unsubscribe = deps.channel?.subscribe(deps.playerId, reason => {
+        if (!probe.visible()) return;
+        void pollNow();
+        deps.events?.onPing?.(reason);
+      }) ?? null;
       unVisibility = deps.onVisibility?.(onVisible) ?? null;
       onVisible();
     },
     stop() {
       running = false;
+      generation++;
+      pollAgain = false;
+      polling = null;
+      beating = null;
+      beatAgain = false;
+      announceNext = false;
       clear(pollTimer);
       clear(beatTimer);
       pollTimer = beatTimer = null;
@@ -250,6 +317,7 @@ export const createChallengeCenter = (deps: {
     liveMatchId: () => live,
     noteLive(matchId) {
       live = matchId;
+      announcedLive = matchId;
     },
   };
 };

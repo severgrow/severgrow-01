@@ -43,6 +43,8 @@ type Snap = {
   laneClient: number;
   scroll: string | undefined;
   anims: number;
+  /** The turn word's painted display: 'none' while it is hidden (owner, 2026-10-21). */
+  msgDisplay: string;
 };
 
 const PROBE = (long: string) => `(() => {
@@ -67,7 +69,10 @@ const PROBE = (long: string) => `(() => {
   const tileEls = [...document.querySelectorAll('.l-tiles .tile[data-key]')];
   const snap = () => ({ board: rect(board), tiles: union(tileEls), hud: rect(hud), lane: rect(lane),
     msgScroll: msg.scrollHeight, msgClient: msg.clientHeight, laneScroll: lane.scrollHeight, laneClient: lane.clientHeight,
-    scroll: msg.dataset.scroll, anims: track.getAnimations().length });
+    scroll: msg.dataset.scroll, anims: track.getAnimations().length,
+    // The turn word is hidden for now (owner, 2026-10-21: the top text is going away, and its
+    // ticker looked jumpy), so "is it painted" is the fact this probe has to report.
+    msgDisplay: getComputedStyle(msg).display });
   const before = snap();
   window.__futasakuHeader.set(${JSON.stringify(long)});
   const after = snap();
@@ -109,8 +114,8 @@ const isFrameless = (f: Frame): boolean =>
 const pillState = (s: SeatSession): Promise<string | null> =>
   ev(s, `(() => { const p = document.querySelector('[data-live="pill"]'); return p && !p.hidden ? p.dataset.state : null; })()`);
 
-/** The bolt, as the proof needs it: its box, the wordmark's box, and the board's tiles. */
-type BoltSnap = { bolt: Box | null; brand: Box | null; tilesOverlap: number; board: Box | null; words: string };
+/** The bolt, as the proof needs it: its box, the menu's, the wordmark's, and the board's tiles. */
+type BoltSnap = { bolt: Box | null; menu: Box | null; brand: Box | null; score: Box | null; tilesOverlap: number; board: Box | null; words: string };
 const BOLT_PROBE = `(() => {
   const rect = (el) => { if (!el) return null; const r = el.getBoundingClientRect();
     return { x: Math.round(r.x * 10) / 10, y: Math.round(r.y * 10) / 10, width: Math.round(r.width * 10) / 10, height: Math.round(r.height * 10) / 10 }; };
@@ -120,8 +125,23 @@ const BOLT_PROBE = `(() => {
   let ov = 0;
   if (b) for (const t of tiles) { const w = Math.min(b.right, t.right) - Math.max(b.left, t.left); const h = Math.min(b.bottom, t.bottom) - Math.max(b.top, t.top); if (w > 0.5 && h > 0.5) ov += w * h; }
   const visibleText = bolt ? [...bolt.querySelectorAll('*')].filter((n) => n.childElementCount === 0 && (n.textContent || '').trim() && n.getBoundingClientRect().width > 2).map((n) => n.textContent.trim()).join('|') : '';
-  return { bolt: rect(bolt), brand: rect(document.getElementById('hud-brand')), tilesOverlap: Math.round(ov), board: rect(document.getElementById('board-wrap')), words: visibleText };
+  return { bolt: rect(bolt), menu: rect(document.getElementById('hud-menu')), brand: rect(document.getElementById('hud-brand')), score: rect(document.querySelector('.game > .hud .score.you')), tilesOverlap: Math.round(ov), board: rect(document.getElementById('board-wrap')), words: visibleText };
 })()`;
+const noOverlap = (a: Box | null, b: Box | null): boolean =>
+  !a || !b || a.width <= 0 || b.width <= 0 ||
+  a.x + a.width <= b.x + 0.5 || b.x + b.width <= a.x + 0.5 ||
+  a.y + a.height <= b.y + 0.5 || b.y + b.height <= a.y + 0.5;
+/** Is the sender-side confirmation window on screen (as opposed to the incoming invitation)? */
+const confirmOpen = (s: SeatSession): Promise<boolean> =>
+  ev(s, `(() => { const p = document.querySelector('.live-glass[data-live="confirm"]'); return !!p && !p.hidden; })()`);
+const confirmCopy = (s: SeatSession): Promise<{ what: string; terms: string; actions: string[] }> =>
+  ev(s, `(() => { const p = document.querySelector('.live-glass[data-live="confirm"]');
+    return { what: (p.querySelector('.lg-what')?.textContent || '').trim(), terms: (p.querySelector('.lg-terms')?.textContent || '').trim(),
+      actions: [...p.querySelectorAll('.lg-actions button')].map((b) => (b.textContent || '').trim()) }; })()`);
+const tapConfirm = (s: SeatSession, which: 'send' | 'cancel'): Promise<unknown> =>
+  s.page.click(`[data-live="confirm-${which}"]`);
+const boltHasFocus = (s: SeatSession): Promise<boolean> =>
+  ev(s, `document.activeElement === document.querySelector('[data-live="pill"]')`);
 
 /** Tap the middle of the bolt with a real finger. */
 const tapBolt = async (s: SeatSession): Promise<void> => {
@@ -141,8 +161,8 @@ const waitState = async (s: SeatSession, want: (v: string | null) => boolean): P
 const circleGone = (display: string): boolean => display === 'none' || display === 'none-found';
 
 /** Stop the ticker: set a short message and read the lane back. */
-const shortProbe = (s: SeatSession): Promise<{ scroll: string | undefined; anims: number }> =>
-  ev(s, `(() => { window.__futasakuHeader.set('Your turn'); const m = document.querySelector('#duel-hud [data-duel-turn]'); const t = document.querySelector('#duel-hud [data-duel-track]'); return { scroll: m.dataset.scroll, anims: t.getAnimations().length }; })()`);
+const shortProbe = (s: SeatSession): Promise<{ scroll: string | undefined; anims: number; msgDisplay: string }> =>
+  ev(s, `(() => { window.__futasakuHeader.set('Your turn'); const m = document.querySelector('#duel-hud [data-duel-turn]'); const t = document.querySelector('#duel-hud [data-duel-track]'); return { scroll: m.dataset.scroll, anims: t.getAnimations().length, msgDisplay: getComputedStyle(m).display }; })()`);
 
 /** Put the match into real time: A challenges, B accepts (both pages already in the match). */
 const goLive = async (duel: LocalDuel, match: LocalMatch): Promise<void> => {
@@ -247,12 +267,16 @@ try {
       check(`[${tag}] the lane never intersects the board's tiles`, p.laneTilesOverlap === 0 && p.hudTilesOverlap === 0, `${Math.round(p.laneTilesOverlap)}px² lane, ${Math.round(p.hudTilesOverlap)}px² hud`);
       check(`[${tag}] the board rectangle is IDENTICAL with and without a message`, JSON.stringify(p.before.board) === JSON.stringify(p.after.board), `${JSON.stringify(p.before.board)} vs ${JSON.stringify(p.after.board)}`);
       check(`[${tag}] the lane is a fixed-height row (<= 46px)`, (p.after.lane?.height ?? 0) <= 46, `${p.after.lane?.height}px`);
-      check(`[${tag}] the ticker runs when the words overflow`, p.after.scroll === '1' && p.after.anims > 0, `scroll=${p.after.scroll} anims=${p.after.anims}`);
+      // DELIBERATE CHANGE (owner, 2026-10-21): the turn words are hidden, so nothing may ticker.
+      // This replaces a check that required the ticker to run on overflow. The stronger fact now is
+      // that the word is not painted at all - and, because an unpainted element cannot animate,
+      // that no ticker runs either.
+      check(`[${tag}] the turn words are hidden, so nothing tickers`, p.after.msgDisplay === 'none' && p.after.anims === 0, `display=${p.after.msgDisplay} anims=${p.after.anims}`);
       check(`[${tag}] the header text has no border, outline, shadow or fill`, isFrameless(p.msgFrame) && isFrameless(p.trackFrame) && isFrameless(p.hudFrame) && isFrameless(p.laneFrame), JSON.stringify({ msg: p.msgFrame, track: p.trackFrame, hud: p.hudFrame }));
       check(`[${tag}] the two small circles are gone`, circleGone(p.chipDisplay) && circleGone(p.dotDisplay), `chip=${p.chipDisplay} dot=${p.dotDisplay}`);
       check(`[${tag}] the lane holds no real-time pill (it is the bolt under the wordmark now)`, !p.pillFrame, JSON.stringify(p.pillFrame));
       const stopped = await shortProbe(phone);
-      check(`[${tag}] the ticker stops when the words fit`, stopped.scroll === '0' && stopped.anims === 0, `scroll=${stopped.scroll} anims=${stopped.anims}`);
+      check(`[${tag}] a short message does not ticker either`, stopped.scroll === '0' && stopped.anims === 0 && stopped.msgDisplay === 'none', `scroll=${stopped.scroll} anims=${stopped.anims} display=${stopped.msgDisplay}`);
       if (size.w === 390) await shot(phone, `long-message-${tag}`);
     }
 
@@ -270,26 +294,55 @@ try {
       console.log('    [standalone] CDP display-mode emulation is unavailable here; skipped');
     }
 
-    // ---- the real-time bolt (owner, 2026-10-15) -------------------------------------------------
-    // One icon, no words, in the rail UNDER the wordmark with the right edges aligned. Filled when the
-    // opponent is here (tap = invite), breathing while the invite waits (tap = cancel).
+    // ---- the real-time bolt (owner, 2026-10-15; re-homed 2026-10-26) ---------------------------
+    // One icon, no words, in the HUD header IMMEDIATELY RIGHT OF THE HAMBURGER. Filled when the
+    // opponent is here; a tap ASKS first (the confirmation glass), and only Send challenge invites;
+    // breathing while the invite waits (tap = cancel).
     check('[bolt] the opponent is here: the bolt is lit and ready', await waitState(phone, (v) => v === 'ready'), String(await pillState(phone)));
-    for (const size of [{ w: 360, h: 640 }, { w: 390, h: 844 }, { w: 430, h: 932 }] as const) {
+    for (const size of [{ w: 360, h: 640 }, { w: 390, h: 844 }, { w: 430, h: 932 }, { w: 844, h: 390 }] as const) {
       await phone.page.setViewportSize({ width: size.w, height: size.h });
       await sleep(700);
       const b = await ev<BoltSnap>(phone, BOLT_PROBE);
-      const tag = `bolt ${size.w}px`;
+      const tag = `bolt ${size.w}x${size.h}`;
       check(`[${tag}] it is a real 44x44 target`, !!b.bolt && b.bolt.width >= 44 && b.bolt.height >= 44, JSON.stringify(b.bolt));
-      check(`[${tag}] it sits under the wordmark, right edges aligned`, !!b.bolt && !!b.brand && b.bolt.y >= b.brand.y + b.brand.height - 1 && Math.abs(b.bolt.x + b.bolt.width - (b.brand.x + b.brand.width)) <= 2, JSON.stringify({ bolt: b.bolt, brand: b.brand }));
+      check(
+        `[${tag}] it sits immediately right of the menu, on the menu's row`,
+        !!b.bolt && !!b.menu &&
+          b.bolt.x - (b.menu.x + b.menu.width) >= 0 &&
+          b.bolt.x - (b.menu.x + b.menu.width) <= 12 &&
+          Math.abs(b.bolt.y + b.bolt.height / 2 - (b.menu.y + b.menu.height / 2)) <= 4,
+        JSON.stringify({ bolt: b.bolt, menu: b.menu }),
+      );
+      check(
+        `[${tag}] it shares no pixel with the menu, the score or the wordmark`,
+        noOverlap(b.bolt, b.menu) && noOverlap(b.bolt, b.score) && noOverlap(b.bolt, b.brand),
+        JSON.stringify({ bolt: b.bolt, menu: b.menu, score: b.score, brand: b.brand }),
+      );
       check(`[${tag}] it never covers the board's tiles`, b.tilesOverlap === 0, `${b.tilesOverlap}px²`);
       check(`[${tag}] no words on screen`, b.words === '', b.words);
-      await shot(phone, `bolt-ready-${size.w}`);
+      await shot(phone, `bolt-ready-${size.w}x${size.h}`);
     }
     await phone.page.setViewportSize({ width: 390, height: 844 });
     await sleep(600);
     const boardBefore = JSON.stringify((await ev<BoltSnap>(phone, BOLT_PROBE)).board);
     await tapBolt(phone);
-    check('[bolt] a tap invites: the bolt breathes while the invite waits', await waitState(phone, (v) => v === 'waiting'), String(await pillState(phone)));
+    check('[bolt] a tap asks before anything is sent', await confirmOpen(phone) && (await pillState(phone)) === 'ready', String(await pillState(phone)));
+    const copy = await confirmCopy(phone);
+    check(
+      '[bolt] the confirmation says what it is, its terms and its two decisions',
+      copy.what === 'Real time duel?' && copy.terms === '60 seconds on every move.' && copy.actions.join('|') === 'Not now|Send challenge',
+      JSON.stringify(copy),
+    );
+    await shot(phone, 'bolt-confirm-390');
+    await tapConfirm(phone, 'cancel');
+    check(
+      '[bolt] Not now closes the question and returns focus to the bolt',
+      !(await confirmOpen(phone)) && (await pillState(phone)) === 'ready' && (await boltHasFocus(phone)),
+      String(await pillState(phone)),
+    );
+    await tapBolt(phone);
+    await tapConfirm(phone, 'send');
+    check('[bolt] Send challenge is what breathes the invite', await waitState(phone, (v) => v === 'waiting'), String(await pillState(phone)));
     await shot(phone, 'bolt-waiting-390');
     await tapBolt(phone);
     check('[bolt] a second tap cancels the invite (back to ready)', await waitState(phone, (v) => v === 'ready'), String(await pillState(phone)));
@@ -321,7 +374,7 @@ try {
     await shot(phone, 'real-time-counter-390');
     // A long message with the counter present: the ticker scrolls it, still one row, still off the board.
     const live = await ev<Probe>(phone, PROBE(LONG));
-    check('[real time] a long message still tickers on one row', live.after.scroll === '1' && live.after.anims > 0 && live.after.msgScroll === live.after.msgClient, `scroll=${live.after.scroll} anims=${live.after.anims}`);
+    check('[real time] a long message is hidden and never tickers', live.after.msgDisplay === 'none' && live.after.anims === 0 && live.after.msgScroll === live.after.msgClient, `display=${live.after.msgDisplay} anims=${live.after.anims}`);
     check('[real time] a long message never reaches the board', live.laneTilesOverlap === 0 && JSON.stringify(live.before.board) === JSON.stringify(live.after.board), `${Math.round(live.laneTilesOverlap)}px²`);
     await shot(phone, 'real-time-long-message-390');
   } finally {

@@ -256,6 +256,9 @@ const ghostKeys = (page: Page) => page.evaluate(() => [...document.querySelector
   const { page } = await open(s, { touch: true });
   const h = await histLen(page);
   await pick(page, 3);
+  // The unavailable overlay is painted on the next render frame, not necessarily before the
+  // click promise resolves. Assert the actual settled marker rather than sampling that race.
+  await page.locator('.l-draw .draw-unavailable[data-key="-1,1"]').waitFor({ state: 'attached', timeout: 2000 });
   const marked = await page.evaluate(() => document.querySelectorAll('.l-draw .draw-unavailable[data-key="-1,1"]').length);
   await tDrag(page, ['-1,2', '-1,1'], 6, false);
   const why = await page.textContent('#draw-info');
@@ -268,7 +271,8 @@ const ghostKeys = (page: Page) => page.evaluate(() => [...document.querySelector
   await page.click('#confirm-play');
   await page.waitForTimeout(300);
   const b = (await st(page)).board;
-  check('ADVERSARIAL 4: a hex that cannot take its number is marked with a reason and skipped; Reverse makes it work', marked > 0 && nothing && /Needs a 5 or higher/.test(why ?? '') && b['-1,1']?.owner === 0 && b['-1,1']?.strength === 5, why ?? '');
+  check('ADVERSARIAL 4: a hex that cannot take its number is marked with a reason and skipped; Reverse makes it work', marked > 0 && nothing && /Needs a 5 or higher/.test(why ?? '') && b['-1,1']?.owner === 0 && b['-1,1']?.strength === 5,
+    `${why ?? ''}; marked=${marked}, skipped=${nothing}, owner=${b['-1,1']?.owner}, strength=${b['-1,1']?.strength}`);
   await page.close();
 }
 {
@@ -384,6 +388,9 @@ const ghostKeys = (page: Page) => page.evaluate(() => [...document.querySelector
   await page.click('#gm-settings');
   await page.click('#palette-seg .seg-btn:not(.on)');
   await page.locator('#sheet-settings [data-close]').click();
+    // Settings now returns to the pause panel it was opened from (0.6: a sheet returns to its
+    // opener), so resuming is an explicit second step. The rest of the check is unchanged.
+  await page.click('#gm-resume');
   await page.waitForTimeout(300);
   const afterTheme = (await ghostKeys(page)).length === 2;
   await tDrag(page, ['0,1', '1,1']);

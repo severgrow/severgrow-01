@@ -5,9 +5,11 @@
 //   PW_CHROMIUM=... npx tsx web/e2e/accounts-nickname.ts
 //   SHOTS=1 ... also writes docs/screens/accounts/*.png
 //
-// What it proves: the nickname step appears once after the sign-in that FORMS an account, it is
-// skippable (never blocks play), saving stores the typed name with the #tag untouched, Settings can
-// change it later, a guest never sees it, and a later sign-in on another device does not ask again.
+// What it proves: the nickname step appears after the sign-in that FORMS an account and must be
+// answered (owner, 2026-10-28: an account TYPES its nickname — no suggested name, no skip, and a
+// reload brings it back until a name is saved), saving stores the typed name with the #tag
+// untouched, Settings can change it later, a guest never sees it, and a later sign-in on another
+// device does not ask again.
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
@@ -167,6 +169,10 @@ const signIn = async (page: Page, user: string) => {
 };
 const saveName = async (page: Page, name: string) => {
   await page.fill('#acct-nickname .acct-input', name);
+  await page.locator('#acct-nickname .acct-input').dispatchEvent('keydown', {key:'Enter',isComposing:true,bubbles:true});
+  await page.waitForTimeout(100);
+  check('IME confirmation does not submit the nickname', await sheetVisible(page, 'acct-nickname'));
+
   await page.click('[data-acct="nickname-save"]');
 };
 const openSettings = async (page: Page) => {
@@ -183,6 +189,8 @@ try {
   const d1 = await device(390, 844);
   await signIn(d1.page, 'alice');
   check('the first Google sign-in shows the nickname step', await nicknameOpen(d1.page));
+  check('the new account starts from an empty box: no suggested name', (await d1.page.inputValue('#acct-nickname .acct-input')) === '');
+  check('there is no skip on a new account', (await d1.page.locator('[data-acct="nickname-skip"]').count()) === 0);
   const fits = (await d1.page.evaluate(`(() => {
     const p = document.getElementById('acct-nickname');
     const r = p.getBoundingClientRect();
@@ -203,6 +211,9 @@ try {
   })()`)) as { border: string; font: string; avg: number };
   check('the step is the dark accounts glass and the name field has no border', look.avg < 60 && look.border === '0px', `bg avg ${look.avg.toFixed(0)}, border ${look.border}`);
   check('the name field is 16px, so iOS never zooms on focus', look.font === '16px', look.font);
+  // THE OWNER'S LIMIT (2026-10-30): account names are at most 8 characters on the way in.
+  const nameMax = await d1.page.getAttribute('#acct-nickname .acct-input', 'maxlength');
+  check('the name field caps at the server\'s 8 characters', nameMax === '8', String(nameMax));
   await shot(d1.page, 'nickname-390x844');
 
   // The server is the authority: a blocked word is refused and the sheet stays open.
@@ -211,43 +222,51 @@ try {
   check('a refused name shows an error line and the step stays open', errShown && (await sheetVisible(d1.page, 'acct-nickname')));
 
   const before1 = (await identity(d1.page))!;
-  await saveName(d1.page, "Renée O'Hara");
+  await saveName(d1.page, "Renée OH");
   check('saving closes the step and says so', await waitFor(async () => !(await sheetVisible(d1.page, 'acct-nickname')) && (await toastText(d1.page)).includes('Name saved')));
   const after1 = (await identity(d1.page))!;
-  check('the typed name is stored (normalised), not a generated one', after1.displayName === "Renée O'Hara", String(after1.displayName));
+  check('the typed name is stored (normalised), not a generated one', after1.displayName === "Renée OH", String(after1.displayName));
   check('the #tag did not move on the rename', playerTag(after1.playerId) === playerTag(before1.playerId) && after1.playerId === before1.playerId);
 
   await openSettings(d1.page);
   const myTag = `#${playerTag(after1.playerId)}`;
-  check('Settings shows the new name with the same tag', await waitFor(async () => (await settingsText(d1.page)).includes(`Renée O'Hara ${myTag}`)));
+  check('Settings shows the new name with the same tag', await waitFor(async () => (await settingsText(d1.page)).includes(`Renée OH ${myTag}`)));
   check('Settings offers the "change nickname" entry', await d1.page.locator('[data-acct="change-nickname"]').isVisible());
 
   // ---- 2. changing it later from Settings keeps the tag ----
   await d1.page.click('[data-acct="change-nickname"]');
-  check('the Settings entry reopens the same step, prefilled', await nicknameOpen(d1.page) && (await d1.page.inputValue('#acct-nickname .acct-input')) === "Renée O'Hara");
+  check('the Settings entry reopens the same step, prefilled', await nicknameOpen(d1.page) && (await d1.page.inputValue('#acct-nickname .acct-input')) === "Renée OH");
   await shot(d1.page, 'settings-nickname-390x844');
-  await saveName(d1.page, 'Renée the Second');
-  check('a later change is stored too', await waitFor(async () => (await identity(d1.page))?.displayName === 'Renée the Second'));
+  await saveName(d1.page, 'Renée II');
+  check('a later change is stored too', await waitFor(async () => (await identity(d1.page))?.displayName === 'Renée II'));
   check('the tag is STILL the same after a second rename', `#${playerTag(((await identity(d1.page))!).playerId)}` === myTag);
 
-  // ---- 3. a fresh account on a smaller phone: the step appears, and Skip never blocks play ----
+  // ---- 3. a fresh account on a smaller phone: the step must be answered ----
   const d2 = await device(360, 640);
   await signIn(d2.page, 'bob');
   check('a second, brand-new account is asked too', await nicknameOpen(d2.page));
   await shot(d2.page, 'nickname-360x640');
-  await d2.page.click('[data-acct="nickname-skip"]');
-  check('Skip closes the step', await waitFor(async () => !(await sheetVisible(d2.page, 'acct-nickname'))));
-  check('Skip never blocks play: the online hub is reachable', await waitFor(() => sheetVisible(d2.page, 'online-hub'), 25_000));
-  const skipped = (await identity(d2.page))!;
-  check('Skip leaves the generated nature name in place', /^[A-Z][a-z]+[A-Z][a-z]+$/.test(skipped.displayName ?? ''), String(skipped.displayName));
-  check('Skip does not come back on this device', !(await nicknameOpen(d2.page, 1_500)));
+  await d2.page.keyboard.press('Escape');
+  await d2.page.mouse.click(4, 4);
+  await d2.page.waitForTimeout(300);
+  check('Escape and the scrim do not dismiss a new account\'s name step', await sheetVisible(d2.page, 'acct-nickname'));
+  await saveName(d2.page, '   ');
+  await d2.page.waitForTimeout(300);
+  check('an empty name is not accepted', await sheetVisible(d2.page, 'acct-nickname'));
+  await d2.page.reload();
+  check('a reload brings the step back until a name is saved', await nicknameOpen(d2.page));
+  await saveName(d2.page, 'Bobbin');
+  check('typing a name closes it', await waitFor(async () => !(await sheetVisible(d2.page, 'acct-nickname'))));
+  check('the typed name is the account\'s name', ((await identity(d2.page))?.displayName ?? '') === 'Bobbin');
+  await d2.page.reload();
+  check('once saved, it does not come back', !(await nicknameOpen(d2.page, 1_500)));
 
   // ---- 4. signing in again on another device never asks twice ----
   const d3 = await device(390, 844);
   await signIn(d3.page, 'alice');
   check('a later sign-in says "Welcome back"', await waitFor(async () => (await toastText(d3.page)).includes('Welcome back'), 25_000));
   check('a later sign-in does NOT ask for a name again', !(await nicknameOpen(d3.page, 3_000)));
-  check('the name chosen on the other device is here', ((await identity(d3.page))?.displayName ?? '') === 'Renée the Second');
+  check('the name chosen on the other device is here', ((await identity(d3.page))?.displayName ?? '') === 'Renée II');
 
   // ---- 5. a guest is unaffected: no nickname entry anywhere ----
   const d4 = await device(390, 844);

@@ -54,8 +54,15 @@ describe('every finished game is counted, online included', () => {
   // The exact gap the owner found: online duels never reached the stats recorder, so an
   // online-only player would never see the invitation. Both finish paths must call the counter.
   it('counts the offline finish and the online finish', () => {
-    const calls = mainSource.match(/installPrompt\.noteFinished\(/g) ?? [];
+    // Both finish paths count through `noteInstallFinished` (2026-11-06: it retries if a game ends
+    // while the page is still booting, before the invitation is mounted), which hands each finish to
+    // the one recorder, `installPrompt.noteFinished`.
+    const calls = mainSource.match(/^\s+noteInstallFinished\(/gm) ?? [];
     expect(calls.length).toBe(2);
+    // OWNER CHANGED THE RULE (2026-11-08: never mid-game): the finish is remembered and handed to the
+    // one recorder when the end screen is up (offerEndOfGamePrompts), still once per finish.
+    expect(mainSource).toMatch(/function noteInstallFinished\([^)]*\): void \{[\s\S]*?installOutcomeWaiting = outcome;\s*offerEndOfGamePrompts\(\);/);
+    expect(mainSource).toMatch(/installPrompt\.noteFinished\(waiting\);/);
   });
 
   it('counts an online result once per match (the finish screen re-renders)', () => {
@@ -64,8 +71,10 @@ describe('every finished game is counted, online included', () => {
   });
 
   it('never counts a tutorial step (the recorder sits behind the tutorial guard)', () => {
-    // The offline call sits in the same `!coach.tutorial` block as the stats recorder.
-    expect(mainSource).toMatch(/!coach\.tutorial[\s\S]{0,400}noteFinished/);
+    // The offline call sits behind the same tutorial guard as the stats recorder (`countsTowardRecord`
+    // with `tutorial: !!coach.tutorial`). (The Blitz timeout-loss path that also matched an older
+    // `!coach.tutorial` spelling was removed in 0.82: a Blitz timeout no longer finishes the match.)
+    expect(mainSource).toMatch(/tutorial: !!coach\.tutorial[\s\S]{0,1200}noteFinishedForInstall\(/);
   });
 
   it('no longer mounts the removed menu button', () => {

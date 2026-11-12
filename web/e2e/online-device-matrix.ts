@@ -59,6 +59,7 @@ import {
   type SessionOptions,
 } from './helpers/online-matrix.js';
 import { requireRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
+import { expandYourMatches } from './helpers/lobby-matches.js';
 requireRealProjectOptIn('online-device-matrix'); // real Supabase project: opt-in only
 
 // ---------------------------------------------------------------------------- arguments
@@ -425,6 +426,7 @@ const variants: Record<VariantName, (env: Env) => Promise<void>> = {
     const role = waiter === creator ? 'creator' : 'joiner';
     const reopened = await env.spawn(role, `${role}-reopened`);
     await openHub(reopened);
+    await expandYourMatches(reopened.page);
     // The match must still be listed for that identity; open it from the lobby row.
     const row = reopened.page.locator(`#online-matches li[data-match-id="${matchId}"]`);
     const listed = await row
@@ -721,6 +723,7 @@ const variants: Record<VariantName, (env: Env) => Promise<void>> = {
       .catch(() => false);
     addCheck(env.rec, 'refresh returns to the menu (no auto-resume)', backToMenu);
     await openHub(actor);
+    await expandYourMatches(actor.page);
     const row = actor.page.locator(`#online-matches li[data-match-id="${actorView.matchId}"]`);
     const listed = await row
       .waitFor({ state: 'visible', timeout: 20_000 })
@@ -874,6 +877,7 @@ const variants: Record<VariantName, (env: Env) => Promise<void>> = {
         .catch(() => false);
       addCheck(env.rec, `${name} returns to the menu after refresh`, backToMenu);
       await openHub(session);
+      await expandYourMatches(session.page);
       const row = session.page.locator(`#online-matches li[data-match-id="${matchId}"]`);
       const listed = await row
         .waitFor({ state: 'visible', timeout: 20_000 })

@@ -35,11 +35,21 @@ export const INFORMATION_CSS = `
   border-color: var(--c-accent);
   box-shadow: 0 0 10px color-mix(in srgb, var(--c-accent) 28%, transparent), inset 0 0 7px color-mix(in srgb, var(--c-accent) 8%, transparent);
 }
+/* Picked toward a Bloom (or in the Bloom being painted): the Bloom's own aqua, as on the board.
+   The #hand id is load-bearing, not decoration: the lifted-card rule in cards.ts (five classes,
+   on the card-art-ready lifted card, injected LATER) and the generic Grow edge light below both
+   outrank a class-only selector, so this rule silently lost the border and the glow and a selected
+   Bloom looked exactly like any playable card. An id beats any number of classes, and the Grow
+   edge light excludes this class explicitly. */
+html.futa04-information #hand .card.futa04-bloom-pick {
+  border-color: #8fd3c9;
+  box-shadow: 0 0 12px rgba(143, 211, 201, 0.38), inset 0 0 8px rgba(143, 211, 201, 0.10);
+}
 .futa04-information .dock .hand.waiting .card {
   opacity: .38 !important;
   filter: grayscale(.85) brightness(.72) !important;
   box-shadow: none !important;
-  transition: opacity calc(180ms * var(--anim,1)) ease-out, filter calc(180ms * var(--anim,1)) ease-out !important;
+  transition: opacity calc(var(--dur-quick) * var(--anim,1)) ease-out, filter calc(var(--dur-quick) * var(--anim,1)) ease-out, translate var(--dur-quick) var(--ease-settle) !important;
 }
 .futa04-information #moves .futa04-skip {
   color: var(--c-muted); background: transparent; border: 1px solid var(--c-line);
@@ -236,7 +246,12 @@ html.futa04-information .dock #futa04-box .pile-meter-window {
 }
 html.futa04-information .dock #futa04-box .pile-meter-drum { position: absolute; top: 0; left: 0; width: 100%; height: 20px; }
 html.futa04-information .dock #futa04-box .pile-meter-face {
-  position: relative; top:1px; display: grid; place-items: center; width: 100%;
+  /* The digit is centred in its window, not 1px below it. A top:1px nudge moved the face down —
+     the drum's travel is the window's own height, so the offset moved the resting digit too: its
+     text box sat 1.0px low (0 top gap, -2 bottom) and its ink 0.55px low in the 11x10 window
+     (owner, 2026-10-29: the counters' numbers were not centred in the tiny box). Centred it is
+     0.00 on the text box and 0.45 on the ink, both inside the 0.5px the audit asks for. */
+  position: relative; display: grid; place-items: center; width: 100%;
   height: 10px; white-space: nowrap; font: inherit;
   text-shadow: 0 1px 1px #020303, 0 -1px rgba(255,250,225,.12);
   background: transparent;
@@ -277,12 +292,15 @@ html.futa04-information .dock #futa04-box #futa04-actions > .hand-slot {
 }
 html.futa04-information .dock #futa04-box #futa04-actions > .hand-slot::after { display: none; }
 html.futa04-information .dock #futa04-box #futa04-help-button[hidden] { display: grid; visibility: hidden; pointer-events: none; }
-html.futa04-information[data-thumb='left'] .dock #futa04-box { grid-template-columns: var(--box-tools) minmax(0,1fr) var(--box-piles); }
-html.futa04-information[data-thumb='left'] .dock #futa04-box > .piles { grid-column: 3; }
-html.futa04-information[data-thumb='left'] .dock #futa04-box > .moves { grid-column: 1 / 3; grid-template-columns: var(--box-tools) minmax(0,1fr); }
-html.futa04-information[data-thumb='left'] .dock #futa04-box #moves > .kind { grid-column: 2; }
-html.futa04-information[data-thumb='left'] .dock #futa04-box #moves > :is(.futa04-skip,.cancel,.empty-continue,.primary:not(.kind)) { grid-column: 1; justify-self: end; }
-html.futa04-information[data-thumb='left'] .dock #futa04-box #futa04-actions { grid-column: 1; justify-content: flex-start; }
+html.futa04-information[data-cockpit='left'] .dock #futa04-box { grid-template-columns: var(--box-tools) minmax(0,1fr) var(--box-piles); }
+html.futa04-information[data-cockpit='left'] .dock #futa04-box > .piles { grid-column: 3; }
+html.futa04-information[data-cockpit='left'][data-step='draw'] .dock #futa04-box > .piles { justify-content: flex-end; }
+/* On the right edge the ready pile grows inward, never past the glass. */
+html.futa04-information[data-cockpit='left'] .dock #futa04-box > .piles > .pile { transform-origin: right bottom; }
+html.futa04-information[data-cockpit='left'] .dock #futa04-box > .moves { grid-column: 1 / 3; grid-template-columns: var(--box-tools) minmax(0,1fr); }
+html.futa04-information[data-cockpit='left'] .dock #futa04-box #moves > .kind { grid-column: 2; }
+html.futa04-information[data-cockpit='left'] .dock #futa04-box #moves > :is(.futa04-skip,.cancel,.empty-continue,.primary:not(.kind)) { grid-column: 1; justify-self: end; }
+html.futa04-information[data-cockpit='left'] .dock #futa04-box #futa04-actions { grid-column: 1; justify-content: flex-start; }
 html.futa04-information .dock #futa04-box #futa04-actions .i { width: 20px; height: 20px; }
 html.futa04-information .dock #futa04-box .futa04-combination {
   display: flex; justify-content: center; flex-wrap: wrap; gap: 3px; max-width: 100%;
@@ -302,25 +320,82 @@ html.futa04-information .dock #futa04-box #moves .bloom-options {
   width: max-content; min-width: 0; max-width: min(280px, calc(100% - var(--box-piles) - 12px));
   max-height: min(45dvh,320px); z-index: 8; padding: 8px; box-sizing: border-box;
 }
-html.futa04-information[data-thumb='left'] .dock #futa04-box #moves .bloom-options {
+html.futa04-information[data-cockpit='left'] .dock #futa04-box #moves .bloom-options {
   left: 6px;
 }
 html.futa04-information #board .badge.weak { display: none !important; }
 html.futa04-information #board .futa04-boink { transform-box: fill-box; transform-origin: center; }
 html.futa04-information[data-step='throw'] #futa04-box #deck {
-  opacity: .48; filter: grayscale(.7); transition: opacity 160ms ease, filter 160ms ease;
+  opacity: .48; filter: grayscale(.7); transition: opacity var(--ix-open) ease, filter var(--ix-open) ease;
 }
+/* The Throw pile is the target of the Throw step, so it is never dimmed there: the deck
+   recedes, the pile is the brightest thing in the cockpit. (The pile's own .dim used to apply.) */
 html.futa04-information[data-step='throw'] #futa04-box #discard {
-  filter: brightness(1.12); transition: filter 160ms ease;
+  opacity: 1;
+  filter: brightness(1.14) saturate(1.03);
+  transition: opacity var(--ix-open) ease, filter var(--ix-open) ease;
 }
+/* A picked card swells its target once, on the acknowledgement beat (owner, 2026-10-30:
+   "make the pile bigger after player selects a card to throw"). Transform only: nothing reflows,
+   so the hand and the neighbouring deck never move. It scales about the pile's own centre, never
+   the page's.
+
+   WHY 1.16 and not more: the pile is a 50x92-96 box inside the cockpit plate, whose inner height
+   is 104px on a wide screen — 92 * 1.16 is 106.7, the same 1.3px lip the Draw step's own 1.16
+   swell has always had. At 1.24 the pile starts poking out of the plate (measured 6.5px), so this
+   is the honest maximum, not a taste value. The art stays crisp: the card is drawn from a
+   256x356px atlas cell into a ~58x82 CSS px box (still a 4.4x downscale) and the pile is not
+   promoted with will-change, so the resting state rasterises at the swollen size. */
+html.futa04-information:not([data-step='draw']) #futa04-box #discard {
+  transform-origin: 50% 50%;
+  transition:
+    transform var(--dur-ack) var(--ease-standard),
+    opacity var(--ix-close) var(--ix-ease-close),
+    filter var(--ix-close) var(--ix-ease-close);
+}
+html.futa04-information #futa04-box #discard.futa04-throw-target {
+  transform: scale(1.16);
+  opacity: 1;
+  filter: brightness(1.18) saturate(1.04);
+  z-index: 2;
+  transition:
+    transform var(--dur-ack) var(--ease-standard),
+    opacity var(--ix-open) var(--ix-ease-open),
+    filter var(--ix-open) var(--ix-ease-open);
+}
+/* The existing edge light, a step stronger — but only its FALLOFF. Owner, 2026-10-30: "remove the
+   outer contour rectangle around discard pile" when throwing. The contour was this layer's hard,
+   zero-blur ring ( 0 0 0 1.5px rgba(232,150,120,.55) ): spread-only, so it painted a 1px rounded
+   rectangle hugging the card — measured in the browser as a sharp 1px spike at the pile's edges
+   (rgb 82,43,35 against a rgb 23,23,23 backdrop). Only the ring goes; the soft ember light stays. */
+html.futa04-information #futa04-box #discard.futa04-throw-target .gd-halo {
+  opacity: 1;
+  box-shadow: 0 0 26px 4px rgba(190,80,60,.42);
+}
+/* Reduce motion: the pile still ENDS bigger — the size is information, not decoration — and only
+   the transition is dropped, so it is simply bigger the moment the card is picked. */
+html.futa04-information.reduce-motion #futa04-box #discard.futa04-throw-target {
+  transform: scale(1.16);
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.futa04-information #futa04-box #discard.futa04-throw-target { transform: scale(1.16); transition: none; }
+}
+/* The resting throw light: the same contour removal as the picked state. The old ring was
+   0 0 0 1px rgba(218,104,80,.38); what is left is the ember falloff alone. */
 html.futa04-information[data-step='throw'] #discard .gd-halo {
   opacity: .62; transition: none;
-  box-shadow: 0 0 0 1px rgba(218,104,80,.38), 0 0 22px 2px rgba(173,64,47,.32);
+  box-shadow: 0 0 22px 2px rgba(173,64,47,.32);
 }
 html.futa04-information[data-step='throw'] #discard .gd-ring { animation: none !important; opacity: 0; }
-html.futa04-information #hand .card { touch-action: manipulation; }
-/* A short edge light belongs to each card, and follows its fan rotation and lift. */
-html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim) {
+/* The hand is a drag surface (Grow and the new swipe-up Throw): it must own the vertical gesture,
+   or the browser pans the page instead and the drag layer never sees the swipe. "none" also
+   disables double-tap zoom, which "manipulation" did. */
+html.futa04-information #hand .card { touch-action: none; }
+/* A short edge light belongs to each card, and follows its fan rotation and lift. A card picked
+   toward a Bloom opts out: its edge is the Bloom's aqua (see the bloom-pick rule above), never the
+   green of a plain Grow. */
+html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim):not(.futa04-bloom-pick) {
   box-shadow: 0 0 0 1px rgba(119,179,116,.22), 0 0 8px 1px rgba(88,158,89,.18), 0 5px 15px rgba(5,16,9,.30);
 }
 /* Scale is separate from the fan's rotate/translate, preserving its hit targets. */
@@ -331,14 +406,30 @@ html.futa04-information[data-step='grow'][data-futa04-waiting='true'] #hand:not(
 html.futa04-information[data-step='grow'][data-futa04-waiting='true'] #moves > :is(.kind[data-kind^='bloom-'],.bloom-toggle):not(.on) .futa04-combination {
   animation: futa04-card-breathe 1.35s ease-in-out infinite;
 }
+/* THROW: the hand recedes by OPACITY and a cool ember edge, never by a filter. This rule used to
+   desaturate every card with grayscale(.54) while the whole hand breathed on futa04-card-breathe
+   (below): a filter on an animating node re-rasterises all eight cards every frame for the length of
+   every Throw step. The ember edge and the 12% step-back already say "the pile is the target", and
+   the card's own colours stay readable (which is what the check names). */
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) {
-  opacity: .88; filter: grayscale(.54) brightness(.94);
+  opacity: .88;
   outline-color: rgba(223,105,77,.35) !important;
-  box-shadow: 0 0 0 1px rgba(222,110,83,.29), 0 0 9px 1px rgba(186,66,47,.24), 0 5px 15px rgba(20,11,10,.34);
+  box-shadow: 0 0 3px rgba(222,110,83,.29), 0 0 9px 1px rgba(186,66,47,.24), 0 5px 15px rgba(20,11,10,.34);
   animation: futa04-card-breathe 1.35s ease-in-out infinite;
 }
+/* The lesson's suggested card is lifted out of the fan: still, one clean shadow, no green edge.
+   (!important is needed: the playable/throw rules above are more specific and injected later.) */
+html.futa04-information #hand .card.tutorial-target-card {
+  animation: none !important;
+  box-shadow:
+    inset 1px 1px 0 rgba(243,232,202,.25),
+    inset -1px -1.5px 0 rgba(0,0,0,.32),
+    0 16px 26px -12px rgba(0,0,0,.88),
+    0 2px 6px -2px rgba(0,0,0,.55),
+    0 0 20px rgba(233,216,173,.14) !important;
+}
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked {
-  opacity: 1; box-shadow: 0 0 0 1px rgba(222,110,83,.35), 0 0 11px 1px rgba(186,66,47,.26) !important;
+  opacity: 1; box-shadow: 0 0 3px rgba(222,110,83,.35), 0 0 11px 1px rgba(186,66,47,.26) !important;
 }
 html.futa04-information:is(.futa04-move-active,.futa04-information-blocked,.reduce-motion) #hand .card { animation: none !important; }
 html.futa04-information:is(.futa04-move-active,.futa04-information-blocked,.reduce-motion) #moves .futa04-combination { animation: none !important; }
@@ -375,7 +466,7 @@ html.futa04-information .dock #futa04-box :is(#futa04-actions > .hand-slot, #mov
   color: var(--control-ivory); opacity: 1;
   box-shadow: none;
   text-decoration: none; touch-action: manipulation;
-  transition: border-color .16s ease, box-shadow .16s ease, color .16s ease, opacity .16s ease, transform .12s ease;
+  transition: border-color .16s ease, box-shadow .16s ease, color .16s ease, opacity .16s ease, transform var(--dur-ack) var(--ease-standard);
 }
 html.futa04-information .dock #futa04-box :is(#futa04-actions > .hand-slot, #moves .futa04-hardware-control) :is(svg,.i) {
   display: block; width: 21px; height: 21px;
@@ -385,9 +476,6 @@ html.futa04-information .dock #futa04-box :is(#futa04-actions > .hand-slot, #mov
 }
 html.futa04-information .dock #futa04-box :is(#futa04-actions > .hand-slot, #moves .futa04-hardware-control):focus-visible {
   outline: 2px solid #ffe1a7; outline-offset: 2px;
-}
-html.futa04-information .dock #futa04-box :is(#futa04-actions > .hand-slot, #moves .futa04-hardware-control):active:not(:disabled) {
-  transform: translateY(1px) scale(.98);
 }
 html.futa04-information .dock #futa04-box #moves .futa04-skip.futa04-hardware-control {
   color: #c4c1b7; opacity: .77;

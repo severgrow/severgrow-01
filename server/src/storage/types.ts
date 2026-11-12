@@ -2,7 +2,10 @@
 // `commitMove`: no two moves may be applied on the same revision, and a repeated requestId must
 // return the original outcome without applying again.
 import type { Action, Event, Player, RulesConfig, State } from '../../../src/engine/index.js';
-import type { MatchStatus, OnlineGameResult, PlayerSummary } from '../protocol.js';
+import type { AccountCampaignProgressWire } from '../account-campaign-progress.js';
+import type { AccountGuideWire } from '../account-guide.js';
+import type { HeadToHead, MatchStatus, OfflineCounters, OfflineSummary, OnlineGameResult, PlayerSummary } from '../protocol.js';
+import type { RetentionRow } from '../retention.js';
 
 export type PlayerRecord = {
   id: string;
@@ -16,6 +19,17 @@ export type PlayerRecord = {
    * direct SQL. Absent/false means a real player.
    */
   isTest?: boolean;
+  /**
+   * Why `isTest` was set, written by the tool that set it (a harness at creation, or the backfill
+   * that recognised a CI burst). Shown beside the account on the Bots tab so the owner can judge it.
+   * Null when nothing recorded a reason; never invented.
+   */
+  testReason?: string | null;
+  /**
+   * The owner's correction (migration 0016): `false` = always a real person, `true` = always a bot,
+   * absent/null = follow `isTest`. Every admin read treats this as part of the test marker.
+   */
+  testOverride?: boolean | null;
 };
 
 export type TokenRecord = {
@@ -71,6 +85,11 @@ export type MatchRecord = {
    * `PlayerRecord.isTest`: never written by the game, only read by the admin dashboard.
    */
   isTest?: boolean;
+  /**
+   * What kind of duel this is (migration 0014): `duel` is the ordinary match, `territory` is the
+   * linked duel a Territory challenge creates. Absent on historical rows means `duel`.
+   */
+  kind?: 'duel' | 'territory';
 };
 
 export type Participant = {
@@ -112,7 +131,12 @@ export type Fail = { ok: false; code: string; reason: string };
  * repeated tap is idempotent and never creates a second entry).
  */
 export type OpenQueueSeat =
-  | { ok: true; match: MatchRecord; seat: Player; paired: boolean }
+  | { ok: true; match: MatchRecord; seat: Player; paired: boolean;
+      /** The searcher met someone they already share an open game with: `match` is THAT game. */
+      continued?: boolean;
+      /** The player's earlier search has already become `match` (an active game); nothing new was
+       * created. A repeat Find from either device lands here instead of starting a second search. */
+      resumed?: boolean }
   | Fail;
 
 /** What the rules layer decided for one submitted action, computed inside the atomic section. */
@@ -173,6 +197,12 @@ export type SweepResult = {
    * each device's own poll, so a device could sit on a stale board until its next fetch.
    */
   timedOutIds: string[];
+  /**
+   * Finished matches housekeeping deleted under the replay retention rule this pass (never a
+   * player's newest ten — see server/src/retention.ts). Additive: a caller that does not know the
+   * field yet is unaffected.
+   */
+  prunedMatches?: number;
 };
 
 export type MatchListRow = {
@@ -190,6 +220,39 @@ export interface Storage {
   issueToken(token: TokenRecord): Promise<void>;
   playerByTokenHash(tokenHash: string): Promise<PlayerRecord | null>;
 
+  /**
+   * The caller's OFFLINE record over every device (migration 0022), in ONE aggregate read: games,
+   * wins and draws summed, `longestStreak` taken as the maximum per-device best. A player with no
+   * rows reads all zeroes, and reading never creates a row.
+   */
+  offlineSummaryOf(playerId: string): Promise<OfflineSummary>;
+  /**
+   * Store ONE device's cumulative offline snapshot and return the fresh account aggregate. This is
+   * an upsert that never lets a counter go down (`greatest`): counters are running totals, so a
+   * stale or racing request may repeat progress but must not erase it.
+   */
+  mergeOfflineStats(playerId: string, counters: OfflineCounters, now: number): Promise<OfflineSummary>;
+
+  /**
+   * The account's campaign progress snapshot (migration 0023), or null when none was ever posted.
+   * Never invents a place.
+   */
+  accountCampaignProgressOf(playerId: string): Promise<AccountCampaignProgressWire | null>;
+  /**
+   * Keep the further-ahead of the stored snapshot and `incoming`. Returns the stored row after the
+   * merge. Seeds / Territory / achievements are untouched.
+   */
+  mergeAccountCampaignProgress(
+    playerId: string,
+    incoming: AccountCampaignProgressWire,
+    now: number,
+  ): Promise<AccountCampaignProgressWire>;
+
+  /** The in-game guide's progress for this account (migration 0024), or null when none was posted. */
+  accountGuideOf(playerId: string): Promise<AccountGuideWire | null>;
+  /** Join `incoming` into the stored row (union of beats, higher count) and return the result. */
+  mergeAccountGuide(playerId: string, incoming: AccountGuideWire, now: number): Promise<AccountGuideWire>;
+
   createMatch(match: MatchRecord): Promise<{ ok: true } | Fail>;
   /**
    * Oldest waiting open-queue match that `playerId` is not already in, or null.
@@ -202,16 +265,26 @@ export interface Storage {
    * Phase 7 Find Opponent, atomic and race-safe. Inside one serialized section (in Postgres, a
    * transaction holding an advisory lock; in memory, a synchronous critical section):
    *
-   *   1. the player's own `waiting` open-queue match, if any — returned as-is so a repeated tap
-   *      never creates a second parked entry (pairing with self is impossible);
-   *   2. else the oldest `waiting` open-queue match with one free seat (FIFO) — the player is
+   *   1. an ACTIVE open-queue game the player is a seat of — the search they already started has
+   *      been paired, so that game is returned with `paired: true, resumed: true` and no second
+   *      search is created (owner, 2026-11-12: a repeat Find must never strand one device in a
+   *      fresh empty match while its opponent sits in the real one). Games that began as INVITES
+   *      are not resumed: an open invite must not stop a player meeting a stranger;
+   *   2. else the player's own `waiting` open-queue match, if any — returned as-is so a repeated
+   *      tap never creates a second parked entry (pairing with self is impossible);
+   *   3. else the oldest `waiting` open-queue match with one free seat (FIFO) — the player is
    *      seated in the free seat and the match is activated in the same step, so two simultaneous
    *      searchers can never both claim it or both end up waiting;
-   *   3. else `parked` is inserted and the player is seated in seat 0.
+   *   4. else, when the only waiting searcher already shares an open game with the player (owner,
+   *      2026-11-11: one game per pair must not leave them waiting for each other forever), that
+   *      search is retired, the shared game's `updatedAt` is set to now, and it is returned with
+   *      `paired: true, continued: true`;
+   *   5. else `parked` is inserted and the player is seated in seat 0.
    *
    * `maxOpenMatches` is the per-player cap on unfinished matches; a player at the cap is refused
-   * (case 2 and 3) rather than silently parked or matched. `expiresAt` on `parked` is the
-   * parked-search expiry, set by the caller from `waitingExpireMs`.
+   * (case 3 and 5) rather than silently parked or matched. Continuing or resuming a game creates
+   * no match, so the cap never blocks it. `expiresAt` on `parked` is the parked-search expiry, set
+   * by the caller from `waitingExpireMs`.
    */
   claimOpenQueueOrPark(input: {
     playerId: string;
@@ -242,10 +315,23 @@ export interface Storage {
   cancelWaitingMatch(playerId: string, matchId: string): Promise<boolean>;
   matchById(id: string): Promise<MatchRecord | null>;
   matchByInviteCode(code: string): Promise<MatchRecord | null>;
+  /**
+   * A standard duel's mutual rematch (migration 0015): create `match`, tag it as the rematch of
+   * `rematchOf` and seat `playerId` in seat 0, all at once. At most ONE rematch per finished match:
+   * when another already exists it is not created, and `REMATCH_EXISTS` is returned.
+   */
+  createRematch(match: MatchRecord, rematchOf: string, playerId: string, now: number): Promise<{ ok: true } | Fail>;
+  /** The rematch match created for `finishedMatchId`, if any. */
+  rematchOf(finishedMatchId: string): Promise<MatchRecord | null>;
   /** Every match the player is a participant of (any status). */
   matchesOfPlayer(playerId: string): Promise<MatchRecord[]>;
   /** One-query match list with opponent names (P-15). */
   listMatchesForPlayer(playerId: string): Promise<MatchListRow[]>;
+  /**
+   * Finished duels between `viewerId` and `opponentId`, counted from the viewer's seat. Unfinished
+   * matches and waiting rows never appear. One bounded aggregate — no per-match fan-out.
+   */
+  headToHead(viewerId: string, opponentId: string): Promise<HeadToHead>;
   addParticipant(participant: Participant): Promise<{ ok: true } | Fail>;
   /** Moves a waiting match to active once both seats are filled. Returns the updated match. */
   activateMatch(matchId: string, now: number, turnTimeoutMs: number): Promise<MatchRecord | null>;
@@ -255,6 +341,12 @@ export interface Storage {
 
   /** Committed moves with `revision > sinceRevision`, in ascending revision order. */
   movesOf(matchId: string, sinceRevision: number): Promise<MoveRecord[]>;
+  /**
+   * EVERY move of MANY matches in ONE read, ordered by match and revision. This is the achievements
+   * read's aggregate: it must never become one `movesOf` per finished duel (the N+1 that made the
+   * endpoint slow). The `(match_id, revision)` primary key serves the `= any(...)` lookup.
+   */
+  movesOfMatches(matchIds: readonly string[]): Promise<MoveRecord[]>;
   /** The whole atomic pipeline: participant → idempotency → revision → decide → persist. */
   commitMove(input: CommitInput): Promise<CommitResult>;
   /** Atomic multi-action commit (max 12). Same requestId replays the whole batch. */
@@ -264,13 +356,29 @@ export interface Storage {
    * ONE decision point for expiry (P-8): inside a row lock, finish an overdue active match
    * (timeout) or an expired waiting match. Idempotent. Returns the (possibly updated) match.
    */
-  applyExpiry(matchId: string, now: number): Promise<MatchRecord | null>;
+  applyExpiry(matchId: string, now: number, known?: MatchRecord): Promise<MatchRecord | null>;
 
   /** Finish by resign (not an engine action). */
   resignMatch(matchId: string, playerId: string, now: number, result: OnlineGameResult): Promise<MatchRecord | null>;
 
   /** Housekeeping: timeouts, waiting expiry, stale guest cleanup. Idempotent. */
   sweep(now: number, guestMaxAgeMs: number): Promise<SweepResult>;
+
+  /**
+   * EVERY finished match with its participant ids — the input to the one retention rule
+   * (`server/src/retention.ts`). The whole set matters, not only the old rows: a duel played
+   * yesterday still occupies one of its players' newest ten, so excluding it would make the rule
+   * protect an extra old duel. The set stays small because the rule itself trims it to about ten
+   * finished duels per player.
+   */
+  finishedMatches(): Promise<RetentionRow[]>;
+
+  /**
+   * Delete FINISHED matches by id (the cascade removes their moves and participants). The caller is
+   * the retention rule; this method itself makes no policy decision, and it refuses to touch a
+   * match that is not finished.
+   */
+  deleteFinished(ids: readonly string[]): Promise<number>;
 
   /** Postgres rate limit: increment bucket in the current window; ok=false when over max. */
   hitRateLimit(bucket: string, windowStart: number, max: number): Promise<{ ok: boolean; count: number }>;

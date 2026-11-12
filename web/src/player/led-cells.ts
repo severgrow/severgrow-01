@@ -1,4 +1,7 @@
 /** A tiny, fixed 5×7 alphabet for the cockpit sign. Drawn only when the message changes. */
+import { LED_INK, LIGHT_CAPS, bloomProfile, lightTone } from './light.js';
+import type { LightTone } from './light.js';
+
 const GLYPHS: Record<string, string> = {
   A:'01110/10001/10001/11111/10001/10001/10001',
   B:'11110/10001/10001/11110/10001/10001/11110',
@@ -49,31 +52,81 @@ const GLYPHS: Record<string, string> = {
   '✦':'00100/00100/11111/01110/11111/00100/00100',
   '点':'00100/00100/01110/01010/01110/10101/01010',
 };
+/** Every character the sign can draw (a space is a gap). */
+export const GLYPH_CHARS: ReadonlySet<string> = new Set(Object.keys(GLYPHS));
 
 export type LedTone = 'amber' | 'red' | 'green' | 'ivory' | 'pink' | 'cyan' | 'score';
-export type LedMotif = 'stars' | 'heart' | 'shock' | 'scatter' | 'eyes';
-export const ledMotifFrames = (motif: LedMotif): readonly string[] => ({
+
+/**
+ * THE SCORE IS NEUTRAL (owner, 2026-10-20: "the owner does not like the green and red on the
+ * points"). The resting face reads "12:8"; it used to paint your digits green and theirs red, so
+ * the two numbers looked like good/bad or two colour-coded teams. Now both sides use ONE cream —
+ * the palette's own ivory, the brightest quiet ink the display has — and the two numbers are told
+ * apart by POSITION (either side of the separator) and the separator itself, never by hue.
+ * Ownership colour is untouched everywhere it means something: tiles, territory, outcome tones.
+ */
+export const SCORE_INK: LightTone = 'ivory';
+/** The separator keeps the warm amber punctuation it always had; it is not a player's colour. */
+export const SCORE_SEPARATOR_INK: LightTone = 'amber';
+/**
+ * The two players' own inks (owner, 2026-10-21): the digits go back to green for you and red for the
+ * opponent, as they read before the interim neutral pass. Position still says whose is whose, so the
+ * colour reinforces rather than carries the meaning alone.
+ */
+export const SCORE_INK_YOU: LightTone = 'green';
+export const SCORE_INK_OPP: LightTone = 'red';
+export type LedMotif = 'stars' | 'heart' | 'shock' | 'scatter' | 'eyes' | 'blast' | 'snake' | 'kanji';
+/** Pixel-art motifs (player/led-art.ts): whole-window pictures on the glass's own dot grid,
+ *  each dot with its own colour, played once (no loop). A frame is ART_MARK + rows joined by '/',
+ *  one character per dot: '.' is dark, and a letter is a tone (see ART_TONES). */
+export const ART_MARK = '\u0001';
+export const ART_TONES: Record<string, LedTone> = { a: 'amber', r: 'red', g: 'green', i: 'ivory', p: 'pink', c: 'cyan' };
+const ART_MOTIFS = new Map<string, readonly string[]>();
+export const registerArtMotif = (motif: LedMotif, frames: readonly string[]) => { ART_MOTIFS.set(motif, frames); };
+export const ledMotifFrames = (motif: LedMotif): readonly string[] => ART_MOTIFS.get(motif) ?? ({
   stars:['• ✦ •','✦ • ✦','• ✦ •','✦ ✦','• ✦ •'],
   heart:['•','♥','♥','•'],
   shock:['•','• •','✦ • ✦','• •','•'],
   scatter:['•••','• •','•  •','• •','•••'],
   eyes:['• •','• •','••','• •'],
-})[motif];
-const INK: Record<Exclude<LedTone,'score'>, { fill:string; glow:string }> = {
-  amber:{ fill:'#f5d8a4', glow:'rgba(255,195,104,.78)' },
-  red:{ fill:'#e4705e', glow:'rgba(234,68,48,.82)' },
-  green:{ fill:'#a9d886', glow:'rgba(143,210,111,.70)' },
-  ivory:{ fill:'#f5ead1', glow:'rgba(255,233,182,.66)' },
-  pink:{ fill:'#edabc0', glow:'rgba(237,150,178,.65)' },
-  cyan:{ fill:'#a7d3d0', glow:'rgba(132,209,206,.58)' },
-};
+} as Record<string, readonly string[]>)[motif] ?? ['•'];
+/** Pixel-art motifs play once and hold their last frame; the small motifs loop. */
+export const ledMotifOnce = (motif: LedMotif) => ART_MOTIFS.has(motif);
+/* The glyph inks live in the LIGHT contract (player/light.ts) so the dots and the light
+   they cast can never drift into two palettes. */
+const INK = LED_INK;
 
 export const LED_ADVANCE = 14.5;
 const ADVANCE = LED_ADVANCE;
 const DOT_X = 2.3;
 const SEPARATOR = ' • ';
 export const ledMessageWidth = (message: string) => Math.max(1, message.length * ADVANCE - 1);
-export const ledMarqueeTravel = (message: string) => ledMessageWidth(`${message}${SEPARATOR}`);
+/**
+ * The distance one marquee loop travels, in CSS px: a WHOLE number of dot advances.
+ *
+ * The width formula is 1 px narrower than the advance (the last column of a glyph is inset), and
+ * the old travel inherited that -1. The strip then wrapped 1 px away from the column it started
+ * on, and every glyph after the wrap sat on a fraction of a dot. A dot-matrix sign steps column by
+ * column, so the period is exactly N advances — the wrap lands on the same column and the seam is
+ * exact rather than 1 px out.
+ */
+export const ledMarqueeTravel = (message: string) => (message.length + SEPARATOR.length) * ADVANCE;
+/** How many whole dot columns one loop is worth: the marquee's step grid. */
+export const ledMarqueeSteps = (message: string) => message.length + SEPARATOR.length;
+/**
+ * How much strip a marquee has to hold, in CSS px, for a display `windowWidth` wide.
+ *
+ * THE WINDOW, NOT THE MESSAGE (2026-10-29). The animation travels exactly one period
+ * (`ledMarqueeTravel`), so at any moment the glass shows strip [t, t + windowWidth] for
+ * t in [0, period]: one period plus the window is every pixel that can ever be on screen.
+ * Bounding the sprite to that keeps the raster work flat in the LENGTH of the message —
+ * before this, scrolling baked the message three times over (measured 2522 CSS px / a
+ * 7566 px bitmap for a 58-character line, and a long sentence would overflow the maximum
+ * canvas width and stop drawing altogether). Callers pass this only while scrolling; a
+ * static message is baked at its own width, exactly as before.
+ */
+export const ledMarqueeSpan = (message: string, windowWidth: number) =>
+  Math.max(1, Math.ceil(ledMarqueeTravel(message) + Math.max(0, windowWidth)));
 
 /** Readable static shorthand for the physical window when motion is reduced. The full copy stays in the live region. */
 export function ledStaticMessage(message: string) {
@@ -150,6 +203,65 @@ export function ledToken(message: string): string | null {
   return null;
 }
 
+export type LedDot = { x: number; y: number; r: number; tone: LightTone };
+export type LedLayout = { width: number; height: number; scale: number; dots: LedDot[] };
+
+/** The lit dots of a message, in CSS px. The ONE source for the cells and their light.
+ *  `span` bounds how much strip is built (the marquee case); it is ignored for a static
+ *  message, whose sprite is exactly its own width. */
+export function ledLayout(message: string, repeat = false, mode: LedTone = 'amber', scale = 1, span?: number): LedLayout {
+  const s = Math.max(0.5, scale);
+  const advance = ADVANCE * s;
+  const dotX = DOT_X * s;
+  const rowStep = 3.1 * s;
+  const originY = 3.15 * s;
+  const cellH = 26 * s;
+  if (message.startsWith(ART_MARK)) {
+    // A picture: one dot per character on the same 2.3 x 3.1 grid as the glass's unlit dots.
+    const rows = message.slice(1).split('/');
+    const cols = Math.max(0, ...rows.map(row => row.length));
+    const dots: LedDot[] = [];
+    rows.forEach((row, y) => { for (let x = 0; x < row.length; x++) {
+      const tone = ART_TONES[row[x]!];
+      if (tone && y < 8) dots.push({ x: x * dotX + 1.1 * s, y: y * rowStep + originY, r: s, tone: tone as LightTone });
+    } });
+    return { width: Math.max(1, (cols - 1) * dotX + 2.2 * s), height: cellH, scale: s, dots };
+  }
+  const period = `${message}${SEPARATOR}`;
+  // Three copies is the legacy marquee strip; with a span we build only the copies that can be
+  // seen (one period plus the window), so the bitmap stops growing with the message.
+  const copies = span === undefined
+    ? 0
+    : Math.max(2, Math.ceil((span + advance) / Math.max(advance, period.length * advance)));
+  const shown = repeat
+    ? (span === undefined ? `${period}${period}${message}` : message + (SEPARATOR + message).repeat(copies - 1))
+    : message;
+  const contentWidth = Math.max(1, shown.length * advance - s);
+  const width = span === undefined ? contentWidth : Math.max(1, Math.min(contentWidth, span));
+  const colon = mode === 'score' ? shown.indexOf(':') : -1;
+  // In the score face the digits before the colon are YOUR score and the digits after are the
+  // opponent's, so each side takes its own ink (green / red) while the colon stays amber.
+  const dots: LedDot[] = [];
+  for (let i = 0; i < shown.length; i++) {
+    const rows = GLYPHS[shown[i]!] ?? (shown[i] === ' ' ? '' : GLYPHS['?']!);
+    if (!rows) continue;
+    const glyph = rows.split('/');
+    for (let y = 0; y < 7; y++) for (let x = 0; x < 5; x++) {
+      if (glyph[y]?.[x] !== '1') continue;
+      const tone: LightTone = mode === 'score'
+        ? (i === colon ? SCORE_SEPARATOR_INK : i < colon ? SCORE_INK_YOU : SCORE_INK_OPP)
+        : mode;
+      dots.push({
+        x: i * advance + x * dotX + 1.1 * s,
+        y: y * rowStep + originY,
+        r: (shown[i] === '•' ? 1.33 : 1) * s,
+        tone,
+      });
+    }
+  }
+  return { width, height: cellH, scale: s, dots };
+}
+
 /** Full-size square LED cells. Longer copy repeats as one seamless marquee strip.
  *  `scale` grows the dots (tutorial titles use ~1.15 so they match the old 20px heading). */
 export function drawLedCells(
@@ -158,43 +270,260 @@ export function drawLedCells(
   repeat = false,
   mode: LedTone = 'amber',
   scale = 1,
+  span?: number,
 ) {
-  const s = Math.max(0.5, scale);
-  const advance = ADVANCE * s;
-  const dotX = DOT_X * s;
-  const rowStep = 3.1 * s;
-  const originY = 3.15 * s;
-  const cellH = 26 * s;
-  const shown = repeat ? `${message}${SEPARATOR}${message}${SEPARATOR}${message}` : message;
-  const width = Math.max(1, shown.length * advance - s);
+  const layout = ledLayout(message, repeat, mode, scale, span);
+  const s = layout.scale;
   const dpr = Math.min(3, window.devicePixelRatio || 1);
-  canvas.width = Math.ceil(width * dpr);
-  canvas.height = Math.ceil(cellH * dpr);
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${cellH}px`;
+  canvas.width = Math.ceil(layout.width * dpr);
+  canvas.height = Math.ceil(layout.height * dpr);
+  canvas.style.width = `${layout.width}px`;
+  canvas.style.height = `${layout.height}px`;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return width;
+  if (!ctx) return layout.width;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const colon = mode === 'score' ? shown.indexOf(':') : -1;
-  for (let i = 0; i < shown.length; i++) {
-    const rows = GLYPHS[shown[i]!] ?? (shown[i] === ' ' ? '' : GLYPHS['?']!);
-    if (!rows) continue;
-    const glyph = rows.split('/');
-    for (let y = 0; y < 7; y++) for (let x = 0; x < 5; x++) {
-      const lit = glyph[y]?.[x] === '1';
-      const px = i * advance + x * dotX + 1.1 * s;
-      const py = y * rowStep + originY;
-      const radius = (shown[i] === '•' ? 1.33 : 1) * s;
-      ctx.beginPath();
-      ctx.arc(px, py, radius, 0, Math.PI * 2);
-      if (lit) {
-        const tone = mode === 'score' ? (i < colon ? 'green' : i > colon ? 'red' : 'amber') : mode;
-        ctx.fillStyle = INK[tone].fill;
-        ctx.shadowColor = INK[tone].glow; ctx.shadowBlur = (tone === 'red' ? 4 : 3.4) * s;
-        ctx.fill();
-      }
-      ctx.shadowBlur = 0;
-    }
+  for (const dot of layout.dots) {
+    const ink = INK[dot.tone];
+    ctx.beginPath();
+    ctx.arc(dot.x, dot.y, dot.r, 0, Math.PI * 2);
+    ctx.fillStyle = ink.fill;
+    ctx.shadowColor = ink.glow; ctx.shadowBlur = (dot.tone === 'red' ? 4 : 3.4) * s;
+    ctx.fill();
+    ctx.shadowBlur = 0;
   }
-  return width;
+  return layout.width;
+}
+
+/* --------------------------------------------------------------------------------------------
+   The baked bloom. It is painted from the ACTUAL lit dots (the same `ledLayout` the cells use)
+   into a small low-res offscreen canvas, soft on every side and padded so nothing is clipped.
+   There is no readback and no live blur filter: one bake per message (or a small set per motif
+   frame), then the compositor only moves/opacity-animates the finished sprite.
+   ------------------------------------------------------------------------------------------ */
+
+/** Bitmap pixels per CSS px. Half resolution on purpose: this is a blur, not an image. The canvas
+ *  is upscaled by CSS, which both softens the falloff and quarters the pixels the compositor has
+ *  to move — at 4x CPU throttle a full-resolution sprite of this size stalled a frame by ~200 ms. */
+const BLOOM_RES = .5;
+/** The soft stamp is an ellipse leaning along the tone's angle. */
+const STAMP_STRETCH = 1.45;
+const STAMP_FLATTEN = .9;
+/* The falloff leans DOWN: the lower tail is stretched to reachDown and the upper side is trimmed
+   to reachUp, so the light pools onto the keys under the display instead of haloing evenly. The
+   shift keeps the stamp centred on the new, asymmetric extent, and the brightest point stays on
+   the lit dots because the short upper side is still drawn through them. */
+const DOWN_EXTRA = LIGHT_CAPS.reachDown - 1;
+const UP_TRIM = 1 - LIGHT_CAPS.reachUp;
+const STAMP_DOWN_SCALE = 1 + (DOWN_EXTRA - UP_TRIM) / 2;
+const STAMP_DOWN_SHIFT = LIGHT_CAPS.reach * STAMP_FLATTEN * ((DOWN_EXTRA + UP_TRIM) / 2);
+/** The stamp's reach above and below a lit dot, in CSS px (equal horizontally by construction). */
+export const BLOOM_REACH_UP = LIGHT_CAPS.reach * STAMP_FLATTEN * LIGHT_CAPS.reachUp;
+export const BLOOM_REACH_DOWN = LIGHT_CAPS.reach * STAMP_FLATTEN * LIGHT_CAPS.reachDown;
+/** CSS px of empty paper kept around the dot strip inside the sprite. It must cover the LONGEST
+ *  reach in any direction or the sprite would clip the falloff into a rectangle — and since the
+ *  lower tail is now the longest, the pad follows it rather than the horizontal stretch. */
+export const BLOOM_REACH = LIGHT_CAPS.reach * STAMP_STRETCH;
+export const BLOOM_PAD = Math.ceil(Math.max(BLOOM_REACH, BLOOM_REACH_UP, BLOOM_REACH_DOWN)) + 2;
+/** Alpha at the centre of one dot's stamp. Hundreds of stamps sum with 'lighter', so this is the
+ *  slope of the gradient rather than its ceiling: too high and the sum saturates into a flat
+ *  plateau (light stops reading as light); too low and it is invisible once the sprite's own cap
+ *  and the CSS opacity are applied. */
+const DOT_ALPHA = .05;
+/**
+ * Ceiling for the whole sprite: never an opaque wash over the dots it came from. Lowered from
+ * .5 (owner, 2026-10-20: the display's light "can never" read as a panel wash). At the published
+ * rest opacity (.286) the strongest bloom pixel is ~.10 of the ink — a halo on the bezel, not a
+ * light source — and even a marquee's saturated strip stays a faint bloom.
+ */
+export const BLOOM_ALPHA_CAP = .34;
+const stampCache = new Map<LightTone, HTMLCanvasElement>();
+
+const bloomStamp = (tone: LightTone): HTMLCanvasElement | null => {
+  const cached = stampCache.get(tone);
+  if (cached) return cached;
+  const r = LIGHT_CAPS.reach;
+  const size = Math.ceil(r * 2 * BLOOM_RES) + 2;
+  const canvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+  if (!canvas) return null;
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  const centre = size / 2;
+  const gradient = ctx.createRadialGradient(centre, centre, 0, centre, centre, r * BLOOM_RES);
+  const spec = lightTone(tone);
+  for (let i = 0; i <= 12; i++) {
+    const t = i / 12;
+    gradient.addColorStop(t, `rgba(${rgbOf(spec.core)},${(bloomProfile(t) * DOT_ALPHA).toFixed(4)})`);
+  }
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  stampCache.set(tone, canvas);
+  return canvas;
+};
+
+const rgbOf = (hex: string): string => {
+  const value = hex.replace('#', '');
+  const full = value.length === 3 ? value.split('').map(c => c + c).join('') : value;
+  const n = Number.parseInt(full, 16);
+  return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+};
+
+export type LedSprite = { canvas: HTMLCanvasElement; width: number; height: number };
+
+/**
+ * The soft bloom for a message: the actual lit dots, blown up in soft layers (a baked blur) into
+ * a sprite whose dot strip sits `BLOOM_PAD` px inside every edge, so the light starts on the glyphs
+ * and fades out on all sides with no edge. Returns null where there is no canvas (tests / no DOM).
+ */
+export function ledBloomSprite(
+  message: string,
+  repeat = false,
+  mode: LedTone = 'amber',
+  scale = 1,
+  span?: number,
+): LedSprite | null {
+  if (typeof document === 'undefined') return null;
+  const layout = ledLayout(message, repeat, mode, scale, span);
+  const width = layout.width + BLOOM_PAD * 2;
+  const height = layout.height + BLOOM_PAD * 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.ceil(width * BLOOM_RES));
+  canvas.height = Math.max(1, Math.ceil(height * BLOOM_RES));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.setTransform(BLOOM_RES, 0, 0, BLOOM_RES, 0, 0);
+
+  // The source is the ACTUAL lit dots, at their real positions: this is what guarantees the
+  // brim of the light sits on the glyphs rather than between them.
+  const dots = document.createElement('canvas');
+  dots.width = Math.max(1, Math.ceil(layout.width));
+  dots.height = Math.max(1, Math.ceil(layout.height));
+  const dctx = dots.getContext('2d');
+  if (!dctx) return null;
+  for (const dot of layout.dots) {
+    const ink = INK[dot.tone];
+    dctx.beginPath();
+    dctx.arc(dot.x, dot.y, dot.r, 0, Math.PI * 2);
+    dctx.fillStyle = ink.fill;
+    dctx.fill();
+  }
+
+  // A BLUR, baked. Two parts, and both matter:
+  //  · a smooth radial field stamped at every lit dot (rotated along the tone's angle) gives the
+  //    long, even falloff — it has no glyph-shaped holes in it;
+  //  · the dots themselves, once, at full colour, pin the brightest point to a lit dot.
+  // The field's alpha is deliberately low: hundreds of stamps sum with 'lighter', and a higher
+  // value saturates into a flat plateau (which is how a "glow" stops looking like light).
+  ctx.globalCompositeOperation = 'lighter';
+  const stamps = new Map<LightTone, HTMLCanvasElement | null>();
+  for (const dot of layout.dots) {
+    let stamp = stamps.get(dot.tone);
+    if (stamp === undefined) { stamp = bloomStamp(dot.tone); stamps.set(dot.tone, stamp); }
+    if (!stamp) continue;
+    const angle = (lightTone(dot.tone).angle * Math.PI) / 180;
+    const reach = LIGHT_CAPS.reach;
+    ctx.save();
+    ctx.translate(BLOOM_PAD + dot.x, BLOOM_PAD + dot.y);
+    // Straight DOWN in screen space, before the tone's lean: the tail is stretched on the way down
+    // only, and the shift keeps the stamp's top edge exactly where it was.
+    ctx.translate(0, STAMP_DOWN_SHIFT);
+    ctx.rotate(angle);
+    ctx.scale(STAMP_STRETCH, STAMP_FLATTEN * STAMP_DOWN_SCALE);
+    ctx.drawImage(stamp, -reach, -reach, reach * 2, reach * 2);
+    ctx.restore();
+  }
+  // The dots again, but softened: shrunk to half size and drawn back at the strip's own size, so
+  // the peak still sits on a lit dot while the glyph edges themselves are interpolated (a sharp
+  // copy here would put a 1-px hard rim inside the falloff).
+  const coreSrc = document.createElement('canvas');
+  coreSrc.width = Math.max(1, Math.round(layout.width / 2));
+  coreSrc.height = Math.max(1, Math.round(layout.height / 2));
+  const cctx = coreSrc.getContext('2d');
+  if (cctx) {
+    cctx.imageSmoothingEnabled = true;
+    cctx.imageSmoothingQuality = 'high';
+    cctx.drawImage(dots, 0, 0, coreSrc.width, coreSrc.height);
+    ctx.globalAlpha = .30;
+    ctx.drawImage(coreSrc, BLOOM_PAD, BLOOM_PAD, layout.width, layout.height);
+    ctx.globalAlpha = 1;
+  }
+
+  // No hole is cut at the dots. The halo has to start AT the lit dots, and the alpha cap
+  // keeps the glyphs reading through it, so the strongest point of the glow is the dot itself.
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.fillStyle = `rgba(0,0,0,${BLOOM_ALPHA_CAP})`;
+  ctx.fillRect(0, 0, width, height);
+  ctx.globalCompositeOperation = 'source-over';
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  return { canvas, width, height };
+}
+
+/** Paint a baked bloom into a visible canvas (one drawImage; no blur, no readback). */
+export function drawLedBloom(
+  canvas: HTMLCanvasElement,
+  message: string,
+  repeat = false,
+  mode: LedTone = 'amber',
+  scale = 1,
+  span?: number,
+): number {
+  const sprite = ledBloomSprite(message, repeat, mode, scale, span);
+  if (!sprite) return 0;
+  canvas.width = sprite.canvas.width;
+  canvas.height = sprite.canvas.height;
+  canvas.style.width = `${sprite.width}px`;
+  canvas.style.height = `${sprite.height}px`;
+  canvas.getContext('2d')?.drawImage(sprite.canvas, 0, 0);
+  return sprite.width;
+}
+
+/**
+ * The one-shot brightness layer for pulse / alarm: the same lit dots and the same footprint
+ * as the cells, baked once. CSS animates ONLY its opacity (never a filter, never a repaint).
+ */
+export function ledHotSprite(
+  message: string,
+  repeat = false,
+  mode: LedTone = 'amber',
+  scale = 1,
+  span?: number,
+): LedSprite | null {
+  if (typeof document === 'undefined') return null;
+  const layout = ledLayout(message, repeat, mode, scale, span);
+  const canvas = document.createElement('canvas');
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  canvas.width = Math.max(1, Math.ceil(layout.width * dpr));
+  canvas.height = Math.max(1, Math.ceil(layout.height * dpr));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  for (const dot of layout.dots) {
+    ctx.beginPath();
+    ctx.arc(dot.x, dot.y, dot.r * 1.08, 0, Math.PI * 2);
+    ctx.fillStyle = INK[dot.tone].fill;
+    ctx.fill();
+  }
+  canvas.style.width = `${layout.width}px`;
+  canvas.style.height = `${layout.height}px`;
+  return { canvas, width: layout.width, height: layout.height };
+}
+
+/** Paint a baked hot layer into a visible canvas. */
+export function drawLedHot(
+  canvas: HTMLCanvasElement,
+  message: string,
+  repeat = false,
+  mode: LedTone = 'amber',
+  scale = 1,
+  span?: number,
+): number {
+  const sprite = ledHotSprite(message, repeat, mode, scale, span);
+  if (!sprite) return 0;
+  canvas.width = sprite.canvas.width;
+  canvas.height = sprite.canvas.height;
+  canvas.style.width = `${sprite.width}px`;
+  canvas.style.height = `${sprite.height}px`;
+  canvas.getContext('2d')?.drawImage(sprite.canvas, 0, 0);
+  return sprite.width;
 }

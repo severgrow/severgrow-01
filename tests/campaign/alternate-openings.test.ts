@@ -5,8 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import { apply, newMatch, viewFor } from '../../src/engine/index.js';
 import type { Action, RulesConfig, State } from '../../src/engine/index.js';
-import { botSeed, chooseLevelAction } from '../../src/bots/levels.js';
-import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
+import { botSeed } from '../../src/bots/levels.js';
+import { CURRENT_BOT_VERSION, chooseBotAction } from '../../src/bots/versions.js';
 import {
   ALTERNATE_OPENINGS,
   CAMPAIGN_LEVELS,
@@ -21,7 +21,7 @@ const play = (seed: number, config: Partial<RulesConfig>, botLevel: number): { e
   const actions: Action[] = [];
   while (s.phase !== 'GAME_OVER' && actions.length < 1600) {
     const level = s.actor === 1 ? botLevel : 9;
-    const action = chooseLevelAction(
+    const action = chooseBotAction(
       viewFor(s, s.actor),
       level as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9,
       botSeed(s.seed, level, s.turnNumber, s.history?.length ?? 0),
@@ -43,6 +43,14 @@ describe('a level played on two boards pays on both', () => {
       const alternate = ALTERNATE_OPENINGS[id]!;
       expect(alternate.boardRadius, id).toBe(2);
       expect(alternate.board.cells, id).toHaveLength(19);
+      if (id === 'c1-09') {
+        // Level 9 is a real game on the small map from 2026-11-01, so its CURRENT board is the /2/
+        // one. The entry stays as the frozen record of that board (the verifier still tries it);
+        // lessons 1-9 pay no Seeds, so no level-9 proof was ever earned on either board.
+        expect(campaignLevelById(id)!.config.boardRadius, id).toBe(2);
+        expect(campaignLevelById(id)!.config.board, id).toEqual(alternate.board);
+        continue;
+      }
       // The released campaign plays these levels on the big map, so the two really do differ.
       expect(campaignLevelById(id)!.config.boardRadius, id).toBe(3);
     }

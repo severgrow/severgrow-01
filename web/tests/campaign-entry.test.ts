@@ -1,9 +1,12 @@
 // THE CAMPAIGN ENTRY (menu label + press). The bug this covers was a mismatch between the two: the
 // label came from progress, the press preferred a saved match, so an old replay could make the entry
 // say LEVEL 70 and open level 31. These cases pin the decision, not the DOM.
+//
+// Owner (2026-10-24) went one step further: the entry's anchor is the PLACE (currentLevel), so a
+// saved match on any level behind it — a replay in progress — is never offered by the entry.
 import { describe, expect, it } from 'vitest';
-import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
-import { campaignEntry } from '../src/logic/campaign.js';
+import { CAMPAIGN_CHAPTERS, CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
+import { campaignEntry, chapterProgressFor } from '../src/logic/campaign.js';
 import type { CampaignProgress } from '../src/logic/campaign.js';
 
 const progress = (unlocked: number, completed: number[]): CampaignProgress => ({
@@ -22,25 +25,28 @@ describe('campaignEntry decides what the entry does', () => {
     expect(e).toEqual({ kind: 'start', level: lvl(31) });
   });
 
-  it('resumes without asking when the saved match IS the next unfinished level', () => {
-    // The common case. A question here would be pure friction.
+  it('asks before continuing a saved match on the level being entered', () => {
+    // Owner decision (2026-10-19): there is no resume from the main menu, and entering the level
+    // that owns the unfinished match must ASK rather than silently drop the player back into it.
     const e = campaignEntry(progress(31, range(30)), lvl(31));
-    expect(e).toEqual({ kind: 'resume', level: lvl(31) });
+    expect(e).toEqual({ kind: 'ask', next: lvl(31), saved: lvl(31) });
   });
 
-  it('asks only when the saved match is a DIFFERENT level', () => {
-    // The reported bug: everything is done, an old replay of 31 is unfinished.
+  it('a saved match on an EARLIER level is a replay and never hijacks the entry', () => {
+    // Owner (2026-10-24): the reported stranding. Everything is done, and an old replay of 31 is
+    // unfinished: the entry stays the list (there is no place left to open), not a resume of 31.
     const e = campaignEntry(progress(LAST, range(LAST)), lvl(31));
     expect(e.kind).toBe('list');
-    // And with the last level still open, the same old replay must produce a choice, not a silent resume.
-    const open = campaignEntry(progress(LAST, range(LAST - 1)), lvl(31));
-    expect(open).toEqual({ kind: 'ask', next: lvl(LAST), saved: lvl(31) });
+    // With the last level still open, the same old replay must not make the entry offer "Resume level 31".
+    // The entry opens the PLACE; the replay save is left on the device for the level list.
+    expect(campaignEntry(progress(LAST, range(LAST - 1)), lvl(31))).toEqual({ kind: 'start', level: lvl(LAST) });
   });
 
-  it('asks when the saved match is AHEAD of the next unfinished level', () => {
-    // Reachable by replaying a later level after clearing an earlier one out of order.
+  it('a saved match anywhere but the place starts the place (a replay is not the place)', () => {
+    // Reachable by replaying a later level after clearing an earlier one out of order: the saved
+    // match is a replay too, so the place (35) is what the entry opens.
     const e = campaignEntry(progress(40, range(40).filter((n) => n !== 35)), lvl(38));
-    expect(e).toEqual({ kind: 'ask', next: lvl(35), saved: lvl(38) });
+    expect(e).toEqual({ kind: 'start', level: lvl(35) });
   });
 
   it('opens the list, and claims no level number, once every built level is complete', () => {
@@ -51,6 +57,29 @@ describe('campaignEntry decides what the entry does', () => {
 
   it('never asks on a fresh save: level 1 is a start', () => {
     expect(campaignEntry(progress(1, []), null)).toEqual({ kind: 'start', level: lvl(1) });
+  });
+});
+
+describe('the chapter caption under LEVEL <n>', () => {
+  // Owner review (2026-10-23): the main menu must not show a campaign read-out, and the PLAY
+  // submenu must not say LEVEL n twice. The caption therefore counts the player's progress through
+  // the CHAPTER the entry opens, from the same progress record the level list reads.
+  const chapterOf = (n: number) => CAMPAIGN_CHAPTERS.find((c) => c.number === n)!;
+
+  it('counts the completed levels of the chapter the entry opens', () => {
+    expect(chapterProgressFor(lvl(1), progress(1, []))).toEqual({ done: 0, total: chapterOf(1).levels.length });
+    expect(chapterProgressFor(lvl(6), progress(6, range(5)))).toEqual({ done: 5, total: chapterOf(1).levels.length });
+  });
+
+  it('starts over at the next chapter, never carrying the previous one forward', () => {
+    expect(chapterProgressFor(lvl(11), progress(11, range(10)))).toEqual({ done: 0, total: chapterOf(2).levels.length });
+    expect(chapterProgressFor(lvl(16), progress(16, range(15)))).toEqual({ done: 5, total: chapterOf(2).levels.length });
+  });
+
+  it('returns nothing when there is no level to describe, so no line can be invented', () => {
+    // Every built level is complete: the entry opens the chapter list and claims no level number,
+    // so there is nothing for a chapter caption to sit under.
+    expect(chapterProgressFor(null, progress(70, range(70)))).toBeNull();
   });
 });
 

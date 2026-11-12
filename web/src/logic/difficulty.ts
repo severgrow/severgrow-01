@@ -79,3 +79,13 @@ export const stepAfterGame = (id: DifficultyId, level: Level, outcome: Outcome):
  */
 export const defaultDifficultyForLevel = (level: Level): DifficultyId =>
   level <= 4 ? 'easy' : level <= 7 ? 'medium' : 'hard';
+
+/**
+ * How a match is named to the player. Bot levels 1-9 are internal only (owner, 2026-10-20): a
+ * practice match is its difficulty (Easy / Medium / Hard), a campaign match is its level number.
+ */
+export const matchLabel = (m: { campaign: number | null; difficulty: DifficultyId | null; botLevel: Level }): string => {
+  if (m.campaign !== null) return `Level ${m.campaign}`;
+  const label = difficultyById(m.difficulty ?? defaultDifficultyForLevel(m.botLevel))!.label;
+  return label[0] + label.slice(1).toLowerCase();
+};

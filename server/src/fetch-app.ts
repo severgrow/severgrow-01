@@ -6,6 +6,25 @@ import { DEFAULT_SERVER_CONFIG } from './config.js';
 import { corsHeadersForRequest } from './cors.js';
 import { ApiError } from './errors.js';
 import type { MatchService } from './service.js';
+import { BOT_VERSIONS } from '../../src/bots/versions.js';
+import { ACCOUNT_CAMPAIGN_PROGRESS_FEATURE } from './account-campaign-progress.js';
+import { ACCOUNT_GUIDE_FEATURE } from './account-guide.js';
+
+/**
+ * What this server can do that an older one could not; a page checks before relying on it.
+ * `campaign-random-deals` (owner, 2026-11-01) is the campaign's `RANDOM_DEALS_FEATURE` — spelled out
+ * here because the online core never imports the campaign module (tests/campaign/isolation.test.ts);
+ * server/tests/seeds-verify.test.ts pins the two spellings together.
+ * Every bot version it can verify is listed too (2026-11-04, bots-v0.11): a page keeps a proof against
+ * a newer bot queued until the server it talks to names that version (web/src/online/seed-rewards.ts).
+ * `account-campaign-progress` (owner, 2026-11-08) is the further-ahead campaign snapshot route.
+ */
+export const SERVER_FEATURES: readonly string[] = Object.freeze([
+  'campaign-random-deals',
+  ACCOUNT_CAMPAIGN_PROGRESS_FEATURE,
+  ACCOUNT_GUIDE_FEATURE,
+  ...Object.keys(BOT_VERSIONS),
+]);
 
 export type FetchAppDeps = {
   service: MatchService;
@@ -70,10 +89,11 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
 
     if (method === 'GET' && path === '/v1/health') {
       const serverNow = service.serverNow();
-      const body: { ok: true; rulesVersion: string; serverNow: number; db?: { ok: true; ms: number } } = {
+      const body: { ok: true; rulesVersion: string; serverNow: number; features: readonly string[]; db?: { ok: true; ms: number } } = {
         ok: true,
         rulesVersion: service.rulesVersion,
         serverNow,
+        features: SERVER_FEATURES,
       };
       if (url.searchParams.get('db') === '1') {
         const startedDb = Date.now();
@@ -85,13 +105,51 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
 
     if (method === 'POST' && path === '/v1/guests') {
       await readJson(req, config.maxBodyBytes);
-      const created = await service.createGuest(null, clientIpOf(req));
+      // An automated harness tags its own guests (`x-futasaku-traffic: test`). Only guest CREATION
+      // reads it, and only to set `players.is_test` — no gameplay path, no way to change an existing
+      // account. A real player's browser never sends it (DuelClient sets it only outside a browser).
+      const testTraffic = req.headers.get('x-futasaku-traffic')?.trim().toLowerCase() === 'test';
+      const created = await service.createGuest(null, clientIpOf(req), testTraffic);
       return { status: 201, body: { ok: true, ...created, serverNow: service.serverNow() } };
     }
 
     if (method === 'GET' && path === '/v1/players/me') {
       const player = await service.authenticate(bearer(req.headers.get('authorization')));
       return { status: 200, body: { ok: true, player: await service.getMe(player), serverNow: service.serverNow() } };
+    }
+
+    /**
+     * ANOTHER PLAYER'S PUBLIC PROFILE (owner, 2026-11-01: look up other people's profiles from
+     * Territory). A SIGNED-IN caller only — the token names who is asking, and a missing or stale
+     * one is the usual 401; there is no anonymous read. The response is the closed allow-list in
+     * `PublicPlayerProfile`: name, tag, level, tiles, colour and the ONLINE record. It can never
+     * carry an email, a Seeds wallet, an offline record, a token, a device, or anything private:
+     * the store query selects only the public columns (see `seeds/postgres.ts`).
+     *
+     * A malformed/percent-broken id and an unknown one are the SAME 404, so this route cannot be
+     * used to tell which player ids exist.
+     */
+    const profileRoute = /^\/v1\/players\/([^/]+)\/profile$/.exec(path);
+    if (method === 'GET' && profileRoute) {
+      const viewer = await service.authenticate(bearer(req.headers.get('authorization')));
+      let playerId = profileRoute[1]!;
+      try {
+        playerId = decodeURIComponent(playerId);
+      } catch {
+        throw new ApiError('NOT_FOUND', 'No such player.');
+      }
+      const profile = await service.publicProfile(playerId);
+      const headToHead =
+        viewer.id !== playerId ? await service.headToHead(viewer.id, playerId) : undefined;
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          profile,
+          ...(headToHead !== undefined ? { headToHead } : {}),
+          serverNow: service.serverNow(),
+        },
+      };
     }
 
     if (method === 'PATCH' && path === '/v1/players/me') {
@@ -107,6 +165,69 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
         status: 200,
         body: { ok: true, matches: await service.listMyMatches(player), serverNow: service.serverNow() },
       };
+    }
+
+    // The Profile screen's three OFFLINE numbers (migration 0022). Authenticated and player-agnostic
+    // in its inputs: the token names the account, so a request can never read or write someone
+    // else's record. GET is one aggregate over all devices; POST stores one device's cumulative
+    // snapshot and answers with the same aggregate.
+    if (method === 'GET' && path === '/v1/players/me/offline') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      return { status: 200, body: { ok: true, offline: await service.offlineStats(player), serverNow: service.serverNow() } };
+    }
+
+    // THE ACCOUNT'S FURTHEST CAMPAIGN LEVEL (owner brief, 2026-11-01). One authenticated read for
+    // the account-place rule and the menu's campaign suggestion, and ONE source:
+    // `campaignHighestLevel`, the same single indexed `max` over the player's `campaign:cN-M`
+    // receipts the map uses. Deliberately NOT `campaign_clears`
+    // (that table is only written when a reward proof is submitted, so ordinary wins never land in
+    // it). Levels unlock in order, so "highest = N" means chapter-1 levels 1..N are cleared; the
+    // client derives the ten lessons. A guest is never asked: the client only calls this with an
+    // account.
+    if (method === 'GET' && path === '/v1/players/me/campaign') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      return {
+        status: 200,
+        body: { ok: true, campaign: { highestLevel: await service.campaignHighestLevel(player) }, serverNow: service.serverNow() },
+      };
+    }
+
+    // ACCOUNT CAMPAIGN PROGRESS SNAPSHOT (owner, 2026-11-08). Further-ahead completed ids + best
+    // attempts only — never Seeds, Territory or achievements. GET is null until the first POST.
+    if (method === 'GET' && path === '/v1/players/me/campaign/progress') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      return {
+        status: 200,
+        body: { ok: true, progress: await service.accountCampaignProgress(player), serverNow: service.serverNow() },
+      };
+    }
+
+    if (method === 'POST' && path === '/v1/players/me/campaign/progress') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      const body = asRecord(await readJson(req, config.maxBodyBytes));
+      return {
+        status: 200,
+        body: { ok: true, progress: await service.putAccountCampaignProgress(player, body), serverNow: service.serverNow() },
+      };
+    }
+
+    // THE IN-GAME GUIDE (owner, 2026-11-09): which teaching windows this account has opened, and how
+    // many games it has started with the guide on. Beats only ever join; GET is null until a POST.
+    if (method === 'GET' && path === '/v1/players/me/guide') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      return { status: 200, body: { ok: true, guide: await service.accountGuide(player), serverNow: service.serverNow() } };
+    }
+
+    if (method === 'POST' && path === '/v1/players/me/guide') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      const body = asRecord(await readJson(req, config.maxBodyBytes));
+      return { status: 200, body: { ok: true, guide: await service.putAccountGuide(player, body), serverNow: service.serverNow() } };
+    }
+
+    if (method === 'POST' && path === '/v1/players/me/offline') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      const body = asRecord(await readJson(req, config.maxBodyBytes));
+      return { status: 200, body: { ok: true, offline: await service.putOfflineStats(player, body), serverNow: service.serverNow() } };
     }
 
     if (method === 'POST' && path === '/v1/players/me/upgrade') {
@@ -168,7 +289,7 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
       return { status: 200, body: { ok: true, ...result, serverNow: service.serverNow() } };
     }
 
-    const matchRoute = /^\/v1\/matches\/([^/]+)(\/view|\/reconnect|\/actions|\/resign|\/cancel)?$/.exec(path);
+    const matchRoute = /^\/v1\/matches\/([^/]+)(\/view|\/reconnect|\/actions|\/resign|\/cancel|\/rematch|\/replay)?$/.exec(path);
     if (matchRoute) {
       const matchId = decodeURIComponent(matchRoute[1]!);
       const sub = matchRoute[2] ?? '';
@@ -191,6 +312,15 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
         return {
           status: 200,
           body: { ok: true, player: await service.viewPayload(player, matchId, since), serverNow: service.serverNow() },
+        };
+      }
+      if (method === 'GET' && sub === '/replay') {
+        // A FINISHED duel's whole action log, for one of its two players (403 otherwise). The
+        // client rebuilds every position from it with the deterministic engine.
+        const player = await service.authenticate(bearer(req.headers.get('authorization')));
+        return {
+          status: 200,
+          body: { ok: true, replay: await service.replayOf(player, matchId), serverNow: service.serverNow() },
         };
       }
       if (method === 'POST' && sub === '/reconnect') {
@@ -219,6 +349,12 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
         await readJson(req, config.maxBodyBytes);
         const resigned = await service.resign(player, matchId);
         return { status: 200, body: { ok: true, ...resigned, serverNow: service.serverNow() } };
+      }
+      if (method === 'POST' && sub === '/rematch') {
+        const player = await service.authenticate(bearer(req.headers.get('authorization')));
+        await readJson(req, config.maxBodyBytes);
+        const rematch = await service.rematch(player, matchId);
+        return { status: 200, body: { ok: true, ...rematch, serverNow: service.serverNow() } };
       }
     }
 

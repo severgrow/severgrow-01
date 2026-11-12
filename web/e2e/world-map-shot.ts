@@ -84,14 +84,14 @@ const report = await page.evaluate(() => {
 });
 console.log(JSON.stringify(report, null, 2));
 console.log('errors:', errors.length ? errors.slice(0, 5) : 'none');
-if (!report.screenVisible || report.cells !== 183 || report.held !== 5) throw new Error('The shared world did not render correctly.');
+if (!report.screenVisible || report.cells !== WORLD_CELLS.length || report.held !== 5) throw new Error('The shared world did not render correctly.');
 
 // A mobile first-claim gesture must select, confirm, debit and appear in the refreshed world.
 const free = page.locator('.world-hex.available').first();
 const claimedCell = await free.getAttribute('data-cell-id');
 await free.click();
-await page.getByRole('button', { name: 'GROW A TILE' }).click();
-await page.getByRole('button', { name: 'CONFIRM GROW' }).click();
+await page.getByRole('button', { name: 'Grow a tile' }).click();
+await page.getByRole('button', { name: 'Confirm grow' }).click();
 await page.waitForFunction(() => document.getElementById('online-world-wallet')?.textContent?.includes('50 SEEDS'));
 if (claimedCell) await page.locator(`.world-hex[data-cell-id="${claimedCell}"].mine`).waitFor();
 if (!claimedCell || !(await page.locator(`.world-hex[data-cell-id="${claimedCell}"].mine`).count())) {
@@ -108,7 +108,7 @@ await other.route('**/v1/guests*', (r) => r.fulfill({ status: 429, contentType: 
 await other.goto(BASE, { waitUntil: 'load' });
 await other.click('#menu-world');
 await other.locator('.world-hex').first().waitFor({ state: 'attached' });
-if ((await other.locator('.world-hex').count()) !== 183 ||
+if ((await other.locator('.world-hex').count()) !== WORLD_CELLS.length ||
   !(await other.locator(`.world-hex[data-cell-id="${claimedCell}"].held`).count())) {
   throw new Error('The second browser did not see the public updated territory.');
 }

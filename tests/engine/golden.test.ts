@@ -28,10 +28,20 @@ describe('golden games', () => {
       // Keep Main's original fixtures. Only disabled Lab metadata is normalized.
       expect(rest.config.board).toBeNull();
       expect(rest.config.reshuffleDiscard).toBe(false);
-      // Newer config keys stay off under archived rules and are omitted from the frozen hash.
-      const { board, reshuffleDiscard, deckFinalTurns, expandedBloom, strengthTiebreak, startingPlayerLottery, ...classicConfig } = rest.config;
+      // Config keys added after these fixtures were recorded are omitted from the frozen hash: the
+      // archived rules version predates them, and spreading today's defaults is what puts them on
+      // the object. `allowOvergrow` is the newest (2026-10-24, campaign level 1) and resolves ON
+      // under the archived version, so these games keep the rule they were recorded under. Its
+      // presence moved the hash; no move changed (the GreedyBot loop above matched every one, and
+      // the history hash below is untouched).
+      const { board, reshuffleDiscard, deckFinalTurns, expandedBloom, strengthTiebreak, startingPlayerLottery, allowOvergrow, ...classicConfig } = rest.config;
       expect(strengthTiebreak).toBe(false);
       expect(startingPlayerLottery).toBe(false);
+      // `allowOvergrow` (added 2026-10-24 for campaign level 1) resolves ON for an archived rules
+      // version, so these fixtures keep the rule they were recorded under. Its presence in the
+      // config object is what moved the hash, not any change in play: the GreedyBot loop above
+      // matched every archived move, and the history hash below is untouched.
+      expect(allowOvergrow).toBe(true);
       expect(stateHash({ ...rest, config: classicConfig })).toBe(g.stateHash);
       expect(stateHash(history)).toBe(g.historyHash);
     });

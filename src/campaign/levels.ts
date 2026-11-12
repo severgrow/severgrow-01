@@ -82,8 +82,8 @@ export const CAMPAIGN_HOMES: readonly [string, string] = Object.freeze([
 ]);
 
 /**
- * The tutorial's small map (radius 2 → 19 hexes), used by levels 1-3 only. Its size comes from
- * `TUTORIAL_BOARD_RADIUS` (one ring smaller than the product board; SPEC 4.3, tutorial exception).
+ * The tutorial's small map (radius 2 → 19 hexes), used by levels 1-3 and level 9. Its size comes
+ * from `TUTORIAL_BOARD_RADIUS` (one ring smaller than the product board; SPEC, tutorial exception).
  * The ring2 homes stay the same keys — on radius 2 they are the two far corners.
  */
 export const CAMPAIGN_SMALL_CELLS: readonly string[] = Object.freeze(allCoords(TUTORIAL_BOARD_RADIUS).map(coordKey));
@@ -136,9 +136,11 @@ const level = (
   spec: BoardSpec,
   intent: string,
   boardRadius = 3,
+  /** Further engine overrides for this level only (a rule the level withholds, never invents). */
+  extra: Partial<RulesConfig> = {},
 ): CampaignLevel => ({
   id, number, chapter, name, intent, seed, botLevel,
-  config: { ...BASE, boardRadius, board: spec },
+  config: { ...BASE, ...extra, boardRadius, board: spec },
 });
 
 /**
@@ -154,16 +156,19 @@ const level = (
  * untouched (design-exact); only gold counts and positions changed. Level 1 stays a single gold centre.
  *
  * Levels 1-3 also play on the TUTORIAL's small map (radius 2 → 19 hexes) by owner direction: the same
- * ground the tutorial teaches on, so the opening levels stay small, quick and welcoming. Levels 4-30
- * keep the full product hexagon (radius 3 → 37 hexes) — decided 2026-10-17 after playing the guided
- * levels: on the 19-hex map the homes sit in corners with only three neighbours, and one Bloom places
- * three tiles, so a single Bloom against the far home strangulates it in 3-4 turns. The small map
- * cannot carry a real match, so only the three discovery levels use it.
+ * ground the tutorial teaches on, so the opening levels stay small, quick and welcoming. Levels 4-8
+ * and 10 keep the full product hexagon (radius 3 → 37 hexes) — decided 2026-10-17 after playing the
+ * guided levels: on the 19-hex map the homes sit in corners with only three neighbours, and one Bloom
+ * places three tiles, so a real match there is tight. Level 9 is the exception the owner asked for on
+ * 2026-11-01: the Throw-pile lesson became a FULL game from scratch, played on the same small map
+ * (its board is the /2/ line's small-map opening for this level, `frozen.ts`).
  */
 export const CAMPAIGN_LEVELS: readonly CampaignLevel[] = Object.freeze([
   // A completely open board: a clean first win, no obstacle at all — the tutorial's own map and its
-  // single gold centre, nothing else.
-  level(1, 1, 'c1-01', 'First Seed', 95001, 1, board([], OPEN_GOLD, TUTORIAL_BOARD_RADIUS), 'Completely open, welcoming; the tutorial map.', TUTORIAL_BOARD_RADIUS),
+  // single gold centre, nothing else. Taking their ground is withheld here: level 1's opponent is
+  // the gentlest one and taking is only explained in level 2, so the first level must not offer it
+  // (owner, 2026-10-24). Growth on empty ground is untouched, and the level stays a clean first win.
+  level(1, 1, 'c1-01', 'First Seed', 95001, 1, board([], OPEN_GOLD, TUTORIAL_BOARD_RADIUS), 'Completely open, welcoming; the tutorial map.', TUTORIAL_BOARD_RADIUS, { allowOvergrow: false }),
   // A second open board on the small map: the centre gold plus one inner pair, so gold is worth
   // reaching for early without any obstacle to read.
   level(1, 2, 'c1-02', 'New Growth', 95002, 1, board([], RICH_PAIR_INNER, TUTORIAL_BOARD_RADIUS), 'Another open board; a first taste of contested gold.', TUTORIAL_BOARD_RADIUS),
@@ -179,8 +184,12 @@ export const CAMPAIGN_LEVELS: readonly CampaignLevel[] = Object.freeze([
   level(1, 7, 'c1-07', 'First Obstacle', 95007, 3, board(['-3,0', '-3,1'], RICH_PAIR_Q), 'Cutting a connection: a small rock cluster near a flank.'),
   // The strongest Chapter I opponent on a wide-open field: pure play, gold waiting on both wings.
   level(1, 8, 'c1-08', 'The Open Field', 95008, 3, board([], RICH_PAIR_FLANK), 'Fruit: a stronger opponent and flank gold, on open ground.'),
-  // A short three-hex wall to walk around; the rich pair moved to the other axis so nothing overlaps.
-  level(1, 9, 'c1-09', 'Around the Stone', 95009, 4, board(['-2,-1', '-2,0', '-1,-1'], RICH_PAIR_R), 'Bloom: a short wall to paint around, room for three in a row.'),
+  // A FULL game from scratch on the small map (owner, 2026-11-01): this lesson is no longer a
+  // scripted Throw-pile beat. It deals a real game with the real bot, opens with the Who-starts
+  // ritual, and the live display keeps coaching each action as it happens. The board is the /2/
+  // line's small-map opening for this level; the Throw-pile sentence is still said once, before
+  // the first draw (lessons.ts), so the teaching it carried is not lost.
+  level(1, 9, 'c1-09', 'Around the Stone', 95009, 4, board(['-2,0', '-1,-1', '-1,0'], RICH_PAIR_R, TUTORIAL_BOARD_RADIUS), 'A real game on the small map: every legal move, coached as it happens.', TUTORIAL_BOARD_RADIUS),
   // The finale: a compact grove off-centre, the strongest Chapter I bot, everything so far at once.
   level(1, 10, 'c1-10', 'The First Grove', 95010, 4, board(['-1,0', '-1,-1', '0,-1'], RICH_PAIR_Q), 'Chapter finale: gold and every lesson so far.'),
 
@@ -192,7 +201,9 @@ export const CAMPAIGN_LEVELS: readonly CampaignLevel[] = Object.freeze([
   // A short wall flanks the centre: two ways round it — over the top or under the bottom.
   level(2, 12, 'c2-12', 'Split Meadow', 95012, 5, board(['-1,0', '1,0', '-1,-1'], RICH_PAIR_R), 'A split down the middle; pick a lane.'),
   // The first real detour: a four-hex arc off the centre-left to walk around.
-  level(2, 13, 'c2-13', 'The Detour', 95013, 5, board(['-2,0', '-1,0', '-1,-1', '-1,-2'], RICH_PAIR_R), 'A four-hex arc to route around.'),
+  // Deliberate difficulty spike to bot 8 (owner request, 2026-10-20): this is the one sanctioned
+  // exception to the 1-30 ramp. Do not "fix" it back to 5 — the spike is pinned in the campaign tests.
+  level(2, 13, 'c2-13', 'The Detour', 95013, 8, board(['-2,0', '-1,0', '-1,-1', '-1,-2'], RICH_PAIR_R), 'A four-hex arc to route around.'),
   // Breathing space: one lone stone, a stronger opponent, and a second gold pair to race for.
   // (Its stone moved 2026-11-12 from 0,1 to 1,0: on 0,1 the board was byte-identical to lesson 6. The
   // old opening is kept in frozen.ts, RETIRED_OPENINGS.)

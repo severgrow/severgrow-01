@@ -1,7 +1,10 @@
 import type { Card } from '../../../src/engine/index.js';
 import type { MatchIntel } from '../logic/match-intel.js';
+import type { IntelTip, TipKind } from '../logic/intel-guide.js';
 import { drawLedCells, ledMessageWidth } from './led-cells.js';
+import { enterSurface, exitSurface, resetSurface } from '../ui/interface-motion.js';
 import { cardFace, suitClass } from '../ui/effects.js';
+import { INTEL, RESULT } from '../../../src/strings.js';
 
 export type FocusShape = 'hex' | 'card' | 'pill' | 'none';
 export type TutorialWindowButtons = {
@@ -22,6 +25,12 @@ export type TutorialWindowHandlers = {
 };
 export type TutorialFocusOptions = {
   arrow?: boolean;
+  /**
+   * Light the target exactly as the levels do (its own contour, the levels' corner, a still halo)
+   * instead of the Tutorial's soft pill. The in-game guide's lessons use it (owner, 2026-11-10:
+   * one look for "lit").
+   */
+  outline?: boolean;
   why?: string;
   shape?: FocusShape;
   chapterCount?: number;
@@ -46,24 +55,54 @@ export type TutorialFocusOptions = {
    * journey?" without spending any of the one-line instruction budget. Campaign guidance only.
    */
   kicker?: string;
+  /** The level's one-line mission, shown as a small pill until the first move. */
+  mission?: string;
+  /**
+   * How much light this step earns (lessons/mastery.ts): spotlight full dim + pointer,
+   * guide soft dim + pointer, whisper a pulse only, silent nothing.
+   */
+  tier?: 'spotlight' | 'guide' | 'whisper' | 'silent';
+  /**
+   * Levels 1-10: keep the glow and the pointer, but do not park a window on the map and do not
+   * pad the board. The words live in the cockpit plate (#lesson-plate) instead, so the hexes stay
+   * the size of a normal match. The highlight tier still decides how strong that light is.
+   */
+  inCockpit?: boolean;
+  /** Show copy with no lit target at all: no dim, no pointer (the level's mission line). */
+  noLight?: boolean;
 };
 
-/** Match Intel has two tabs: what happened (data) and the moves reference (static text). */
-export type IntelTabId = 'intel' | 'howto';
-export type IntelTabLabels = { intel: string; howto: string };
+/** Match Intel has three tabs (owner, 2026-10-24): the match now, tips for this moment, and the
+ *  rules (the ten lessons as cards, the full moves reference folded under them). */
+export type IntelTabId = 'now' | 'tips' | 'rules';
+export type IntelTabLabels = { now: string; tips: string; rules: string };
+/** Tips and Rules content, built by main.ts from logic/intel-guide.ts (pure, public facts only). */
+export type IntelGuide = {
+  /** This match's ranked reads, most urgent first. Never a lesson label. */
+  tips: readonly IntelTip[];
+  rules: readonly { level: number; icon: string; title: string; line: string }[];
+  /** The lesson the Rules tab opens at: the one behind the most urgent tip. */
+  rule: number;
+};
 export type IntelOptions = {
   /** Open on this tab; omitted keeps the tab already showing (so live re-renders don't jump). */
   tab?: IntelTabId;
   /** Tab headings (from src/strings.ts, passed by main.ts). */
   labels?: IntelTabLabels;
-  /** The moves reference body for the How-to tab. */
+  /** The full moves reference, folded under the lesson cards. */
   howToHtml?: string;
+  guide?: IntelGuide;
+  /** Open with the full rules unfolded (the pause menu's How to play). */
+  fullRules?: boolean;
+  /** Told whenever the player picks a tab, so the next open starts there. */
+  onTab?: (tab: IntelTabId) => void;
 };
 
 const CSS = `
-#futasaku-glass { position:fixed; z-index:35; box-sizing:border-box; border:1px solid rgba(214,204,177,.14);
+/* No frame around the glass, ever (owner, 2026-10-23): blur and shade only, and a soft drop shadow. */
+#futasaku-glass { position:fixed; z-index:35; box-sizing:border-box; border:none;
   border-radius:15px; overflow:hidden; color:#f0e9dc; background:rgba(8,10,10,.42);
-  box-shadow:inset 0 1px rgba(243,232,202,.06),0 10px 28px rgba(0,0,0,.22);
+  box-shadow:0 10px 28px rgba(0,0,0,.22);
   backdrop-filter:blur(9px) saturate(1.05); -webkit-backdrop-filter:blur(9px) saturate(1.05);
   font:400 13px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); }
 #futasaku-glass[hidden], #tutorial-focus[hidden] { display:none; }
@@ -147,7 +186,7 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 #futasaku-glass[data-mode='tutorial'] .glass-head-slot > button {
   width:100%; height:100%; min-height:0; min-width:0; padding:0 6px; box-sizing:border-box;
   border:1px solid rgba(214,204,177,.22); border-radius:8px;
-  background:rgba(255,255,255,.05); color:#f0e9dc;
+  background:rgba(242, 237, 228,.05); color:#f0e9dc;
   font:400 11px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
   letter-spacing:.04em; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   pointer-events:auto;
@@ -194,6 +233,16 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 #futasaku-glass[data-mode='tutorial'][data-lesson='1'] .glass-why { font-size:12px; min-height:2.9em; }
 #futasaku-glass[data-mode='tutorial'] .glass-why { margin:0; font:400 13px/1.45 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:rgba(240,233,220,.78); letter-spacing:.012em; text-transform:none; text-wrap:pretty; text-align:center; }
 #futasaku-glass[data-mode='tutorial'] .glass-status { margin:0; font:400 13px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:#e8ddc9; letter-spacing:.015em; text-align:center; }
+/* The level's mission: a quiet pill, not another instruction. */
+#futasaku-glass[data-mode='tutorial'] .glass-mission {
+  align-self:center; margin:0 0 6px; padding:3px 10px 2px; border:1px solid rgba(233,216,173,.18);
+  border-radius:999px; background:rgba(233,216,173,.05); color:rgba(243,230,196,.76);
+  font:600 10px/1.35 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
+  letter-spacing:.12em; text-transform:uppercase; text-align:center;
+}
+.large-text #futasaku-glass[data-mode='tutorial'] .glass-mission { font-size:12px; letter-spacing:.09em; }
+/* A mission line is the last thing in the window: no stray gap under it. */
+#futasaku-glass[data-mode='tutorial'] .glass-mission:last-child { margin-bottom:0; }
 /* Large text: the tutorial window's copy follows the same ~18% step the rest of Futasaku takes
    (the Match Intel reference already goes 13px → 15px). The head buttons keep their 11px so the
    longest CTA ("DRAW 1 CARD") can never ellipsise inside a 360px glass. */
@@ -214,26 +263,62 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 #futasaku-glass .glass-chapter { color:#bcae8d; font:600 10px/1.1 monospace; letter-spacing:.16em; white-space:nowrap; }
 #futasaku-glass .glass-copy { font-weight:650; letter-spacing:.09em; text-wrap:balance; text-shadow:0 1px 5px rgba(0,0,0,.8); }
 #futasaku-glass[data-mode='intel'] { pointer-events:auto; display:flex; flex-direction:column; }
+/* Match Intel is a READING surface (Now / Tips / Rules), not a one-line hint over the board: at the
+   hint's 42% glass the hand's card faces showed straight through the rule rows. Same dark glass,
+   denser, with a deeper blur — the board still reads as "behind", the words read cleanly.
+   NO EDGE, THOUGH (owner, 2026-11-02: "we should never use frame contour ... BOTH (and any other
+   similar) should be using our classic dark glass window style"). The finish used to add an inset
+   1px ivory hairline all round, which is a contour drawn on the glass; it is gone, and the window is
+   now defined by its shade and its shadow alone, like every other glass surface in the game. */
+#futasaku-glass[data-mode='intel'] { background:rgba(8,10,10,.86); backdrop-filter:blur(16px) saturate(1.05); -webkit-backdrop-filter:blur(16px) saturate(1.05);
+  box-shadow:0 14px 36px rgba(0,0,0,.42); }
 #futasaku-glass .intel-bar { display:flex; align-items:center; gap:8px; padding:4px 6px 2px 12px; min-height:44px; }
-#futasaku-glass .intel-step { flex:1; min-width:0; font:600 11px/1 monospace; letter-spacing:.14em; color:#cbbfa0; font-variant-numeric:tabular-nums; }
+/* Match Intel: Now · Tips · Rules (owner, 2026-10-24: "pristine… easy to go through and read").
+   One pattern: a serif title, short tracked capitals for labels, one plain sentence of mono text. */
 #futasaku-glass .intel-close { width:44px; height:44px; flex:none; border:0; border-radius:9px; background:transparent; color:#e8ddc9; font-size:23px; line-height:1; cursor:pointer; }
 #futasaku-glass .intel-close:focus-visible { outline:2px solid #e8ddc9; }
-#futasaku-glass .intel-body { padding:2px 13px 12px; min-height:0; overflow:auto; overscroll-behavior:contain; display:flex; flex-direction:column; gap:10px; }
-#futasaku-glass .intel-readout { display:grid; gap:4px; min-height:58px; padding:10px 0 8px; border-top:1px solid rgba(229,214,183,.10); border-bottom:1px solid rgba(229,214,183,.10); }
-#futasaku-glass .intel-who { font:600 10px/1 monospace; letter-spacing:.18em; color:#b7a98a; }
-#futasaku-glass .intel-verb { font:700 28px/1.05 monospace; letter-spacing:.08em; color:#f6ecd8; text-shadow:0 1px 8px rgba(0,0,0,.45); }
-#futasaku-glass .intel-detail { font:600 13px/1 monospace; letter-spacing:.12em; color:#e2d4b4; min-height:1em; }
-#futasaku-glass .intel-nav { display:flex; align-items:center; gap:8px; }
-#futasaku-glass .intel-nav button { flex:1; min-height:40px; border:1px solid rgba(214,204,177,.18); border-radius:8px;
-  background:rgba(255,255,255,.03); color:#e8ddc9; font:600 11px/1 monospace; letter-spacing:.14em; cursor:pointer; }
-#futasaku-glass .intel-nav button:disabled { opacity:.28; cursor:default; }
-#futasaku-glass .intel-nav button:not(:disabled):is(:hover,:focus-visible) { background:rgba(255,255,255,.07); outline:none; }
-#futasaku-glass .intel-nav button:focus-visible { outline:2px solid #e8ddc9; outline-offset:1px; }
-#futasaku-glass .intel-meters { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px 10px; }
-#futasaku-glass .intel-meter { display:grid; gap:2px; min-width:0; }
-#futasaku-glass .intel-meter span { font:600 9px/1 monospace; letter-spacing:.14em; color:#b7a98a; }
-#futasaku-glass .intel-meter b { font:700 14px/1.1 monospace; letter-spacing:.04em; color:#f4ebda; font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#futasaku-glass .intel-body { padding:8px 14px 14px; min-height:0; overflow:auto; overscroll-behavior:contain; display:flex; flex-direction:column; gap:12px;
+  animation:intel-tab-in var(--ix-open,150ms) var(--ix-ease-open,cubic-bezier(.22,1,.36,1)) both;
+  /* rows scrolling under the tab bar dissolve instead of being sliced */
+  -webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 10px), transparent 100%);
+  mask-image:linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 10px), transparent 100%); }
+@keyframes intel-tab-in { from { opacity:0; translate:0 var(--ix-travel,4px); } to { opacity:1; translate:0 0; } }
+.reduce-motion #futasaku-glass .intel-body { animation:none; }
+@media (prefers-reduced-motion: reduce) { #futasaku-glass .intel-body { animation:none; } }
+/* WHICH surface is this: Tips reads THIS match, Rules is the reference. One line, always visible. */
+#futasaku-glass .intel-scope { display:flex; align-items:baseline; gap:8px; margin:0; min-width:0; }
+#futasaku-glass .intel-scope b { font:700 9.5px/1.1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.18em; color:#cfc0a0; white-space:nowrap; }
+#futasaku-glass .intel-scope span { font:600 9px/1.1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.14em; color:#8f846c; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+#futasaku-glass .intel-label { margin:0 0 6px; font:600 9.5px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.16em; color:#a99c81; text-transform:uppercase; }
+#futasaku-glass .intel-lead { margin:0; font:var(--w-display,700) 22px/1.1 var(--font-display,Besley,Georgia,serif); letter-spacing:.005em; color:#f6ecd8; text-wrap:balance; }
+#futasaku-glass .intel-sub { margin:4px 0 0; font:500 11.5px/1.3 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.04em; color:#cbbfa0; font-variant-numeric:tabular-nums; }
+/* ONE strategic read of this position: a note in the margin of the instrument, not a paragraph. */
+#futasaku-glass .intel-observation { margin:8px 0 0; padding:0 0 0 10px; border-left:2px solid rgba(233,216,173,.22);
+  font:400 13px/1.45 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.012em; color:#e0d3b4; text-wrap:pretty; }
+#futasaku-glass .intel-moves { list-style:none; margin:0; padding:0; display:grid; gap:5px; }
+#futasaku-glass .intel-move { font:400 13px/1.35 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.012em; color:rgba(240,233,220,.62); }
+#futasaku-glass .intel-move:first-child { color:#f4ebda; }
+#futasaku-glass .intel-move[data-who='you'] { color:rgba(214,226,201,.55); }
+#futasaku-glass .intel-move[data-who='you']:first-child { color:#dfe9d3; }
+/* The readout: five facts, one rhythm, numbers first (territory / cuts / deck / hand / bombs).
+   No rules above or below it (owner, 2026-11-02): the per-stat caps already say what each number
+   is, and the extra air keeps the strip clear of the prose on either side. */
+#futasaku-glass .intel-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:2px 10px;
+  margin:0; padding:12px 0 11px; }
+#futasaku-glass .intel-stat { display:flex; flex-wrap:wrap; align-items:baseline; gap:0 3px; min-width:0; }
+#futasaku-glass .intel-stat-k { flex:1 0 100%; font:500 10px/1.3 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.1em; color:#b7ab91; white-space:nowrap; }
+#futasaku-glass .intel-stat-v { font:700 14px/1.15 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.01em; color:#f4ebda; font-variant-numeric:tabular-nums; white-space:nowrap; }
+#futasaku-glass .intel-stat-edge { font:700 8px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); font-style:normal; color:#8f846c; }
+#futasaku-glass .intel-stat[data-edge='you'] .intel-stat-edge { color:var(--c-you,#7fcf8d); }
+#futasaku-glass .intel-stat[data-edge='them'] .intel-stat-edge { color:color-mix(in srgb, var(--c-danger,#c96e5c) 70%, #e8ddc9); }
 #futasaku-glass .intel-cards { display:flex; flex-wrap:wrap; align-items:flex-start; gap:5px; }
+#futasaku-glass .intel-comparison { margin:0; font:400 10px/1.4 var(--font-ui); letter-spacing:.06em; color:#b7ab91; }
+#futasaku-glass .intel-record > summary { min-height:44px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; color:#cbbfa0; font:400 12px/1.3 var(--font-ui); }
+#futasaku-glass .intel-record > summary::after { content:'+'; font-size:18px; }
+#futasaku-glass .intel-record[open] > summary::after { content:'−'; }
+#futasaku-glass .intel-record > summary:focus-visible { outline:2px solid #e8ddc9; outline-offset:2px; }
+#futasaku-glass .intel-record .intel-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+#futasaku-glass .intel-none { margin:0; font:400 12.5px/1.35 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:rgba(240,233,220,.6); }
 #futasaku-glass .intel-card-wrap { position:relative; flex:none; }
 #futasaku-glass .intel-card { display:block; position:relative; width:26px; height:37px; border-radius:3px; box-sizing:border-box; overflow:hidden; background:#171918; border:1px solid #958a70; }
 #futasaku-glass .intel-card .futa04-card-art { position:absolute; inset:0; display:block; border-radius:inherit; background-size:300% 300%; background-repeat:no-repeat; }
@@ -241,19 +326,83 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 #futasaku-glass .intel-card .c-num { position:absolute; top:1px; left:2px; z-index:1; font:800 11px/1 monospace; }
 #futasaku-glass .intel-card .c-suit { display:none; }
 #futasaku-glass .intel-card-count { position:absolute; right:-3px; bottom:-3px; min-width:13px; height:13px; padding:0 2px; border-radius:5px; background:#24221e; border:1px solid #a99c81; font:700 9px/12px monospace; text-align:center; }
-#futasaku-glass .intel-observation { margin:0; color:#d3c4a3; font-size:10px; letter-spacing:.09em; }
-/* Two tab headings share the bar with the close control. Active state is word + cream
+/* Tips and Rules: soft filled rows, never a frame. */
+#futasaku-glass .intel-tips, #futasaku-glass .intel-rules { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
+#futasaku-glass :is(.intel-tip, .intel-rule) { display:block; width:100%; box-sizing:border-box; margin:0; border:0; border-radius:11px; text-align:left;
+  background:rgba(242, 237, 228,.045); color:#f0e9dc; cursor:pointer; transition:background-color 160ms ease; -webkit-tap-highlight-color:transparent; }
+#futasaku-glass :is(.intel-tip, .intel-rule):is(:hover,:focus-visible) { background:rgba(242, 237, 228,.08); outline:none; }
+#futasaku-glass :is(.intel-tip, .intel-rule):focus-visible { box-shadow:0 0 0 2px rgba(232,221,201,.7); }
+/* A tip is an INSTRUMENT readout: a verdict row, a headline, the decision it implies, and the
+   facts behind it. Kind and severity are carried by the word, the glyph and the fill, never by a
+   line and never by colour alone — the same rule the rest of the game follows. */
+#futasaku-glass .intel-tip { --tip-ink:#cbbfa0; display:grid; gap:5px; padding:10px 12px 11px;
+  background:rgba(242, 237, 228,.045); }
+#futasaku-glass .intel-tip[data-kind='danger'] { --tip-ink:color-mix(in srgb, var(--c-danger,#c96e5c) 66%, #e8ddc9); }
+#futasaku-glass .intel-tip[data-kind='opportunity'] { --tip-ink:color-mix(in srgb, var(--c-you,#7fcf8d) 76%, #e8ddc9); }
+#futasaku-glass .intel-tip[data-kind='tempo'] { --tip-ink:#cbbfa0; }
+#futasaku-glass .intel-tip[data-kind='endgame'] { --tip-ink:color-mix(in srgb, var(--c-gold,#f2c14e) 74%, #e8ddc9); }
+/* Severity is the word, the glyph and the fill, never a line (owner, 2026-11-02). */
+#futasaku-glass .intel-tip[data-severity='critical'] { background:rgba(242, 237, 228,.062); }
+#futasaku-glass .intel-tip--primary { padding:11px 13px 12px; }
+#futasaku-glass .intel-tip-top { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
+#futasaku-glass .intel-kind { display:inline-flex; align-items:center; gap:6px; min-width:0;
+  font:700 9.5px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.16em; color:var(--tip-ink); }
+#futasaku-glass .intel-tip-mark { display:inline-grid; place-items:center; flex:none; width:15px; height:15px; border-radius:4px;
+  border:1px solid color-mix(in srgb, var(--tip-ink) 70%, transparent); font:700 8px/1 var(--font-ui,'Fragment Mono'),ui-monospace,sans-serif;
+  font-variant-emoji:text; color:var(--tip-ink); }
+#futasaku-glass .intel-tip[data-severity='critical'] .intel-tip-mark { background:color-mix(in srgb, var(--tip-ink) 20%, transparent); }
+#futasaku-glass .intel-tip-sev { flex:none; font:700 8px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.16em; color:rgba(240,233,220,.5); }
+#futasaku-glass .intel-tip[data-severity='critical'] .intel-tip-sev { color:var(--tip-ink); }
+#futasaku-glass .intel-tip-headline { display:block; font:600 13.5px/1.35 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.012em; color:#f4ebda; text-wrap:pretty; }
+#futasaku-glass .intel-tip--primary .intel-tip-headline { font:var(--w-display,700) 18px/1.22 var(--font-display,Besley,Georgia,serif); letter-spacing:.004em; color:#fbf2e0; }
+#futasaku-glass .intel-tip-detail { display:block; font:400 12px/1.42 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.012em; color:rgba(240,233,220,.7); text-wrap:pretty; }
+#futasaku-glass .intel-evidence { display:flex; flex-wrap:wrap; gap:5px; margin-top:1px; }
+#futasaku-glass .intel-fact { display:inline-flex; align-items:baseline; gap:4px; padding:2px 6px; border-radius:5px;
+  background:rgba(0,0,0,.22); border:1px solid rgba(233,216,173,.10);
+  font:600 8.5px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.1em; color:#b3a587; }
+#futasaku-glass .intel-fact b { font:700 11px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:#f0e6d0; font-variant-numeric:tabular-nums; }
+/* The quiet Tips tab: composed, never blank and never a bare apology. */
+#futasaku-glass .intel-quiet { display:grid; gap:7px; padding:13px 13px 14px; border-radius:11px; background:rgba(242, 237, 228,.035); }
+#futasaku-glass .intel-quiet-line { margin:0; font:400 12.5px/1.45 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.012em; color:rgba(240,233,220,.72); text-wrap:pretty; }
+#futasaku-glass .intel-rule { padding:0; }
+#futasaku-glass .intel-rule-head { display:grid; grid-template-columns:24px 1fr auto; align-items:center; gap:10px; min-height:46px; padding:0 12px; }
+/* The rule glyphs (✦ ↑ ◆ ✂) in the game's face, always as plain text: on iPhone "✂" otherwise
+   renders as a colour emoji among cream icons. The renderer also appends U+FE0E (text style). */
+#futasaku-glass .intel-rule-icon { font:400 15px/1 var(--font-ui,'Fragment Mono'),ui-monospace,system-ui,sans-serif; font-variant-emoji:text; color:#d8c9a6; text-align:center; }
+#futasaku-glass .intel-rule-title { font:var(--w-display,700) 15px/1.2 var(--font-display,Besley,Georgia,serif); color:#f6ecd8; letter-spacing:.005em; }
+#futasaku-glass .intel-rule-num { font:600 9.5px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.14em; color:#a99c81; font-variant-numeric:tabular-nums; }
+#futasaku-glass .intel-rule-fold { display:grid; grid-template-rows:0fr; transition:grid-template-rows 260ms cubic-bezier(.22,.72,.24,1); }
+#futasaku-glass .intel-rule[aria-expanded='true'] .intel-rule-fold { grid-template-rows:1fr; }
+#futasaku-glass .intel-rule[aria-expanded='true'] { background:rgba(242, 237, 228,.075); }
+#futasaku-glass .intel-rule-line { overflow:hidden; min-height:0; font:400 13px/1.45 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.012em; color:rgba(240,233,220,.84); text-wrap:pretty; }
+#futasaku-glass .intel-rule-line > span { display:block; padding:0 12px 12px 46px; }
+@media (prefers-reduced-motion: reduce) { #futasaku-glass .intel-rule-fold { transition:none; } }
+#futasaku-glass .intel-full { margin-top:4px; }
+#futasaku-glass .intel-full > summary { list-style:none; display:flex; align-items:center; justify-content:space-between; min-height:44px; padding:0 12px; border-radius:11px; cursor:pointer;
+  font:600 10px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.16em; text-transform:uppercase; color:#cbbfa0; }
+#futasaku-glass .intel-full > summary::-webkit-details-marker { display:none; }
+#futasaku-glass .intel-full > summary::after { content:'+'; font-size:15px; letter-spacing:0; color:#a99c81; }
+#futasaku-glass .intel-full[open] > summary::after { content:'–'; }
+#futasaku-glass .intel-full > summary:focus-visible { outline:2px solid #e8ddc9; outline-offset:-2px; }
+#futasaku-glass .intel-full .intel-howto { padding:4px 12px 0; }
+/* Three tab headings share the bar with the close control. Active state is word + cream
    underline (never colour alone). No borders: the glass already frames the sheet. */
 #futasaku-glass .intel-tabs { display:flex; align-items:stretch; gap:2px; flex:1; min-width:0; }
 #futasaku-glass .intel-tab { position:relative; flex:1 1 0; min-width:0; min-height:44px; padding:0 8px; border:0;
-  background:transparent; color:#b7a98a; font:600 11px/1 monospace; letter-spacing:.14em; cursor:pointer;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  background:transparent; color:#b7a98a; font:600 11px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.16em; text-transform:uppercase; cursor:pointer;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:color 160ms ease; }
 #futasaku-glass .intel-tab[aria-selected='true'] { color:#f6ecd8; }
-#futasaku-glass .intel-tab[aria-selected='true']::after { content:''; position:absolute; left:10px; right:10px; bottom:5px;
-  height:2px; border-radius:1px; background:rgba(233,216,173,.8); }
+#futasaku-glass .intel-tab::after { content:''; position:absolute; left:14px; right:14px; bottom:5px;
+  height:2px; border-radius:1px; background:rgba(233,216,173,.8); transform:scaleX(0); opacity:0; transition:transform 220ms cubic-bezier(.22,.72,.24,1), opacity 160ms ease; }
+#futasaku-glass .intel-tab[aria-selected='true']::after { transform:none; opacity:1; }
 #futasaku-glass .intel-tab:focus-visible { outline:2px solid #e8ddc9; outline-offset:-2px; border-radius:8px; }
 .large-text #futasaku-glass .intel-tab { min-height:48px; font-size:12px; }
-/* The moves reference reads as prose in the same face as the tutorial glass copy. */
+.large-text #futasaku-glass :is(.intel-tip-headline, .intel-tip-detail, .intel-observation, .intel-move, .intel-rule-line) { font-size:15px; }
+.large-text #futasaku-glass .intel-tip--primary .intel-tip-headline { font-size:20px; }
+.large-text #futasaku-glass .intel-stat-v { font-size:16px; }
+.large-text #futasaku-glass .intel-stat-k { font-size:9.5px; }
+.large-text #futasaku-glass .intel-kind { font-size:10.5px; }
+/* The full rules read as prose in the same face as the tutorial glass copy. */
 #futasaku-glass .intel-howto p { margin:0 0 10px; font:400 13px/1.5 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
   color:rgba(240,233,220,.82); letter-spacing:.012em; text-wrap:pretty; }
 #futasaku-glass .intel-howto p:last-child { margin-bottom:0; }
@@ -287,17 +436,153 @@ html.futa04-tutorial #hud-menu {
 }
 html.futa04-tutorial #scrim { z-index: 50; }
 html.futa04-tutorial .sheet { z-index: 51; }
+/* Lessons: the menu stays above the dim. The map is not padded — the words sit in #lesson-plate. */
+html.futa04-lesson .game > .hud,
+html.futa04-lesson.futa04-branding.slim-hud .game > .hud {
+  z-index: 45;
+  pointer-events: none;
+}
+html.futa04-lesson #hud-menu {
+  position: relative;
+  z-index: 46;
+  pointer-events: auto !important;
+}
+html.futa04-lesson #scrim { z-index: 50; }
+html.futa04-lesson .sheet { z-index: 51; }
+/* THE lesson info box: a caption floating over the felt. A soft translucent fill at .77 — no
+   border, no outline, no ring, no shadow, no buttons (START AGAIN aside, below). Flat (no blur:
+   a blur would repaint the board underneath on every camera frame). pointer-events:none lets
+   every tap through. */
+#lesson-plate {
+  position: fixed;
+  left: 0; top: 0;
+  z-index: 42;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 9px 14px 10px;
+  border: 0;
+  outline: 0;
+  border-radius: 14px;
+  background: rgba(14,13,12,.77);
+  color: #f0e9dc;
+  box-shadow: none;
+  pointer-events: none;
+  overflow: hidden;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  transition: transform 160ms ease, opacity 180ms ease;
+}
+#lesson-plate[hidden] { display: none !important; }
+/* START AGAIN, only while a lesson cannot finish: the box's one button takes taps itself. */
+#lesson-plate .lesson-restart {
+  display: flex;
+  width: 100%;
+  margin-top: 8px;
+  pointer-events: auto;
+}
+#lesson-plate .lesson-copy {
+  margin: 0;
+  /* One explanation, up to four centred lines on the smallest phone. The placement measures the
+     real height once per beat and never lets the box cover the lit target. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  font: 400 12.5px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
+  color: rgba(240,233,220,.9);
+  letter-spacing: .012em;
+  text-align: center;
+  text-wrap: pretty;
+}
+/* The smallest phones (320-340 px): half a pixel smaller, so the longest explanation keeps its
+   four lines with room to spare (at 12.5px its second line had 0.4px left, and a rounding
+   difference pushed the end of the sentence past the four-line clamp). */
+@media (max-width: 340px) { #lesson-plate .lesson-copy { font-size: 12px; } }
+/* Desktop: the box, its words and its example cards scale together (--plate-scale, set with the
+   box's width in main.ts placeLessonPlate; 1 on phones, so phones are unchanged). */
+html[data-layout='side'] #lesson-plate { padding: calc(9px * var(--plate-scale,1)) calc(14px * var(--plate-scale,1)) calc(10px * var(--plate-scale,1)); border-radius: calc(14px * var(--plate-scale,1)); }
+html[data-layout='side'] #lesson-plate .lesson-copy { font-size: calc(12.5px * var(--plate-scale,1)); }
+html[data-layout='side'].large-text #lesson-plate .lesson-copy { font-size: calc(15px * var(--plate-scale,1)); }
+html[data-layout='side'] #lesson-plate .lesson-example-card { zoom: var(--plate-scale,1); }
+.large-text #lesson-plate .lesson-copy { font-size: 15px; line-height: 1.4; }
+/* The Bloom lesson's static example: three tiny faces per row, inside the SAME caption box.
+   No new overlay, no animation, no border of its own; it is sized to stay legible at 360 px. */
+#lesson-plate .lesson-example {
+  margin: 7px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+}
+#lesson-plate .lesson-example[hidden] { display: none; }
+#lesson-plate .lesson-example-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+}
+#lesson-plate .lesson-example-row[hidden] { display: none; }
+#lesson-plate .lesson-example-card {
+  --cw: 25px;
+  --ch: 34px;
+  width: 25px;
+  height: 34px;
+  padding: 1px 0 2px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  justify-items: center;
+  align-items: center;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--suit, #f0e9dc) 42%, transparent);
+  background: rgba(20, 21, 21, 0.88);
+  color: var(--suit, #f0e9dc);
+  box-shadow: none;
+}
+#lesson-plate .lesson-example-card .futa04-card-art { display: none; }
+#lesson-plate .lesson-example-card :is(.c-num, .c-suit) { opacity: 1; }
+#lesson-plate .lesson-example-card .c-num {
+  font: 700 11px/1 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
+  padding: 0;
+}
+#lesson-plate .lesson-example-card .c-suit svg { width: 11px; height: 11px; }
+.large-text #lesson-plate .lesson-example-card { width: 30px; height: 40px; }
+.large-text #lesson-plate .lesson-example-card .c-num { font-size: 13px; }
+.large-text #lesson-plate .lesson-example-card .c-suit svg { width: 13px; height: 13px; }
+.reduce-motion #lesson-plate .lesson-example-card { transition: none !important; }
+.reduce-motion #lesson-plate { transition: none !important; }
 /* Plain SVG mask dim — no foreignObject/backdrop-filter (iOS Safari ignores those cutouts
    and the grayscale+brightness crush leaves the board nearly black). */
-#tutorial-focus .focus-dim { fill:rgba(0,0,0,.38); }
-/* The levels: a strong dim (only the lit thing reads), a chunky pointer with a dark edge. */
-#tutorial-focus[data-lesson='1'] .focus-dim { fill:rgba(0,0,0,.62); }
-#tutorial-focus[data-lesson='1'] .focus-glow { fill:rgba(233,216,173,.16); }
-#tutorial-focus[data-lesson='1'] .focus-pointer-body { transform:scale(1.6); transform-origin:10px 1px; stroke:rgba(20,16,10,.85); stroke-width:1.6px; paint-order:stroke; }
-/* Contour-free highlight: soft cream fill only — no stroke/ring outline. */
-#tutorial-focus .focus-glow { fill:rgba(233,216,173,.10); stroke:none; stroke-width:0;
-  filter:drop-shadow(0 0 12px rgba(233,216,173,.55)); }
-#tutorial-focus .focus-glow-soft { fill:rgba(233,216,173,.18); stroke:none; filter:drop-shadow(0 0 16px rgba(233,216,173,.42)); }
+#tutorial-focus .focus-dim { fill:rgba(0,0,0,.22); }
+/* The levels: a NEW idea gets the strong dim; a guide is much lighter; a whisper has no dim at
+   all and only pulses the target. Level 1 starts a little stronger than the rest. */
+/* OWNER, 2026-11-11: in levels 1-9 the rest of the screen goes clearly darker when the next move is
+   lit (about half as visible as before: .45 -> .72 for a new idea, .15 -> .55 for a guide step).
+   When and how it dims is unchanged; the "?" turn guide outside the levels keeps its light dim. */
+#tutorial-focus[data-tier='spotlight'][data-lesson='1'] .focus-dim { fill:rgba(0,0,0,.72); }
+#tutorial-focus[data-tier='guide'] .focus-dim { fill:rgba(0,0,0,.15); }
+#tutorial-focus[data-tier='guide'][data-lesson='1'] .focus-dim { fill:rgba(0,0,0,.55); }
+#tutorial-focus[data-tier='whisper'] .focus-dim { fill:rgba(0,0,0,0); }
+#tutorial-focus[data-tier='whisper'] .focus-hole { fill:transparent; }
+#tutorial-focus[data-tier='whisper'] .focus-glow { filter:drop-shadow(0 0 10px rgba(242,237,224,.38)); }
+/* The pointer is made of the same light as the glow (owner, 2026-11-10: no flat 2D outlines): no
+   dark rim — its own colour rounds its corners, a soft drop gives it depth, and a warm halo makes it
+   glow like the thing it points at. */
+#tutorial-focus[data-lesson='1'] .focus-pointer-body { transform:scale(1.6); transform-origin:10px 1px; }
+/* ONE LOOK FOR "LIT" (owner, 2026-11-10: "draw pile had a contour around when highlighted ...
+   make sure it's consistent", levels 1-9 included). The light is the Draw pile's own: a soft
+   cool-white glow hugging the target's edge (information.ts: 0 0 12px 2px rgba(242,237,224,.42)).
+   Never a fill over the card, tile or key, so the thing itself is never washed out. */
+/* The light is the target's own shape, filled and blurred BEHIND it (the inside is masked away):
+   it starts at the very edge with no gap, falls off softly, and never draws a line or rounds the
+   shape — the target's own crisp edge stays the strongest edge on screen. */
+#tutorial-focus .focus-glow { fill:rgba(242,237,224,.5); stroke:none; stroke-width:0; filter:blur(4px); }
+#tutorial-focus .focus-glow-soft { fill:rgba(242,237,224,.2); stroke:none; stroke-width:0; filter:blur(11px); }
+/* ONE halo per target. When the target is the display, its own baked bloom IS the highlight;
+   when the board already lights it (a top-rank tile's glow), the lesson does not stack a second.
+   The paths stay in the DOM (only their ink is cleared), so the pointer's geometry is unchanged. */
+#tutorial-focus[data-light-target='display'] :is(.focus-glow,.focus-glow-soft),
+#tutorial-focus[data-light-target='lit'] :is(.focus-glow,.focus-glow-soft) { fill:transparent; stroke:none; filter:none; }
 #tutorial-focus .focus-lift { transform-box:fill-box; transform-origin:center; }
 /* Steady opacity pulse only — never scale (scale + live target breathe looked broken). */
 #tutorial-focus[data-pulse='1'] .focus-lift { animation:tutorial-glow-pulse 1.6s ease-in-out infinite; }
@@ -305,8 +590,10 @@ html.futa04-tutorial .sheet { z-index: 51; }
   0%,100% { opacity:1; }
   50% { opacity:.72; }
 }
-#tutorial-focus .focus-pointer { filter:drop-shadow(0 1px 3px rgba(0,0,0,.4)); transform-origin:10px 4px; }
-#tutorial-focus .focus-pointer-body { fill:#fff; stroke:none; }
+#tutorial-focus .focus-pointer { filter:drop-shadow(0 1px 3px rgba(0,0,0,.4)) drop-shadow(0 0 8px var(--light-bloom,rgba(233,216,173,.32))); transform-origin:10px 4px; }
+#tutorial-focus .focus-pointer-body { fill:color-mix(in srgb,var(--light-core,#f2ede4) 35%,#f2ede4 65%);
+  stroke:color-mix(in srgb,var(--light-core,#f2ede4) 35%,#f2ede4 65%); stroke-width:2.4px; stroke-linejoin:round;
+  filter:drop-shadow(0 1px 1.5px rgba(8,6,4,.6)) drop-shadow(0 0 6px rgba(242,237,224,.5)); }
 #tutorial-focus[data-bob='1'] .focus-pointer { animation:tutorial-pointer-tap 1.1s ease-in-out infinite; }
 #tutorial-focus[data-bob='hard'] .focus-pointer { animation:tutorial-pointer-tap-hard .85s ease-in-out infinite; }
 @keyframes tutorial-pointer-tap { 0%,100% { transform:translate(0,0); } 45% { transform:translate(var(--bob-x,0px),var(--bob-y,7px)); } }
@@ -342,8 +629,9 @@ html.futa04-tutorial .sheet { z-index: 51; }
   box-shadow:inset 0 1px rgba(243,232,202,.07),0 14px 34px rgba(0,0,0,.38);
   backdrop-filter:blur(10px) saturate(1.05); -webkit-backdrop-filter:blur(10px) saturate(1.05);
 }
+/* The 22px stage gap already separates the groups; no rule between them (owner, 2026-11-02). */
 #tutorial-bloom-demo .tutorial-bloom-group + .tutorial-bloom-group {
-  padding-top:18px; border-top:1px solid rgba(214,204,177,.1);
+  padding-top:18px;
 }
 #tutorial-bloom-demo .tutorial-bloom-group { display:flex; flex-direction:column; gap:8px; align-items:center; }
 /* Same face as tutorial glass why-copy (not a mismatched display face). */
@@ -402,7 +690,7 @@ const bloomDemoRowHtml = (cards: readonly Card[]) =>
 
 const bloomDemoHtml = () =>
   `<div class="tutorial-bloom-stage" aria-hidden="true">`
-  + `<div class="tutorial-bloom-group"><span class="tutorial-bloom-tag">Same number, different suits</span>`
+  + `<div class="tutorial-bloom-group"><span class="tutorial-bloom-tag">Same number, any suits</span>`
   + `<div class="tutorial-bloom-row">${bloomDemoRowHtml(BLOOM_DEMO_SET)}</div></div>`
   + `<div class="tutorial-bloom-group"><span class="tutorial-bloom-tag">Numbers in a row, one suit</span>`
   + `<div class="tutorial-bloom-row">${bloomDemoRowHtml(BLOOM_DEMO_RUN)}</div></div>`
@@ -417,7 +705,9 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 type Pt = { x: number; y: number };
 type Tracked = { cx: number; cy: number; hole: string; ring: string; soft: string; w: number; h: number; left: number; top: number; right: number; bottom: number; exact?: boolean;
   /** The lesson shapes: one outline per target, in screen pixels (absent: the pill). */
-  polys?: Pt[][] };
+  polys?: Pt[][];
+  /** Each outline's own corner radius (a card's, a key's, a pile's), so the glow follows the shape exactly. */
+  radii?: number[] };
 
 const FOCUS_RX = 10;
 const FOCUS_PAD_X = 8;
@@ -559,25 +849,16 @@ const cardOutline = (el: Element): Pt[] | null => {
   const cx = r.left + r.width / 2;
   const cy = r.top + r.height / 2;
   const cos = Math.cos(a); const sin = Math.sin(a);
+  // The card's LIVE size: a lit card breathes (lesson-breath scales it), and the glow must hug the
+  // edge it has right now, never the resting one. The turned box's width gives the scale.
+  const turnedW = w * Math.abs(cos) + ht * Math.abs(sin);
+  const k = turnedW > 0 ? r.width / turnedW : 1;
   return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => {
-    const x = (sx! * w) / 2; const y = (sy! * ht) / 2;
+    const x = (sx! * w * k) / 2; const y = (sy! * ht * k) / 2;
     return { x: cx + x * cos - y * sin, y: cy + x * sin + y * cos };
   });
 };
 
-const polyCentre = (pts: readonly Pt[]): Pt => ({
-  x: pts.reduce((a, p) => a + p.x, 0) / pts.length,
-  y: pts.reduce((a, p) => a + p.y, 0) / pts.length,
-});
-/** The outline pushed out by `pad` pixels from its centre (the soft halo around it). */
-const grownPoly = (pts: readonly Pt[], pad: number): Pt[] => {
-  const c = polyCentre(pts);
-  return pts.map((p) => {
-    const dx = p.x - c.x; const dy = p.y - c.y;
-    const len = Math.hypot(dx, dy) || 1;
-    return { x: p.x + (dx / len) * pad, y: p.y + (dy / len) * pad };
-  });
-};
 /** The levels' one corner: every glow (hex, card, pile, button) has the same rounded corner. */
 const LESSON_CORNER = 9;
 /** An outline as a path whose every corner is rounded by the same radius (shorter on tiny edges). */
@@ -598,24 +879,51 @@ const roundedPath = (pts: readonly Pt[], r = LESSON_CORNER): string => {
 };
 
 /** Tracked geometry for outlines: the bounds (for the pointer) plus each outline. */
-const geometryFromPolys = (polys: Pt[][]): Tracked => {
+const geometryFromPolys = (polys: Pt[][], radii?: number[]): Tracked => {
   const all = polys.flat();
   const left = Math.min(...all.map((p) => p.x)); const right = Math.max(...all.map((p) => p.x));
   const top = Math.min(...all.map((p) => p.y)); const bottom = Math.max(...all.map((p) => p.y));
   return {
     cx: (left + right) / 2, cy: (top + bottom) / 2, hole: '', ring: '', soft: '',
-    w: right - left, h: bottom - top, left, top, right, bottom, exact: true, polys,
+    w: right - left, h: bottom - top, left, top, right, bottom, exact: true, polys, ...(radii ? { radii } : {}),
   };
 };
 
-/** The pill (Tutorial), or the target's own outline (levels: 'hex', 'card'). */
+/** An element's own corner radius in px (the top-left one; a % radius read against its width). */
+const cornerOf = (el: Element): number => {
+  const raw = getComputedStyle(el).borderTopLeftRadius;
+  const v = parseFloat(raw) || 0;
+  return raw.trim().endsWith('%') ? (v / 100) * ((el as HTMLElement).offsetWidth || rectOf(el).width) : v;
+};
+/** A hex tile's corners are sharp: the glow follows the drawn hex exactly. */
+const HEX_CORNER = 0;
+
+/** The pill (Tutorial), or the target's own outline (levels and the guide: every shape). */
 const measureTarget = (selector: string, _shape: FocusShape, exactTarget = false): Tracked | null => {
   if (!selector || _shape === 'none') return null;
   if (_shape === 'hex' || _shape === 'card') {
-    const polys = [...document.querySelectorAll(selector)]
-      .map((n) => (_shape === 'hex' ? (n.classList.contains('hex-cell') ? hexOutline(n) : null) ?? cardOutline(n) : cardOutline(n)))
-      .filter((p): p is Pt[] => !!p);
-    if (polys.length) return geometryFromPolys(polys);
+    const polys: Pt[][] = []; const radii: number[] = [];
+    for (const n of document.querySelectorAll(selector)) {
+      const hex = _shape === 'hex' && n.classList.contains('hex-cell') ? hexOutline(n) : null;
+      const poly = hex ?? cardOutline(n);
+      if (!poly) continue;
+      polys.push(poly); radii.push(hex ? HEX_CORNER : cornerOf(n));
+    }
+    if (polys.length) return geometryFromPolys(polys, radii);
+  }
+  // The levels and the guide: a pile, a key or the display glows on its OWN box with its OWN corner
+  // (one outline each), never a padded pill around it.
+  if (exactTarget) {
+    const polys: Pt[][] = []; const radii: number[] = [];
+    for (const raw of document.querySelectorAll(selector)) {
+      const el = focusMeasureEl(raw);
+      const b = layoutBounds(el);
+      if (!b) continue;
+      polys.push([{ x: b.left, y: b.top }, { x: b.right, y: b.top }, { x: b.right, y: b.bottom }, { x: b.left, y: b.bottom }]);
+      radii.push(cornerOf(el));
+    }
+    if (polys.length) return geometryFromPolys(polys, radii);
+    return null;
   }
   // The levels light exactly their one target (never both piles at once).
   const nodes = [...document.querySelectorAll(exactTarget ? selector : expandFocusSelector(selector))];
@@ -676,15 +984,26 @@ export const mountGlassSurface = (onClose: () => void) => {
   let targetSelector = '';
   let targetShape: FocusShape = 'pill';
   let mode: 'tutorial' | 'intel' | 'guidance' | null = null;
-  let moveCursor = -1;
-  let lastMoveLen = -1;
-  let intelTab: IntelTabId = 'intel';
-  let intelLabels: IntelTabLabels = { intel: 'Match Intel', howto: 'How to' };
+  let intelTab: IntelTabId = 'now';
+  let intelLabels: IntelTabLabels = { now: 'Now', tips: 'Tips', rules: 'Rules' };
+  let intelGuide: IntelGuide = { tips: [], rules: [], rule: 1 };
+  let ruleOpen: number | null = null;
+  let fullRules = false;
+  let recordOpen=false;
+  let ruleTimer:ReturnType<typeof setTimeout>|undefined;
+  const intelScroll:Record<IntelTabId,number>={now:0,tips:0,rules:0};
+  let onIntelTab: ((tab: IntelTabId) => void) | null = null;
   let howToHtml = '';
   let reduceMotion = false;
   let idleHard = false;
   /** A level's focus: exactly its target, the target's own outline, strong dim. */
   let lessonFocus = false;
+  /** Levels 1-10: glow and pointer only. The words are the cockpit plate, so the map is not padded. */
+  let cockpitLesson = false;
+  /** The current teaching tier; WHISPER has a pulse but no dim and no pointer. */
+  let focusTier: 'spotlight' | 'guide' | 'whisper' | 'silent' = 'spotlight';
+  /** Copy with no target at all: the window shows, the dim never appears. */
+  let lightOff = false;
   let raf = 0;
   let holdUntil = 0;
   let smooth: Tracked | null = null;
@@ -745,14 +1064,19 @@ export const mountGlassSurface = (onClose: () => void) => {
 
 
   const stopLoop = () => { if (raf) cancelAnimationFrame(raf); raf = 0; };
+  /** How far a READING Intel sheet may rise above the cockpit: 112px, bounded by the screen.
+   *  The docked cockpit keeps about half the map visible while the Tips/Rules copy is read; the
+   *  one-line guidance bulb never grows (it is not a reading surface). */
+  const INTEL_LIFT = 112;
   const placeIntel = () => {
     clearTutorialReserve();
     const d = rectOf(dock);
+    const lift = mode === 'intel' ? Math.min(INTEL_LIFT, Math.max(0, Math.round(d.top - 8))) : 0;
     styleIfChanged(panel, 'left', `${Math.max(6, d.left + 6)}px`);
     styleIfChanged(panel, 'width', `${Math.max(0, Math.min(innerWidth - 12, d.width - 12))}px`);
     styleIfChanged(panel, 'max-width', '');
-    styleIfChanged(panel, 'top', `${Math.max(6, d.top + 4)}px`);
-    styleIfChanged(panel, 'height', `${Math.max(140, Math.min(innerHeight - d.top - 8, d.height - 8))}px`);
+    styleIfChanged(panel, 'top', `${Math.max(6, d.top + 4 - lift)}px`);
+    styleIfChanged(panel, 'height', `${Math.max(140, Math.min(innerHeight - d.top - 8 + lift, d.height - 8 + lift, innerHeight - 12))}px`);
     styleIfChanged(panel, 'bottom', '');
     styleIfChanged(panel, 'transform', '');
   };
@@ -772,59 +1096,59 @@ export const mountGlassSurface = (onClose: () => void) => {
     };
   };
 
+  /** Shared chrome→board margin on both ends of the leftover map band. */
+  const TUTORIAL_BAND_GAP = 4;
+  let lastBandKey = '';
+
+  /** The game's header row (menu + logo); the tutorial band starts under it. */
+  const hudRect = () => document.querySelector('#game > .hud')?.getBoundingClientRect();
+
   const placeTutorialPanel = (_tracked: Tracked | null) => {
     // Keep the glass docked (never follows the moving highlight).
     void _tracked;
     panelSide = 'top';
     styleIfChanged(panel, 'height', 'auto');
     styleIfChanged(panel, 'bottom', '');
+    // A hidden panel still needs the focus loop, but not a position or a reserved band.
+    if (panel.hidden) return;
     const side = document.documentElement.dataset.layout === 'side';
     const safe = safeInsets();
+    // The window starts flush under the game's header row.
+    const hud = hudRect();
+    const underBar = Math.round((hud?.bottom ?? safe.top) + TUTORIAL_BAND_GAP);
     if (side) {
-      // Desktop: right column — sides with the cockpit; top near the map but clear of the logo.
+      // Desktop: right column — sides with the cockpit; flush under the header.
       const cockpit = document.getElementById('futa04-box')?.getBoundingClientRect();
-      const board = document.getElementById('board-wrap')?.getBoundingClientRect();
       const dock = document.getElementById('dock')?.getBoundingClientRect();
-      const logo = document.getElementById('hud-brand')?.getBoundingClientRect();
       const col = cockpit ?? dock;
-      if (col && board) {
+      if (col) {
         const width = Math.max(200, Math.round(col.width));
         const left = Math.round(col.left);
-        // Prefer map-top alignment, but always sit a small gap under the Futa logo when it
-        // shares the right column (never cover chrome).
-        const logoClear = logo && logo.width > 0 ? Math.ceil(logo.bottom + 8) : 0;
-        const top = Math.max(Math.round(board.top), logoClear);
         styleIfChanged(panel, 'width', `${width}px`);
         styleIfChanged(panel, 'max-width', `${width}px`);
         styleIfChanged(panel, 'left', `${left}px`);
-        styleIfChanged(panel, 'top', `${top}px`);
+        styleIfChanged(panel, 'top', `${underBar}px`);
         // Override stylesheet `translateX(-50%)` (used for phone centering).
         styleIfChanged(panel, 'transform', 'none');
         clearTutorialPads();
         return;
       }
     }
-    // Phone / stack: the menu and logo own the top chrome, including the
-    // Home Screen safe area. Measure their live bounds rather than guessing a
-    // device-specific notch offset.
+    // Phone / stack: the window shares the board's left and right edges, so the bar, the window
+    // and the map read as one column (owner: "150IQ alignment"). The board already owns the
+    // gutters, so measuring it keeps them identical at every width.
+    const wrap = document.getElementById('board-wrap')?.getBoundingClientRect();
     const sidePad = 16 + safe.left + safe.right;
-    const width = Math.min(420, Math.max(200, innerWidth - sidePad));
-    const menu = document.getElementById('hud-menu')?.getBoundingClientRect();
-    const logo = document.getElementById('hud-brand')?.getBoundingClientRect();
-    const chromeBottom = Math.max(menu?.bottom ?? 0, logo?.bottom ?? 0);
-    const top = Math.max(Math.round(safe.top), Math.ceil(chromeBottom + 8));
+    const left = wrap ? Math.round(wrap.left) : Math.round(8 + safe.left);
+    const width = wrap ? Math.round(wrap.width) : Math.min(460, Math.max(200, innerWidth - sidePad));
     styleIfChanged(panel, 'width', `${width}px`);
     styleIfChanged(panel, 'max-width', `${width}px`);
-    styleIfChanged(panel, 'left', '50%');
-    styleIfChanged(panel, 'transform', 'translateX(-50%)');
-    styleIfChanged(panel, 'top', `${top}px`);
+    styleIfChanged(panel, 'left', `${left}px`);
+    styleIfChanged(panel, 'transform', 'none');
+    styleIfChanged(panel, 'top', `${underBar}px`);
     // After layout: equal gaps glass→board and board→cockpit/hand (centre map in the band).
     requestAnimationFrame(() => balanceTutorialBoardBand());
   };
-
-  /** Shared chrome→board margin on both ends of the leftover map band. */
-  const TUTORIAL_BAND_GAP = 4;
-  let lastBandKey = '';
 
   const clearTutorialPads = () => {
     lastBandKey = '';
@@ -839,7 +1163,7 @@ export const mountGlassSurface = (onClose: () => void) => {
    * Camera centres a short map while `futa04-tutorial` is on so hex gaps match.
    */
   const balanceTutorialBoardBand = () => {
-    if (mode !== 'tutorial' || document.documentElement.dataset.layout === 'side') return;
+    if (mode !== 'tutorial' || panel.hidden || document.documentElement.dataset.layout === 'side') return;
     const wrapEl = document.getElementById('board-wrap');
     const dockEl = document.getElementById('dock');
     const wrap = wrapEl?.getBoundingClientRect();
@@ -941,6 +1265,9 @@ export const mountGlassSurface = (onClose: () => void) => {
         if (c.room < BOX + GAP) return false;
         if (!onScreen(c.box)) return false;
         if (overlaps(c.box, panelRect)) return false;
+        const lessonPlate = document.getElementById('lesson-plate') as (HTMLElement & { _lessonBox?: DOMRect }) | null;
+        const lessonPlateRect = lessonPlate && !lessonPlate.hidden ? lessonPlate._lessonBox : null;
+        if (lessonPlateRect && lessonPlateRect.height > 8 && overlaps(c.box, lessonPlateRect)) return false;
         if (fan && overlaps(c.box, fan)) return false;
         if (overlaps(c.box, targetRect)) return false;
         return true;
@@ -982,7 +1309,9 @@ export const mountGlassSurface = (onClose: () => void) => {
     focus.innerHTML = cutoutMask(
       `<rect class="focus-hole" fill="black"/>`,
     )
-      + `<g class="focus-lift"><rect class="focus-glow-soft"/><rect class="focus-glow"/></g>`
+      + `<defs><mask id="tutorial-glow-out" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">`
+      + `<rect x="0" y="0" width="100%" height="100%" fill="white"/><rect class="focus-glow-cut" fill="black"/></mask></defs>`
+      + `<g class="focus-lift" mask="url(#tutorial-glow-out)"><rect class="focus-glow-soft"/><rect class="focus-glow"/></g>`
       + `<g class="focus-pointer-root" hidden>${POINTER_ARROW}</g>`;
     focusScene = 'tracked';
   };
@@ -990,9 +1319,11 @@ export const mountGlassSurface = (onClose: () => void) => {
   const paintFocus = (tracked: Tracked | null) => {
     setIfChanged(focus, 'viewBox', `0 0 ${innerWidth} ${innerHeight}`);
     // Steady pulse always while a target is live — never pauses for settle/jiggle.
-    // The levels' glow holds still: the lit thing already breathes on its own.
-    setIfChanged(focus, 'data-pulse', reduceMotion || !tracked || lessonFocus ? '0' : '1');
-    setIfChanged(focus, 'data-bob', reduceMotion || !tracked ? '0' : idleHard ? 'hard' : '1');
+    // In the levels the overlay glow holds still: the lit thing breathes on its own now
+    // (player/lesson-breath.ts puts one breath on a card, a pile or a key), so the halo must not
+    // pulse a second time on top of it. A whisper has no target of its own, so it keeps the pulse.
+    setIfChanged(focus, 'data-pulse', reduceMotion || !tracked ? '0' : focusTier === 'whisper' ? '1' : lessonFocus ? '0' : '1');
+    setIfChanged(focus, 'data-bob', reduceMotion || !tracked || focusTier === 'whisper' ? '0' : idleHard ? 'hard' : '1');
     setIfChanged(focus, 'data-on', tracked || mode === 'tutorial' ? '1' : '0');
     // #hud-menu sits above the dim (z-index), so it needs no cut-out of its own
     if (!tracked) {
@@ -1008,27 +1339,43 @@ export const mountGlassSurface = (onClose: () => void) => {
       const scene = `poly:${n}` as const;
       if (focusScene !== scene) {
         const each = (cls: string) => Array.from({ length: n }, () => `<path class="${cls}"/>`).join('');
+        // The glow sits on the exact outline and is cut away inside it, so it reads like the Draw
+        // pile's own box-shadow: light around the thing, never over it.
         focus.innerHTML = cutoutMask(each('focus-hole" fill="black'))
-          + `<g class="focus-lift">${each('focus-glow-soft')}${each('focus-glow')}</g>`
+          + `<defs><mask id="tutorial-glow-out" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">`
+          + `<rect x="0" y="0" width="100%" height="100%" fill="white"/>${each('focus-glow-cut" fill="black')}</mask></defs>`
+          + `<g class="focus-lift" mask="url(#tutorial-glow-out)">${each('focus-glow-soft')}${each('focus-glow')}</g>`
           + `<g class="focus-pointer-root" hidden>${POINTER_ARROW}</g>`;
         focusScene = scene;
       }
       const holes = focus.querySelectorAll('.focus-hole');
       const softs = focus.querySelectorAll('.focus-glow-soft');
       const rings = focus.querySelectorAll('.focus-glow');
+      const cuts = focus.querySelectorAll('.focus-glow-cut');
       tracked.polys.forEach((poly, i) => {
-        setIfChanged(holes[i] ?? null, 'd', roundedPath(grownPoly(poly, 4)));
-        setIfChanged(softs[i] ?? null, 'd', roundedPath(grownPoly(poly, 6)));
-        setIfChanged(rings[i] ?? null, 'd', roundedPath(grownPoly(poly, 2)));
+        // ONE edge for everything: the dim stops at the target's own outline and the light starts
+        // there, so it wraps the thing from behind with no gap and never redraws its shape
+        // (owner, 2026-11-10). A hex keeps its sharp corners (radius 0); cards and keys their own.
+        const exact = roundedPath(poly, tracked.radii?.[i] ?? LESSON_CORNER);
+        setIfChanged(holes[i] ?? null, 'd', exact);
+        setIfChanged(softs[i] ?? null, 'd', exact);
+        setIfChanged(rings[i] ?? null, 'd', exact);
+        setIfChanged(cuts[i] ?? null, 'd', exact);
       });
     } else {
       ensureTrackedScene();
       applyRectAttrs(focus.querySelector('.focus-hole'), tracked, true);
       applyRectAttrs(focus.querySelector('.focus-glow-soft'), tracked, true);
       applyRectAttrs(focus.querySelector('.focus-glow'), tracked, true);
+      applyRectAttrs(focus.querySelector('.focus-glow-cut'), tracked, true);
     }
-    const panelRect = panel.getBoundingClientRect();
-    const pose = pointerPose(tracked, panelRect);
+    const panelBox = panel.getBoundingClientRect();
+    const livePanel = !panel.hidden && panelBox.height > 8;
+    const panelRect = livePanel
+      ? panelBox
+      : ({ left: -10000, right: -10000, top: -10000, bottom: -10000 } as DOMRect);
+    // WHISPER is a pulse on the target only: no pointer, no dim.
+    const pose = focusTier === 'whisper' ? null : pointerPose(tracked, panelRect);
     const pointerRoot = focus.querySelector('.focus-pointer-root');
     if (pose && pointerRoot) {
       styleIfChanged(focus, '--bob-x', `${pose.bobX}px`);
@@ -1070,14 +1417,14 @@ export const mountGlassSurface = (onClose: () => void) => {
         const bottom = lerp(smooth.bottom, measured.bottom, t);
         smooth = geometryFromBounds(left, top, right, bottom, measured.exact);
       }
-      placeTutorialPanel(smooth);
+      if (!cockpitLesson) placeTutorialPanel(smooth);
       paintFocus(smooth);
     } else if (now < holdUntil && smooth) {
-      placeTutorialPanel(smooth);
+      if (!cockpitLesson) placeTutorialPanel(smooth);
       paintFocus(smooth);
     } else {
       smooth = null;
-      placeTutorialPanel(null);
+      if (!cockpitLesson) placeTutorialPanel(null);
       paintFocus(null);
     }
     raf = requestAnimationFrame(tick);
@@ -1091,9 +1438,15 @@ export const mountGlassSurface = (onClose: () => void) => {
   const place = () => {
     if (!mode) return;
     if (mode === 'intel' || mode === 'guidance') return placeIntel();
+    if (cockpitLesson) {
+      clearTutorialPads();
+      if (!raf && !lightOff) startLoop();
+      return;
+    }
+    if (panel.hidden) { if (!raf && !lightOff) startLoop(); return; }
     placeTutorialPanel(smooth);
     paintTutorialLed();
-    if (!raf) startLoop();
+    if (!raf && !lightOff) startLoop();
   };
 
   const observer = new ResizeObserver(place); observer.observe(dock);
@@ -1108,10 +1461,30 @@ export const mountGlassSurface = (onClose: () => void) => {
   };
 
   const close = () => {
-    mode = null; moveCursor = -1; lastMoveLen = -1; stopLoop(); smooth = null;
-    focusScene = null;
+    clearTimeout(ruleTimer);
+    // Match Intel leaves with the shared interface motion (owner, 2026-10-23: menus open and
+    // close "a bit alive and organic"); its content stays until it has gone. A lesson window keeps
+    // its own pinned timing and simply goes.
+    const leaving = mode === 'intel' && !panel.hidden;
+    mode = null; stopLoop(); smooth = null;
+    focusScene = null; cockpitLesson = false;
     setBloomDemo(false); clearTutorialReserve();
-    panel.hidden = true; showFocus(false); panel.replaceChildren(); onClose();
+    showFocus(false);
+    const gone = () => { panel.hidden = true; panel.replaceChildren(); };
+    if (!leaving || !exitSurface(panel, { onDone: gone })) gone();
+    onClose();
+  };
+
+  /**
+   * Take the window (and its light) away. `keepBand` keeps the space it reserved, so a step that
+   * goes quiet does not make the map jump under the player's finger.
+   */
+  const hidePanel = (keepBand = false) => {
+    clearTimeout(ruleTimer);
+    mode = null; stopLoop(); smooth = null; focusScene = null; lightOff = false; cockpitLesson = false;
+    if (panel.dataset.ixState === 'closing') resetSurface(panel);
+    panel.hidden = true; showFocus(false); setBloomDemo(false);
+    if (!keepBand) clearTutorialReserve();
   };
 
   const playGlassStepSettle = () => {
@@ -1148,6 +1521,7 @@ export const mountGlassSurface = (onClose: () => void) => {
       ? (options.lesson ? '<p class="glass-why" aria-hidden="true"></p>' : '')
       : options.why ? `<p class="glass-why">${safe(options.why)}</p>`
       : options.lesson ? '<p class="glass-why" aria-hidden="true"></p>' : '';
+    const missionHtml = options.mission ? `<p class="glass-mission">${safe(options.mission)}</p>` : '';
     const icons = options.turnIcons
       ? `<div class="glass-icons" aria-hidden="true"><span>Draw</span><span>Grow</span><span>Throw</span></div>` : '';
     const b = options.buttons ?? {};
@@ -1179,16 +1553,16 @@ export const mountGlassSurface = (onClose: () => void) => {
       const nextSlot = shell.querySelector('.glass-head-next');
       if (prevSlot) prevSlot.innerHTML = prevBtn;
       if (nextSlot) nextSlot.innerHTML = nextBtn;
-      for (const node of [...shell.querySelectorAll('.glass-why, .glass-status, .glass-icons')]) node.remove();
+      for (const node of [...shell.querySelectorAll('.glass-mission, .glass-why, .glass-status, .glass-icons')]) node.remove();
       const head = shell.querySelector('.glass-head');
-      if (head) head.insertAdjacentHTML('afterend', `${whyHtml}${icons}`);
-      else shell.insertAdjacentHTML('beforeend', `${whyHtml}${icons}`);
+      if (head) head.insertAdjacentHTML('afterend', `${missionHtml}${whyHtml}${icons}`);
+      else shell.insertAdjacentHTML('beforeend', `${missionHtml}${whyHtml}${icons}`);
       handlers = options.handlers ?? handlers;
       bindTutorialButtons();
       return;
     }
     ledTitle = line;
-    panel.innerHTML = `<div class="glass-tutorial">${headHtml}${whyHtml}${icons}</div>`;
+    panel.innerHTML = `<div class="glass-tutorial">${headHtml}${missionHtml}${whyHtml}${icons}</div>`;
     bindTutorialButtons();
     paintTutorialLed();
   };
@@ -1196,21 +1570,42 @@ export const mountGlassSurface = (onClose: () => void) => {
   const tutorial = (text: string, chapter: number, selectors: readonly string[], options: TutorialFocusOptions = {}) => {
     mode = 'tutorial';
     handlers = options.handlers ?? {};
+    cockpitLesson = !!options.inCockpit;
     reduceMotion = !!options.reduceMotion || document.documentElement.classList.contains('reduce-motion');
     idleHard = !!options.idleHard;
     const nextSelector = selectors.join(', ');
-    targetSelector = nextSelector;
-    // The Tutorial's focus is always a soft pill. The levels keep the target's own outline.
+    // Copy with no target (a mission line): the window shows, but nothing is dimmed or pointed at.
+    lightOff = !!options.noLight;
+    if (lightOff) { targetSelector = ''; stopLoop(); smooth = null; }
+    else targetSelector = nextSelector;
+    // The Tutorial's focus is a soft pill. The levels and the guide draw the SAME light: the target's
+    // own outline (a card, a tile, a pile's or key's exact box), one corner, a still halo.
+    const levelLook = !!options.lesson || !!options.outline;
     targetShape = !targetSelector || options.shape === 'none' ? 'none'
-      : options.lesson && (options.shape === 'hex' || options.shape === 'card') ? options.shape : 'pill';
-    setIfChanged(focus, 'data-lesson', options.lesson ? '1' : '0');
-    lessonFocus = !!options.lesson;
+      : levelLook && (options.shape === 'hex' || options.shape === 'card') ? options.shape : 'pill';
+    setIfChanged(focus, 'data-lesson', levelLook ? '1' : '0');
+    // One halo per target. If the target is the display, the baked bloom is the light; if the
+    // board already lights it (a top-rank tile's glow lives in the l-glow layer, not inside the
+    // hex cell), do not stack the lesson's halo on top. Measured once per step, never per frame.
+    const litByBoard = new Set(
+      [...document.querySelectorAll('#board .l-glow .top-glow[data-key]')].map(node => node.getAttribute('data-key')),
+    );
+    const lightTarget = lightOff || !targetSelector ? 'none'
+      : /#smart-led\b/.test(targetSelector) ? 'display'
+      : [...document.querySelectorAll(targetSelector)]
+        .some(node => litByBoard.has(node.getAttribute('data-key') ?? '')) ? 'lit'
+      : 'board';
+    setIfChanged(focus, 'data-light-target', lightTarget);
+    focusTier = options.tier ?? 'spotlight';
+    setIfChanged(focus, 'data-tier', focusTier);
+    lessonFocus = levelLook;
     panel.dataset.mode = 'tutorial';
     if (options.lesson) panel.dataset.lesson = '1';
     else delete panel.dataset.lesson;
     panel.dataset.focus = targetSelector.includes('#deck') ? 'deck' : targetSelector.includes('#discard') ? 'discard' : 'other';
+    if (panel.dataset.ixState === 'closing') resetSurface(panel); // a fading Match Intel must not hide the lesson window when it ends
     panel.hidden = false;
-    showFocus(true);
+    showFocus(!lightOff);
     setBloomDemo(!!options.bloomDemo);
     panel.setAttribute('aria-label', options.kicker ? `${options.kicker} guidance` : 'Tutorial guidance');
     panel.setAttribute('role', 'status');
@@ -1220,6 +1615,15 @@ export const mountGlassSurface = (onClose: () => void) => {
     const stepKey = options.stepKey ?? `${chapter}:${text}`;
     const stepped = stepKey !== lastStepKey;
     lastStepKey = stepKey;
+    if (cockpitLesson) {
+      clearTutorialPads();
+      panel.hidden = true;
+      panel.replaceChildren();
+      delete panel.dataset.kicker;
+      if (lightOff) { stopLoop(); smooth = null; paintFocus(null); }
+      else startLoop();
+      return;
+    }
     // Same step (CTA arm / status clear): patch actions only — avoids LED redraw flash.
     renderTutorialWindow(text, chapter, options, { keepShell: !stepped });
     if (stepped) {
@@ -1228,73 +1632,193 @@ export const mountGlassSurface = (onClose: () => void) => {
       playGlassStepSettle();
       requestAnimationFrame(() => {
         panel.dataset.fade = 'in';
-        startLoop();
+        if (!lightOff) startLoop();
         place();
       });
     } else {
-      startLoop();
+      if (!lightOff) startLoop();
       place();
     }
   };
 
-  const renderIntel = (data: MatchIntel) => {
-    const total = data.moves.length;
-    if (total !== lastMoveLen) {
-      moveCursor = total ? total - 1 : -1;
-      lastMoveLen = total;
-    } else if (total) {
-      moveCursor = Math.max(0, Math.min(total - 1, moveCursor < 0 ? total - 1 : moveCursor));
-    } else moveCursor = -1;
-    const tabs = `<div class="intel-tabs" role="tablist" aria-label="Match help">`
-      + `<button type="button" class="intel-tab" role="tab" data-intel-tab="intel" aria-selected="${intelTab === 'intel'}">${safe(intelLabels.intel)}</button>`
-      + `<button type="button" class="intel-tab" role="tab" data-intel-tab="howto" aria-selected="${intelTab === 'howto'}">${safe(intelLabels.howto)}</button>`
-      + `</div>`;
-    const bar = `<div class="intel-bar">${tabs}<button class="intel-close" type="button" aria-label="Close">×</button></div>`;
-    if (intelTab === 'howto') {
-      panel.innerHTML = bar + `<div class="intel-body" role="tabpanel" data-intel-panel="howto"><div class="intel-howto">${howToHtml}</div></div>`;
-    } else {
-      const move = total && moveCursor >= 0 ? data.moves[moveCursor]! : null;
-      const stepLabel = total ? `${pad(total - moveCursor)} / ${pad(total)}` : '00 / 00';
-      const groups = new Map<string, { card: Card; count: number }>();
-      for (const card of data.discarded) {
-        const key = `${card.suit}:${card.rank}`;
-        const group = groups.get(key);
-        if (group) group.count++;
-        else groups.set(key, { card, count: 1 });
-      }
-      const sorted = [...groups.values()].sort((a, b) => (a.card.suit ?? 4) - (b.card.suit ?? 4) || a.card.rank - b.card.rank);
-      const cards = sorted.map(({ card, count }) => `<span class="intel-card-wrap" title="${card.suit === null ? 'Bomb' : `Suit ${card.suit + 1}, ${card.rank}`}${count > 1 ? ` — seen ${count} times` : ''}"><span class="intel-card card ${suitClass(card)}">${cardFace(card)}</span>${count > 1 ? `<span class="intel-card-count">${count}</span>` : ''}</span>`).join('');
-      const who = move ? (move.who === 'you' ? 'YOU' : 'OPP') : 'MATCH';
-      const verb = move ? move.verb : (data.discarded.length ? 'FACE' : 'READY');
-      const detail = move?.detail ?? (data.discarded.length ? 'OPEN PILE' : 'NO MOVES YET');
-      panel.innerHTML = bar + `<div class="intel-body" role="tabpanel" data-intel-panel="intel"><div class="intel-step">${stepLabel}</div><div class="intel-readout"><span class="intel-who">${who}</span><span class="intel-verb">${safe(verb)}</span><span class="intel-detail">${safe(detail)}</span></div><div class="intel-nav"><button type="button" class="intel-newer" ${!total || moveCursor >= total - 1 ? 'disabled' : ''}>‹ NEWER</button><button type="button" class="intel-older" ${!total || moveCursor <= 0 ? 'disabled' : ''}>OLDER ›</button></div><div class="intel-meters"><label class="intel-meter"><span>SCORE</span><b>${data.score[0]}:${data.score[1]}</b></label><label class="intel-meter"><span>TILES</span><b>${data.territory[0]}:${data.territory[1]}</b></label><label class="intel-meter"><span>DRAW</span><b>${data.deckCount}</b></label><label class="intel-meter"><span>OPP</span><b>${data.oppHand}</b></label><label class="intel-meter"><span>BOMBS</span><b>${data.fruitUnseen}</b></label><label class="intel-meter"><span>TURN</span><b>${data.turn}</b></label></div><div class="intel-cards">${cards || ''}</div>${data.observation ? `<p class="intel-observation">${safe(data.observation)}</p>` : ''}</div>`;
+  const thrownCards = (data: MatchIntel): string => {
+    const groups = new Map<string, { card: Card; count: number }>();
+    for (const card of data.discarded) {
+      const key = `${card.suit}:${card.rank}`;
+      const group = groups.get(key);
+      if (group) group.count++;
+      else groups.set(key, { card, count: 1 });
     }
+    const sorted = [...groups.values()].sort((a, b) => (a.card.suit ?? 4) - (b.card.suit ?? 4) || a.card.rank - b.card.rank);
+    return sorted.map(({ card, count }) => `<span class="intel-card-wrap" title="${card.suit === null ? 'Bomb' : `Suit ${card.suit + 1}, ${card.rank}`}${count > 1 ? ` - seen ${count} times` : ''}"><span class="intel-card card ${suitClass(card)}">${cardFace(card)}</span>${count > 1 ? `<span class="intel-card-count">${count}</span>` : ''}</span>`).join('');
+  };
+
+  /** WHICH surface this is, then the match's clock. Tips reads THIS match; Rules is the reference. */
+  const scopeHtml = (id: IntelTabId, data: MatchIntel): string => {
+    const label = id === 'now' ? INTEL.scope.now : id === 'tips' ? INTEL.scope.tips : INTEL.scope.rules;
+    const note = id === 'rules' ? INTEL.scope.reference : INTEL.scope.turn(Math.max(1, data.turn));
+    return `<p class="intel-scope" data-intel-scope="${id}"><b>${safe(label)}</b><span>${safe(note)}</span></p>`;
+  };
+
+  /** The five facts every player scans: land, cuts made, deck, hand, public Bombs left. */
+  const readoutHtml = (data: MatchIntel, record=false): string => {
+    const edge = (you: number, them: number): 'you' | 'them' | 'even' => (you > them ? 'you' : you < them ? 'them' : 'even');
+    const cells = [
+      { key: 'land', label: INTEL.stat.land, value: `${data.territory[0]}–${data.territory[1]}`, edge: edge(data.territory[0], data.territory[1]) },
+      { key: 'cuts', label: INTEL.stat.cuts, value: `${data.cuts[0]}–${data.cuts[1]}`, edge: edge(data.cuts[0], data.cuts[1]) },
+      { key: 'deck', label: INTEL.stat.deck, value: String(data.deckCount), edge: null },
+      { key: 'hand', label: INTEL.stat.hand, value: `${data.handCount}·${data.oppHand}`, edge: null },
+      { key: 'bombs', label: INTEL.stat.bombs, value: String(data.fruitUnseen), edge: null },
+    ];
+    const shown=cells.filter(cell=>record?cell.key==='cuts'||cell.key==='bombs':cell.key!=='cuts'&&cell.key!=='bombs');
+    return `<div class="intel-stats" role="list">${shown.map((cell) => {
+      const arrow = cell.edge === 'you' ? '▲' : cell.edge === 'them' ? '▼' : '';
+      const tone = cell.edge && cell.edge !== 'even' ? ` data-edge="${cell.edge}"` : '';
+      const spoken = cell.key === 'land' || cell.key === 'cuts' ? `, ${cell.edge === 'you' ? 'you lead' : cell.edge === 'them' ? 'they lead' : 'level'}` : '';
+      return `<div class="intel-stat" role="listitem" data-key="${cell.key}"${tone} aria-label="${safe(`${cell.label} ${cell.value}${spoken}`)}"><span class="intel-stat-k" aria-hidden="true">${safe(cell.label)}</span><b class="intel-stat-v" aria-hidden="true">${safe(cell.value)}</b><i class="intel-stat-edge" aria-hidden="true">${arrow}</i></div>`;
+    }).join('')}</div>`;
+  };
+
+  const TIP_MARK: Readonly<Record<TipKind, string>> = Object.freeze({ danger: '▲', opportunity: '◆', tempo: '▸', endgame: '■' });
+
+  /** One tip as a button: verdict, the read, the decision, the facts, and a link to its rule. */
+  const tipHtml = (tip: IntelTip, rank: number): string => {
+    const kind = INTEL.kind[tip.kind];
+    const severity = tip.severity === 'steady' ? '' : tip.severity.toUpperCase();
+    const facts = tip.evidence.map((fact) => `<span class="intel-fact"><b>${safe(fact.value)}</b>${safe(fact.label)}</span>`).join('');
+    const spokenFacts = tip.evidence.map((fact) => `${fact.value} ${fact.label}`).join(', ');
+    const label = `${kind}${severity ? `, ${severity}` : ''}. ${tip.headline} ${tip.detail} ${spokenFacts}. ${INTEL.seeRule}`;
+    return `<button type="button" class="intel-tip${rank === 0 ? ' intel-tip--primary' : ''}" data-tip="${safe(tip.id)}" data-rule="${tip.rule}" data-kind="${tip.kind}" data-severity="${tip.severity}" data-rank="${rank}" aria-label="${safe(label)}">`
+      + `<span class="intel-tip-top"><span class="intel-kind"><span class="intel-tip-mark" aria-hidden="true">${TIP_MARK[tip.kind]}</span>${safe(kind)}</span><span class="intel-tip-sev" aria-hidden="true">${severity}</span></span>`
+      + `<span class="intel-tip-headline">${safe(tip.headline)}</span>`
+      + `<span class="intel-tip-detail">${safe(tip.detail)}</span>`
+      + (facts ? `<span class="intel-evidence">${facts}</span>` : '')
+      + `</button>`;
+  };
+
+  /** NOW: who leads, the match read, the readout, the latest moves and the public thrown cards. */
+  const nowHtml = (data: MatchIntel): string => {
+    const diff = data.score[0] - data.score[1];
+    const lead = data.outcome ? RESULT[data.outcome] : diff > 0 ? INTEL.lead(diff) : diff < 0 ? INTEL.behind(-diff) : INTEL.level;
+    const observation = data.outcome ? '' : data.observation ?? INTEL.observation.open(data.deckCount);
+    // A deck draw says nothing (the card is hidden), so the latest lines are the moves that show something.
+    const telling = data.moves.filter(m => m.verb !== 'DREW');
+    const latest = (telling.length ? telling : data.moves).slice(-4).reverse()
+      .map(m => `<li class="intel-move" data-who="${m.who}">${safe(INTEL.move(m.who === 'you', m.verb, m.detail))}</li>`).join('');
+    const cards = thrownCards(data);
+    return scopeHtml('now', data)
+      + `<section class="intel-now-head"><h3 class="intel-lead">${safe(lead)}</h3><p class="intel-sub">${safe(INTEL.scoreLine(data.score[0], data.score[1], data.turn))}</p>${observation ? `<p class="intel-observation">${safe(observation)}</p>` : ''}</section>`
+      + `<div><p class="intel-comparison">${safe(INTEL.comparison)}</p>${readoutHtml(data)}</div>`
+      + `<section><p class="intel-label">${INTEL.latest}</p>${latest ? `<ol class="intel-moves">${latest}</ol>` : `<p class="intel-none">${safe(INTEL.noMoves)}</p>`}</section>`
+      + `<details class="intel-record"${recordOpen?' open':''}><summary>${safe(INTEL.record)}</summary>${readoutHtml(data,true)}<p class="intel-label">${INTEL.thrown}</p>${cards ? `<div class="intel-cards">${cards}</div>` : `<p class="intel-none">${safe(INTEL.thrownNone)}</p>`}</details>`;
+  };
+
+  /** TIPS: this match's ranked reads, most urgent first; each opens the lesson it rests on. */
+  const tipsHtml = (data: MatchIntel): string => {
+    const tips = intelGuide.tips;
+    const head = scopeHtml('tips', data);
+    if (!tips.length) {
+      return head + `<div class="intel-quiet"><span class="intel-kind"><span class="intel-tip-mark" aria-hidden="true">▸</span>${safe(data.outcome ? INTEL.complete.title : INTEL.quiet.title)}</span><p class="intel-quiet-line">${safe(data.outcome ? INTEL.complete.line : INTEL.quiet.line)}</p></div>`;
+    }
+    return head + `<ul class="intel-tips">${tips.map((tip, rank) => `<li>${tipHtml(tip, rank)}</li>`).join('')}</ul>`;
+  };
+
+  /** RULES: the ten lessons, one line each when opened, and the full rules folded below. */
+  const rulesHtml = (data: MatchIntel): string => scopeHtml('rules', data) + `<ul class="intel-rules">${intelGuide.rules.map(r =>
+    `<li><button type="button" class="intel-rule" data-rule="${r.level}" aria-expanded="${ruleOpen === r.level}"><span class="intel-rule-head"><span class="intel-rule-icon" aria-hidden="true">${safe(r.icon)}\uFE0E</span><span class="intel-rule-title">${safe(r.title)}</span><span class="intel-rule-num">${pad(r.level)}</span></span><span class="intel-rule-fold"><span class="intel-rule-line"><span>${safe(r.line)}</span></span></span></button></li>`).join('')}</ul>`
+    + (howToHtml ? `<details class="intel-full"${fullRules ? ' open' : ''}><summary>${safe(INTEL.fullRules)}</summary><div class="intel-howto">${howToHtml}</div></details>` : '');
+
+  /** Scroll only the Match Intel body (never the page) so a lesson card is in view. */
+  const revealRule = (rule: HTMLElement, centre: boolean) => {
+    const body = panel.querySelector<HTMLElement>('.intel-body');
+    if (!body) return;
+    const b = body.getBoundingClientRect(), r = rule.getBoundingClientRect();
+    const top = r.top - b.top + body.scrollTop;
+    const target = centre ? top - (b.height - r.height) / 2
+      : r.bottom > b.bottom ? top + r.height - b.height + 8 : r.top < b.top ? top - 8 : body.scrollTop;
+    body.scrollTo({ top: Math.max(0, target), behavior: centre || reduceMotion ? 'auto' : 'smooth' });
+  };
+
+  const renderIntel = (data: MatchIntel, animate = true) => {
+    clearTimeout(ruleTimer);
+    const tab = (id: IntelTabId) => `<button type="button" class="intel-tab" role="tab" id="intel-tab-${id}" aria-controls="intel-panel" tabindex="${intelTab===id?0:-1}" data-intel-tab="${id}" aria-selected="${intelTab === id}">${safe(intelLabels[id])}</button>`;
+    const bar = `<div class="intel-bar"><div class="intel-tabs" role="tablist" aria-label="Match help">${tab('now')}${tab('tips')}${tab('rules')}</div><button class="intel-close" type="button" aria-label="Close">×</button></div>`;
+    const body = intelTab === 'now' ? nowHtml(data) : intelTab === 'tips' ? tipsHtml(data) : rulesHtml(data);
+    const oldBody=panel.querySelector<HTMLElement>('.intel-body');
+    const oldTab=oldBody?.dataset.intelPanel as IntelTabId|undefined;
+    if(oldBody&&oldTab)intelScroll[oldTab]=oldBody.scrollTop;
+    const focused=document.activeElement as HTMLElement|null;
+    const focusSelector=focused&&panel.contains(focused)?focused.classList.contains('intel-body')?'.intel-body':focused.classList.contains('intel-close')?'.intel-close':focused.dataset.intelTab?`[data-intel-tab="${focused.dataset.intelTab}"]`:focused.dataset.tip?`.intel-tip[data-tip="${focused.dataset.tip}"]`:focused.dataset.rule?`.intel-rule[data-rule="${focused.dataset.rule}"]`:focused.closest('.intel-record')?'.intel-record > summary':focused.closest('.intel-full')?'.intel-full > summary':null:null;
+    panel.innerHTML = bar + `<div class="intel-body" id="intel-panel" role="tabpanel" tabindex="0" aria-labelledby="intel-tab-${intelTab}" data-intel-panel="${intelTab}"${animate ? '' : ' style="animation:none"'}>${body}</div>`;
+    const nextBody=panel.querySelector<HTMLElement>('.intel-body');if(nextBody)nextBody.scrollTop=intelScroll[intelTab];
+    if(focusSelector)(panel.querySelector<HTMLElement>(focusSelector)??panel.querySelector<HTMLElement>(`[data-intel-tab="${intelTab}"]`))?.focus({preventScroll:true});
     panel.querySelector('.intel-close')?.addEventListener('click', close, { once: true });
-    panel.querySelectorAll<HTMLButtonElement>('.intel-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        const next: IntelTabId = tab.dataset.intelTab === 'howto' ? 'howto' : 'intel';
+    panel.querySelectorAll<HTMLButtonElement>('.intel-tab').forEach(button => {
+      button.addEventListener('keydown',event=>{
+        const ids:IntelTabId[]=['now','tips','rules'],index=ids.indexOf(intelTab);
+        const next=event.key==='ArrowRight'?ids[(index+1)%3]:event.key==='ArrowLeft'?ids[(index+2)%3]:event.key==='Home'?'now':event.key==='End'?'rules':null;
+        if(!next)return;event.preventDefault();intelTab=next;onIntelTab?.(next);renderIntel(data);panel.querySelector<HTMLElement>(`[data-intel-tab="${next}"]`)?.focus({preventScroll:true});
+      });
+      button.addEventListener('click', () => {
+        const next = button.dataset.intelTab as IntelTabId;
         if (next === intelTab) return;
         intelTab = next;
+        onIntelTab?.(next);
         renderIntel(data);
+        panel.querySelector<HTMLElement>(`.intel-tab[data-intel-tab="${next}"]`)?.focus();
       });
     });
-    if (intelTab === 'intel') {
-      panel.querySelector('.intel-newer')?.addEventListener('click', () => { if (moveCursor < lastMoveLen - 1) { moveCursor++; renderIntel(data); } });
-      panel.querySelector('.intel-older')?.addEventListener('click', () => { if (moveCursor > 0) { moveCursor--; renderIntel(data); } });
+    panel.querySelectorAll<HTMLButtonElement>('.intel-tip').forEach(button => {
+      button.addEventListener('click', () => {
+        ruleOpen = Number(button.dataset.rule);
+        intelScroll.rules=0;
+        intelTab = 'rules';
+        onIntelTab?.('rules');
+        renderIntel(data);
+        panel.querySelector<HTMLElement>(`.intel-rule[data-rule="${ruleOpen}"]`)?.focus({preventScroll:true});
+      });
+    });
+    // A lesson card unfolds in place (no re-render, so the fold can animate).
+    panel.querySelectorAll<HTMLButtonElement>('.intel-rule').forEach(button => {
+      button.addEventListener('click', () => {
+        const level = Number(button.dataset.rule);
+        ruleOpen = ruleOpen === level ? null : level;
+        panel.querySelectorAll<HTMLButtonElement>('.intel-rule').forEach(b => b.setAttribute('aria-expanded', String(Number(b.dataset.rule) === ruleOpen)));
+        clearTimeout(ruleTimer);
+        if (ruleOpen !== null) ruleTimer=setTimeout(() => {if(mode==='intel'&&button.isConnected)revealRule(button, false);}, reduceMotion?0:270);
+      });
+    });
+    // Rules opens with the lesson closest to this moment in view.
+    if (intelTab === 'rules' && ruleOpen !== null && animate && intelScroll.rules===0) {
+      const open = panel.querySelector<HTMLElement>(`.intel-rule[data-rule="${ruleOpen}"]`);
+      if (open) requestAnimationFrame(() => {if(mode==='intel'&&!panel.hidden&&open.isConnected)revealRule(open, true);});
     }
+    panel.querySelector<HTMLDetailsElement>('.intel-full')?.addEventListener('toggle', event => { fullRules = !!(event.currentTarget as HTMLDetailsElement).open; });
+    panel.querySelector<HTMLDetailsElement>('.intel-record')?.addEventListener('toggle',event=>{recordOpen=!!(event.currentTarget as HTMLDetailsElement).open;});
     requestAnimationFrame(place);
   };
 
   const intel = (data: MatchIntel, options: IntelOptions = {}) => {
     if (options.labels) intelLabels = options.labels;
     if (options.howToHtml !== undefined) howToHtml = options.howToHtml;
+    if (options.onTab) onIntelTab = options.onTab;
+    // Only an appearance animates: a refresh of an open panel (a tab, a new turn) never re-enters.
+    const appearing = panel.hidden || mode !== 'intel' || panel.dataset.ixState === 'closing';
+    const switching = !!options.tab && options.tab !== intelTab;
     if (options.tab) intelTab = options.tab;
+    if (options.guide) {
+      intelGuide = options.guide;
+      // The Rules tab opens at the lesson closest to this moment; a live refresh keeps the player's choice.
+      if (appearing || options.tab) ruleOpen = options.guide.rule;
+    }
+    if (appearing || options.fullRules !== undefined) fullRules = !!options.fullRules;
     mode = 'intel'; stopLoop(); smooth = null;
     delete panel.dataset.kicker;
     panel.dataset.mode = 'intel'; panel.hidden = false; showFocus(false);
-    panel.setAttribute('aria-label', 'Match details'); panel.setAttribute('role', 'dialog');
+    if (appearing) enterSurface(panel);
+    panel.setAttribute('aria-label', 'Match Intel'); panel.setAttribute('role', 'dialog');
     panel.removeAttribute('aria-live');
-    renderIntel(data);
+    renderIntel(data, !!appearing || switching);
   };
 
   /** Free-play bulb: one amber LED matrix line for the current step — nothing else. */
@@ -1302,6 +1826,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     const same = mode === 'guidance' && ledTitle === line && !panel.hidden;
     mode = 'guidance'; stopLoop(); smooth = null;
     delete panel.dataset.kicker;
+    if (panel.dataset.ixState === 'closing') resetSurface(panel);
     panel.dataset.mode = 'guidance'; panel.hidden = false; showFocus(false);
     panel.setAttribute('aria-label', 'Turn guidance'); panel.setAttribute('role', 'dialog');
     panel.removeAttribute('aria-live');
@@ -1323,7 +1848,12 @@ export const mountGlassSurface = (onClose: () => void) => {
     requestAnimationFrame(place);
   };
 
-  panel.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); close(); } });
+  panel.addEventListener('keydown', event => {
+    // A reading surface owns its keyboard. Escape closes it without also cancelling a card
+    // underneath; number/draw shortcuts must not play unseen moves while its controls have focus.
+    if(mode==='intel')event.stopPropagation();
+    if (event.key === 'Escape') { event.preventDefault();event.stopPropagation();close(); }
+  });
 
   return {
     tutorial,
@@ -1331,11 +1861,12 @@ export const mountGlassSurface = (onClose: () => void) => {
     guidance,
     close,
     hide: () => {
-      mode = null; moveCursor = -1; lastMoveLen = -1; stopLoop(); smooth = null;
-      intelTab = 'intel'; howToHtml = '';
-      focusScene = null;
-      setBloomDemo(false); clearTutorialReserve(); panel.hidden = true; showFocus(false);
+      hidePanel(false);
+      intelTab = 'now'; howToHtml = ''; ruleOpen = null; fullRules = false;recordOpen=false;
+      intelScroll.now=intelScroll.tips=intelScroll.rules=0;clearTimeout(ruleTimer);
     },
+    /** Quiet step: no window, no light, but the map keeps the space it had. */
+    hidePanel,
     nudge: () => {
       if (reduceMotion) return;
       focus.classList.remove('nudge');

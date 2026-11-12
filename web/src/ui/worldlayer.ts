@@ -38,6 +38,10 @@ export class WorldLayer {
   /** set when a full paint was too slow on this device: from then on, Low detail */
   slowDevice = false;
   private workMs = 0;
+  private disposed = false;
+  private timer: ReturnType<typeof setTimeout> | undefined;
+  private publication = 0;
+  private urls = new Map<string, ReturnType<typeof setTimeout> | undefined>();
   /** called when new pixels are on screen, with the hexes that changed (for the cross-fade) */
   onSwap: (keys: string[]) => void = () => {};
   /** called once, when the first picture is ready (the board redraws its tiles with it) */
@@ -76,9 +80,21 @@ export class WorldLayer {
     return this.url !== null;
   }
 
+  /** A replacement board owns a new canvas. No old paint/encode may land on it. */
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;this.publication++;
+    clearTimeout(this.timer);this.timer=undefined;
+    for(const [url,timer] of this.urls){clearTimeout(timer);URL.revokeObjectURL(url);}
+    this.urls.clear();this.url=null;this.queue=[];this.changed.clear();this.tiles.clear();
+    this.onFirst=()=>{};this.onSwap=()=>{};
+    if(this.canvas)this.canvas.width=this.canvas.height=0;
+    this.canvas=null;this.g=null;this.running=false;this.stats.canvasBytes=0;
+  }
+
   /** The tiles to show now; repaints whatever differs from last time (and the blend band around it). */
   sync(tiles: ReadonlyMap<string, PaintTile>, palette: ThemeId, detail: 'low' | 'normal') {
-    if (!this.g) return;
+    if (this.disposed || !this.g) return;
     if (this.slowDevice) detail = 'low';
     const full = palette !== this.palette || detail !== this.detail || this.url === null;
     this.palette = palette;
@@ -125,11 +141,14 @@ export class WorldLayer {
     this.running = true;
     this.workMs = 0;
     const step = () => {
+      this.timer=undefined;
+      if(this.disposed)return;
       const r = this.queue.shift();
       if (!r) {
         this.running = false;
         this.lastPaintMs = this.workMs;
         (this.fullPending ? this.stats.full : this.stats.partial).push(Math.round(this.workMs * 10) / 10);
+        for(const list of [this.stats.full,this.stats.partial])if(list.length>300)list.splice(0,list.length-300);
         // the Low fallback: a slow device gets the lighter texture (fewer blades, no flowers
         // or roots) from the next repaint on
         if (this.fullPending && this.detail === 'normal' && this.workMs > SLOW_FULL_MS) {
@@ -154,15 +173,19 @@ export class WorldLayer {
         this.g!.putImageData(new ImageData(new Uint8ClampedArray(data), w, h), Math.max(0, px), Math.max(0, py));
       }
       this.workMs += performance.now() - t0;
-      setTimeout(step, 0);
+      this.timer=setTimeout(step, 0);
     };
-    setTimeout(step, 0);
+    this.timer=setTimeout(step, 0);
   }
 
   /** Swaps the new pixels in (the old picture stays as the "previous" pattern for a cross-fade). */
   private publish() {
+    const publication=++this.publication;
+    const current=()=>!this.disposed&&publication===this.publication;
     const land = (next: string) => {
+      if(!current()){if(next.startsWith('blob:'))URL.revokeObjectURL(next);return;}
       const old = this.url;
+      if(next.startsWith('blob:'))this.urls.set(next,undefined);
       if (old) this.prevImage.setAttribute('href', old);
       this.image.setAttribute('href', next);
       this.url = next;
@@ -171,11 +194,14 @@ export class WorldLayer {
       if (!old) this.onFirst();
       else this.onSwap(keys);
       // free the old picture once the cross-fade is over
-      if (old?.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(old), 1500);
+      if (old?.startsWith('blob:')) this.urls.set(old,setTimeout(() => {
+        URL.revokeObjectURL(old);this.urls.delete(old);
+      },1500));
     };
     // Some browsers (iPhone Safari with a large canvas) hand back no blob: fall back to a data URL,
     // so the material still appears instead of the board quietly keeping the older tile look.
     const viaDataUrl = () => {
+      if(!current())return;
       try {
         land(this.canvas!.toDataURL('image/png'));
       } catch {
@@ -183,7 +209,7 @@ export class WorldLayer {
       }
     };
     try {
-      this.canvas!.toBlob((blob) => (blob ? land(URL.createObjectURL(blob)) : viaDataUrl()));
+      this.canvas!.toBlob((blob) => {if(current())blob ? land(URL.createObjectURL(blob)) : viaDataUrl();});
     } catch {
       viaDataUrl();
     }

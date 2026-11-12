@@ -16,7 +16,7 @@ import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { ONLINE } from '../../src/strings.js';
 import { openMenuEntry } from './helpers/menu-nav.js';
 
-const OUT = new URL('../../docs/screens/online/', import.meta.url).pathname;
+const OUT = process.env.SHOTS ?? new URL('../../docs/screens/online/', import.meta.url).pathname;
 const PHASE = process.env.PHASE ?? 'after';
 const CHROME =
   process.env.PW_CHROMIUM ??
@@ -191,6 +191,12 @@ try {
   const noticeText = ((await A.page.locator('#online-waiting-notice').textContent()) ?? '').trim();
   check('waiting: tapping the code copies the code', clip === codeA, `clip=${clip}`);
   check('waiting: tapping the code confirms briefly', noticeText === ONLINE.codeCopied, noticeText);
+
+  await A.page.evaluate("Object.defineProperty(navigator,'share',{configurable:true,value:async()=>{throw new DOMException('Cancelled','AbortError');}})");
+  await A.page.click('#online-share');
+  await A.page.waitForTimeout(100);
+  check('cancelled native sharing leaves clipboard unchanged',await A.page.evaluate(()=>navigator.clipboard.readText())===codeA);
+  check('cancelled sharing does not claim a link was copied',((await A.page.locator('#online-waiting-notice').textContent())??'').trim()===noticeText);
 
   for (const vp of VIEWPORTS) {
     await A.page.setViewportSize({ width: vp.width, height: vp.height });

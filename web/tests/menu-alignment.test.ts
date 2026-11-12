@@ -50,11 +50,39 @@ const classesOf = (section: string, id: string): string => {
 const COLUMN = 'width: min(420px, 100% - 32px)';
 
 describe('every menu surface centres the same column', () => {
-  it('the main menu column is the shared width, padding and rhythm', () => {
+  it('the main menu column is the shared width, and a height-aware rhythm', () => {
     expect(has(styleCss, '.menu-inner', COLUMN)).toBe(true);
-    expect(has(styleCss, '.menu-inner', 'padding: 32px 0')).toBe(true);
-    expect(has(styleCss, '.menu-inner', '--menu-rhythm: 14px')).toBe(true);
-    expect(has(styleCss, '.menu-inner', 'gap: var(--menu-rhythm)')).toBe(true);
+    // Owner, 2026-10-19: the menu spreads over tall screens and compresses on short ones, so its
+    // padding and rhythm are clamps of the viewport height (never fixed pixels that force a scroll).
+    const inner = rulesFor(styleCss, '.menu-inner');
+    const body = inner.map((r) => r.body).join('\n');
+    expect(body).toMatch(/--menu-rhythm:\s*clamp\([^)]*dvh/);
+    expect(body).toMatch(/padding:\s*clamp\([^)]*dvh/);
+    expect(body).toContain('gap: var(--menu-rhythm)');
+  });
+
+  it('the menu fits the screen by construction: spread, capped, and never scrollable', () => {
+    // (a rule's prelude also carries the comment above it, so match on the selector it ends with)
+    const menu = rules(styleCss).filter((r) => r.prelude.trim().endsWith('.menu')).map((r) => r.body).join('\n');
+    // No scrolling fallback: the layout itself has to fit.
+    expect(menu).toContain('overflow: hidden');
+    expect(menu).not.toContain('overflow-y: auto');
+    const inner = rulesFor(styleCss, '.menu-inner').map((r) => r.body).join('\n');
+    // Tall screens: the free height is shared evenly above, between and below the three blocks…
+    expect(inner).toContain('justify-content: space-evenly');
+    // …capped, so a very tall screen never becomes a sparse ladder.
+    expect(inner).toMatch(/height:\s*min\(100%,\s*max\(\d+px,\s*[\d.]+dvh\)\)/);
+    expect(inner).toContain('max-height: 100%');
+    // Short screens compress the gaps first; the KEYS keep the owner's one 50px height (2026-10-21).
+    const keys = rules(styleCss)
+      .filter((r) => r.prelude.includes('#menu .menu-buttons .btn') || r.prelude.includes('#play-menu .menu-buttons .btn'))
+      .map((r) => r.body)
+      .join('\n');
+    expect(keys).toContain('min-height: var(--menu-key-h)');
+    expect(keys).toContain('height: var(--menu-key-h)');
+    expect(rules(styleCss).some((r) => r.body.includes('--menu-key-h: 50px'))).toBe(true);
+    // The logo is never hidden: every supported screen keeps the mark.
+    expect(styleCss).not.toMatch(/#menu #logo[^{]*\{\s*display:\s*none/);
   });
 
   it('the difficulty pick repeats it exactly', () => {
@@ -91,7 +119,13 @@ describe('the main menu gives the wordmark deliberate breathing room', () => {
     expect(has(styleCss, '.menu-inner', '--menu-head-gap: calc(2 * var(--menu-rhythm))')).toBe(true);
   });
 
-  it('the gap is applied to the wordmark→buttons pair only, so a restored tagline keeps its spacing', () => {
+  it('the gap is applied across the beta line, so the wordmark never crowds the actions', () => {
+    // Owner decision (2026-10-20): the beta line sits BETWEEN the wordmark and the buttons, so the
+    // head gap is carried by the beta line's step into the column (and still honoured if the line
+    // is ever absent).
+    const chain = rulesFor(styleCss, '#menu-beta + .menu-buttons');
+    expect(chain.length).toBeGreaterThan(0);
+    expect(chain.map((r) => r.body).join('\n')).toContain('--menu-head-gap');
     const pair = rulesFor(styleCss, '.title + .menu-buttons');
     expect(pair.length).toBeGreaterThan(0);
     expect(pair.map((r) => r.body).join('\n')).toContain('--menu-head-gap');
@@ -102,7 +136,7 @@ describe('one leader per screen: the menu and the PLAY submenu', () => {
   it('the main menu has exactly one leading action (PLAY), and it is the cream fill', () => {
     const menu = sectionById('menu');
     // Every entry that STAYS on the main menu is quiet except PLAY. The three that main.ts moves
-    // into #play-actions (Play online / LEVEL n / Training) are checked in the submenu below.
+    // into #play-actions (LEVEL n / Play online / Practice match) are checked in the submenu below.
     expect(classesOf(menu, 'menu-play')).toContain('primary');
     for (const id of ['menu-login', 'menu-continue', 'menu-world', 'menu-tutorial', 'menu-settings']) {
       expect(classesOf(menu, id), `${id} must be the quiet ghost`).toContain('ghost');
@@ -118,26 +152,32 @@ describe('one leader per screen: the menu and the PLAY submenu', () => {
     expect(menu.indexOf('id="menu-world"')).toBeLessThan(menu.indexOf('id="menu-tutorial"'));
   });
 
-  it('PLAY holds Play online / LEVEL n / Training, in that order', () => {
+  it('PLAY holds LEVEL n, then Play online, then Practice match, in that order', () => {
     const main = read('../src/main.ts');
     const list = /const PLAY_MENU_ENTRIES = \[([^\]]*)\] as const;/.exec(main);
     expect(list, 'PLAY_MENU_ENTRIES must exist').toBeTruthy();
     // Three entries: the "Levels" list was removed (owner, 2026-10-16) so the player is not offered
     // the whole level list; LEVEL <n> opens the next uncompleted level instead.
-    expect(list![1]!.replace(/['\s]/g, '')).toBe('menu-online,menu-campaign,menu-new');
-    // Every one is a real button in the menu markup, so the move can never append a missing node.
+    // ORDER (owner, 2026-10-20): LEVEL is the FIRST entry, above Play online. The array is the DOM
+    // order (main.ts appends one by one), so this one assertion also pins what is seen and tabbed.
+    expect(list![1]!.replace(/['\s]/g, '')).toBe('menu-campaign,menu-online,menu-new');
+    // The markup that the move takes those nodes from lists them in the SAME order, so the source
+    // reads in the order the submenu shows (no CSS `order` is involved anywhere).
     const menu = sectionById('menu');
+    expect(menu.indexOf('id="menu-campaign"'), 'LEVEL must come before Play online in the markup').toBeLessThan(menu.indexOf('id="menu-online"'));
+    // Every one is a real button in the menu markup, so the move can never append a missing node.
     for (const id of ['menu-online', 'menu-campaign', 'menu-new']) expect(menu).toContain(`id="${id}"`);
     expect(menu, 'the removed Levels entry must not be in the markup at all').not.toContain('menu-levels');
   });
 });
 
 describe('the difficulty tiles are the same button as the menu', () => {
-  it('do not carry their own height or corner (they inherit the shared .btn scale: 56 big, pill)', () => {
+  it('share the menu key height and never invent their own corner', () => {
     const shared = rulesFor(styleCss, '#levels .level-grid .difficulty-tile');
     expect(shared.length).toBeGreaterThan(0);
     const body = shared.map((r) => r.body).join('\n');
-    expect(body).not.toMatch(/min-height\s*:/);
+    // Owner, 2026-11-07: BLITZ + bolt must match EASY/MEDIUM/HARD metrics — same --menu-key-h.
+    expect(body).toMatch(/min-height:\s*var\(--menu-key-h\)/);
     expect(body).not.toMatch(/border-radius\s*:/);
   });
 });

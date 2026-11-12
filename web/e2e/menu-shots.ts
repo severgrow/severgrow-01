@@ -1,5 +1,5 @@
 // Main-menu structure shots for the FUTASAKU 0.5 menu restructure (2026-10-15): the main menu with
-// its LOG IN button, the PLAY submenu, the three TRAINING tiers and the signed-in menu.
+// its LOG IN button, the PLAY submenu, the three practice-match tiers and the signed-in menu.
 //
 //   npx tsx web/e2e/menu-shots.ts
 //   PW_CHROMIUM=/path/to/chrome npx tsx web/e2e/menu-shots.ts
@@ -104,18 +104,20 @@ const leaders = (page: Page, scope: string) =>
 
 try {
   for (const vp of VIEWPORTS) {
-    // ---- 1. the main menu, signed out: LOG IN at the top, PLAY (the one leader), then the world
-    //         map, Tutorial and Settings ----
+    // ---- 1. the main menu, signed out: the column PLAY → TERRITORY, then the bottom row LOG IN |
+    //         Settings (owner brief, 2026-10-21) ----
     {
       const { context, page } = await device(vp, false, `out-${vp.key}`);
       const loginBox = await page.locator('#menu-login').boundingBox();
       const playBox = await page.locator('#menu-play').boundingBox();
+      const settingsBox = await page.locator('#menu-settings').boundingBox();
       check(`${vp.key}: LOG IN is visible on the signed-out menu`, await page.locator('#menu-login').isVisible());
-      check(`${vp.key}: LOG IN sits above PLAY`, !!loginBox && !!playBox && loginBox.y < playBox.y);
-      const order = await page.evaluate(() => [...document.querySelectorAll('#menu .menu-buttons > .btn')]
+      check(`${vp.key}: LOG IN is the LEFT key of the footer, below the column`,
+        !!loginBox && !!playBox && !!settingsBox && loginBox.y > playBox.y && loginBox.x < settingsBox.x);
+      const order = await page.evaluate(() => [...document.querySelectorAll('#menu .menu-buttons .btn')]
         .filter((b) => (b as HTMLElement).getClientRects().length > 0).map((b) => b.id));
-      check(`${vp.key}: the menu reads LOG IN / PLAY / Territory / Tutorial / Settings`,
-        JSON.stringify(order) === JSON.stringify(['menu-login', 'menu-play', 'menu-world', 'menu-tutorial', 'menu-settings']), order.join(' | '));
+      check(`${vp.key}: the menu reads PLAY / Territory / LOG IN / Settings`,
+        JSON.stringify(order) === JSON.stringify(['menu-play', 'menu-world', 'menu-login', 'menu-settings']), order.join(' | '));
       check(`${vp.key}: exactly one filled button on the menu, and it is PLAY`,
         JSON.stringify(await leaders(page, '#menu')) === JSON.stringify(['menu-play']), (await leaders(page, '#menu')).join(' | '));
       // Five entries must fit a 360x640 phone without the column scrolling or the page widening.
@@ -128,7 +130,7 @@ try {
       await context.close();
     }
 
-    // ---- 2. the PLAY submenu: Play online / LEVEL n / Training, and a way back ----
+    // ---- 2. the PLAY submenu: LEVEL n / Play online / Practice match, and a way back ----
     {
       const { context, page } = await device(vp, false, `play-${vp.key}`);
       await page.click('#menu-play');
@@ -137,9 +139,12 @@ try {
       check(`${vp.key}: the submenu takes over the menu`, !(await page.locator('#menu').isVisible()));
       check(`${vp.key}: the PLAY heading reads Play`, (await page.textContent('#play-title'))?.trim() === 'Play');
       const entries = await page.locator('#play-actions button').allTextContents();
-      check(`${vp.key}: PLAY holds Play online / LEVEL n / Training`, JSON.stringify(entries) === JSON.stringify(['Play online', 'LEVEL 1', 'Training']), entries.join(' | '));
-      check(`${vp.key}: exactly one filled button in the submenu, and it is Play online`,
-        JSON.stringify(await leaders(page, '#play-menu')) === JSON.stringify(['menu-online']), (await leaders(page, '#play-menu')).join(' | '));
+      // LEVEL leads the column AND carries the cream fill (owner, 2026-10-20: LEVEL is the first
+      // entry of PLAY, above Play online; owner, 2026-10-22: "highlight 'level n' instead"). Play
+      // online is a quiet ghost key now, so the old "it is still Play online" claim is retired.
+      check(`${vp.key}: PLAY holds LEVEL n / Play online / Practice match`, JSON.stringify(entries) === JSON.stringify(['LEVEL 1', 'Play online', 'Practice match']), entries.join(' | '));
+      check(`${vp.key}: exactly one filled button in the submenu, and it is LEVEL`,
+        JSON.stringify(await leaders(page, '#play-menu')) === JSON.stringify(['menu-campaign']), (await leaders(page, '#play-menu')).join(' | '));
       const fit = await page.evaluate(() => {
         const inner = document.querySelector('#play-menu .levels-inner')!;
         return inner.scrollHeight - inner.clientHeight;
@@ -149,24 +154,26 @@ try {
       await context.close();
     }
 
-    // ---- 3. the three TRAINING tiers (PLAY -> Training) ----
+    // ---- 3. the three practice-match tiers (PLAY -> Practice match) ----
     {
       const { context, page } = await device(vp, false, `training-${vp.key}`);
       await page.click('#menu-play');
       await page.click('#menu-new');
       await page.waitForSelector('#levels:not([hidden])', { timeout: 10_000 });
       await page.waitForTimeout(400);
-      check(`${vp.key}: the training heading reads Training`, (await page.textContent('#levels-heading'))?.trim() === 'Training');
+      check(`${vp.key}: the practice-match heading reads Practice match`, (await page.textContent('#levels-heading'))?.trim() === 'Practice match');
       const tiers = await page.locator('#level-grid .difficulty-tile').allTextContents();
       check(`${vp.key}: three tiers EASY / MEDIUM / HARD`, JSON.stringify(tiers) === JSON.stringify(['EASY', 'MEDIUM', 'HARD']), tiers.join(' | '));
       await shotName(page, `training-tiers-${vp.key}`);
       await context.close();
     }
 
-    // ---- 4. the main menu, signed in: no LOG IN ----
+    // ---- 4. the main menu, signed in: the SAME left key now carries the player's name ----
     {
       const { context, page } = await device(vp, true, `in-${vp.key}`);
-      check(`${vp.key}: LOG IN is gone once signed in`, !(await page.locator('#menu-login').isVisible()));
+      const label = ((await page.locator('#menu-login').textContent()) ?? '').trim();
+      check(`${vp.key}: the left footer key shows the player's name once signed in`, await page.locator('#menu-login').isVisible() && label.startsWith('Ann'), label);
+      check(`${vp.key}: the key says whose profile it opens`, ((await page.locator('#menu-login').getAttribute('aria-label')) ?? '').includes('Ann'));
       await shotName(page, `menu-signed-in-${vp.key}`);
       await context.close();
     }
@@ -199,12 +206,13 @@ try {
       await context.close();
     }
 
-    // ---- 6. the saved-game resume survives a reload (the regression guard, 2026-10-15) ----
-    // A player who reloads with a saved match MUST be offered Continue on the fresh menu: it is the
-    // only way back into that match. The boot shows the menu while `shownScreen` may already say
-    // 'menu' (returning from PLAY sets it back), so the reveal must not depend on "the screen
-    // changed". Seeded from the URL: the game starts at once, is played one real turn, and the page
-    // is then reloaded WITHOUT the query, exactly as a player who taps the browser's reload does.
+    // ---- 6. a reload with a saved match keeps that match (the regression guard, 2026-10-15) ----
+    // The menu REPLACED this guard's first premise: since the owner's 2026-10-19 decision the product
+    // menu has no Continue at all (a match is resumed from its level in PLAY). What still matters is
+    // that a reload never loses the save: the hidden control is bound to the same continueGame(), so
+    // invoking it must return the exact same position. Seeded from the URL: the game starts at once,
+    // is played one real turn, and the page is then reloaded WITHOUT the query, exactly as a player
+    // who taps the browser's reload does.
     {
       const { context, page } = await device(vp, false, `resume-${vp.key}`);
       page.on('dialog', (d) => void d.accept());
@@ -225,13 +233,16 @@ try {
       await page.evaluate(() => history.replaceState(null, '', location.pathname));
       await page.reload();
       await page.waitForSelector('#menu:not([hidden])', { timeout: 40_000 });
-      // Poll for the reveal (the menu section is unhidden a beat before its buttons are styled).
-      const offered = await page.locator('#menu-continue').waitFor({ state: 'visible', timeout: 20_000 }).then(() => true).catch(() => false);
-      check(`${vp.key}: a reload with a saved game still offers Continue`, offered);
-      await page.click('#menu-continue');
+      // Owner decision (2026-10-19, commit 76546c1b): the PRODUCT main menu has NO Continue. A
+      // saved match is offered when the player enters its level from PLAY, never as a resume key.
+      // The control is hidden, not deleted — so the save itself must still round-trip through it.
+      await page.waitForSelector('#menu[data-laid-out]', { timeout: 20_000 });
+      const offered = await page.locator('#menu-continue').isVisible().catch(() => false);
+      check(`${vp.key}: a reload offers NO Continue on the product menu (the player enters the level)`, !offered);
+      await page.evaluate(() => (document.getElementById('menu-continue') as HTMLButtonElement).click());
       await page.waitForFunction(settled, undefined, { timeout: 40_000 });
       const resumed = await page.evaluate('JSON.stringify(window.__severgrow.state())');
-      check(`${vp.key}: Continue resumes the exact saved game`, resumed === saved);
+      check(`${vp.key}: the saved game still resumes exactly (hidden control, same continueGame)`, resumed === saved);
       await context.close();
     }
   }

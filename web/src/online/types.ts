@@ -1,6 +1,7 @@
 // Shared types for the online client layer (Phase 3). No screens — only the seam.
 import type { Action, Event, Player, View } from '../../../src/engine/index.js';
 import type { MatchStatus, MatchViewPayload, OnlineGameResult } from '../../../server/src/protocol.js';
+import type { SettledSeeds } from '../ui/seed-reveal.js';
 
 /** Connection / sync status shown quietly in the UI (Phase 5). */
 export type ConnectionStatus = 'online' | 'reconnecting' | 'offline' | 'client_too_old';
@@ -19,6 +20,11 @@ export type MatchChannel = {
     matchId: string,
     handlers: {
       onPing: (ping: MatchPing) => void;
+      /** Content-free invalidation on the existing socket; never private message text. */
+      onChat?: () => void;
+      onReconnect?: () => void;
+      /** Joined Realtime topic health; HTTP history remains authoritative. */
+      onConnection?: (connected: boolean) => void;
       onPresence: (presence: PresenceSnapshot) => void;
     },
   ): () => void;
@@ -54,6 +60,18 @@ export type MatchDriverSnapshot = {
   screenEvents: Event[];
   turnDeadlineAt: number | null;
   result: OnlineGameResult | null;
+  /**
+   * What this seat was PAID for this duel, when the server said. It IS wired end to end now:
+   * `MatchViewPayload.seeds` (server/src/protocol.ts) is filled by the finished-view path from
+   * `settleOnline`'s per-seat report (`server/src/service.ts` `payload` → `safeSettleOnline`), and
+   * `server/tests/duel-seeds-report.test.ts` proves both seats get their own figure. A resignation
+   * or a timeout settles nobody, so those payloads carry no field and the card shows no line.
+   *
+   * The client still reads it DEFENSIVELY and never infers an amount from the mode or the outcome —
+   * a daily cap pays 0, and a resignation pays nothing, so a guessed number would print money
+   * nobody received (see `duelSeedsMessage` in ui/seed-reveal.ts).
+   */
+  seeds?: SettledSeeds;
   opponentName: string | null;
   connection: ConnectionStatus;
   presence: PresenceStatus;

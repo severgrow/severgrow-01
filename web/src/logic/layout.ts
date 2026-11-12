@@ -10,6 +10,8 @@ export type Viewport = { w: number; h: number; safeTop?: number; safeBottom?: nu
 export type Box = { x: number; y: number; w: number; h: number };
 export type Layout = {
   mode: 'stack' | 'side';
+  /** Desktop quarters: board centred in the left half, the dock on the bottom-right quarter's centre. */
+  quad?: boolean;
   /** the board's orientation on screen: whichever gives bigger tiles */
   orient: Orient;
   header: Box;
@@ -66,7 +68,9 @@ export type Thumb = {
  *  shared side margin (board, piles, fan, tools), icon buttons, the fan's end tilt (deg) and
  *  rise (of its width), the dock's cap (of the usable height), the most the board may reach
  *  under the dock (of its height), the bottom margin and the largest gap between map and dock. */
-export const THUMB = { slice: 44, minSlice: 34, maxSlice: 48, sliceOf: 0.64, lift: 10, pileW: 56, edge: 8, icon: 44, tilt: 7, rise: 0.12, cap: 0.45, overlapMax: 0, bottom: 12, mapGap: 24, gap: 14 } as const;
+/* sliceOf 0.67 (was 0.64): a tiny bit more hand spread so cards are easier to pick, without
+   shrinking below the 44pt touch floor on the shortest phones (owner, 2026-11-07). */
+export const THUMB = { slice: 45, minSlice: 35, maxSlice: 50, sliceOf: 0.67, lift: 10, pileW: 56, edge: 8, icon: 44, tilt: 7, rise: 0.12, cap: 0.45, /** the touch minimum a card may not go below */ minCard: 44, /** the dock cap allowed to reach it on the shortest phone */ minCardCap: 0.48, overlapMax: 0, bottom: 12, mapGap: 24, gap: 14 } as const;
 /** Room kept above the dock's top element (a picked card's lift reaches into it). */
 const TOP_KEEP = 2;
 
@@ -162,11 +166,26 @@ const thumbDock = (W: number, usable: number, maxHand: number, side: 'right' | '
   };
   // the biggest cards whose compact fan fits the width with at least a 34pt strip per card
   const sizes = [62, 60, 58, 56, 54, 52, 50, 48, 46, 44, 42, 40];
-  for (const cw of sizes) {
+  const fits = (cw: number, cap: number) => {
     const b = build(cw);
-    if (b.t.slice >= THUMB.minSlice && b.h <= usable * THUMB.cap) return b;
+    return b.t.slice >= THUMB.minSlice && b.h <= usable * cap ? b : null;
+  };
+  const best = build(40);
+  for (const cw of sizes) {
+    const b = fits(cw, THUMB.cap);
+    if (b) return b;
   }
-  return build(40);
+  // The normal 45% dock cap could not fit even the 40pt fallback on the shortest phone. A card
+  // below 44pt is not a touch target, so spend a little of the map's height instead: pick the
+  // SMALLEST card that reaches the minimum, never the biggest that happens to fit. The piles keep
+  // their own row and the fan keeps its band, so nothing is clipped; if even this cannot fit, the
+  // old 40pt fallback stands (honest, rather than an overflowing dock).
+  for (const cw of [...sizes].reverse()) {
+    if (cw < THUMB.minCard) continue;
+    const b = fits(cw, THUMB.minCardCap);
+    if (b) return b;
+  }
+  return best;
 };
 
 const mirrorThumb = (t: Thumb, W: number): Thumb => {
@@ -366,15 +385,33 @@ export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND, thumb
       : Math.min(420, Math.max(340, Math.round(W * 0.32)));
     const card = cardSize(dockW, maxHand, wideDesktop ? Math.min(150, Math.round(dockW * 0.17)) : 72);
     const rows = { table: Math.max(HEIGHTS.table, card.h + PILE_LABEL), hand: card.h + HEIGHTS.handPad };
-    const zone: Box = { x: sl + BOARD_MARGIN, y: top, w: W - dockW - 3 * BOARD_MARGIN, h: v.h - top - sb - BOARD_MARGIN };
+    // A phone on its side (owner, 2026-10-24): the board takes the whole height with the same tiny
+    // margin above and below. The menu key and the wordmark sit in the corners, where a hexagonal
+    // board has no tiles. Desktops keep the board under the header.
+    const phoneSide = v.w > v.h && v.h <= 560;
+    const zoneTop = phoneSide ? st + BOARD_MARGIN : top;
+    // DESKTOP QUARTERS (owner, 2026-11-08: "if you divide screen into 4 equal parts - [hand and cockpit]
+    // should be roughly centred in the bottom right corner of 4 rectangles"; the board "centred in left
+    // half"). Full desktops split the screen in halves; compact landscape keeps its old fit.
+    const quad = !phoneSide && v.w >= 1000 && v.h >= 650;
+    const half = Math.round(W / 2);
+    const zone: Box = quad
+      ? { x: sl + BOARD_MARGIN, y: zoneTop, w: half - 2 * BOARD_MARGIN, h: v.h - zoneTop - sb - BOARD_MARGIN }
+      : { x: sl + BOARD_MARGIN, y: zoneTop, w: W - dockW - 3 * BOARD_MARGIN, h: v.h - zoneTop - sb - BOARD_MARGIN };
     const fit = bestFit(zone.w, zone.h, radius);
     const u = boardUnits(radius, fit.orient);
     const bw = u.w * fit.scale;
     const bh = u.h * fit.scale;
     const board: Box = { x: zone.x + (zone.w - bw) / 2, y: zone.y + (zone.h - bh) / 2, w: bw, h: bh };
     const dockH = rows.table + rows.hand + SIDE_GAP + HEIGHTS.bottomPad;
-    const dock: Box = { x: sl + W - dockW - BOARD_MARGIN, y: top + Math.max(0, (zone.h - dockH) / 2), w: dockW, h: dockH };
-    return { mode: 'side', orient: fit.orient, header, zone, board, dock, rows, card, parts: partsIn(dock, rows, card, 'side', maxHand), hexPx: u.hexW * fit.scale, scale: fit.scale, tools: toolsIn(zone) };
+    const dock: Box = quad
+      ? {
+          x: sl + Math.round(W * 0.75 - dockW / 2),
+          y: Math.round(Math.max(top, Math.min(v.h * 0.75 - dockH / 2, v.h - sb - BOARD_MARGIN - dockH))),
+          w: dockW, h: dockH,
+        }
+      : { x: sl + W - dockW - BOARD_MARGIN, y: top + Math.max(0, (zone.h - dockH) / 2), w: dockW, h: dockH };
+    return { mode: 'side', quad, orient: fit.orient, header, zone, board, dock, rows, card, parts: partsIn(dock, rows, card, 'side', maxHand), hexPx: u.hexW * fit.scale, scale: fit.scale, tools: toolsIn(zone) };
   }
 
   if (thumb) {

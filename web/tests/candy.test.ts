@@ -1,6 +1,7 @@
 // UI overhaul Part 3: the eye-candy decisions.
 import { describe, expect, it } from 'vitest';
-import { deckMoment, splashPlan, sporesHome } from '../src/logic/candy.js';
+import { DECK_BEAT, SCORE_BEAT, deckMoment, scoreProgress, splashPlan, sporesHome } from '../src/logic/candy.js';
+import { MOTION } from '../src/logic/motion.js';
 
 describe('B. splash', () => {
   it('once per visit, short, still with Reduce motion, never when switched off', () => {
@@ -20,6 +21,25 @@ describe('C. last card', () => {
     expect(deckMoment(1, 1)).toBeNull();
     expect(deckMoment(9, 8)).toBeNull();
     expect(deckMoment(0, 0)).toBeNull();
+  });
+});
+
+describe('the deck and the score click instead of bouncing', () => {
+  it('the last card and the empty pile are one short beat, with a small scale and no spring', () => {
+    expect(DECK_BEAT.ms).toBe(MOTION.move);
+    expect(DECK_BEAT.lastScale).toBeGreaterThan(1);
+    expect(DECK_BEAT.lastScale).toBeLessThanOrEqual(1.08);
+  });
+  it('a score eases out over one move, then the digit clicks instead of bouncing', () => {
+    expect(SCORE_BEAT.countMs).toBe(MOTION.move);
+    expect(SCORE_BEAT.popMs).toBe(MOTION.quick);
+    expect(SCORE_BEAT.popScale).toBeGreaterThan(1);
+    expect(SCORE_BEAT.popScale).toBeLessThanOrEqual(1.08);
+    expect(scoreProgress(0)).toBe(0);
+    expect(scoreProgress(1)).toBe(1);
+    expect(scoreProgress(0.5)).toBeGreaterThan(0.5);
+    expect(scoreProgress(-1)).toBe(0);
+    expect(scoreProgress(2)).toBe(1);
   });
 });
 

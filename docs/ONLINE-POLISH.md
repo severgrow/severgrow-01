@@ -146,7 +146,7 @@ A bounded probe (2 real HTTPS duels, 252 requests, 0 errors, no 429/500/503) thr
 
 For contrast, the same client against the local server on the same real database measured view p50
 269 ms / p95 277 ms and submit p50 342 ms / p95 391 ms — the difference is the Edge hop plus the
-network, not the game. The numbers match the previous verification (`docs/ONLINE-SHIP-STATUS.md`
+network, not the game. The numbers match the previous verification (`docs/history/ONLINE-SHIP-STATUS.md`
 recorded edge view p50 565 / p95 633, submit p50 644 / p95 749), so this pass did not regress
 latency.
 

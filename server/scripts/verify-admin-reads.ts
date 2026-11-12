@@ -63,6 +63,16 @@ await run('matches', () => store.matches({ limit: 5 }));
 await run('ledger', () => store.ledger({ limit: 5 }));
 await run('world', () => store.world(now));
 await run('campaign', () => store.campaign());
+// The one read that returns BOTH sides of the human/bot split. It is the only admin read that is not
+// filtered to `is_test = false`, so it is the one that must be checked against the real schema (its
+// columns `test_reason` / `test_override` come from migration 0016).
+await run('players', async () => {
+  const page = await store.players(now);
+  if (page.summary.humans + page.summary.bots !== page.total) {
+    throw new Error(`the split does not add up: ${page.summary.humans} + ${page.summary.bots} != ${page.total}`);
+  }
+  return `${page.total} accounts: ${page.summary.humans} humans, ${page.summary.bots} bots`;
+});
 
 // A detail read needs a real id; take one from the list rather than inventing one. The row's field
 // is `id` (AdminMatchRow), not `matchId`.
