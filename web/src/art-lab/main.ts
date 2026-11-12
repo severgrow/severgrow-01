@@ -641,6 +641,14 @@ async function onClear() {
 }
 
 // ---------- start ----------
+// The lab owns its route: register the /art/-scoped worker (web/art/public/art-sw.js). It answers this
+// page's navigations from the network, so neither the game's root worker nor a 10-minute-old HTML
+// cache entry can put anything but the lab at /art/. Offline play is the game's job, not the lab's.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./art-sw.js').catch(() => {
+    /* the lab works without it; a failed registration must not stop the dashboard */
+  });
+}
 (async () => {
   const progress = h('progress', { max: 1, value: 0 });
   root.prepend(h('div', { class: 'loading' }, 'Loading today’s art… ', progress));

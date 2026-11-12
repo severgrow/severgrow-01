@@ -4,7 +4,7 @@ import {expect,it,vi} from 'vitest';
 
 const source=readFileSync(new URL('../public/futa04-sw.js',import.meta.url),'utf8');
 function worker(fetcher:typeof fetch,cached?:Response){
- const listeners=new Map<string,(e:any)=>void>();const put=vi.fn(async()=>{});
+ const listeners=new Map<string,(e:any)=>void>();const put=vi.fn(async (_key:string,_response:Response)=>{});
  const timers=new Map<number,{fn:()=>void;ms:number}>();let next=0;
  const cache={match:vi.fn(async()=>cached?.clone()),put};
  runInNewContext(source,{URL,Response,Promise,setTimeout:(fn:()=>void,ms:number)=>{timers.set(++next,{fn,ms});return next;},clearTimeout:(id:number)=>timers.delete(id),fetch:fetcher,
@@ -73,4 +73,52 @@ it('a stale-page recovery reload (?_fresh=) gets the network page, never the sav
 it('…and offline, the recovery still falls back to the saved page rather than nothing',async()=>{
  const w=worker(vi.fn(async()=>{throw new TypeError('offline');}) as unknown as typeof fetch,new Response('saved app'));
  expect(await (await w.navigate(undefined,'https://game.example/?_fresh=9').answer).text()).toBe('saved app');
+});
+
+// THE ART LAB (futasaku.com/art) is a separate tool on the same origin, with the same scope as the
+// game. A designer opening /art/ on a device that still holds an older worker must get the lab: the
+// worker must step aside and let the browser ask the network. If a navigation ever reaches `navigate`
+// it is answered from the saved game page, which is exactly the reported failure ("/art/ shows the
+// game"), so this is checked through the real fetch listener, not just the handler.
+it('never answers an Art Lab navigation, even with the game saved in the cache',()=>{
+ const w=worker(vi.fn() as unknown as typeof fetch,new Response('saved game'));
+ const respondWith=vi.fn();
+ w.dispatch({request:{url:'https://game.example/art/',method:'GET',mode:'navigate'},respondWith,waitUntil:vi.fn()});
+ expect(respondWith).not.toHaveBeenCalled();
+ expect(w.cache.match).not.toHaveBeenCalled();
+});
+it('steps aside for every address the lab is reached by (query or not, /test/art/ too)',()=>{
+ for(const url of ['https://game.example/art/','https://game.example/art','https://game.example/art/?v=2','https://game.example/art/?cb=3#seed=4821','https://game.example/test/art/']){
+  const respondWith=vi.fn();
+  worker(vi.fn() as unknown as typeof fetch,new Response('saved game'))
+   .dispatch({request:{url,method:'GET',mode:'navigate'},respondWith,waitUntil:vi.fn()});
+  expect(respondWith,url).not.toHaveBeenCalled();
+ }
+});
+it('checks the Art Lab exclusion before the navigation branch that answers with the saved page',()=>{
+ const artAt=source.indexOf('\\/art(');
+ const navigateAt=source.indexOf("if (req.mode");
+ expect(artAt).toBeGreaterThan(-1);
+ expect(navigateAt).toBeGreaterThan(-1);
+ expect(artAt).toBeLessThan(navigateAt);
+});
+it('never saves a sub-page as the game’s own offline page',async()=>{
+ const sub=new Response('a sub-page');
+ Object.defineProperty(sub,'url',{value:'https://game.example/notes/'});
+ const w=worker(vi.fn(async()=>sub) as unknown as typeof fetch);
+ const n=w.navigate(undefined,'https://game.example/notes/');
+ expect(await (await n.answer).text()).toBe('a sub-page');
+ await Promise.all(n.tasks);
+ expect(w.cache.put).not.toHaveBeenCalled();
+});
+it('still saves the game’s own page for the next launch',async()=>{
+ const own=new Response('the game');
+ Object.defineProperty(own,'url',{value:'https://game.example/'});
+ const w=worker(vi.fn(async()=>own) as unknown as typeof fetch,new Response('saved game'));
+ const n=w.navigate();
+ // the saved page is answered at once; the network page is what gets saved for next time
+ expect(await (await n.answer).text()).toBe('saved game');
+ await Promise.all(n.tasks);
+ expect(w.cache.put).toHaveBeenCalled();
+ expect(await w.cache.put.mock.calls[0]![1].text()).toBe('the game');
 });

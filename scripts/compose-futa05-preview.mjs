@@ -50,7 +50,7 @@ assert(
 );
 
 /** Routes that live beside the root and must never be swept into /firststep/. */
-const SIBLING_ROUTES = ['admin', 'firststep', 'test', 'test2', 'futa0.4', 'futa-test', 'futa0.5', '2', '3'];
+const SIBLING_ROUTES = ['admin', 'art', 'firststep', 'test', 'test2', 'futa0.4', 'futa-test', 'futa0.5', '2', '3'];
 
 /**
  * Main's own worker must not treat a sibling route as its offline index. compose-pages.mjs and
@@ -89,11 +89,12 @@ const GUARD_COMMENT = "// a sibling channel is never this worker's page";
 const patchRootWorker = (path) => {
   assert(existsSync(path), `missing ${path}`);
   const worker = readFileSync(path, 'utf8');
-  // `/admin/` is in this guard because the dashboard is served from the ROOT's scope: without the
-  // early return, a visit to /admin/ would be cached by this worker as the root's offline index.
+  // `/art/` is in this guard because the Art Lab shares the root's scope and is a separate tool:
+  // without the early return a designer's visit would be answered from — and saved as — the root's
+  // offline page, and the game would later open the lab (or the lab the game).
   // `/2/` and `/3/` are the retired preview lines: each now holds only a forwarding page and a worker
   // that removes itself (compose-retired-routes.mjs), and the root's worker must never cache those.
-  const guard = String.raw`  if (/^\/(?:firststep|test2?|futa0[.]4|futa0[.]5|futa-test|admin|2|3)(\/|$)/.test(url.pathname)) return; ${GUARD_COMMENT}`;
+  const guard = String.raw`  if (/^\/(?:firststep|test2?|futa0[.]4|futa0[.]5|futa-test|admin|art|2|3)(\/|$)/.test(url.pathname)) return; ${GUARD_COMMENT}`;
   // A guard installed by an earlier copy of this script is REPLACED, never doubled: the route list
   // grows over time, and appending a second guard line would leave the old one in place forever.
   const without = worker.split('\n').filter((line) => !line.includes(GUARD_COMMENT)).join('\n');
@@ -101,6 +102,13 @@ const patchRootWorker = (path) => {
   assert(without.includes(anchor), 'Review the changed FUTASAKU 0.5 worker before publishing it at the root');
   // A replacer function, not a string: the guard contains `$`, which a replacement string mangles.
   const next = without.replace(anchor, () => `${anchor}\n${guard}`);
+  // The Art Lab shares this worker's scope and is a separate tool. The guard line installed here
+  // names it, and must sit BEFORE the navigation branch: `navigate()` answers from `./index.html`
+  // (the game's page), so a navigation that reaches that branch is answered with the game.
+  const navAt = next.indexOf('if (req.mode');
+  const guardAt = next.indexOf(GUARD_COMMENT);
+  assert(navAt > 0 && guardAt > 0 && guardAt < navAt, `${path}: the sibling-route guard must come before the navigation branch`);
+  assert(/admin\|art\|/.test(guard), `${path}: the published guard must name /art/`);
   if (next !== worker) writeFileSync(path, next);
 };
 

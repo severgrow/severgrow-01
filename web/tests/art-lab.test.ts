@@ -206,8 +206,27 @@ describe('the game never loads the lab', () => {
     // its own build pass, into dist/art only; the game's build has no lab entry
     expect(readFileSync(resolve(__dirname, '../vite.art.config.ts'), 'utf8')).toContain("'./dist/art'");
     expect(readFileSync(resolve(__dirname, '../vite.config.ts'), 'utf8')).not.toContain('art/index.html');
-    // the game's offline worker never caches the lab
-    expect(readFileSync(resolve(__dirname, '../public/futa04-sw.js'), 'utf8')).toMatch(/\/art\//);
+    // the game's offline worker steps aside for the lab BEFORE it answers a navigation: `navigate()`
+    // answers from the saved game page, so a /art/ navigation that reached it would show the game
+    const worker = readFileSync(resolve(__dirname, '../public/futa04-sw.js'), 'utf8');
+    const artAt = worker.indexOf('\\/art(');
+    expect(artAt).toBeGreaterThan(-1);
+    expect(artAt).toBeLessThan(worker.indexOf('if (req.mode'));
+  });
+  it('the lab owns its route: its own worker, no cache, and the published worker is guarded for it', () => {
+    const lab = readFileSync(resolve(__dirname, '../src/art-lab/main.ts'), 'utf8');
+    expect(lab).toContain("navigator.serviceWorker.register('./art-sw.js')");
+    const sw = readFileSync(resolve(__dirname, '../art/public/art-sw.js'), 'utf8');
+    // the page itself always goes past the HTTP cache (Pages keeps HTML for 10 minutes), and this
+    // worker never writes a cache: an out-of-date lab document is the failure it exists to prevent
+    expect(sw).toContain("cache: 'reload'");
+    expect(sw).toContain("request.mode !== 'navigate'");
+    expect(sw).not.toContain('caches.open');
+    expect(sw).not.toContain('caches.match');
+    // the worker the workflow publishes at the root names /art/ in its route guard
+    const composer = readFileSync(resolve(__dirname, '../../scripts/compose-futa05-preview.mjs'), 'utf8');
+    expect(composer).toContain("const SIBLING_ROUTES = ['admin', 'art',");
+    expect(composer).toMatch(/\|admin\|art\|/);
   });
 });
 
