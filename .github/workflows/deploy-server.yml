@@ -10,15 +10,17 @@ name: Deploy the server (Supabase Edge function)
 # Without it the job says so and skips; nothing fails. The live site keeps working on the old server
 # meanwhile, because the server always accepts the bot versions of older pages.
 
+# Triggered by the PUSH and gated on CI inside the job, exactly like the publish workflow: a
+# `workflow_run` trigger only fires for workflows on the repository's default branch (`main`), which
+# never carries this line's workflows.
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
+  push:
     branches: [futa0.5-online]
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read # the CI gate reads this commit's CI result
 
 concurrency:
   group: deploy-server
@@ -30,14 +32,29 @@ env:
 
 jobs:
   deploy:
-    # Only a green CI on a push to futa0.5-online (or a manual run).
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 90
     steps:
+      - name: Wait for CI to pass on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          for i in $(seq 1 150); do
+            json=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&per_page=20" || echo '{}')
+            state=$(echo "$json" | jq -r '[.workflow_runs // [] | .[] | select(.head_branch == "futa0.5-online")]
+              | sort_by(.created_at) | last | if . == null then "waiting none" else "\(.status) \(.conclusion // "none")" end')
+            echo "CI on $SHA: $state"
+            case "$state" in
+              "completed success") exit 0 ;;
+              completed*) echo "::error::CI did not pass on $SHA ($state); not deploying the server"; exit 1 ;;
+            esac
+            sleep 30
+          done
+          echo "::error::CI did not finish on $SHA in time; not deploying the server"; exit 1
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20
