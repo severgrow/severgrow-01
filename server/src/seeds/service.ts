@@ -10,7 +10,7 @@ import type { MatchListRow, MatchRecord, MoveRecord, PlayerRecord, Storage } fro
 import type { PublicPlayerProfile } from '../protocol.js';
 import { PLANET_GROWTH, WORLD_VERSION, seenWorld } from '../world.js';
 import { colourById, colourChangeAvailableAt, colourCooldownMs, colourIdFor, isColourId, resolveTileColours } from '../../../src/tile-colours.js';
-import { SEED_ECONOMY, WORLD_CHALLENGE_LIST_WINDOW_MS } from './config.js';
+import { SEED_ECONOMY, MAX_TRAINING_BOT, WORLD_CHALLENGE_LIST_WINDOW_MS } from './config.js';
 import type {
   ChallengeSendFailure,
   WorldChallenge,
@@ -487,7 +487,7 @@ export class WorldEconomyService {
   }
 
   async issueTraining(player: PlayerRecord, botLevel: number) {
-    if (!Number.isInteger(botLevel) || botLevel < 1 || botLevel > 9) throw new ApiError('INVALID_REQUEST', 'Invalid Training level.');
+    if (!Number.isInteger(botLevel) || botLevel < 1 || botLevel > MAX_TRAINING_BOT) throw new ApiError('INVALID_REQUEST', 'Invalid Training level.');
     const now = this.now();
     const day = Math.floor(now / 3_600_000) * 3_600_000;
     const limit = await this.matches.hitRateLimit(`seeds:ticket:${player.id}`, day, 12);

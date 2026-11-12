@@ -1,7 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DIFFICULTIES, DIFFICULTY_STEP_KEY, defaultDifficultyForLevel, matchLabel, parseDifficultyStep, stepAfterGame, stepLevelFor,
+  DIFFICULTIES, DIFFICULTY_STEP_KEY, defaultDifficultyForLevel, hardOpponent, matchLabel, parseDifficultyStep, stepAfterGame, stepLevelFor,
 } from '../src/logic/difficulty.js';
+
+describe('the hard opponent ceiling (the one place the top of the ladder lives)', () => {
+  it('answers 9 for every seed today (the sig is kept for the rotation that comes next)', () => {
+    for (const seed of [0, 1, -1, 42, 0x7fff_ffff, -0x8000_0000, Number.NaN, Infinity]) {
+      expect(hardOpponent(seed)).toBe(9);
+    }
+  });
+
+  it('is the TOP of the Hard range, which still runs 8 to 9', () => {
+    const hard = DIFFICULTIES.find((tier) => tier.id === 'hard')!;
+    expect(hard.level).toBe(8);
+    expect(hard.levels).toEqual([8, 9]);
+    expect(hard.levels[hard.levels.length - 1]).toBe(hardOpponent(0));
+  });
+
+  it('leaves the one-game carry-over stepping BOTH ways inside 8 to 9', () => {
+    // A ceiling is not a level: a win still steps 8 -> 9 and a loss still steps 9 -> 8.
+    expect(stepAfterGame('hard', 8, 'win')).toBe(9);
+    expect(stepAfterGame('hard', 9, 'loss')).toBe(8);
+    // ...and the ceiling is where the climb stops, exactly as before.
+    expect(stepAfterGame('hard', 9, 'win')).toBeNull();
+    expect(stepAfterGame('hard', 8, 'loss')).toBeNull();
+  });
+});
 
 describe('training difficulty tiers', () => {
   it('is the three training tiers, each with its own bot-level range', () => {

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   BLITZ_DEFAULT, BLITZ_DROP_BOT_LEVEL, BLITZ_FIRST_MAP, BLITZ_KEY, BLITZ_LAST_MAP, BLITZ_MAPS,
-  BLITZ_TURN_MS, blitzAfterGame, blitzClockText, blitzNextFlipIn, blitzDeadlineAt, blitzRemainingMs, blitzStage, blitzTempo, blitzTempoLine,
+  BLITZ_BOT_LEVEL, BLITZ_TURN_MS, blitzAfterGame, blitzClockText, blitzNextFlipIn, blitzDeadlineAt, blitzRemainingMs, blitzStage, blitzTempo, blitzTempoLine,
   blitzTick, blitzTimeoutAction, blitzTimeoutResult, blitzTimeoutState,
   parseBlitzState, pickBlitzMap, readBlitzState, recordBlitzOutcome,
 } from '../src/logic/blitz.js';
 import type { BlitzState, BlitzStore } from '../src/logic/blitz.js';
-import { DIFFICULTIES } from '../src/logic/difficulty.js';
+import { DIFFICULTIES, hardOpponent } from '../src/logic/difficulty.js';
 import { apply, newMatch, viewFor } from '../../src/engine/index.js';
 import type { Card, State } from '../../src/engine/index.js';
 
@@ -85,6 +85,16 @@ describe('Blitz ladder (the only bot rule that is not the tier carry-over)', () 
   it('leaves the three training tiers exactly as they were', () => {
     expect(DIFFICULTIES.map((tier) => tier.id)).toEqual(['easy', 'medium', 'hard']);
     expect(DIFFICULTIES.some((tier) => (tier.id as string) === 'pro')).toBe(false);
+  });
+
+  it('takes its top from the Hard ceiling, so the clamp changes nothing today', () => {
+    // Both ladders top out in ONE place (`hardOpponent`); the ladder's own top is still 9 ...
+    expect(hardOpponent(0)).toBe(9);
+    expect(BLITZ_BOT_LEVEL).toBe(9);
+    expect(readBlitzState(fakeStore().store)).toEqual({ level: 9, losses: 0 });
+    // ... a win returns to it, and the two-loss drop to 8 is untouched by the clamp.
+    expect(blitzAfterGame({ level: 8, losses: 4 }, 'win')).toEqual({ level: 9, losses: 0 });
+    expect(blitzAfterGame(blitzAfterGame(BLITZ_DEFAULT, 'loss'), 'loss')).toEqual({ level: 8, losses: 2 });
   });
 });
 

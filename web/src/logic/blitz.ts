@@ -16,6 +16,7 @@ import type { CampaignLevel } from '../../../src/campaign/levels.js';
 import { legalActions, scores } from '../../../src/engine/index.js';
 import type { Action, GameResult, Player, State, View } from '../../../src/engine/index.js';
 import type { FinishResult } from './log.js';
+import { hardOpponent } from './difficulty.js';
 
 /** One turn: 30 seconds, fresh every turn (owner, 2026-11-08: 30 s, was 21 s on 2026-11-06). */
 export const BLITZ_TURN_MS = 30_000;
@@ -26,8 +27,19 @@ export const BLITZ_RED_MS = 3_000;
 /** `severgrow.*`: the ladder's own key, never shared with the training tiers' carry-over. */
 export const BLITZ_KEY = 'severgrow.blitz.v1';
 
+/** The bot Blitz starts at and returns to after a win — the ladder's top before the shared ceiling. */
+const BLITZ_TOP_LEVEL = 9;
+
+/**
+ * Clamp a ladder level to the Hard tier's ceiling (`logic/difficulty.ts`): the ONE place both
+ * ladders top out, so a future rotation moves Practice Hard and Blitz together. Today the ceiling
+ * is 9 and every ladder value is 8 or 9, so this returns its argument unchanged for every current
+ * value. The ceiling is asked with seed 0 because this ladder is persisted, not drawn per game.
+ */
+const blitzCeiling = (level: number): Level => Math.min(level, hardOpponent(0)) as Level;
+
 /** The bot Blitz starts at (and returns to after a win). */
-export const BLITZ_BOT_LEVEL: Level = 9;
+export const BLITZ_BOT_LEVEL: Level = blitzCeiling(BLITZ_TOP_LEVEL);
 /** The bot after two losses in a row, until the player wins one. */
 export const BLITZ_DROP_BOT_LEVEL: Level = 8;
 /** Losses in a row that drop 9 to 8. */
