@@ -62,6 +62,15 @@ const idle = async (page: Page, ms = 15000) => {
 };
 const boardTiles = (page: Page) => page.locator('.l-tiles .tile').count();
 const stateTiles = (page: Page) => page.evaluate(() => Object.values((window as unknown as { __severgrow: Hook }).__severgrow.state()!.board).filter((t) => t).length);
+/** Polls `cond` until it holds or the deadline passes (the suites' usual `waitFor` idiom). */
+const waitUntil = async (cond: () => Promise<boolean>, ms = 5000): Promise<boolean> => {
+  const start = Date.now();
+  while (Date.now() - start < ms) {
+    if (await cond()) return true;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return cond();
+};
 /** One channel check for the whole run (see openPage). */
 let channelChecked = false;
 
@@ -259,6 +268,11 @@ const playTurn = async (page: Page) => {
       if (await page.locator('#confirm-play').isVisible()) await page.click('#confirm-play');
       await idle(page);
       await page.click('#tool-undo');
+      // The undone tile stays drawn until its exit animation ends (measured ~300 ms), so the board
+      // DOM briefly holds one tile more than the state. Wait for the two counts to meet before
+      // comparing — a board that never catches up still fails the check below, it just gets a real
+      // deadline instead of being read mid-animation.
+      await waitUntil(async () => (await boardTiles(page)) === (await stateTiles(page)));
       undone = (await stateJson(page)) === before && (await boardTiles(page)) === (await stateTiles(page));
     }
   }
