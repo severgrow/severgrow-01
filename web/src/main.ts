@@ -4206,10 +4206,17 @@ let pumpWanted = false;
 let currentStep: Step | null = null;
 /** True while the in-game replay holds the display sign (released on the same drain). */
 let replaySignHeld = false;
-/** Steps that are an enemy ACTION: the in-game replay separates these with a quiet beat. */
+/**
+ * Steps that are an enemy ACTION: the in-game replay separates these with a quiet beat.
+ *
+ * A DRAW is deliberately NOT one (owner, 2026-11-12: the card dealt to the opponent at the end of a
+ * replayed turn took too long and held up the hand-over). A draw is housekeeping, not something to
+ * read: the quiet beat before it bought nothing and cost 160 ms at the very moment input reopens.
+ * The deal keeps its own short beat (PINNED.oppDeal).
+ */
 const replayActionStep = (s: Step): boolean =>
   s.k === 'grow' || s.k === 'sever' || s.k === 'remove' || s.k === 'strengthen'
-  || s.k === 'fruit' || s.k === 'megaBomb' || s.k === 'discard' || s.k === 'draw';
+  || s.k === 'fruit' || s.k === 'megaBomb' || s.k === 'discard';
 async function pump() {
   if (pumping) {
     pumpWanted = true;
@@ -4905,15 +4912,15 @@ async function playStep(step: Step, my: number) {
               const r = $('board-wrap').getBoundingClientRect();
               point = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
             }
-            // The flight is the card's own beat (`BOOMERANG.total` = PINNED.throwFlight); the STEP
-            // keeps its published 396 ms wait. The boomerang used to total 624 ms at interface
-            // speed and this await followed it, so every human throw held the step 634 ms instead
-            // of ~406 ms (+228 ms). max() is a floor for the flight, never a reason to stretch the
-            // beat: the unit test pins the flight inside the wait, and `futa04-motion` measures
-            // the step itself.
+            // The flight is the card's own beat (`BOOMERANG.total` = PINNED.boomerang); the STEP
+            // waits it out. The boomerang used to total 624 ms at interface speed and this await
+            // followed it, so every human throw held the step 634 ms instead of ~406 ms (+228 ms).
+            // `max()` is a floor for the flight, never a reason to stretch the beat: the unit test
+            // pins the flight inside the wait, and `futa04-motion` measures the step itself.
             // 2026-11-08: the boomerang has its own beat (PINNED.boomerang) and the step waits it out:
             // a throw ends the turn and my own animation never blocks my input (0.8), so the only
-            // thing that waits is the opponent's turn, by ~300 ms. The pile thuds at the catch.
+            // thing that waits is the opponent's turn. 2026-11-12: the flick is shorter (500 -> 420),
+            // so the wait is 420 ms at Normal speed. The pile thuds at the catch.
             const pileEl = $('discard');
             const catchAndThud = () => {
               land();

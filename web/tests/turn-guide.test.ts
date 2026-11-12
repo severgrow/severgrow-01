@@ -4,6 +4,7 @@
 //   is possible); a card picked → its legal tiles; Throw → the cards you may throw. Nothing to play
 //   → Skip. Not your turn → nothing.
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { applyAs, coordKey, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, State, View } from '../../src/engine/index.js';
 import { turnGuideStep } from '../src/logic/turn-guide';
@@ -72,5 +73,27 @@ describe('the turn guide lights one step at a time', () => {
     expect(turnGuideStep(other, legalActions(other), null)).toBeNull();
     const { v } = until(3, (vv) => vv.phase === 'DRAW');
     expect(turnGuideStep(v, [], null)).toBeNull();
+  });
+});
+
+// OWNER DIRECTION (2026-11-12): "i dont know why its showing ? guide icon since guide should not be
+// available in blitz". The "?" was wired for every turn (2026-11-11) and nothing filtered it, so it
+// rode into a timed mode that already drops Undo, Match Intel and Replay. The repo never said Blitz
+// had a guide; this pins the decided rule so it cannot drift back. The browser proof is in
+// web/e2e/blitz.ts (in a real Blitz match the key offers no guide, at Draw and at Grow).
+describe('the guide is not offered in Blitz (owner, 2026-11-12)', () => {
+  const source = readFileSync(new URL('../src/player/smart-cockpit.ts', import.meta.url), 'utf8');
+
+  it('the cockpit collects "?" only outside a Blitz match', () => {
+    // The gate must be on the collection itself, not a paint-time hide: the key's glyph comes from
+    // the item list, so a filtered item is the only way it can never render a dead "?".
+    expect(source).toMatch(/if \(!blitzMatchOn\(\) && options\.guide\?\.available\(\)\) items\.push\(guideSource\);/);
+    // ... and Blitz's own rule is the page class the one clock (practice AND live duel) writes.
+    expect(source).toMatch(/const blitzMatchOn = \(\): boolean => document\.documentElement\.classList\.contains\('blitz-match'\);/);
+  });
+
+  it('the clock turning on or off repaints the key on that frame', () => {
+    expect(source).toContain("import { BLITZ_CLOCK_EVENT } from '../logic/blitz-clock-event.js';");
+    expect(source).toMatch(/window\.addEventListener\(BLITZ_CLOCK_EVENT, \(\) => api\.sync\(\)\);/);
   });
 });

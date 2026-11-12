@@ -20,6 +20,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
+import { contextKinds } from './helpers/context-key.js';
 import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
 import { allNeighbors, apply, coordKey, homeCoord, newMatch, rootCoord, scores } from '../../src/engine/index.js';
 import type { Card, State } from '../../src/engine/index.js';
@@ -212,6 +213,91 @@ try {
   check(JSON.stringify(await page.evaluate(() => localStorage.getItem('severgrow.blitz.v1'))) === 'null', 'a timeout records nothing on the ladder');
   noErrors(page);
   await page.close();
+
+  // ---------------------------------------------------------------------------------------------
+  // 3b. THE SORTING KEY LIVES UNDER THE CONTEXT KEY (owner, 2026-11-12: "the sorting key sits over
+  //     the Blitz timer"; "move the sorting key so it sits directly UNDER the context button - the
+  //     skip/cancel control next to the display"). Blitz only, and measured, never eyeballed: the
+  //     key must clear the timer and both piles at every phone shape and in left-hand mode.
+  // ---------------------------------------------------------------------------------------------
+  {
+    type Box = { x: number; y: number; w: number; h: number; right: number; bottom: number };
+    // The same no-intersection rule futa04-smart-cockpit.ts measures its layout with.
+    const intersects = (a: Box, b: Box): boolean =>
+      a.x < b.right - 0.5 && b.x < a.right - 0.5 && a.y < b.bottom - 0.5 && b.y < a.bottom - 0.5;
+    const openBlitzAt = async (w: number, h: number, side: 'right' | 'left'): Promise<Page> => {
+      const p = await browser.newPage({ viewport: { width: w, height: h }, isMobile: w < 600, hasTouch: w < 600 });
+      const errs: string[] = [];
+      p.on('pageerror', (e) => errs.push(e.message));
+      (p as Page & { __blitzErrors?: string[] }).__blitzErrors = errs;
+      await p.addInitScript(() => { (window as any).__name = (f: unknown) => f; });
+      // The thumb layout's hand side; seeded before the app boots, on the /test/ channel's prefix.
+      await p.addInitScript((s) => localStorage.setItem('futa05-test:severgrow-thumb', JSON.stringify({ side: s })), side);
+      await p.goto(TEST_URL);
+      await p.waitForFunction(() => !!(window as any).__severgrow, undefined, { timeout: 30000 });
+      await openPractice(p);
+      await p.click('#level-grid [data-difficulty="pro"]');
+      await p.waitForFunction(() => (window as any).__severgrow?.blitz?.()?.active === true, undefined, { timeout: 30000 });
+      await p.waitForFunction(() => {
+        const g = (window as any).__severgrow;
+        return !g.busy() && g.blitz().clock?.running === true && !!document.getElementById('blitz-clock');
+      }, undefined, { timeout: 40000 });
+      return p;
+    };
+    for (const [w, h, side] of [[390, 844, 'right'], [375, 667, 'right'], [430, 932, 'right'], [844, 390, 'right'], [390, 844, 'left']] as const) {
+      const name = `${w}x${h} ${side}`;
+      const p = await openBlitzAt(w, h, side);
+      const g = await p.evaluate(() => {
+        const box = (id: string) => {
+          const b = document.getElementById(id)!.getBoundingClientRect();
+          return { x: b.x, y: b.y, w: b.width, h: b.height, right: b.right, bottom: b.bottom };
+        };
+        return {
+          sort: box('hand-sort'), timer: box('blitz-clock'), context: box('smart-context'),
+          deck: box('deck'), discard: box('discard'),
+          cockpit: document.documentElement.dataset.cockpit,
+          shown: getComputedStyle(document.getElementById('blitz-clock')!).display !== 'none',
+        };
+      });
+      check(g.shown, `${name}: the Blitz timer is on screen`);
+      check(!intersects(g.sort, g.timer),
+        `${name}: the sorting key does not cover the timer (sort ${JSON.stringify(g.sort)} vs timer ${JSON.stringify(g.timer)})`);
+      check(!intersects(g.sort, g.deck) && !intersects(g.sort, g.discard),
+        `${name}: the sorting key does not cover either pile (sort x${Math.round(g.sort.x)}-${Math.round(g.sort.right)})`);
+      check(!intersects(g.timer, g.deck) && !intersects(g.timer, g.discard),
+        `${name}: the timer does not cover either pile`);
+      const gap = g.sort.y - g.context.bottom;
+      check(Math.abs(g.sort.x - g.context.x) <= 0.5 && gap >= -0.5 && gap < 8,
+        `${name}: the sorting key sits directly under the context (skip/cancel) key (dx ${(g.sort.x - g.context.x).toFixed(1)}, gap ${gap.toFixed(1)})`);
+      // Still a real key: a tap must reorder the hand (an invisible layer over it would eat the tap).
+      if (w === 390 && side === 'right') {
+        // OWNER DIRECTION (2026-11-12): "i dont know why its showing ? guide icon since guide should
+        // not be available in blitz". The turn guide lives in the context key (owner, 2026-11-11) and
+        // nothing filtered it out of a timed mode, so it rode in. DECISION: Blitz offers no guide; the
+        // key falls back to its normal face, never a "?" that looks like a control. Nothing to skip in
+        // the Draw step, so that face is the neutral, unavailable one.
+        check(JSON.stringify(await contextKinds(p)) === '[]', `${name}: the context key offers no turn guide in Blitz`);
+        check(await p.locator('#smart-context').isDisabled()
+          && (await p.locator('#smart-context').getAttribute('data-action')) === '',
+          `${name}: with no move to offer the key is the neutral, unavailable face (not a "?")`);
+        const order = () => p.evaluate(() => [...document.querySelectorAll('#hand .card')].map((c) => (c as HTMLElement).dataset.card).join(','));
+        const before = await order();
+        await p.locator('#hand-sort').click();
+        await p.waitForTimeout(320);
+        check((await order()) !== before, `${name}: the sorting key is still tappable under the context key`);
+        // The same rule where the key DOES have a move: Skip owns it, and no "?" waits beside it.
+        await p.locator('#deck').evaluate((el) => (el as HTMLElement).click());
+        await p.waitForFunction(() => {
+          const g = (window as any).__severgrow;
+          return g.state().phase === 'ACT' && !g.busy();
+        }, undefined, { timeout: 20000 });
+        check(JSON.stringify(await contextKinds(p)) === '["skip"]',
+          `${name}: in Grow skip owns the key and no "?" joins its menu`);
+      }
+      noErrors(p);
+      await p.close();
+    }
+  }
 
   // ---------------------------------------------------------------------------------------------
   // 4. Two losses in a row drop the next match to bot 8; the drop survives a reload.

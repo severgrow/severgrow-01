@@ -30,10 +30,19 @@ export const PINNED = Object.freeze({
   throwFlight: 248,
   /**
    * The human throw's boomerang (owner, 2026-11-08: "doesn't look satisfying and is too quick ... make
-   * it 10/10"): wind-up, out, a kiss on the board, a curved one-turn return, a catch on the pile.
-   * A throw ends the turn and own animation never blocks input (0.8), so it may outlast `throw`.
+   * it 10/10"; owner, 2026-11-12: "make the card feel lighter - snappy, natural, more satisfying",
+   * and it "can be quicker"): one flick, now 420 ms (was 500). A throw ends the turn and own
+   * animation never blocks input (0.8), so it may outlast `throw`.
    */
-  boomerang: 500,
+  boomerang: 420,
+  /**
+   * The CEILING for a card dealt to the opponent seat, in wall-clock ms (owner, 2026-11-12: the deal
+   * at the end of a replayed turn took too long; it must be fast and snappy, never slower than the
+   * player's own draw, and it must not hold up the hand-over to the player's turn). The animation's
+   * natural length is 280 ms, but a replay plays at 60% of live speed (x1.67), which stretched it to
+   * ~467 ms; this is a hard cap applied after every speed scale.
+   */
+  oppDeal: 240,
   /** The shortest hold for a live enemy turn, so a quiet turn cannot blink past. */
   liveReveal: 600,
   /** The LED display's minimum dwell before another message may replace it (normal play). */
@@ -154,3 +163,12 @@ export const breathAmpStep = (weight: number): 4 | 5 | 6 | 7 | 8 => {
  */
 export const motionAllowed = (reduceMotion: boolean, timeScale: number): boolean =>
   !reduceMotion && timeScale > 0;
+
+/**
+ * The opponent's dealt card, in wall-clock ms: the natural deal beat scaled by the current speed —
+ * but never past `PINNED.oppDeal`. A replay plays at 60% of live speed (x1.67) and used to stretch
+ * this 280 ms deal to ~467 ms, holding the hand-over to the player's turn; the ceiling is applied
+ * AFTER every scale so live, async and replay all deal on the same short beat (owner, 2026-11-12).
+ */
+export const oppDealMs = (timeScale: number, quick: boolean): number =>
+  Math.max(1, Math.round(Math.min((quick ? 130 : 280) * Math.max(timeScale, 0.1), PINNED.oppDeal)));
