@@ -41,6 +41,13 @@ game onto `SkinBoardView` is a separate step once a pack is ready and measured o
 - `web/art/index.html`, `web/src/art-lab/` — the page. Built by its own pass
   (`web/vite.art.config.ts`, run by `scripts/build-art-lab.mjs` for CHANNEL=futa05 only) into
   `dist/art/`, so the game's build, chunks and first load are untouched.
+- **`/art/` owns its route.** The page registers `./art-sw.js` (`web/art/public/art-sw.js`, scope
+  `/art/`), which answers the lab's navigations from the network with `cache: 'reload'` and stores
+  nothing: GitHub Pages keeps HTML for 10 minutes, and a stale document is the one thing that could
+  show a designer something other than the lab. The game's root worker steps aside for `/art/`
+  (`web/public/futa04-sw.js`, above the navigation branch) and never saves the lab as the game's
+  offline page; `scripts/compose-futa05-preview.mjs` puts `/art/` in the published worker's route
+  guard and asserts both properties at publish time.
 - The phone frame loads the real game as `../?artlab=1&seed=N`: its own storage prefix and no server
   (`IS_ART_FRAME` in web/src/channel.ts, `duelApiUrl` in web/src/online/config.ts). The lab renames
   the game's `#board` to `#board-game` (hidden) and draws a `SkinBoardView` as `#board` with the

@@ -1,11 +1,15 @@
 // Futa04 owns only its scope and cache. It never deletes Main or experimental caches.
 //
-// What it may answer from its cache, and what it must ask the network for first:
-// - pages: network first (offline: the cached page)
+// What it answers, and what it asks the network for first:
+// - pages (navigations): the saved page AT ONCE, refreshed in the background for the next launch
+//   (see `navigate` below). Only the game's own page is ever saved — never a sub-page.
 // - files whose address can never change content (hashed build files in /assets/, art asked
 //   for as file?v=<content hash>): cache first, they are immutable
 // - everything else (the art manifest, icons, any unversioned file): network first, falling
 //   back to the cache only when offline. A stale copy is never preferred to a fresh one.
+// - other tools on this origin (/art/, and the sibling routes the publisher guards): nothing at
+//   all — the worker steps aside and the browser talks to the network. Their exclusions must come
+//   BEFORE the navigation branch below; that ordering is what makes an exclusion real.
 // Each new version of this worker drops the older Futa04 caches (only its own, by prefix).
 const PREFIX = cachePrefix();
 function cachePrefix() {
@@ -25,7 +29,10 @@ function cachePrefix() {
 }
 // v3 (2026-10-19): levels 1-10 became the guided lessons and the campaign was reset, so every
 // returning player must get the new app rather than a cached v2 shell.
-const CACHE = `${PREFIX}v3`;
+// v4 (2026-11-12): the Art Lab went live at /art/ on this origin. Workers without the /art/ guard
+// saved the lab's page as the game's offline copy when a designer opened it (and cached the lab's
+// files), so a new cache name drops those copies on the first launch after this deploy.
+const CACHE = `${PREFIX}v4`;
 const scope = new URL(self.registration.scope);
 const shell = ['./', './index.html', './manifest.webmanifest', './futasaku-icon-192.png', './futasaku-icon-512.png'];
 self.addEventListener('install', (e) => {
@@ -40,6 +47,15 @@ self.addEventListener('activate', (e) => e.waitUntil(Promise.all([
   self.registration.navigationPreload?.enable().catch(() => undefined),
 ]).then(() => self.clients.claim())));
 const immutable = (url) => url.pathname.includes('/assets/') || /[?&]v=[0-9a-f]{6,}/.test(url.search);
+// The only page this worker may keep as the offline copy is the scope's OWN page. A navigation to a
+// sub-page (the Art Lab, the admin dashboard, a forwarding route) must never be saved as the root
+// index: with the route guards above that cannot happen, but a guard can be lost in a later edit or
+// in a published worker, and this is the one place the mistake would become an offline bug.
+const ownPage = (address) => {
+  if (!address) return true; // a stubbed/opaque response: nothing to prove wrong
+  const path = new URL(address).pathname;
+  return path === scope.pathname || path === `${scope.pathname}index.html`;
+};
 const networkFirst = (req, key) =>
   fetch(req)
     .then(async (res) => {
@@ -55,7 +71,7 @@ const networkFirst = (req, key) =>
 const navigate = async (event) => {
   const network = Promise.resolve(event.preloadResponse).then((preloaded) => preloaded || fetch(event.request))
     .then((res) => {
-      if (res.ok) {
+      if (res.ok && ownPage(res.url)) {
         const copy = res.clone();
         event.waitUntil(caches.open(CACHE).then((c) => c.put('./index.html', copy)).catch(() => undefined));
       }
@@ -82,8 +98,11 @@ self.addEventListener('fetch', (e) => {
   const req = e.request, url = new URL(req.url);
   if (isDuelApi(url)) return; // network only — never touch the cache
   if (req.method !== 'GET' || url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return;
-  // The Art Lab (/art/, /test/art/) is a separate tool: never cached, never served from here.
-  if (/\/art\//.test(url.pathname)) return;
+  // The Art Lab (/art/, /test/art/) is a separate tool with its own worker: never cached, never
+  // served from here. THIS TEST MUST STAY ABOVE `req.mode === 'navigate'`: `navigate` answers from
+  // `./index.html`, so a navigation that reaches it is answered with the GAME. `(\/|$)` also covers
+  // the bare `/art`, which forwards to `/art/`.
+  if (/\/art(\/|$)/.test(url.pathname)) return;
   if (req.mode === 'navigate') {
     e.waitUntil(purge());
     e.respondWith(navigate(e));

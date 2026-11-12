@@ -185,6 +185,16 @@ describe('compose-futa05-preview: the site root map', () => {
       'firststep|test2?|futa0[.]4|futa0[.]5|futa-test',
     );
   });
+  it('keeps the Art Lab out of the root worker, before the branch that answers with the game', () => {
+    // /art/ shares this worker's scope but is its own tool. If a navigation to it reached the
+    // navigation branch it would be answered from `./index.html` — the game — which is the reported
+    // failure; and the lab's page would then be saved as the root's offline copy.
+    const worker = read(root, 'site', 'futa04-sw.js');
+    expect(worker).toContain('|admin|art|2|3');
+    expect(worker.indexOf('a sibling channel is never')).toBeLessThan(worker.indexOf('if (req.mode'));
+    // the lab is not swept into /firststep/ by the root move either
+    expect(existsSync(join(root, 'site', 'firststep', 'art'))).toBe(false);
+  });
 
   it('installs a parity guard that checks Main where Main now lives', () => {
     const guard = read(root, 'preview', 'scripts', 'check-pages-parity.mjs');
@@ -255,7 +265,7 @@ describe('compose-futa05-preview: /2/ is the onboarding line, published beside t
     const withOnboarding = runOnboarding();
     const worker = read(withOnboarding, 'site', 'futa04-sw.js');
     // Without this, a /2/ page would be cached as the ROOT's offline index.
-    expect(worker).toContain('futa-test|admin|2');
+    expect(worker).toContain('futa-test|admin|art|2');
     // Exactly one guard, however many times the composer has run: the route list keeps growing.
     expect(worker.split("// a sibling channel is never this worker's page")).toHaveLength(2);
   });
@@ -329,7 +339,7 @@ describe('compose-retired-routes: /2/ and /3/ forward to the root and clean up a
   it('keeps the released root and the root worker guard covering both routes', () => {
     const root = runRetired();
     expect(read(root, 'site', 'index.html')).toBe(FUTA05_HTML);
-    expect(read(root, 'site', 'futa04-sw.js')).toContain('futa-test|admin|2|3)');
+    expect(read(root, 'site', 'futa04-sw.js')).toContain('futa-test|admin|art|2|3)');
     expect(existsSync(join(root, 'site', 'firststep', '3'))).toBe(false);
   });
 });
