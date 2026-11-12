@@ -45,8 +45,9 @@ describe('motion tokens', () => {
       throw: 312,
       throwFlight: 248,
       // OWNER CHANGED THE VALUE (2026-11-08): the throw's own beat. 620 for the six-leg boomerang, then
-      // 500 for the one-flick throw ("quick - but satisfying, not annoying").
-      boomerang: 500,
+      // 500 for the one-flick throw ("quick - but satisfying, not annoying"); OWNER CHANGED IT AGAIN
+      // (2026-11-12): "lighter - snappy" and it "can be quicker" -> 420.
+      boomerang: 420,
       liveReveal: 600,
       displayDwell: 1000,
       lessonDwell: 2000,

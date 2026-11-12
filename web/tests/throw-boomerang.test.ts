@@ -27,8 +27,9 @@ const flight = (plan: ReturnType<typeof planBoomerang>) => plan.frames.filter((f
 describe('one quick flick', () => {
   it('has its own short beat: quick, never a chore to watch', () => {
     expect(BOOMERANG.total).toBe(PINNED.boomerang);
-    expect(PINNED.boomerang).toBeGreaterThanOrEqual(420);
-    expect(PINNED.boomerang).toBeLessThanOrEqual(560);
+    // OWNER CHANGED THE VALUE (2026-11-12: "lighter - snappy" and it "can be quicker"): 500 -> 420.
+    expect(PINNED.boomerang).toBeGreaterThanOrEqual(400);
+    expect(PINNED.boomerang).toBeLessThanOrEqual(470);
     const plan = planBoomerang(from, board, to, true, view);
     expect(plan.duration).toBe(PINNED.boomerang);
     expect(plan.landMs).toBe(Math.round(BOOMERANG.total * BOOMERANG.landAt));
@@ -48,22 +49,66 @@ describe('one quick flick', () => {
     expect(reach).toBeGreaterThan(0.5 * Math.hypot(outX, outY));
   });
 
-  it('moves like a flick: fast off the hand, slowest around the turn, faster again before the catch', () => {
+  it('moves like a flick: fastest off the hand, slower through the turn, a quick catch before the pile', () => {
     const f = flight(planBoomerang(from, board, to, true, view));
     const speed = f.slice(1).map((k, i) => {
       const [ax, ay] = xy(f[i]!.transform); const [bx, by] = xy(k.transform);
       return Math.hypot(bx - ax, by - ay) / (Number(k.offset) - Number(f[i]!.offset));
     });
     const mid = speed.slice(Math.floor(speed.length * 0.35), Math.ceil(speed.length * 0.65));
+    // OWNER DIRECTION (2026-11-12: "fastest as it leaves the hand, decelerating like air drag, then a
+    // quick final catch"): the FIRST step is the fastest of the whole flight, the middle is slower
+    // than both ends, and the catch is quicker again than the turn. Never an even glide, never a stop.
+    expect(speed[0]).toBe(Math.max(...speed));
     expect(speed[0]!).toBeGreaterThan(Math.min(...mid) * 1.3);
     expect(speed.at(-2)!).toBeGreaterThan(Math.min(...mid));
+    expect(speed.every((s) => s > 0)).toBe(true);
+  });
+
+  // OWNER DIRECTION (2026-11-12): the card tilts in perspective as it lifts off and flattens as it
+  // lands; it smears a hair along its own long axis at top speed.
+  it('lifts off in 3D and a little stretched, and flattens by the landing', () => {
+    const plan = planBoomerang(from, board, to, true, view);
+    const lift = String(plan.frames[0]!.transform);
+    expect(lift).toContain('perspective(');
+    const tilt = Math.abs(num(lift, /rotateX\((-?[\d.]+)deg\)/));
+    expect(tilt).toBeGreaterThan(10);
+    expect(tilt).toBeLessThanOrEqual(24);
+    // a two-argument scale is the smear: a touch longer along the card's long axis, a touch narrower across
+    const smear = /scale\(([\d.]+), ([\d.]+)\)/.exec(lift);
+    expect(smear).not.toBeNull();
+    expect(Number(smear![2])).toBeGreaterThan(Number(smear![1]));
+    // the landing is flat and round: no 3D, no smear, just the pile's own size and the catch
+    const land = plan.frames.find((k) => k.offset === BOOMERANG.landAt)!;
+    expect(String(land.transform)).not.toContain('perspective(');
+    expect(String(land.transform)).not.toMatch(/scale\([\d.]+, [\d.]+\)/);
+  });
+
+  // OWNER DIRECTION (2026-11-12): "spin from the flick that decays in flight, landing at a small
+  // natural rest angle of 1-3 degrees (varying between throws), NOT perfectly straight."
+  it('lands at a small natural rest angle, 1-3 degrees, different from throw to throw', () => {
+    const restOf = (variant: number) => {
+      const plan = planBoomerang(from, board, to, true, view, { variant });
+      const land = plan.frames.find((k) => k.offset === BOOMERANG.landAt)!;
+      return num(land.transform, /rotate\((-?[\d.]+)deg\)/);
+    };
+    const angles = Array.from({ length: 12 }, (_, i) => restOf(100 + i));
+    for (const a of angles) {
+      expect(Math.abs(a)).toBeGreaterThanOrEqual(1);
+      expect(Math.abs(a)).toBeLessThanOrEqual(3);
+    }
+    expect(new Set(angles.map((a) => a.toFixed(1))).size).toBeGreaterThan(2);
+    // and it seats straight: a 1-3 degree flyer must never be left over the upright pile card
+    const plan = planBoomerang(from, board, to, true, view, { variant: 7 });
+    const seat = plan.frames.find((k) => k.offset === BOOMERANG.seatAt)!;
+    expect(num(seat.transform, /rotate\((-?[\d.]+)deg\)/)).toBe(0);
   });
 
   it('a light spin, its side set by where the card sat in the hand', () => {
     const left = planBoomerang(from, board, to, true, view, { handMid: 300 });   // card left of the hand's middle
     const right = planBoomerang(from, board, to, true, view, { handMid: 0 });    // card right of it
-    // the card turns as it flies out and straightens as it is caught: it lands upright on the pile
-    // (the pile shows the real card upright; a card landing tilted would flip at the hand-off)
+    // The card turns as it flies out; the spin decays to its small landed rest angle (1-3 degrees,
+    // owner 2026-11-12) and then seats straight so the hand-off to the upright pile card is clean.
     const rots = (p: ReturnType<typeof planBoomerang>) => p.frames.map((k) => num(k.transform, /rotate\((-?[\d.]+)deg\)/));
     const peak = (p: ReturnType<typeof planBoomerang>) => rots(p).reduce((m, r) => (Math.abs(r) > Math.abs(m) ? r : m), 0);
     for (const p of [left, right]) {

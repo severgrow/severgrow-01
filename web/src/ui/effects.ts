@@ -329,7 +329,9 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     // the hand's middle: a card left of it bows and turns one way, right of it the other
     const handRect = document.getElementById('hand')?.getBoundingClientRect();
     const handMid = handRect && handRect.width > 0 ? handRect.left + handRect.width / 2 : undefined;
-    const plan = planBoomerang(from, boardPoint, to, motion() > 0 && f > 0, { width: window.innerWidth, height: window.innerHeight }, handMid === undefined ? {} : { handMid });
+    // The card's id varies the natural rest angle between throws (the same card always lands the
+    // same way): owner, 2026-11-12, "1-3 degrees, varying between throws, NOT perfectly straight".
+    const plan = planBoomerang(from, boardPoint, to, motion() > 0 && f > 0, { width: window.innerWidth, height: window.innerHeight }, { ...(handMid === undefined ? {} : { handMid }), variant: c.id });
     if (!plan.duration) {
       onLand?.();
       return 0;

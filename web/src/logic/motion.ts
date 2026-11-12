@@ -30,10 +30,11 @@ export const PINNED = Object.freeze({
   throwFlight: 248,
   /**
    * The human throw's boomerang (owner, 2026-11-08: "doesn't look satisfying and is too quick ... make
-   * it 10/10"): wind-up, out, a kiss on the board, a curved one-turn return, a catch on the pile.
-   * A throw ends the turn and own animation never blocks input (0.8), so it may outlast `throw`.
+   * it 10/10"; owner, 2026-11-12: "make the card feel lighter - snappy, natural, more satisfying",
+   * and it "can be quicker"): one flick, now 420 ms (was 500). A throw ends the turn and own
+   * animation never blocks input (0.8), so it may outlast `throw`.
    */
-  boomerang: 500,
+  boomerang: 420,
   /** The shortest hold for a live enemy turn, so a quiet turn cannot blink past. */
   liveReveal: 600,
   /** The LED display's minimum dwell before another message may replace it (normal play). */

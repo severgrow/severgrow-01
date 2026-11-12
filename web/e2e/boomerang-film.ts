@@ -5,6 +5,7 @@ import { chromium } from 'playwright-core';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import { servePreview } from './helpers/preview-port.js';
 import { pressContext } from './helpers/context-key.js';
+import { BOOMERANG } from '../src/ui/throw-boomerang.js';
 
 const OUT = process.env.FILM_DIR ?? '/tmp/boomerang-film';
 const { server, url: BASE } = await servePreview(4299, { logLevel: 'silent' });
@@ -28,7 +29,8 @@ try {
   await page.evaluate((a) => { (window as any).__severgrow.playFor(a, 0); }, action);
   const t0 = Date.now();
   const shots: string[] = [];
-  const total = 620;
+  // The flight's own length, never a stale literal (the flick is 420 ms since 2026-11-12).
+  const total = BOOMERANG.total;
   const N = 14;
   for (let i = 0; i <= N; i++) {
     const want = (total * 10 * i) / N;

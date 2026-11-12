@@ -4905,15 +4905,15 @@ async function playStep(step: Step, my: number) {
               const r = $('board-wrap').getBoundingClientRect();
               point = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
             }
-            // The flight is the card's own beat (`BOOMERANG.total` = PINNED.throwFlight); the STEP
-            // keeps its published 396 ms wait. The boomerang used to total 624 ms at interface
-            // speed and this await followed it, so every human throw held the step 634 ms instead
-            // of ~406 ms (+228 ms). max() is a floor for the flight, never a reason to stretch the
-            // beat: the unit test pins the flight inside the wait, and `futa04-motion` measures
-            // the step itself.
+            // The flight is the card's own beat (`BOOMERANG.total` = PINNED.boomerang); the STEP
+            // waits it out. The boomerang used to total 624 ms at interface speed and this await
+            // followed it, so every human throw held the step 634 ms instead of ~406 ms (+228 ms).
+            // `max()` is a floor for the flight, never a reason to stretch the beat: the unit test
+            // pins the flight inside the wait, and `futa04-motion` measures the step itself.
             // 2026-11-08: the boomerang has its own beat (PINNED.boomerang) and the step waits it out:
             // a throw ends the turn and my own animation never blocks my input (0.8), so the only
-            // thing that waits is the opponent's turn, by ~300 ms. The pile thuds at the catch.
+            // thing that waits is the opponent's turn. 2026-11-12: the flick is shorter (500 -> 420),
+            // so the wait is 420 ms at Normal speed. The pile thuds at the catch.
             const pileEl = $('discard');
             const catchAndThud = () => {
               land();
