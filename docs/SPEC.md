@@ -99,8 +99,10 @@ plus one way of playing:
 - **Bots 1–9 do not change.** Their decisions are pinned by `tests/bots/levels-frozen.test.ts`.
 - **Versions:** `bots-v0.11` is current. `bots-v0.10` stays accepted for tickets and proofs issued
   before it (same moves for levels 1–9) and can never replay a rival.
-- **Acceptance bar** (measured with `src/sim/rivals.ts` on campaign boards, seats swapped): each
-  rival wins at least 50% against full-search level 9, and at least two win 55% or more.
+- **Strength** (measured with `src/sim/rivals.ts` on campaign boards, seats swapped, against
+  full-search level 9): Ironwood 55% over 350 games; Strangler Fig and Night Bloom about 51%, i.e.
+  level 9's strength with their own way of playing (owner accepted, 2026-11-12;
+  `docs/CAMPAIGN-71-100.md` G).
 
 ---
 

@@ -216,6 +216,8 @@ of 100–150 games; the final numbers are on deals the tuning never saw. At 100 
 
 Owner bar (2026-11-12): 52% over 50 games. Ironwood clears it on every batch; Fig and Bloom are at
 level 9's strength (48–58% on single batches, ~51% pooled) with a clearly different way of playing.
+**Accepted by the owner (2026-11-12):** Fig and Bloom ship as "as strong as level 9, with their own way
+of playing"; Ironwood is the one rival measurably above it.
 Speed on this machine: 75–115 ms a move for 10/11, 115–160 ms for 12 (about 1.5x level 9), inside the
 approved ~1 s on a mid-range phone. The rivals' choices are pinned by `tests/bots/levels-frozen.test.ts`;
 changing a rival needs a new bot version, because campaign proofs replay against it.
