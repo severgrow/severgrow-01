@@ -189,6 +189,17 @@ describe('a blip never reaches the player as an error (2026-11-12)', () => {
     expect(calls).toHaveLength(3);
   });
 
+  it('only the polled reads retry: any other read fails fast, so a refresh is never held up by it', async () => {
+    const { fetchImpl, calls } = flaky([503, 503, 503], { ok: true, wallet: { balance: 1 } });
+    const client = new DuelClient({ baseUrl: 'https://api.example', fetch: fetchImpl, storage: memoryStore(), retryDelaysMs: [0, 0] });
+    await expect(client.seedWallet('t')).rejects.toBeDefined();
+    expect(calls).toHaveLength(1);
+    const chat = flaky(['network'], { messages: [] });
+    const c2 = new DuelClient({ baseUrl: 'https://api.example', fetch: chat.fetchImpl, storage: memoryStore(), retryDelaysMs: [0, 0] });
+    await expect(c2.territoryChat('t')).resolves.toBeDefined();
+    expect(chat.calls).toEqual(['GET /v1/territory/chat', 'GET /v1/territory/chat']);
+  });
+
   it('never retries a write, and never retries a real answer (a 4xx or a 500)', async () => {
     const post = flaky([503], { ok: true });
     const client = new DuelClient({ baseUrl: 'https://api.example', fetch: post.fetchImpl, storage: memoryStore(), retryDelaysMs: [0, 0] });

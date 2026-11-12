@@ -1,5 +1,5 @@
 import type { DuelClient } from '../../../server/src/client.js';
-import { nextPollMs, shouldReportFailure } from './blips.js';
+import { shouldReportFailure } from './blips.js';
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
 import type { SeedWallet, WorldChallengeWire, WorldChallengesPayload, WorldDispute } from '../../../server/src/seeds/types.js';
 import { isPlanetCell, worldNeighbours } from '../../../server/src/world.js';
@@ -1288,7 +1288,10 @@ export class WorldView {
   private notice(text: string) { document.getElementById('online-world-notice')!.textContent = text; }
   private schedule() {
     if (this.timer) clearTimeout(this.timer);
-    if (this.active) this.timer = setTimeout(() => { if (!document.hidden) void this.refresh(); else this.schedule(); }, nextPollMs(12_000, this.readFailures));
+    // The map keeps its 12 s pace after a failure too: a sooner re-read repaints the planet under the
+    // player's finger (planet-matte caught a tap rolling the camera, 2026-11-12). The quiet retry of a
+    // blip lives in the client (server/src/client.ts); this pace only decides the next poll.
+    if (this.active) this.timer = setTimeout(() => { if (!document.hidden) void this.refresh(); else this.schedule(); }, 12_000);
   }
   async refresh(force = false) {
     if (!this.active) {

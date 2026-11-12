@@ -472,7 +472,7 @@ export class DuelClient {
    * account — looking at the map is the point of a shared map — so it takes no token.
    */
   async worldMap(): Promise<WorldMapPayload> {
-    return await this.request<WorldMapPayload>('GET', '/v1/world');
+    return await this.request<WorldMapPayload>('GET', '/v1/world', { retry: true });
   }
 
   async seedWallet(token: string): Promise<SeedWallet> {
@@ -641,7 +641,7 @@ export class DuelClient {
 
   // ---- Territory chat (server/src/chat/territory.ts): one shared channel, newest 30 ----
   territoryChat(token: string, signal?: AbortSignal): Promise<TerritoryChatPage> {
-    return this.request('GET', '/v1/territory/chat', { token, ...(signal ? { signal } : {}) });
+    return this.request('GET', '/v1/territory/chat', { token, retry: true, ...(signal ? { signal } : {}) });
   }
 
   territoryChatSend(token: string, text: string, requestId: string): Promise<TerritoryChatPage> {
@@ -659,11 +659,15 @@ export class DuelClient {
   private async request<T>(
     method: string,
     path: string,
-    options: { token?: string; body?: unknown; traffic?: boolean; signal?: AbortSignal } = {},
+    options: { token?: string; body?: unknown; traffic?: boolean; signal?: AbortSignal; retry?: boolean } = {},
   ): Promise<T> {
-    // A READ is retried quietly through a blip (a dropped connection, or 502/503/504 while the Edge
-    // function starts or redeploys). A real answer (any 4xx, a 500) and every write go straight back.
-    const delays = method === 'GET' ? this.retryDelaysMs : [];
+    // A POLLED READ that asks for it (`retry`: the world map and the territory chat, the two whose
+    // failure the player sees) is retried quietly through a blip: a dropped connection, or 502/503/504
+    // while the Edge function starts or redeploys. Every other read fails fast as before: a caller that
+    // waits on several reads together must not be held up by a secondary one (a Planet refresh waited
+    // 1.6 s on a dead wallet read and repainted under a tap; planet-matte, 2026-11-12). A real answer
+    // (any 4xx, a 500) and every write always go straight back.
+    const delays = method === 'GET' && options.retry ? this.retryDelaysMs : [];
     for (let attempt = 0; ; attempt++) {
       try {
         return await this.send<T>(method, path, options, true);

@@ -7,6 +7,3 @@ export const FAILURES_BEFORE_NOTICE = 3;
 
 export const shouldReportFailure = (consecutiveFailures: number): boolean => consecutiveFailures >= FAILURES_BEFORE_NOTICE;
 
-/** The wait before the next poll: the normal pace, or sooner after a failure (3 s, 6 s, ... capped). */
-export const nextPollMs = (normalMs: number, consecutiveFailures: number): number =>
-  consecutiveFailures > 0 ? Math.min(normalMs, 3_000 * consecutiveFailures) : normalMs;
