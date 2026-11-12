@@ -45,8 +45,10 @@ export const modestGrow = (v: View): Sprout | null => {
 };
 
 /** bots-v0.11 (and v0.12, which adds the rivals): the level's own move, except that a turn never ends without its grow. */
-export const chooseKeepsGrowing = (v: View, level: BotLevel, seed: number): Action => {
-  const a = chooseLevelAction(v, level, seed);
-  if (a.t !== 'EndAct' || v.phase !== 'ACT' || v.sproutsThisTurn > 0) return a;
-  return modestGrow(v) ?? a;
-};
+export const keepsGrowingWith = (choose: (v: View, level: BotLevel, seed: number) => Action) =>
+  (v: View, level: BotLevel, seed: number): Action => {
+    const a = choose(v, level, seed);
+    if (a.t !== 'EndAct' || v.phase !== 'ACT' || v.sproutsThisTurn > 0) return a;
+    return modestGrow(v) ?? a;
+  };
+export const chooseKeepsGrowing = keepsGrowingWith(chooseLevelAction);

@@ -71,7 +71,7 @@ describe('the opponent always takes its turn', () => {
     expect(lessonFor(9)!.opponent).toEqual({ bot: 4 });
     expect(lessonFor(10)!.opponent).toEqual({ bot: 1 });
     // bots-v0.12 (2026-11-12) added the rivals on top of v0.11's rule; the current chooser still keeps growing.
-    expect(CURRENT_BOT_VERSION).toBe('bots-v0.12');
+    expect(CURRENT_BOT_VERSION).toBe('bots-v0.13');
     expect(chooseBotAction).toBe(chooseKeepsGrowing);
   });
 

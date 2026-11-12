@@ -262,3 +262,24 @@ export const settleSeedProof = (key: string): Promise<SeedSettleReport> =>
       console.warn('[FUTASAKU] Seeds settle attempt failed, the proof stays queued:', error);
     },
   });
+
+/**
+ * WAKE THE SEEDS SERVER BEFORE THE GAME ENDS (owner, 2026-11-12: "seeds take a long time to load in
+ * the end of game screen ... get ready in background during last turn"). The proof can only be sent
+ * once the last move is made, but an Edge function that has gone cold costs a second or two to start.
+ * Near the end of a game that can pay Seeds, this makes one cheap read (the server's feature list) and
+ * makes sure the device has its identity, so the real settle lands on a warm server. Never throws.
+ */
+export const warmSeedServer = async (connect: SeedConnector = seedConnection): Promise<void> => {
+  try {
+    const seeds = connect();
+    if (!seeds) return;
+    await Promise.all([
+      seeds.client.serverFeatures().catch(() => []),
+      seeds.identity.peek() ? null : seeds.identity.ensure().catch(() => null),
+    ]);
+  } catch { /* a warm-up is best effort: the settle itself retries */ }
+};
+
+/** The draw pile at or below this many cards: the last turns, time to wake the server (main.ts). */
+export const WARM_SEED_SERVER_AT_DECK = 6;

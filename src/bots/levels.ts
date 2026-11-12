@@ -152,10 +152,22 @@ export const RIVAL_CONFIGS: Record<Rival, LevelConfig> = {
   //   12 Night Bloom    51% over 150 (keeps its Bomb cards for the last turns: 66 late against 35).
   // The endgame fade and level 9's own danger/pressure weights are what helped; deeper search
   // (counterWeight) and card tracking (trackPlayed) did not, so neither is switched on.
+  // bots-v0.13 (2026-11-12): the rivals search an authored board exactly as level 9 does (its iteration
+  // caps), and Night Bloom judges the same number of moves and imagined hands as level 9. Measured
+  // 2026-11-12: the full search bought NO strength (level 9 full vs capped: 48% over 100 games), while
+  // it made a rival's game cost 3-6 s of server time to verify (Seeds were slow on the finish card, and
+  // an Edge function has a CPU budget). Styles are unchanged.
+  10: { ...LEVEL_CONFIGS[9], style: 'fortress', styleWeight: 0.8, dangerWeight: 0.6, pressureWeight: 0.3, endgame: 12 },
+  11: { ...LEVEL_CONFIGS[9], style: 'siege', styleWeight: 0.6, dangerWeight: 0.6, pressureWeight: 0.3, endgame: 12 },
+  12: { ...LEVEL_CONFIGS[9], style: 'patient', styleWeight: 1, holdChance: 0.12, holdMargin: 4, fruitPatience: 4, replyWeight: 0.4, dangerWeight: 0.6, pressureWeight: 0.3, endgame: 12 },
+};
+
+/** bots-v0.12's rivals, FROZEN: proofs from pages that played them still replay exactly. */
+export const RIVAL_CONFIGS_V012: Record<Rival, LevelConfig> = Object.freeze({
   10: { ...PLANNER, style: 'fortress', styleWeight: 0.8, dangerWeight: 0.6, pressureWeight: 0.3, endgame: 12 },
   11: { ...PLANNER, style: 'siege', styleWeight: 0.6, dangerWeight: 0.6, pressureWeight: 0.3, endgame: 12 },
   12: { ...PLANNER, style: 'patient', styleWeight: 1, holdChance: 0.12, holdMargin: 4, fruitPatience: 4, candidates: 8, searchIterations: 8, replyWeight: 0.4, dangerWeight: 0.6, pressureWeight: 0.3, endgame: 12 },
-};
+}) as Record<Rival, LevelConfig>;
 
 /** Any bot's knobs: a ladder level or a rival. */
 export const configFor = (level: BotLevel): LevelConfig => (isRival(level) ? RIVAL_CONFIGS[level] : LEVEL_CONFIGS[level]);
@@ -357,14 +369,17 @@ export type Decision = { action: Action; reason?: string };
 export const chooseLevelAction = (v: View, level: BotLevel, seed: number): Action => decideLevelAction(v, level, seed).action;
 
 /** The level's move and why (the reason is for debugging and simulation reports only). */
-export const decideLevelAction = (v: View, level: BotLevel, seed: number): Decision => {
+export const decideLevelAction = (v: View, level: BotLevel, seed: number, rivals: Record<Rival, LevelConfig> = RIVAL_CONFIGS): Decision => {
   if (level === 7) {
     const best = rankActions(v)[0];
     if (!best) throw new Error('Level 7 bot: no legal actions');
     return withReason(best); // GreedyBot's choice, exactly
   }
-  return decideWithConfig(v, configFor(level), seed);
+  return decideWithConfig(v, isRival(level) ? rivals[level] : LEVEL_CONFIGS[level], seed);
 };
+
+/** bots-v0.12's choice (its frozen rivals); levels 1-9 are identical to today's. */
+export const chooseLevelActionV012 = (v: View, level: BotLevel, seed: number): Action => decideLevelAction(v, level, seed, RIVAL_CONFIGS_V012).action;
 
 const withReason = (s: Scored): Decision =>
   s.facts.kind === 'strengthen' || s.facts.kind === 'fruit'

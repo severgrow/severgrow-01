@@ -30,11 +30,11 @@ describe('bots-v0.11: a turn never ends without its grow', () => {
   it('is in force in the current version; the versions before it stay accepted, exactly as they were', () => {
     // bots-v0.12 (2026-11-12) added the rivals on top of this rule, so the CURRENT chooser is still
     // chooseKeepsGrowing; v0.11 (this rule) and v0.10 (before it) both still replay as they did.
-    expect(CURRENT_BOT_VERSION).toBe('bots-v0.12');
-    expect(PREVIOUS_BOT_VERSION).toBe('bots-v0.11');
+    expect(CURRENT_BOT_VERSION).toBe('bots-v0.13');
+    expect(PREVIOUS_BOT_VERSION).toBe('bots-v0.12');
     expect(botFor(CURRENT_BOT_VERSION)).toBe(chooseKeepsGrowing);
     expect(chooseBotAction).toBe(chooseKeepsGrowing);
-    expect(Object.keys(BOT_VERSIONS).sort()).toEqual(['bots-v0.10', 'bots-v0.11', 'bots-v0.12']);
+    expect(Object.keys(BOT_VERSIONS).sort()).toEqual(['bots-v0.10', 'bots-v0.11', 'bots-v0.12', 'bots-v0.13']);
     const s = newMatch(5);
     const v = viewFor(s, s.actor);
     for (const level of [1, 4, 9] as const) {

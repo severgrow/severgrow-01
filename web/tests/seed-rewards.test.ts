@@ -1,3 +1,4 @@
+import { BOT_VERSIONS, CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { describe, expect, it, vi } from 'vitest';
 import { DuelError, type DuelClient, type KeyValue } from '../../server/src/client.js';
 import { flushSeedProofs, MAX_CONSECUTIVE_TRANSIENT, PENDING_SEED_PROOFS_KEY, pendingSeedProofCount, queueSeedProof } from '../src/online/seed-rewards.js';
@@ -392,7 +393,7 @@ describe('a random-deal win waiting to be paid (owner, 2026-11-01)', () => {
 describe('a proof against a newer bot waits for a server that knows it (bots-v0.11, 2026-11-04; v0.12 2026-11-12)', () => {
   // The newest version is the one a server may not know yet: bots-v0.12 since the rivals. Every older
   // one (v0.10, v0.11) was live before it and is sent without asking.
-  const v11 = (levelId: string) => ({ kind: 'campaign' as const, levelId, actions: [], botVersion: 'bots-v0.12' });
+  const v11 = (levelId: string) => ({ kind: 'campaign' as const, levelId, actions: [], botVersion: CURRENT_BOT_VERSION });
   const clientWith = (features: string[] | Error, submit: ReturnType<typeof vi.fn>) =>
     ({ submitSeedProof: submit, serverFeatures: vi.fn(async () => { if (features instanceof Error) throw features; return features; }) }) as unknown as DuelClient;
 
@@ -400,7 +401,7 @@ describe('a proof against a newer bot waits for a server that knows it (bots-v0.
     const store = storage();
     queueSeedProof(store, v11('c1-1'));
     queueSeedProof(store, { ...v11('c1-2'), botVersion: 'bots-v0.10' });
-    queueSeedProof(store, { ...v11('c1-3'), botVersion: 'bots-v0.11' });
+    queueSeedProof(store, { ...v11('c1-3'), botVersion: 'bots-v0.12' });
     const submit = vi.fn(async () => reward(10));
     await flushSeedProofs(store, clientWith(['campaign-random-deals'], submit), 'acct');
     // both older versions go straight through; only the newest waits
@@ -421,7 +422,7 @@ describe('a proof against a newer bot waits for a server that knows it (bots-v0.
     const store = storage();
     queueSeedProof(store, v11('c1-1'));
     const submit = vi.fn(async () => reward(10));
-    await flushSeedProofs(store, clientWith(['campaign-random-deals', 'bots-v0.10', 'bots-v0.11', 'bots-v0.12'], submit), 'acct');
+    await flushSeedProofs(store, clientWith(['campaign-random-deals', ...Object.keys(BOT_VERSIONS)], submit), 'acct');
     expect(submit).toHaveBeenCalledTimes(1);
     expect(pending(store)).toEqual([]);
   });

@@ -298,7 +298,7 @@ import { accountsConfiguredInThisBuild, paintEarlyAccountKey, signedInNickname }
 import { paintBetaLine } from './feedback/beta-line.js';
 import { paintBuildTag } from './feedback/build-tag.js';
 import { queueSeedProof } from './online/seed-rewards.js';
-import { requestTrainingTicket, seedIdentityWarm, settleQueuedSeedsOnBoot, trainingTicketWaitMs, warmSeedIdentity, settleSeedProof } from './online/seed-settle.js';
+import { requestTrainingTicket, seedIdentityWarm, settleQueuedSeedsOnBoot, trainingTicketWaitMs, warmSeedIdentity, settleSeedProof, warmSeedServer, WARM_SEED_SERVER_AT_DECK } from './online/seed-settle.js';
 import { SEEDS_IDENTITY_UNVERIFIED, SEEDS_NOT_VERIFIED } from './online/seed-icon.js';
 // THE PLANET ON THE FINISH CARD (owner brief, 2026-11-11): the pane itself is built by the lobby
 // (it owns the client and the identity), and this module only paints its one-off teaching band.
@@ -2339,6 +2339,9 @@ function warmFirstBoard(): Promise<void> {
   return firstWarm;
 }
 
+/** The Seeds server was woken for this game's finish (afterPlay). Reset by every new game. */
+let seedServerWarmed = false;
+
 async function startGame(
   seed: number,
   level: BotLevel = settings.level,
@@ -2368,6 +2371,7 @@ async function startGame(
   blitzStart: { config: CampaignLevel['config']; map: number } | null = null,
 ) {
   let generation = ++startGameGeneration;
+  seedServerWarmed = false;
   // One of the player's games (the guide's HOW TO PLAY label shows in the first few). A watched game,
   // a tutorial replay and a Blitz game are not the player's own learning games.
   turnGuide?.reset();
@@ -3227,6 +3231,13 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   }
   log.unshift(describe(p.before, p.action, p.after, HUMAN));
   noteCampaignDealPlay(by, p.after);
+  // The last turns of a game that can pay Seeds: wake the server now, so the finish card's Seeds land
+  // at once instead of after a cold start (online/seed-settle.ts warmSeedServer). Once per game.
+  if (!seedServerWarmed && onlineBuildEnabled() && p.after.phase !== 'GAME_OVER' && p.after.deck.length <= WARM_SEED_SERVER_AT_DECK
+    && ((campaignLevel && campaignLevel.number >= 11 && !tutorialReplay) || (gameDifficulty && trainingRewardTicketId) || lessonActive()?.level === FINAL_LESSON.level)) {
+    seedServerWarmed = true;
+    void warmSeedServer();
+  }
   if (p.after.phase === 'GAME_OVER' && p.after.result) {
     log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
     const counts = countsTowardRecord({

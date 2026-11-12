@@ -89,7 +89,9 @@ const MEASURE = `(() => {
     return r.top >= -1 && r.bottom <= window.innerHeight + 1 && r.left >= -1 && r.right <= window.innerWidth + 1;
   };
   const controls = [...document.querySelectorAll('#gameover .go-buttons .btn')].filter(shown);
-  const pane = id('go-world');
+  // THE CARD'S WINDOW: the planet, or (owner, 2026-11-12) the final board in the same frame on a loss or
+  // a win short of a tile's price. Every layout check below is about the window, whichever it is.
+  const pane = [id('go-world'), id('go-boardview')].find((el) => el && shown(el)) || id('go-world');
   const rows = [...document.querySelectorAll('#gameover .go-key-row')].filter(shown);
   const keyBox = (el) => { const r = el.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), x: Math.round(r.x) }; };
   return {
@@ -123,6 +125,7 @@ const MEASURE = `(() => {
     kids: card ? [...card.children].map((c) => (c.className || c.id) + ':' + Math.round(c.getBoundingClientRect().height) + ':' + getComputedStyle(c).display) : [],
     summaryFlex: (() => { const s = card && card.querySelector('.go-summary'); return s ? getComputedStyle(s).flex : ''; })(),
     canvas: !!document.querySelector('#go-world-surface > .planet-canvas'),
+    window: id('go-boardview') && shown(id('go-boardview')) ? 'board' : 'planet',
     worldStyle: (() => {
       if (!pane) return null;
       const s = getComputedStyle(pane);
@@ -219,6 +222,7 @@ const measure = (page: Page) => page.evaluate(MEASURE) as Promise<{
   worldStyle: { flex: string; grow: string; basis: string; h: string; mh: string; align: string; gap: string; justify: string; cardH: string } | null;
   summaryFlex: string;
   canvas: boolean;
+  window: 'planet' | 'board';
   highlights: number;
   clipped: string[];
   title: string;
@@ -588,10 +592,11 @@ const report = async (mode: string, vp: string, page: Page, errors: string[], ex
     }
     // THE PLANET IS THE HERO (owner, 2026-11-11): it takes the freed space on every shape, and the
     // four keys never leave an orphaned half slot.
-    check(`${mode} ${vp}: the planet window is the card's hero`, (m.planet?.h ?? 1) / (m.card?.h ?? 1) >= 0.5,
+    check(`${mode} ${vp}: the card's window (${m.window}) is the card's hero`, (m.planet?.h ?? 1) / (m.card?.h ?? 1) >= 0.5,
       `${m.planet?.h}px of ${m.card?.h}px`);
     planetHeights[vp] = m.planet?.h ?? 0;
-    check(`${mode} ${vp}: the shared planet renderer is mounted`, m.canvas);
+    // The renderer belongs to the planet window only; the board window draws no canvas at all.
+    check(`${mode} ${vp}: the ${m.window} window is up, and only the planet window mounts the renderer`, m.window === 'planet' ? m.canvas : !m.canvas, m.window);
     // Row MEMBERSHIP by rendered position (the DOM order is deliberately not the visual order).
     const row1 = m.buttons.filter((b) => b.rowIndex === 1).sort((a, b) => a.left - b.left).map((b) => b.id);
     const row2 = m.buttons.filter((b) => b.rowIndex === 2).sort((a, b) => a.left - b.left).map((b) => b.id);

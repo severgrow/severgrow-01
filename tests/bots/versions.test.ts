@@ -8,9 +8,9 @@ import { BOT_LEVELS, chooseLevelAction, isBotLevel, ladderLevel } from '../../sr
 import { chooseKeepsGrowing } from '../../src/bots/keeps-growing.js';
 
 describe('bot versions', () => {
-  it('the current version is bots-v0.12, it plays the rivals, and the game plays it', () => {
-    expect(CURRENT_BOT_VERSION).toBe('bots-v0.12');
-    expect(PREVIOUS_BOT_VERSION).toBe('bots-v0.11');
+  it('the current version is bots-v0.13, it plays the rivals, and the game plays it', () => {
+    expect(CURRENT_BOT_VERSION).toBe('bots-v0.13');
+    expect(PREVIOUS_BOT_VERSION).toBe('bots-v0.12');
     expect(chooseBotAction).toBe(chooseKeepsGrowing);
     const s = newMatch(1);
     const v = viewFor(s, s.actor);
@@ -18,7 +18,7 @@ describe('bot versions', () => {
   });
 
   it('v0.10 and v0.11 stay accepted and make exactly the moves they always made (levels 1-9)', () => {
-    expect(Object.keys(BOT_VERSIONS).sort()).toEqual(['bots-v0.10', 'bots-v0.11', 'bots-v0.12']);
+    expect(Object.keys(BOT_VERSIONS).sort()).toEqual(['bots-v0.10', 'bots-v0.11', 'bots-v0.12', 'bots-v0.13']);
     for (const seed of [42, 43]) {
       const s = newMatch(seed);
       const v = viewFor(s, s.actor);
@@ -26,6 +26,7 @@ describe('bot versions', () => {
         expect(botFor('bots-v0.10')!(v, level, 99)).toEqual(chooseLevelAction(v, level, 99));
         expect(botFor('bots-v0.11')!(v, level, 99)).toEqual(chooseKeepsGrowing(v, level, 99));
         expect(botFor('bots-v0.12')!(v, level, 99)).toEqual(chooseKeepsGrowing(v, level, 99));
+        expect(botFor('bots-v0.13')!(v, level, 99)).toEqual(chooseKeepsGrowing(v, level, 99));
       }
     }
   });
