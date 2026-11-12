@@ -40,7 +40,10 @@ describe('bots-v0.11: a turn never ends without its grow', () => {
   });
 
   for (const level of LEVELS) {
-    it(`level ${level}: never ends its turn ungrown while a grow is legal`, () => {
+    // Six full seeded games per level. Levels 1-8 take 3-5s each; level 9's determinized search
+    // takes 16.7s here and was the one that crossed the default 60s ceiling under load. Only
+    // level 9 gets a budget; the check itself is unchanged.
+    it(`level ${level}: never ends its turn ungrown while a grow is legal`, level === 9 ? { timeout: 180_000 } : {}, () => {
       let ends = 0;
       for (let seed = 1; seed <= 6; seed++) {
         game(seed, level, (s, a) => {

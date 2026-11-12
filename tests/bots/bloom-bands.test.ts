@@ -32,7 +32,10 @@ describe('Bloom bands', () => {
     expect(views.length).toBe(12);
   });
 
-  it('levels 1-3: a random legal Bloom (seeded, so repeatable), and sometimes no Bloom at all', () => {
+  // 12 views x 12 seeds x 3 levels, each decision ranked twice (the determinism line): 26.4s here,
+  // 66-109s measured under load today. The default 60s ceiling is a flake; 180s is ~2x the worst
+  // observed run. The check itself is unchanged.
+  it('levels 1-3: a random legal Bloom (seeded, so repeatable), and sometimes no Bloom at all', { timeout: 180_000 }, () => {
     for (const level of [1, 2, 3] as const) {
       const picks = new Set<string>();
       let skipped = 0;
