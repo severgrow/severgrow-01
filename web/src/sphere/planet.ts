@@ -11,9 +11,10 @@
 // almost at once. Continuous transition. New interaction and reduced motion cancel coast. A tap
 // selects; a tap on tiles too small to hit flies in. Opening flies in from space to your land.
 // The stars slide slowly while any space is on screen (owner: "deep space subtle + space with slow
-// slide"); that loop runs at ~30 fps and stops when the planet fills the window, the page is
-// hidden, or reduced motion is on.
+// slide"); that loop runs on a deliberate ~20 fps budget and stops when the planet fills the window,
+// the page is hidden, a veil covers it, or reduced motion is on.
 import { interfaceMotionAllowed } from '../ui/interface-motion.js';
+import { backdropHeld, onBackdropChange } from '../ui/render-gate.js';
 import { isDoubleTap, type TapPoint } from '../logic/double-tap.js';
 import { markPlanetPainted } from '../player/startup.js';
 import { uprightTarget,northUpDrag,NORTH_PITCH_LIMIT,coastGain,coastStep } from './upright.js';
@@ -43,6 +44,21 @@ const FLY_MS = 620;
 const INTRO_MS = 1150;
 /** Behind the menu the planet turns slowly on its own (owner, 2026-11-04): one turn in 160 s. */
 const MENU_SPIN_RAD_PER_MS = (2 * Math.PI) / 160_000;
+/**
+ * THE MENU'S FRAME BUDGET (measured; docs/PERF-THERMAL.md). The menu sits behind the game's most
+ * common screen and its drift is 2.25°/s — one turn in 160 s, about a tenth of a degree a frame at
+ * 20 fps, under a pixel of limb travel. Redrawing the whole planet (a full-screen sky shader plus
+ * 104k ground vertices) 30 times a second to move it that little measured 113% of a GPU core while
+ * the page was otherwise idle. A deliberate 20 fps ceiling for the drift-only case costs nothing
+ * visible and takes a third of that away; any interaction, flight or zoom still runs at full rate.
+ */
+const MENU_DRIFT_MS = 34;
+/**
+ * The same budget for a planet that is not turning but is still sliding its stars — the Territory
+ * window at rest, where the disc fills most of the pane. A star field that moves 0.006 CSS px/ms does
+ * not need 60 fps, and the window is a screen the player leaves open.
+ */
+const IDLE_DRIFT_MS = 34;
 /** The planet's light behind the menu, and in the window (the flat map's own "fade in"). */
 // Brighter behind the menu (owner, 2026-11-04: "make the sphere when on main menu brighter/ higher
 // opacity - with low brightness of screen is barely visible"): was .46. It is the canvas's opacity.
@@ -120,6 +136,13 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   fallback.className = 'planet-fallback';
   fallback.hidden = true;
   stage.append(canvas, fallback);
+  /**
+   * IS THIS PLANET INSIDE A VEIL? The finish card's globe lives inside `#gameover`, so the gate that
+   * stops work BEHIND the glass must not stop the glass's own content — the card's opening flight
+   * froze on its first frame when it did (found by measurement, not by eye). Read once: a canvas
+   * never moves between surfaces.
+   */
+  const insideVeil = !!canvas.closest('#gameover, .sheet, #install-prompt, .world-panel, .world-chat');
   let announcedPaint=false;
   const announcePaint=()=>{
     markPlanetPainted();
@@ -265,6 +288,11 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   function frame(now: number) {
     raf = 0;
     if (disposed || frozen || lost || document.hidden || !renderer) return;
+    // THE VEIL IS UP (a sheet, the finish card, the install invitation): the last frame stays on the
+    // canvas behind the blur, and the loop stops dead instead of redrawing pixels nobody can see.
+    // `onBackdropChange` restarts it at the moment the veil goes. A planet that IS the veil's own
+    // content (the finish card's globe) is never gated by it.
+    if (!insideVeil && backdropHeld()) return;
     const gap = Math.max(1, now - (lastFrame || now - 16)), dt = Math.min(48, gap);
     lastFrame = now;
     if (!motion()) { if (flight) { q = flight.to; zoom = targetZoom = flight.zoomTo; flight = null; } zoom = targetZoom; pulseUntil = 0; }
@@ -336,8 +364,10 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     const coasting = (Math.abs(coastVel.x) + Math.abs(coastVel.y)) > .02;
     const busy = !!flight || !!frameTween || zoom !== targetZoom || pulseUntil > now || coasting;
     if (busy) ask();
-    // The slow slide: about 30 frames a second, only while there is space to see.
-    else if (drifting) driftTimer=window.setTimeout(()=>{driftTimer=0;if(mode==='menu'||spaceVisible())ask();},18);
+    // The slow slide: a deliberate frame budget. The menu's own drift AND the card's star-only drift
+    // ask at 20 fps (IDLE_DRIFT_MS); everything else — a flight, a coast, anything the player is
+    // touching — stays at full rate.
+    else if (drifting) driftTimer=window.setTimeout(()=>{driftTimer=0;if(mode==='menu'||spaceVisible())ask();},mode==='menu'?MENU_DRIFT_MS:IDLE_DRIFT_MS);
   }
 
   /** The crop (the window's own rounded frame) and the light, written only when they change. */
@@ -548,6 +578,9 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   window.addEventListener('resize', resize, { signal, passive: true });
   const observer = new ResizeObserver(() => { if (!flight && !frameTween) resize(); else ask(); });
   observer.observe(stage);
+  // THE GATE BEHIND THE GLASS: while a veil covers the screen the loop is stopped (frame() returns),
+  // and the moment it lifts the planet carries on from the frame that was already on its canvas.
+  const offGate = onBackdropChange((held) => { if (!held) { lastFrame = 0; ask(); } });
 
   initialise();
 
@@ -633,6 +666,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     dispose() {
       if (disposed) return;
       disposed = true;
+      offGate();
       abort.abort(); observer.disconnect(); cancelDrift();cancelAnimationFrame(raf); raf = 0;
       if (renderer) renderer.dispose(true);
       // The sky goes back to the space backdrop, which carries on from the planet's last stars.

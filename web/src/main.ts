@@ -305,8 +305,16 @@ import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { installStaleBuildReload } from './logic/stale-build.js';
 import { mountPlanetLockup } from './player/planet-lockup.js';
 import { holdStars, mountSpaceBackdrop, spaceBackdrop } from './player/space-backdrop.js';
+import { backdropHeld, mountBackdropGate, onBackdropChange, refreshBackdropGate } from './ui/render-gate.js';
 // ONE SPACE (0.75): the stars are on screen before anything else mounts (no plain background).
 if (FEATURES.space) mountSpaceBackdrop();
+// THE GATE BEHIND THE GLASS: while a veil is up, nothing behind it animates (measured win; see
+// docs/PERF-THERMAL.md). Mounted before any surface can open.
+mountBackdropGate();
+// The board's ambient life is part of what the veil silences, and it is chosen during a render: a
+// veil's edge re-renders the match so the plan is recomputed (null behind the glass, alive again
+// when it lifts). Never runs outside a match.
+onBackdropChange(() => { if (session && !$('game').hidden) render(); });
 
 // First thing: a page left open across a deploy reloads onto the new build instead of half-breaking.
 installStaleBuildReload();
@@ -1187,6 +1195,9 @@ function syncVeil() {
   const inMatch = !$('game').hidden;
   const over = !!openSheet || !$('gameover').hidden;
   document.documentElement.classList.toggle('game-veiled', IS_FUTA04 && inMatch && over);
+  // THE SAME MOMENT STOPS THE WORK BEHIND IT: a backdrop-filter over a moving layer is recomposited
+  // every frame, and the planet's WebGL loop is not reachable from CSS. One call, at the edge only.
+  refreshBackdropGate();
   syncBrandMark();
 }
 
@@ -7312,12 +7323,15 @@ function renderBoard(v: View, advice: Advice | null) {
     lastBoard = queue.board;
     lastOverlay = key;
   }
-  // Overhaul item 16: ambient life, quiet while moves animate (so cuts read clearly)
-  const ambKey = busy() ? 'busy' : `${settings.effects}|${settings.reduceMotion}`;
+  // Overhaul item 16: ambient life, quiet while moves animate (so cuts read clearly) and while a
+  // veil covers the board. MEASURED (docs/PERF-THERMAL.md): the ambient layer was invalidating SVG
+  // geometry ~120 times a second on the FINISH CARD, where the match behind the card is only a
+  // blurred light — pure heat for pixels no one can see.
+  const ambKey = busy() || backdropHeld() ? 'quiet' : `${settings.effects}|${settings.reduceMotion}`;
   if (queue.board !== lastAmbBoard || ambKey !== lastAmbKey) {
     lastAmbBoard = queue.board;
     lastAmbKey = ambKey;
-    board.ambient(busy() ? null : ambientPlan({ board: queue.board, terrain: v.terrain, config: v.config, me: HUMAN, effects: settings.effects, reduceMotion: settings.reduceMotion }));
+    board.ambient(busy() || backdropHeld() ? null : ambientPlan({ board: queue.board, terrain: v.terrain, config: v.config, me: HUMAN, effects: settings.effects, reduceMotion: settings.reduceMotion }));
   }
   document.getElementById('tool-weak')?.setAttribute('aria-pressed', String(settings.weakSpots));
   document.getElementById('tool-targets')?.setAttribute('aria-pressed', String(showOpps));

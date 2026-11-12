@@ -17,6 +17,7 @@ import { spacePath } from './space-path.js';
 // The sky's own colour is the page background beneath (html.space-backdrop), and the film grain is the
 // app's one grain above everything. Reduce motion = still stars. A hidden tab pauses the slide.
 import { interfaceMotionAllowed } from '../ui/interface-motion.js';
+import { backdropHeld, onBackdropChange } from '../ui/render-gate.js';
 import { DRIFT_PX_PER_MS, DRIFT_Y_SHARE, onSpaceClaim, onSpaceFree, spaceDrift, SpaceRenderer } from '../sphere/space.js';
 
 /** One slide of the stars between two redraws (ms): ~20 s at the menu's own pace. */
@@ -161,8 +162,10 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
     root.classList.toggle('in-game', !!game && !game.hidden);
     const visible = seen();
     root.hidden = !visible;
-    if (!visible || document.hidden || renderer.lost) {
-      // A hidden tab or another screen: the slide stops where it is and resumes from there.
+    if (!visible || document.hidden || renderer.lost || backdropHeld()) {
+      // A hidden tab, another screen, or a veil over the whole page: the slide stops where it is and
+      // resumes from there. (The veil's own backdrop-filter is what makes this matter: a blur over a
+      // sliding layer is recomposited every frame.)
       if (document.hidden) for (const a of anims) a.pause();
       else halt();
       return;
@@ -200,6 +203,8 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
   for (const el of screens) watch.observe(el, { attributes: true, attributeFilter: ['hidden'] });
   addEventListener('resize', wake, { passive: true });
   document.addEventListener('visibilitychange', wake);
+  // The veil gate (ui/render-gate.ts) stops and restarts the slide at its edges.
+  onBackdropChange(wake);
 
   mounted = { snapshot: () => ({ sliding: anims.some((a) => a.playState === 'running'), redraws, visible: !root.hidden }) };
   return mounted;

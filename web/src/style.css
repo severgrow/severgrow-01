@@ -2061,6 +2061,22 @@ html.futasaku-product .install-prompt-scrim {
   -webkit-backdrop-filter: var(--veil);
   backdrop-filter: var(--veil);
 }
+/* NOTHING BEHIND THE GLASS MOVES (measured; docs/PERF-THERMAL.md).
+   Every veil above carries a `backdrop-filter`, and a backdrop blur is only composited ONCE while
+   what it covers is still. While one is up, the screen behind it holds its animation clocks exactly
+   where they were: pausing is free, resuming continues from the same frame, and no decorative
+   breath is lost. The planet's WebGL loop and the stars are stopped by `ui/render-gate.ts` — CSS
+   cannot reach those.
+   PSEUDO-ELEMENTS COUNT TOO: the full-screen warm pass is `#game::before`, and a `*` selector never
+   matches it. Left running, it kept the finish card's blur recompositing every frame — measured at
+   90% of a GPU core with the planet already asleep. */
+html.backdrop-held :is(#game, #menu, #texture)::before,
+html.backdrop-held :is(#game, #menu, #texture)::after,
+html.backdrop-held :is(#game, #menu, #texture, #spores) *,
+html.backdrop-held :is(#game, #menu, #texture, #spores) *::before,
+html.backdrop-held :is(#game, #menu, #texture, #spores) *::after {
+  animation-play-state: paused !important;
+}
 .sheet {
   position: fixed;
   z-index: 11;
