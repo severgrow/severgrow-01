@@ -165,9 +165,9 @@ td:nth-child(3) { font-family: var(--mono); white-space: nowrap; }
   #pane-board { display: contents; }
   #pane-board[hidden] { display: none; }
 
-  .phone-wrap { order: 1; margin: 14px 16px 0; padding: 16px 10px 14px; background: var(--panel);
+  .phone-wrap { order: 2; margin: 0 16px; padding: 16px 10px 14px; background: var(--panel);
     border: 1px solid var(--line); border-radius: 18px; }
-  .preview-caption { order: 2; display: block; margin: 8px 20px 0; color: var(--muted); font-size: .8rem; text-align: center; }
+  .preview-caption { order: 1; display: block; margin: 16px 26px 8px; color: var(--muted); font-size: .8rem; }
   .preview-caption strong { color: var(--cream); font-weight: 600; }
   .tabs { order: 3; margin: 16px 16px 0; }
   .view-tools { order: 4; margin: 10px 16px 0; }
@@ -188,7 +188,12 @@ td:nth-child(3) { font-family: var(--mono); white-space: nowrap; }
     min-height: 54px; padding: 0 14px; cursor: pointer; list-style: none; }
   .group-fold > summary::-webkit-details-marker { display: none; }
   .group-fold > summary h2 { margin: 0; color: var(--cream); font-size: .8rem; }
-  .group-fold > summary .fold-count { color: var(--muted); font: .72rem var(--mono); }
+  .group-fold > summary .fold-count { color: var(--muted); font: .72rem var(--mono); margin-left: auto; }
+  /* a drawn caret: the rows must read as things you can open, with no glyph fonts or emoji */
+  .group-fold > summary::after { content: ''; width: 7px; height: 7px; flex: none; margin: -3px 2px 0 10px;
+    border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); transition: transform .15s; }
+  .group-fold[open] > summary::after { transform: rotate(-135deg); margin-top: 3px; }
+  @media (prefers-reduced-motion: reduce) { .group-fold > summary::after { transition: none; } }
   .group-fold[open] > summary { border-bottom: 1px solid var(--line); }
   .group-fold > .slot { border-radius: 0; background: transparent; border-top: 1px solid var(--line); }
   .group-fold > .slot:first-of-type { border-top: 0; }
