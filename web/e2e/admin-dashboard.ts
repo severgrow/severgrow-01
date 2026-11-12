@@ -373,6 +373,7 @@ const textOf = (page: Page): Promise<string> => page.evaluate(() => document.bod
 
   // Player lookup.
   await goto(page, '/player?q=BrambleOwl');
+  check('the player page offers moderation (pause chat, reset name)', await settle(page, 'Moderation') && /Pause chat 24 h/.test(await textOf(page)) && /Reset name/.test(await textOf(page)));
   check('a player lookup by nickname returns the player', await settle(page, 'Seeds balance'));
   const playerText = await textOf(page);
   check('the player screen shows the authoritative Seeds balance', /Seeds balance/.test(playerText));
@@ -557,6 +558,14 @@ const textOf = (page: Page): Promise<string> => page.evaluate(() => document.bod
   check('ops shows rules-version drift against the current rules', /Rules-version drift/.test(opsText));
   check('ops shows the guest-to-account funnel with its caveat', /Guest → account/.test(opsText));
   await page.screenshot({ path: `${OUT}ops-desktop.png`, fullPage: true });
+
+  // Live status (launch readiness, 2026-11-12): one line per check, the reason in words.
+  await goto(page, '/status');
+  check('the status screen renders', await settle(page, 'Server and database'));
+  const statusText = await textOf(page);
+  check('status shows the database, crashes and waiting reports', /Server and database/.test(statusText) && /Crashes \(24 h\)/.test(statusText) && /Reports waiting for you/.test(statusText));
+  check('status never shows an unreadable fact as OK (the dev server has no scheduler)', /Scheduled jobs[\s\S]*?Unknown|Unknown[\s\S]*?Scheduled jobs/.test(statusText));
+  await page.screenshot({ path: `${OUT}status-desktop.png`, fullPage: true });
 
   // Keyboard: tab from the top and make sure the navigation is reachable and the route changes.
   await goto(page, '/overview');

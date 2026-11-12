@@ -535,6 +535,39 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
       }
     },
 
+    async statusFacts(now) {
+      // One read at a time (see the `sequential` note above), and each fact on its own: a fact the
+      // project cannot read (no pg_cron, a role without the view) is null, shown as "unknown".
+      const attempt = async <T>(read: () => Promise<T>): Promise<T | null> => { try { return await read(); } catch { return null; } };
+      const connections = await attempt(async () => {
+        const row = (await pool.query(`select count(*)::int as used, current_setting('max_connections')::int as max from pg_stat_activity`)).rows[0]!;
+        return { used: num(row.used), max: num(row.max) };
+      });
+      const sizeBytes = await attempt(async () => num((await pool.query('select pg_database_size(current_database())::bigint as b')).rows[0]!.b));
+      const jobs = await attempt(async () => (await pool.query(
+        `select j.jobname, d.status, (extract(epoch from d.end_time) * 1000)::bigint as at
+           from cron.job j
+           left join lateral (select r.status, r.end_time from cron.job_run_details r where r.jobid = j.jobid order by r.start_time desc limit 1) d on true
+          order by j.jobname`,
+      )).rows.map((row) => ({ name: str(row.jobname), lastRunAt: nnum(row.at), lastStatus: nstr(row.status) })));
+      const crashRow = (await pool.query(
+        `select count(*) filter (where created_at > $1)::int as day, count(*) filter (where created_at <= $1)::int as week
+           from feedback_reports where kind = 'crash' and created_at > $2`,
+        [now - DAY_MS, now - 8 * DAY_MS],
+      )).rows[0]!;
+      const waitingRow = (await pool.query(
+        `select count(*)::int as n, min(r.created_at) as oldest from feedback_reports r
+           left join feedback_triage t on t.report_id = r.id
+          where r.kind = 'report' and coalesce(t.status, 'new') = 'new'`,
+      )).rows[0]!;
+      return {
+        connections,
+        sizeBytes,
+        jobs,
+        crashes: { last24h: num(crashRow.day), dailyAverage7d: num(crashRow.week) / 7 },
+        reports: { waiting: num(waitingRow.n), oldestWaitingAt: nnum(waitingRow.oldest) },
+      };
+    },
     async moderatePlayer(input) {
       // Migration 0025 adds `chat_silenced_until`. One transaction: the change, and (for a silence
       // that starts now) the removal of the player's lines from the shared Territory chat.

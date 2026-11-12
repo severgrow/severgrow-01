@@ -136,6 +136,21 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
   };
 
   return {
+    async statusFacts(now) {
+      // The dev server has no pg_cron and no Postgres: those facts are honestly unknown.
+      const crashes = feedbackRows().filter((r) => r.kind === 'crash' && !isMarked(r.playerId));
+      const waiting = feedbackRows().filter((r) => r.kind === 'report' && (triage.get(r.id)?.status ?? 'new') === 'new');
+      return {
+        connections: null,
+        sizeBytes: null,
+        jobs: null,
+        crashes: {
+          last24h: crashes.filter((r) => r.createdAt > now - DAY_MS).length,
+          dailyAverage7d: crashes.filter((r) => r.createdAt <= now - DAY_MS && r.createdAt > now - 8 * DAY_MS).length / 7,
+        },
+        reports: { waiting: waiting.length, oldestWaitingAt: waiting.length ? Math.min(...waiting.map((r) => r.createdAt)) : null },
+      };
+    },
     async moderatePlayer(input) {
       const row = players().find((p) => p.id === input.playerId);
       if (!row) return null;

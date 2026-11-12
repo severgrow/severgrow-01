@@ -20,6 +20,12 @@ without it the job warns and skips (then deploy by hand: `npx supabase functions
 --project-ref wbfrbeedlvjercrukngn --no-verify-jwt --use-api`). The server always keeps accepting older
 pages' bot versions, so the live site keeps working while /test/ runs ahead of it.
 
+**Database migrations (2026-11-12).** Before deploying, the same job runs `npm run server:migrate`
+(each pending migration once, in its own transaction, with a checksum) when the repository secret
+`DATABASE_URL` exists (Supabase → Connect → Session pooler URI, with the database password). Without
+it the job warns and skips; run `npm run server:migrate` by hand. Server code must stay safe before its
+migration lands (0025 is: a missing `chat_silenced_until` column reads as "chat open").
+
 ## The words
 
 - **"push"** (to `futa0.5-online`): the change goes to **/test/** in about 20 minutes (CI first; a red

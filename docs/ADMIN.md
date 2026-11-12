@@ -22,6 +22,25 @@ function redeployed.**
 
 ---
 
+## Launch readiness (2026-11-12): Status and Moderation
+
+- **Status** (first in the menu, `#/status`, `GET /v1/admin/status`). One line per check, green /
+  amber / red / grey, judged on the server (`server/src/admin/status.ts`, thresholds tested in
+  `server/tests/admin-status.test.ts`): the database round trip (amber over 800 ms), connections
+  (amber 70%, red 90% of `max_connections`), database size (amber 75%, red 90% of the Pro plan's
+  8 GB), every pg_cron job's last run (the daily keep-alive + sweeper and the cleanups: red after
+  26 h or a failed run; the hourly chat retention after 2 h; the keep-alive is required even if
+  unlisted), crashes in 24 h against the 7-day daily average, and untriaged player reports (red when
+  one waits over 3 days). Refreshes every minute while open. It is not an alert: nothing runs while
+  the page is closed. A fact that cannot be read is Unknown, never OK.
+- **Moderation** (player page, `POST /v1/admin/players/:id/moderation`). `{chat: 'silence-24h' |
+  'silence-7d' | 'silence-forever' | 'lift'}` pauses duel and Territory chat (stored on
+  `players.chat_silenced_until`, migration 0025; a pause also deletes their Territory chat lines; play
+  is never touched). `{name: 'reset'}` replaces a name with a generated nature name. Each is an audit
+  row (`player.chat`, `player.name`). A chat report's detail links to the reported player.
+- Chat text is masked on the server for blocked words (`server/src/chat/filter.ts`), duel and
+  Territory alike.
+
 ## 1. How it is separate from the game
 
 | | game | dashboard |

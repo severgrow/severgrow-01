@@ -10,6 +10,7 @@ import type { FeedbackKind } from '../feedback/feedback.js';
 import type { AdminAnalytics } from './analytics.js';
 import type { AdminPlayers, PlayerClassification } from './players.js';
 
+import type { StatusFacts } from './status.js';
 export type { AdminAnalytics, AdminAnalyticsFunnel, AdminRetentionCohort } from './analytics.js';
 
 export type AdminTriageStatus = 'new' | 'reviewing' | 'resolved';
@@ -333,6 +334,8 @@ export interface AdminStore {
    * Returns the player's state before and after, or null when the player does not exist. The router
    * writes the audit rows.
    */
+  /** The facts behind the live Status panel (status.ts), except the database ping the router times. */
+  statusFacts(now: number): Promise<Omit<StatusFacts, 'db'>>;
   moderatePlayer(input: { playerId: string; chatSilencedUntil?: number | null; displayName?: string; now: number }): Promise<AdminModeration | null>;
   stuck(now: number, windows: { guestMaxAgeMs: number; waitingExpireMs: number; turnTimeoutMs: number }): Promise<AdminStuck>;
   rulesVersionCounts(): Promise<AdminValueCount[]>;

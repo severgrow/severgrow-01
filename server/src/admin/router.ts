@@ -31,6 +31,8 @@ import { ADMIN_GRANT_MAX, ADMIN_GRANT_REASON_MAX, CSV_MAX_ROWS, MAX_PAGE, TAG_SC
 import { clampLimit } from './util.js';
 import { natureName } from '../nature-names.js';
 import { SILENCE_FOREVER } from '../chat/silence.js';
+import { statusChecks } from './status.js';
+import { CURRENT_BOT_VERSION } from '../../../src/bots/versions.js';
 
 export type AdminOutcome = {
   status: number;
@@ -234,6 +236,25 @@ export const createAdminRouter = (deps: AdminRouterDeps): AdminRouter => {
         }
       }
       return { status: 200, body: { ok: true, ...overview, rulesVersion: deps.rulesVersion, health } };
+    }
+
+    // ---------------------------------------------------------- live status (launch readiness, 2026-11-12)
+    if (req.method === 'GET' && path === '/v1/admin/status') {
+      let db: { ok: boolean; ms: number | null } = { ok: true, ms: null };
+      if (deps.pingDb) {
+        const started = Date.now();
+        try {
+          await deps.pingDb();
+          db = { ok: true, ms: Date.now() - started };
+        } catch {
+          db = { ok: false, ms: null };
+        }
+      }
+      const facts = { db, ...(await deps.store.statusFacts(now)) };
+      return {
+        status: 200,
+        body: { ok: true, checks: statusChecks(facts, now), server: { botVersion: CURRENT_BOT_VERSION, rulesVersion: deps.rulesVersion }, serverNow: now },
+      };
     }
 
     if (req.method === 'GET' && path === '/v1/admin/analytics') {

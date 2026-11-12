@@ -23,11 +23,13 @@ import { renderMatchDetail, renderMatches } from './screens/matches.js';
 import { renderSeeds } from './screens/seeds.js';
 import { renderCampaign } from './screens/campaign.js';
 import { renderOps } from './screens/ops.js';
+import { renderStatus } from './screens/status.js';
 import { renderAnalytics } from './screens/analytics.js';
 import { formatDateTime, parseHash } from './format.js';
 
 /** The sections, grouped the way the owner asks questions: who plays, what they play, what broke. */
 const ROUTES: readonly { group: string; route: string; label: string }[] = [
+  { group: 'Today', route: 'status', label: 'Status' },
   { group: 'Today', route: 'overview', label: 'Overview' },
   { group: 'Today', route: 'analytics', label: 'Players & retention' },
   { group: 'Players', route: 'players', label: 'All players' },
@@ -118,6 +120,9 @@ const render = (session: AdminSession, api: AdminApi, source: TokenSource): void
     switch (name) {
       case 'overview':
         await renderOverview(view, ctxIn);
+        return;
+      case 'status':
+        await renderStatus(view, ctxIn);
         return;
       case 'analytics':
         await renderAnalytics(view, ctxIn);
