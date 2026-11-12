@@ -34,8 +34,36 @@ export function preloadCardArt(): Promise<void> {
   return cardArtReady;
 }
 
-// Kick off while fonts/thumb/camera still load — do not wait for mountCards().
-void preloadCardArt();
+/**
+ * WHEN THE FIRST HAND'S ART LOADS (measured; docs/PERF-COLDSTART.md).
+ *
+ * This used to start at module evaluation — i.e. while the menu was still assembling — and the six
+ * faces are 424 kB together, more than half of the menu's whole image budget, for art the menu never
+ * shows. On a good mobile link that competed directly with the lobby and planet chunks the first
+ * reveal is actually waiting for.
+ *
+ * It now starts once the app is READY (the menu composed and revealed): measured at 4G, that is
+ * ~2 s in, and the earliest a match can ask for a card is seconds after that — the starter ritual
+ * alone takes over a second. A safety timer covers a boot that fails before `severor-ready`.
+ *
+ * `preloadCardArt()` itself is unchanged and still safe to call from anywhere: this only decides WHEN.
+ */
+let cardArtScheduled = false;
+export function warmCardArtWhenReady(): void {
+  if (cardArtScheduled || typeof window === 'undefined') return;
+  cardArtScheduled = true;
+  const start = (): void => {
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
+    if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(() => { void preloadCardArt(); }, { timeout: 1500 });
+    else window.setTimeout(() => { void preloadCardArt(); }, 120);
+  };
+  // The listener is registered before main.ts dispatches the event (this module is in the entry).
+  window.addEventListener('severor-ready', start, { once: true });
+  window.setTimeout(start, 5000);
+}
+
+// Kick off once the menu is up — never before the first composed frame.
+warmCardArtWhenReady();
 
 export const CARDS_CSS = `
 /* Card-local ink: never change terrain, ownership or interface colour tokens. */
