@@ -1,7 +1,9 @@
 # PERF / THERMAL / SNAPPINESS — measured pass
 
 Baseline: `futa0.5-online` @ **1b2f9b7a** (the release the owner compares against). Branch: `perf-thermal`.
-Every number below was taken on this machine with the harness in `scratch/perf/` (not shipped).
+Every number below was taken on this machine with the harness in `scripts/perf/` (shipped, so
+anyone can re-take them). It drives the built product in Playwright at 390x844, DPR 3, with a 4x CPU
+throttle, and reads frame cost from CDP `Tracing` plus `Performance.getMetrics`.
 
 ## How the numbers were taken
 
@@ -252,10 +254,10 @@ the blur, so this is not a visual change).
 export PATH="/Users/patryk/.local/node22/bin:$PATH"
 CHANNEL=futa05 VITE_DUEL_API_URL=https://duel-stub.invalid/v1 \
   VITE_SUPABASE_URL=https://stub.invalid VITE_SUPABASE_ANON_KEY=stub npm run web:build
-node scratch/perf/serve.mjs web/dist 4310 &
-npx tsx scratch/perf/probe-v3.mjs          # menu → match → pause → finish card
-npx tsx scratch/perf/probe-gpu.mjs         # planet DPR / hidden / reduce-motion comparison
-npx tsx scratch/perf/probe-inval2.mjs      # veil invalidation attribution (needs a played-out match)
+node scripts/perf/serve.mjs web/dist 4310 &
+npx tsx scripts/perf/probe-v3.mjs          # menu → match → pause → finish card
+npx tsx scripts/perf/probe-gpu.mjs         # planet DPR / hidden / reduce-motion comparison
+npx tsx scripts/perf/probe-inval2.mjs      # veil invalidation attribution (needs a played-out match)
 ```
 
 `scratch/` is git-ignored: the probes are throwaway, the numbers in this file are the deliverable.
