@@ -249,19 +249,41 @@ export class MemoryStorage implements Storage {
       }
     }
 
-    // 1. Already parked: return the player's own search so a re-tap never creates a second entry.
+    // 1. RESUME (owner, 2026-11-12: "FIND OPPONENT ... both sat searching and never paired"): a
+    // search that has already become an ACTIVE game is this player's game. Parking again here left
+    // one device polling a brand-new empty match while its opponent sat in the real one. A game
+    // that began as an INVITE is never resumed: an open invite is how a player still meets a
+    // stranger, and one-game-per-pair is scoped to that pair, never global.
+    const fromSearch = [...this.matches.values()]
+      .filter((m) => m.status === 'active' && m.openQueue
+        && (this.participants.get(m.id) ?? []).some((p) => p.playerId === input.playerId))
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    if (fromSearch) {
+      // A leftover solo search (rows the old behaviour left behind) is a duplicate of a search that
+      // already paired: retire it so no stranger is ever seated in a game nobody will watch.
+      const stale = this.ownParked(input.playerId);
+      if (stale) {
+        this.matches.delete(stale.id);
+        this.inviteIndex.delete(stale.inviteCode);
+        this.participants.delete(stale.id);
+        this.moves.delete(stale.id);
+      }
+      const seat = (this.participants.get(fromSearch.id) ?? []).find((p) => p.playerId === input.playerId)!.seat;
+      return { ok: true, match: copy(fromSearch), seat, paired: true, resumed: true };
+    }
+
+    // 2. Already parked: return the player's own search so a re-tap never creates a second entry.
     const own = this.ownParked(input.playerId);
     if (own) {
       const seat = (this.participants.get(own.id) ?? []).find((p) => p.playerId === input.playerId)!.seat;
       return { ok: true, match: copy(own), seat, paired: false };
     }
 
-    // 2. CAP: a player at the per-player limit may not park or accept another match.
-    if (this.openMatchCountFor(input.playerId) >= input.maxOpenMatches) {
-      return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
-    }
+    // 3. CAP, read once: the limit forbids joining a FRESH search or parking (both add an open
+    // match). It never forbids continuing a game the searchers already share (step 4b below).
+    const atCap = this.openMatchCountFor(input.playerId) >= input.maxOpenMatches;
 
-    // 3. Join the oldest waiting open-queue match with one free seat (FIFO), atomically.
+    // 4. Join the oldest waiting open-queue match with one free seat (FIFO), atomically.
     const waiting = [...this.matches.values()]
       .filter((m) => m.status === 'waiting' && m.openQueue)
       .sort((a, b) => a.createdAt - b.createdAt);
@@ -275,6 +297,9 @@ export class MemoryStorage implements Storage {
         && (this.participants.get(m.id) ?? []).some((p) => p.playerId === input.playerId)
         && (this.participants.get(m.id) ?? []).some((p) => p.playerId === opener));
       if (shared) continue;
+      if (atCap) {
+        return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
+      }
       const seat: Player = parts.some((p) => p.seat === 0) ? 1 : 0;
       const next: Participant[] = [
         ...parts,
@@ -295,10 +320,11 @@ export class MemoryStorage implements Storage {
       return { ok: true, match: copy(activated), seat, paired: true };
     }
 
-    // 3b. CONTINUE (owner, 2026-11-11): the only searcher waiting is someone this player already
+    // 4b. CONTINUE (owner, 2026-11-11): the only searcher waiting is someone this player already
     // shares an open game with. Never a second game for the pair, and never two people waiting for
     // each other forever: retire that search and hand back their existing game, freshly touched so
-    // the other page (whose search just ended) finds it at the top of its list.
+    // the other page (whose search just ended) finds it at the top of its list. It creates no match,
+    // so the open-match cap never blocks it.
     for (const match of waiting) {
       const parts = this.participants.get(match.id) ?? [];
       if (parts.length !== 1 || parts.some((p) => p.playerId === input.playerId)) continue;
@@ -319,7 +345,10 @@ export class MemoryStorage implements Storage {
       return { ok: true, match: copy(touched), seat, paired: true, continued: true };
     }
 
-    // 4. Nobody is waiting: park the player's search.
+    // 5. Nobody is waiting: park the player's search (unless the cap forbids one more open game).
+    if (atCap) {
+      return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
+    }
     if (this.inviteIndex.has(input.parked.inviteCode)) {
       return { ok: false, code: 'DUPLICATE_INVITE_CODE', reason: 'Invite code already exists.' };
     }

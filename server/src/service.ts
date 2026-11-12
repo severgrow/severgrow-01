@@ -430,8 +430,10 @@ export class MatchService {
         }
         throw new ApiError('INTERNAL', 'Could not find an opponent.');
       }
-      if (result.paired) {
-        // The parked player's page learns about the activation from this ping.
+      if (result.paired && !result.resumed) {
+        // The parked player's page learns about the activation from this ping. A resume changes no
+        // state (the game was already active), so it must not look like a fresh pairing to the
+        // opponent's page.
         await safePublish(this.broadcaster, result.match.id, { revision: result.match.revision, status: result.match.status });
       }
       return {

@@ -388,6 +388,109 @@ describe('postgres storage: Find-Opponent is one atomic, serialized step', () =>
     expect(del).toContain("and status = 'waiting'");
     expect(statements.at(-1)).toBe('commit');
   });
+
+  // OWNER (2026-11-12): the deployed server let a player who had already been PAIRED start a brand
+  // new empty search by tapping Find again, so the two devices sat in different games forever.
+  // Repeat Find must RESUME the active game the search became; it must never insert a second row.
+  it('resumes the active game a search became, and retires any leftover solo search', async () => {
+    const fake = fakePool();
+    fake.script('as active_seat', [{ ...matchRow({ id: 'shared1', status: 'active' }), active_seat: 1 }]);
+    const storage = postgresStorage(fake.pool);
+    const result = await storage.claimOpenQueueOrPark({
+      playerId: 'p2',
+      parked: parkedRecord(),
+      now: 440,
+      turnTimeoutMs: 60_000,
+      maxOpenMatches: 10,
+    });
+    expect(result).toMatchObject({ ok: true, paired: true, resumed: true, seat: 1 });
+    expect((result as { match: MatchRecord }).match.id).toBe('shared1');
+
+    const statements = fake.statements();
+    // Nothing new is created and no other seat is claimed.
+    expect(statements.some((s) => s.startsWith('insert into matches'))).toBe(false);
+    expect(statements.some((s) => s.includes('as opener_seat'))).toBe(false);
+    // A leftover waiting search of the same player is removed (node: legacy duplicate rows).
+    const del = statements.find((s) => s.startsWith('delete from matches'))!;
+    expect(del).toContain("m.status = 'waiting'");
+    expect(statements.at(-1)).toBe('commit');
+  });
+
+  it('never resumes a game that did not start from Find (an invite stays invite-only)', async () => {
+    const fake = fakePool();
+    // The resume select filters on open_queue; the adapter must not fall back to any active row.
+    const storage = postgresStorage(fake.pool);
+    const result = await storage.claimOpenQueueOrPark({
+      playerId: 'p3',
+      parked: parkedRecord(),
+      now: 445,
+      turnTimeoutMs: 60_000,
+      maxOpenMatches: 10,
+    });
+    expect(result).toMatchObject({ ok: true, paired: false });
+    const resume = fake.statements().find((s) => s.includes('as active_seat'))!;
+    expect(resume).toContain('m.open_queue = true');
+    expect(resume).toContain("m.status = 'active'");
+  });
+
+  // OWNER CHANGED THE RULE (2026-11-11): two searchers who already share an open game CONTINUE that
+  // game. That creates no match, so the per-player cap must not block it — only a fresh join/park.
+  it('continues the shared game even at the open-match cap', async () => {
+    const fake = fakePool();
+    fake.script('as n', [{ n: '10' }]); // the player is at the cap
+    fake.script('as shared_id', [{ parked_id: 'parked1', shared_id: 'shared1', my_seat: 1 }]);
+    fake.script('update matches set updated_at', [matchRow({ id: 'shared1', status: 'active' })]);
+    const storage = postgresStorage(fake.pool);
+    const result = await storage.claimOpenQueueOrPark({
+      playerId: 'p2',
+      parked: parkedRecord(),
+      now: 450,
+      turnTimeoutMs: 60_000,
+      maxOpenMatches: 10,
+    });
+    expect(result).toMatchObject({ ok: true, paired: true, continued: true, seat: 1 });
+    expect((result as { match: MatchRecord }).match.id).toBe('shared1');
+    const statements = fake.statements();
+    expect(statements.some((s) => s.startsWith("delete from matches where id = $1 and status = 'waiting'"))).toBe(true);
+    expect(statements).not.toContain('rollback');
+    expect(statements.at(-1)).toBe('commit');
+  });
+
+  it('still refuses a FRESH waiting match at the cap (it would add an open game)', async () => {
+    const fake = fakePool();
+    fake.script('as n', [{ n: '10' }]);
+    fake.script('as opener_seat', [{ ...matchRow({ status: 'waiting' }), opener_seat: 0 }]);
+    const storage = postgresStorage(fake.pool);
+    const result = await storage.claimOpenQueueOrPark({
+      playerId: 'capped',
+      parked: parkedRecord(),
+      now: 460,
+      turnTimeoutMs: 60_000,
+      maxOpenMatches: 10,
+    });
+    expect(result).toMatchObject({ ok: false, code: 'TOO_MANY_MATCHES' });
+    expect(fake.statements()).toContain('rollback');
+    expect(fake.statements().some((s) => s.startsWith('insert into matches'))).toBe(false);
+  });
+
+  it('skips a waiting search only when it shares a game with THAT searcher (pair-scoped, never global)', async () => {
+    const fake = fakePool();
+    fake.script('as opener_seat', [{ ...matchRow({ status: 'waiting' }), opener_seat: 0 }]);
+    fake.script('returning *', [matchRow({ status: 'active' })]);
+    const storage = postgresStorage(fake.pool);
+    await storage.claimOpenQueueOrPark({
+      playerId: 'p2',
+      parked: parkedRecord(),
+      now: 470,
+      turnTimeoutMs: 60_000,
+      maxOpenMatches: 10,
+    });
+    const claim = fake.statements().find((s) => s.includes('as opener_seat'))!;
+    // Both player ids must be in the SAME other match: an unrelated open game never blocks.
+    expect(claim).toContain('mine.player_id = $1');
+    expect(claim).toContain('theirs.player_id = p.player_id');
+    expect(claim).toContain('shared.id <> m.id');
+  });
 });
 
 // The retry in the service is only safe if a duplicate is reported for a GENUINE invite_code

@@ -54,4 +54,22 @@ describe.skipIf(!enabled)('mutual rematch on real Postgres', () => {
     expect(bSearch.match.matchId).toBe(shared.match.matchId);
     await expect(svc.getMatch(pa, parked.match.matchId)).rejects.toThrow();
   });
+  // The owner's FRESH-GUEST case (2026-11-12): the one-game-per-pair rule is pair-scoped, so an
+  // open game against a THIRD party must never stop either searcher meeting a stranger.
+  it('a player with an open game against a third party still pairs with a fresh stranger', async () => {
+    const svc = service();
+    await pool!.query("update matches set open_queue = false where status = 'waiting' and open_queue = true");
+    const pa = await svc.authenticate((await svc.createGuest('Alder')).token);
+    const third = await svc.authenticate((await svc.createGuest('Cedar')).token);
+    const pfresh = await svc.authenticate((await svc.createGuest('Birch')).token);
+    const other = await svc.createMatch(pa);
+    await svc.joinMatch(third, other.match.inviteCode!);
+
+    const freshFind = await svc.findOpponent(pfresh);
+    expect(freshFind.paired).toBe(false);
+    const aFind = await svc.findOpponent(pa);
+    expect(aFind.paired).toBe(true);
+    expect(aFind.match.matchId).toBe(freshFind.match.matchId);
+    expect(aFind.match.matchId).not.toBe(other.match.matchId);
+  });
 });

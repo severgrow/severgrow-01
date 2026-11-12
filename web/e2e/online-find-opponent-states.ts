@@ -127,7 +127,9 @@ try {
   const vp = { width: 390, height: 844 };
   const a = await newPage(vp);
   await openFind(a);
-  await a.waitForTimeout(1_200);
+  // Stay well INSIDE the walk's 1.2 s parked window: waiting the whole window made this check race
+  // the very offer it asserts is absent.
+  await a.waitForTimeout(400);
   const searchingTitle = await a.textContent('#online-waiting-title');
   check('parks on a searching screen', (await visible(a, 'online-waiting')) === true);
   check('searching title is honest', (searchingTitle ?? '').includes('Finding an opponent'), searchingTitle ?? '');
@@ -172,6 +174,32 @@ try {
   await a.waitForSelector('#game:not([hidden])', { timeout: 15_000 });
   check('the parked searcher is pulled into the duel too', (await visible(a, 'game')) === true);
   check('the duel HUD is present for both', (await visible(a, 'duel-hud')) && (await visible(b, 'duel-hud')));
+
+  // REPEAT FIND MUST RESUME, NEVER DUPLICATE (owner, 2026-11-12). A page that lost its search
+  // state — a reload here, a second device in the field — used to start a brand-new empty search
+  // and strand the two devices in different games. It must land in the SAME active duel at once.
+  await a.reload({ waitUntil: 'domcontentloaded' });
+  const tResume = Date.now();
+  await openFind(a); // opens the hub and taps Find; either the waiting screen or the duel
+  await a.waitForSelector('#game:not([hidden])', { timeout: 15_000 });
+  check('a repeat Find after a reload reopens the active duel', (await visible(a, 'duel-hud')) === true);
+  console.log(`repeat Find reopened the duel in ${Date.now() - tResume} ms (includes the reload)`);
+  const openGames = async (page: Page) => {
+    const id = await page.evaluate(() => JSON.parse(localStorage.getItem('severgrow.duel.identity.v1')!).playerId as string);
+    return (await storage.matchesOfPlayer(id)).filter((m) => m.status !== 'finished');
+  };
+  const aOpen = await openGames(a);
+  const bOpen = await openGames(b);
+  check(
+    'repeat Find left exactly one open game (active), never a second search',
+    aOpen.length === 1 && aOpen[0]!.status === 'active',
+    aOpen.map((m) => m.status).join(','),
+  );
+  check(
+    'both devices are in that same game',
+    bOpen.length === 1 && bOpen[0]!.id === aOpen[0]!.id && bOpen[0]!.status === 'active',
+    bOpen.map((m) => m.status).join(','),
+  );
 
   // ---- A plays the computer while searching; B arrives -> "Opponent found" --------------------
   const c = await newPage(vp);

@@ -653,7 +653,44 @@ export const postgresStorage = (pool: PgPool): Storage => ({
         [input.now],
       );
 
-      // 1. Already parked? Return the player's own search (a re-tap never creates a second).
+      // 1. RESUME (owner, 2026-11-12: "FIND OPPONENT ... both sat searching and never paired"): a
+      // search that has already become an ACTIVE game is this player's game. Parking again here
+      // left one device polling a brand-new empty match while its opponent sat in the real one. A
+      // game that began as an INVITE is never resumed: an open invite is how a player still meets a
+      // stranger, and one-game-per-pair is scoped to that pair, never global.
+      const resume = await client.query(
+        `select m.*, p.seat as active_seat
+           from matches m
+           join match_participants p on p.match_id = m.id
+          where p.player_id = $1 and m.status = 'active' and m.open_queue = true
+          order by m.updated_at desc
+          limit 1`,
+        [input.playerId],
+      );
+      if (resume.rows[0]) {
+        // A leftover solo search (rows the old behaviour left behind) is a duplicate of a search
+        // that already paired: retire it so no stranger is ever seated in a game nobody watches.
+        await client.query(
+          `delete from matches
+            where id in (
+              select m.id
+                from matches m
+                join match_participants p on p.match_id = m.id
+               where p.player_id = $1 and m.status = 'waiting' and m.open_queue = true
+                 and (select count(*)::int from match_participants p2 where p2.match_id = m.id) = 1)`,
+          [input.playerId],
+        );
+        await client.query('commit');
+        return {
+          ok: true,
+          match: rowToMatch(resume.rows[0]),
+          seat: asNumber(resume.rows[0].active_seat) === 1 ? 1 : 0,
+          paired: true,
+          resumed: true,
+        };
+      }
+
+      // 2. Already parked? Return the player's own search (a re-tap never creates a second).
       const own = await client.query(
         `select m.*, p.seat as my_seat
            from matches m
@@ -669,7 +706,8 @@ export const postgresStorage = (pool: PgPool): Storage => ({
         return { ok: true, match: rowToMatch(own.rows[0]), seat: asNumber(own.rows[0].my_seat) === 1 ? 1 : 0, paired: false };
       }
 
-      // 2. CAP: a player at the per-player limit may not park or accept another match.
+      // 3. CAP, read once: the limit forbids joining a FRESH search or parking (both add an open
+      // match). It never forbids continuing a game the searchers already share (step 4b below).
       const cap = await client.query(
         `select count(*)::int as n
            from matches m
@@ -677,12 +715,9 @@ export const postgresStorage = (pool: PgPool): Storage => ({
           where p.player_id = $1 and m.status <> 'finished'`,
         [input.playerId],
       );
-      if (asNumber(cap.rows[0]?.n ?? 0) >= input.maxOpenMatches) {
-        await client.query('rollback');
-        return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
-      }
+      const atCap = asNumber(cap.rows[0]?.n ?? 0) >= input.maxOpenMatches;
 
-      // 3. Join the oldest waiting open-queue match with one free seat (FIFO), atomically.
+      // 4. Join the oldest waiting open-queue match with one free seat (FIFO), atomically.
       const claim = await client.query(
         `select m.*, p.seat as opener_seat
            from matches m
@@ -704,6 +739,10 @@ export const postgresStorage = (pool: PgPool): Storage => ({
         [input.playerId],
       );
       if (claim.rows[0]) {
+        if (atCap) {
+          await client.query('rollback');
+          return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
+        }
         const row = claim.rows[0];
         const matchId = asString(row.id);
         const seat: Player = asNumber(row.opener_seat) === 0 ? 1 : 0;
@@ -729,7 +768,7 @@ export const postgresStorage = (pool: PgPool): Storage => ({
         return { ok: true, match, seat, paired: true };
       }
 
-      // 3b. CONTINUE (owner, 2026-11-11): the oldest searcher waiting already shares an open game
+      // 4b. CONTINUE (owner, 2026-11-11): the oldest searcher waiting already shares an open game
       // with this player. Retire that search (scoped delete, status guard) and hand back their
       // existing game, touched so the other page finds it at the top of its list.
       const cont = await client.query(
@@ -760,7 +799,11 @@ export const postgresStorage = (pool: PgPool): Storage => ({
         return { ok: false, code: 'MATCH_FULL', reason: 'The shared game moved on; try again.' };
       }
 
-      // 4. Nobody is waiting: park the player's search.
+      // 5. Nobody is waiting: park the player's search (unless the cap forbids one more open game).
+      if (atCap) {
+        await client.query('rollback');
+        return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
+      }
       try {
         await client.query(INSERT_MATCH_SQL, matchInsertValues({ ...input.parked, openQueue: true }));
       } catch (error) {
