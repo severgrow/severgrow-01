@@ -156,6 +156,98 @@ describe('Find Opponent when one searcher already has a game against a THIRD par
   });
 });
 
+// REPEAT FIND MUST RESUME, NEVER DUPLICATE (owner, 2026-11-12). Reproduced on the deployed server:
+// A finds (waiting) -> B finds and pairs into it (active, both seats) -> A finds AGAIN -> A got a
+// brand-new empty match while B sat in the real one. Both pages looked "searching", in different
+// games, forever. The client's findTap() guard is per page, so two devices cannot rely on it.
+describe('Find Opponent never starts a second search for the same player', () => {
+  it('one player, find twice: the SAME match comes back both times', async () => {
+    const h = harness();
+    const a = await guest(h, 'Alder');
+    const first = await h.service.findOpponent(a.player);
+    expect(first.paired).toBe(false);
+    const second = await h.service.findOpponent(a.player);
+    expect(second.match.matchId).toBe(first.match.matchId);
+    expect(second.match.status).toBe('waiting');
+    expect(await openIds(h, a.player)).toEqual([first.match.matchId]);
+  });
+
+  it('find three times while parked is still one entry', async () => {
+    const h = harness();
+    const a = await guest(h, 'Alder');
+    const first = await h.service.findOpponent(a.player);
+    await h.service.findOpponent(a.player);
+    const third = await h.service.findOpponent(a.player);
+    expect(third.match.matchId).toBe(first.match.matchId);
+    expect(await openIds(h, a.player)).toEqual([first.match.matchId]);
+  });
+
+  it('after being PAIRED, finding again returns that active game, never a new empty one', async () => {
+    const h = harness();
+    const a = await guest(h, 'Alder');
+    const b = await guest(h, 'Birch');
+    const aFind = await h.service.findOpponent(a.player);
+    expect(aFind.paired).toBe(false);
+    const bFind = await h.service.findOpponent(b.player);
+    expect(bFind.paired).toBe(true);
+    expect(bFind.match.matchId).toBe(aFind.match.matchId);
+
+    // THE STRANDING: A's page (or a second device) calls Find again.
+    const aAgain = await h.service.findOpponent(a.player);
+    expect(aAgain.match.matchId).toBe(aFind.match.matchId);
+    expect(aAgain.match.status).toBe('active');
+    expect(aAgain.player.status).toBe('active');
+    expect(aAgain.paired).toBe(true);
+    // No second search is left behind for a stranger to fall into.
+    expect(await h.storage.openQueueMatchOfPlayer(a.player.id)).toBeNull();
+    expect(await openIds(h, a.player)).toEqual([aFind.match.matchId]);
+    expect(await openIds(h, b.player)).toEqual([aFind.match.matchId]);
+  });
+
+  it('both seats finding again after a pairing both land in the same active game', async () => {
+    const h = harness();
+    const a = await guest(h, 'Alder');
+    const b = await guest(h, 'Birch');
+    const aFind = await h.service.findOpponent(a.player);
+    const bFind = await h.service.findOpponent(b.player);
+    expect(bFind.match.matchId).toBe(aFind.match.matchId);
+    const aAgain = await h.service.findOpponent(a.player);
+    const bAgain = await h.service.findOpponent(b.player);
+    expect([aAgain.match.matchId, bAgain.match.matchId]).toEqual([aFind.match.matchId, aFind.match.matchId]);
+    expect([aAgain.match.status, bAgain.match.status]).toEqual(['active', 'active']);
+    expect(await openIds(h, a.player)).toEqual([aFind.match.matchId]);
+    expect(await openIds(h, b.player)).toEqual([aFind.match.matchId]);
+  });
+
+  it('resuming your own active game wins over joining a stranger waiting in the queue', async () => {
+    const h = harness();
+    const a = await guest(h, 'Alder');
+    const b = await guest(h, 'Birch');
+    const stranger = await guest(h, 'Cedar');
+    const aFind = await h.service.findOpponent(a.player);
+    const bFind = await h.service.findOpponent(b.player);
+    expect(bFind.match.matchId).toBe(aFind.match.matchId); // A and B are paired and active
+    const strangerFind = await h.service.findOpponent(stranger.player);
+    expect(strangerFind.paired).toBe(false); // a real stranger is waiting
+
+    const aAgain = await h.service.findOpponent(a.player);
+    // The player goes back to their OWN game, never into a second one; the stranger keeps waiting.
+    expect(aAgain.match.matchId).toBe(aFind.match.matchId);
+    expect(aAgain.match.status).toBe('active');
+    expect((await h.storage.openQueueMatchOfPlayer(stranger.player.id))?.id).toBe(strangerFind.match.matchId);
+    expect(await openIds(h, a.player)).toEqual([aFind.match.matchId]);
+  });
+
+  it('a game started from an INVITE is not resumed: that is how a player still meets a stranger', async () => {
+    const h = harness();
+    const { a, sharedId } = await sharedPair(h); // A's shared game came from an invite
+    const aFind = await h.service.findOpponent(a.player);
+    expect(aFind.paired).toBe(false); // parks, as before
+    expect(aFind.match.matchId).not.toBe(sharedId);
+    expect(await openIds(h, a.player)).toEqual(expect.arrayContaining([sharedId, aFind.match.matchId]));
+  });
+});
+
 describe('Find Opponent happy path (no games anywhere)', () => {
   it('two strangers pair into a new active game', async () => {
     const h = harness();

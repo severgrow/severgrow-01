@@ -133,7 +133,10 @@ export type Fail = { ok: false; code: string; reason: string };
 export type OpenQueueSeat =
   | { ok: true; match: MatchRecord; seat: Player; paired: boolean;
       /** The searcher met someone they already share an open game with: `match` is THAT game. */
-      continued?: boolean }
+      continued?: boolean;
+      /** The player's earlier search has already become `match` (an active game); nothing new was
+       * created. A repeat Find from either device lands here instead of starting a second search. */
+      resumed?: boolean }
   | Fail;
 
 /** What the rules layer decided for one submitted action, computed inside the atomic section. */
@@ -262,20 +265,26 @@ export interface Storage {
    * Phase 7 Find Opponent, atomic and race-safe. Inside one serialized section (in Postgres, a
    * transaction holding an advisory lock; in memory, a synchronous critical section):
    *
-   *   1. the player's own `waiting` open-queue match, if any — returned as-is so a repeated tap
-   *      never creates a second parked entry (pairing with self is impossible);
-   *   2. else the oldest `waiting` open-queue match with one free seat (FIFO) — the player is
+   *   1. an ACTIVE open-queue game the player is a seat of — the search they already started has
+   *      been paired, so that game is returned with `paired: true, resumed: true` and no second
+   *      search is created (owner, 2026-11-12: a repeat Find must never strand one device in a
+   *      fresh empty match while its opponent sits in the real one). Games that began as INVITES
+   *      are not resumed: an open invite must not stop a player meeting a stranger;
+   *   2. else the player's own `waiting` open-queue match, if any — returned as-is so a repeated
+   *      tap never creates a second parked entry (pairing with self is impossible);
+   *   3. else the oldest `waiting` open-queue match with one free seat (FIFO) — the player is
    *      seated in the free seat and the match is activated in the same step, so two simultaneous
    *      searchers can never both claim it or both end up waiting;
-   *   3. else, when the only waiting searcher already shares an open game with the player (owner,
+   *   4. else, when the only waiting searcher already shares an open game with the player (owner,
    *      2026-11-11: one game per pair must not leave them waiting for each other forever), that
    *      search is retired, the shared game's `updatedAt` is set to now, and it is returned with
    *      `paired: true, continued: true`;
-   *   4. else `parked` is inserted and the player is seated in seat 0.
+   *   5. else `parked` is inserted and the player is seated in seat 0.
    *
    * `maxOpenMatches` is the per-player cap on unfinished matches; a player at the cap is refused
-   * (case 2 and 3) rather than silently parked or matched. `expiresAt` on `parked` is the
-   * parked-search expiry, set by the caller from `waitingExpireMs`.
+   * (case 3 and 5) rather than silently parked or matched. Continuing or resuming a game creates
+   * no match, so the cap never blocks it. `expiresAt` on `parked` is the parked-search expiry, set
+   * by the caller from `waitingExpireMs`.
    */
   claimOpenQueueOrPark(input: {
     playerId: string;
