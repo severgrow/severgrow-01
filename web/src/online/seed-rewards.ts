@@ -1,5 +1,5 @@
 import type { Action } from '../../../src/engine/index.js';
-import { BOT_VERSIONS, CURRENT_BOT_VERSION, PREVIOUS_BOT_VERSION } from '../../../src/bots/versions.js';
+import { BOT_VERSIONS, CURRENT_BOT_VERSION } from '../../../src/bots/versions.js';
 import { DuelError } from '../../../server/src/client.js';
 import type { DuelClient, KeyValue } from '../../../server/src/client.js';
 import type { RewardResult } from '../../../server/src/seeds/types.js';
@@ -223,7 +223,10 @@ export const flushSeedProofs = (
     // once the server lists that version in its health `features`; until then it stays queued.
     let features: Promise<readonly string[]> | null = null;
     const serverKnows = async (version: string): Promise<boolean> => {
-      if (version === PREVIOUS_BOT_VERSION || !Object.hasOwn(BOT_VERSIONS, version)) return true;
+      // Only the NEWEST bot can be one a server has not learned yet; every older version (v0.10, v0.11)
+      // was live before it, so its proofs are sent as they always were. (Unknown names are sent too:
+      // the server answers for them.)
+      if (version !== CURRENT_BOT_VERSION || !Object.hasOwn(BOT_VERSIONS, version)) return true;
       features ??= (async () => {
         try {
           const ask = client.serverFeatures();

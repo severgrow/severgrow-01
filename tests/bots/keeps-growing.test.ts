@@ -27,13 +27,20 @@ const game = (seed: number, level: Level, seen: (s: State, a: Action) => void) =
 };
 
 describe('bots-v0.11: a turn never ends without its grow', () => {
-  it('is the current version; the previous one stays accepted, exactly as it was', () => {
-    expect(CURRENT_BOT_VERSION).toBe('bots-v0.11');
-    expect(PREVIOUS_BOT_VERSION).toBe('bots-v0.10');
+  it('is in force in the current version; the versions before it stay accepted, exactly as they were', () => {
+    // bots-v0.12 (2026-11-12) added the rivals on top of this rule, so the CURRENT chooser is still
+    // chooseKeepsGrowing; v0.11 (this rule) and v0.10 (before it) both still replay as they did.
+    expect(CURRENT_BOT_VERSION).toBe('bots-v0.12');
+    expect(PREVIOUS_BOT_VERSION).toBe('bots-v0.11');
     expect(botFor(CURRENT_BOT_VERSION)).toBe(chooseKeepsGrowing);
-    expect(botFor(PREVIOUS_BOT_VERSION)).toBe(chooseLevelAction);
     expect(chooseBotAction).toBe(chooseKeepsGrowing);
-    expect(Object.keys(BOT_VERSIONS).sort()).toEqual(['bots-v0.10', 'bots-v0.11']);
+    expect(Object.keys(BOT_VERSIONS).sort()).toEqual(['bots-v0.10', 'bots-v0.11', 'bots-v0.12']);
+    const s = newMatch(5);
+    const v = viewFor(s, s.actor);
+    for (const level of [1, 4, 9] as const) {
+      expect(botFor('bots-v0.11')!(v, level, 3)).toEqual(chooseKeepsGrowing(v, level, 3));
+      expect(botFor('bots-v0.10')!(v, level, 3)).toEqual(chooseLevelAction(v, level, 3));
+    }
     // The level dials are untouched: the change is one rule on top of every level.
     expect(LEVEL_CONFIGS[1].skipGrowth).toBe(0.57);
     expect(LEVEL_CONFIGS[4].skipGrowth).toBe(0.33);

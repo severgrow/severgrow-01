@@ -7,10 +7,11 @@
 // every turn and never more; level 9's real bot (level 4) did NOTHING on 39% of its turns, a
 // deliberate "laziness" dial tuned for the campaign ladder. Owner, later the same day: "Remove the
 // skipping growth in all levels really": that fix lives in the bots (tests/bots/keeps-growing.test.ts).
+import { chooseKeepsGrowing } from '../../src/bots/keeps-growing.js';
 import { describe, expect, it } from 'vitest';
 import { apply, coordKey, legalActions, mulberry32, neighbors, scores, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
-import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
+import { CURRENT_BOT_VERSION, chooseBotAction } from '../../src/bots/versions.js';
 import { LESSONS, lessonFor, lessonLegal, lessonOpening, suggestMove } from '../src/lessons/lessons.js';
 import type { Lesson } from '../src/lessons/lessons.js';
 import { lessonOpponentAction } from '../src/lessons/opponent.js';
@@ -66,10 +67,12 @@ describe('the opponent always takes its turn', () => {
     expect(turns).toBeGreaterThan(200);
   });
 
-  it('levels 9 and 10 play the real bot of the current version (bots-v0.11: never skips its grow)', () => {
+  it('levels 9 and 10 play the real bot of the current version (never skips its grow, since bots-v0.11)', () => {
     expect(lessonFor(9)!.opponent).toEqual({ bot: 4 });
     expect(lessonFor(10)!.opponent).toEqual({ bot: 1 });
-    expect(CURRENT_BOT_VERSION).toBe('bots-v0.11');
+    // bots-v0.12 (2026-11-12) added the rivals on top of v0.11's rule; the current chooser still keeps growing.
+    expect(CURRENT_BOT_VERSION).toBe('bots-v0.12');
+    expect(chooseBotAction).toBe(chooseKeepsGrowing);
   });
 
   it('levels 1-3 keep exactly the opponent they had', () => {

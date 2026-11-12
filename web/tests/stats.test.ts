@@ -74,6 +74,6 @@ describe('which finished games join the offline record', () => {
     // The old inline guard is gone: the rule lives in one place.
     expect(main).not.toMatch(/if \(p\.before\.phase !== 'GAME_OVER' && !watching && !coach\.tutorial\) \{/);
     // A campaign match stops the guide's early return: the record is written below it.
-    expect(main).toMatch(/stats = recordResult\(stats, p\.after\.result, HUMAN, gameLevel\)/);
+    expect(main).toMatch(/stats = recordResult\(stats, p\.after\.result, HUMAN, ladderLevel\(gameLevel\)\)/);
   });
 });

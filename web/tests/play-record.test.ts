@@ -51,7 +51,7 @@ describe('where it is wired', () => {
   const main = readFileSync(fileURLToPath(new URL('../src/main.ts', import.meta.url)), 'utf8');
 
   it('every finished game against the computer still adds its moves, beside the win/loss record', () => {
-    expect(main).toMatch(/stats = recordResult\(stats, p\.after\.result, HUMAN, gameLevel\);\s*store\.set\(STATS_KEY, JSON\.stringify\(stats\)\);[\s\S]{0,900}store\.set\(PLAY_KEY, JSON\.stringify\(recordPlay\(parsePlay\(store\.get\(PLAY_KEY\)\), p\.after\.history \?\? \[\], HUMAN\)\)\);/);
+    expect(main).toMatch(/stats = recordResult\(stats, p\.after\.result, HUMAN, ladderLevel\(gameLevel\)\);\s*store\.set\(STATS_KEY, JSON\.stringify\(stats\)\);[\s\S]{0,900}store\.set\(PLAY_KEY, JSON\.stringify\(recordPlay\(parsePlay\(store\.get\(PLAY_KEY\)\), p\.after\.history \?\? \[\], HUMAN\)\)\);/);
   });
 
   it('tells the account a finished offline game happened, so other devices can see it', () => {
