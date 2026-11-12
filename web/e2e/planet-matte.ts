@@ -118,7 +118,10 @@ try{
   });
   assert(chat.text?.includes('A quiet world, already here.'));assert.equal(chat.heading,'Global chat');
   const compactSurface=async(selector:string)=>p.locator(selector).first().evaluate(el=>{const s=getComputedStyle(el);return [s.background,s.borderTopColor,s.borderTopWidth,s.borderRadius,s.color,s.backdropFilter];});
-  const expected=[keys[0]![0],keys[0]![1],keys[0]![2],keys[0]![3],keys[0]![4],keys[0]![6]];
+  // The ordinary key's material (THE PLANET's, keys[1]), not PLAY's: PLAY is the one suggested key that
+  // keeps its line, and since 2026-11-12 no other key anywhere wears a frame (owner: "all buttons ...
+  // no frame contour"), the chat's included.
+  const expected=[keys[1]![0],keys[1]![1],keys[1]![2],keys[1]![3],keys[1]![4],keys[1]![6]];
   assert.deepEqual(await compactSurface('#world-chat-send'),expected,'chat SEND uses the menu matte/glass family');
   await p.locator('#world-chat-list .world-chat-line').first().click();
   assert.deepEqual(await compactSurface('.world-chat-line.picked .world-chat-mod button'),expected,'moderation actions use the same material');

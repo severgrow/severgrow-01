@@ -15,6 +15,12 @@ describe('the finish card shows the planet only when the player can grow there (
     expect(finishWindowFor({ won: true, balance: null, hasBoard: true })).toBe('board');
   });
 
+  it('level 10 teaches the planet: its win always shows it, whatever the wallet says', () => {
+    expect(finishWindowFor({ won: true, teach: true, balance: null, hasBoard: true })).toBe('planet');
+    expect(finishWindowFor({ won: true, teach: true, balance: 0, hasBoard: true })).toBe('planet');
+    expect(finishWindowFor({ won: false, teach: true, balance: 500, hasBoard: true })).toBe('board');
+  });
+
   it('with no final board to show, the card keeps the planet as before', () => {
     expect(finishWindowFor({ won: false, balance: 0, hasBoard: false })).toBe('planet');
   });

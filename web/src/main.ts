@@ -8704,7 +8704,7 @@ function syncFinishWindow(show: boolean, won: boolean, teach: boolean, harvest: 
     return;
   }
   finishWindow = { card, won, teach, harvest, view: 'board' };
-  applyFinishWindow(finishWindowFor({ won, balance: parseBalance(store.get(SEED_BALANCE_KEY)), hasBoard: !!harvest }));
+  applyFinishWindow(finishWindowFor({ won, teach, balance: parseBalance(store.get(SEED_BALANCE_KEY)), hasBoard: !!harvest }));
   if (won) void refreshFinishWindow();
 }
 
@@ -8717,7 +8717,7 @@ async function refreshFinishWindow(): Promise<void> {
   rememberBalance(balance);
   const now = finishWindow;
   if (!now || now.card !== card) return;
-  const view = finishWindowFor({ won: now.won, balance, hasBoard: !!now.harvest });
+  const view = finishWindowFor({ won: now.won, teach: now.teach, balance, hasBoard: !!now.harvest });
   if (view !== now.view) applyFinishWindow(view);
 }
 
