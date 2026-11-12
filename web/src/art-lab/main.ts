@@ -61,6 +61,8 @@ let moves = boardMoves(game);
 let stepIndex = 0;
 let playing: ReturnType<typeof setInterval> | null = null;
 const notes = new Map<string, { errors: string[]; warnings: string[]; notes: string[] }>();
+/** Narrow screens: the sections a designer has opened by hand (kept when a render rebuilds them). */
+const folded = new Map<Group, boolean>();
 
 const root = document.getElementById('lab')!;
 const STATUS_TEXT: Record<Status, string> = { done: 'Done', current: "Today's art", missing: 'Missing', placeholder: 'Placeholder' };
@@ -70,6 +72,17 @@ const statusBar = h('div', { class: 'budget', role: 'status', 'aria-live': 'poli
 const checklist = h('div', { class: 'checklist' });
 const slotsBox = h('div', { class: 'slots' });
 const stage = h('section', { class: 'stage', 'aria-label': 'Preview' });
+// Narrow screens (lab.css, max-width 999px): the workbench cannot be a workbench at phone size,
+// so the page says so, frames the real game, and hands the dashboard over as labelled sections.
+const narrowNote = h('section', { class: 'narrow-note', 'aria-labelledby': 'narrow-note-title' },
+  h('p', { class: 'eyebrow', text: 'Phone view' }),
+  h('h1', { id: 'narrow-note-title', text: 'The Art Lab is a workbench for a bigger screen.' }),
+  h('p', { text: 'To drop in art and export a pack, open this page on a laptop. Below is the real game at your phone’s size; after it, every art slot and its spec.' }));
+const previewCaption = h('p', { class: 'preview-caption' },
+  h('strong', { text: 'The real game' }), ' at your phone’s size. The Art Lab is everything around it.');
+const workbenchHead = h('div', { class: 'workbench-head' },
+  h('h2', { text: 'The workbench' }),
+  h('p', { text: 'Every art slot, grouped by where the game uses it. Open a section for its slots, sizes and settings.' }));
 const tabs = h('div', { class: 'tabs', role: 'tablist' });
 const panes: Record<string, HTMLElement> = {};
 const phoneHost = h('div', { class: 'phone' });
@@ -83,18 +96,20 @@ const scrub = h('input', { type: 'range', min: 0, max: 0, value: 0, 'aria-label'
 const toast = h('div', { class: 'toast', role: 'status', 'aria-live': 'polite' });
 const say = (text: string) => { toast.textContent = text; toast.classList.add('on'); setTimeout(() => toast.classList.remove('on'), 3200); };
 
+const headerActions = h('div', { class: 'actions' },
+  h('button', { type: 'button', class: 'key', id: 'compare', title: "Hold to see today's art", text: "Hold: today's art",
+    onpointerdown: () => setCompare(true), onpointerup: () => setCompare(false), onpointerleave: () => setCompare(false),
+    onkeydown: (e) => { if ((e as KeyboardEvent).key === ' ') setCompare(true); }, onkeyup: () => setCompare(false) }),
+  h('label', { class: 'key file' }, 'Import pack', h('input', { type: 'file', accept: '.zip,application/zip', id: 'import', onchange: onImport })),
+  h('button', { type: 'button', class: 'key primary', id: 'export', onclick: onExport, text: 'Export art pack' }),
+  h('button', { type: 'button', class: 'key quiet', id: 'clear', onclick: onClear, text: 'Clear all' }),
+);
 const header = h('header', { class: 'top' },
   h('div', { class: 'brand' }, h('strong', { text: 'FUTASAKU' }), h('span', { text: 'Art Lab' })),
   h('label', { class: 'pack-name' }, h('span', { class: 'sr', text: 'Pack name' }),
     h('input', { id: 'pack-name', value: art.label, maxlength: 48, onchange: (e) => { art.label = (e.target as HTMLInputElement).value || 'Art pack'; changed(false); } })),
   statusBar,
-  h('div', { class: 'actions' },
-    h('button', { type: 'button', class: 'key', id: 'compare', title: "Hold to see today's art", text: "Hold: today's art",
-      onpointerdown: () => setCompare(true), onpointerup: () => setCompare(false), onpointerleave: () => setCompare(false),
-      onkeydown: (e) => { if ((e as KeyboardEvent).key === ' ') setCompare(true); }, onkeyup: () => setCompare(false) }),
-    h('label', { class: 'key file' }, 'Import pack', h('input', { type: 'file', accept: '.zip,application/zip', id: 'import', onchange: onImport })),
-    h('button', { type: 'button', class: 'key primary', id: 'export', onclick: onExport, text: 'Export art pack' }),
-    h('button', { type: 'button', class: 'key quiet', id: 'clear', onclick: onClear, text: 'Clear all' })),
+  headerActions,
 );
 
 const viewTools = h('div', { class: 'view-tools' },
@@ -134,7 +149,7 @@ const cardsPane = h('div', { class: 'pane-cards', id: 'pane-cards' });
 const planetPane = h('div', { class: 'pane', id: 'pane-planet', role: 'tabpanel', hidden: true });
 const specPane = h('div', { class: 'pane', id: 'pane-spec', role: 'tabpanel', hidden: true });
 Object.assign(panes, { board: boardPane, planet: planetPane, spec: specPane });
-boardPane.append(phoneWrap, viewTools, generator, cardsPane);
+boardPane.append(phoneWrap, previewCaption, viewTools, generator, cardsPane);
 const showTab = (id: string) => {
   const live = id === 'board' || id === 'cards';
   for (const [k, p] of Object.entries(panes)) p.hidden = k === 'board' ? !live : k !== id;
@@ -164,9 +179,19 @@ filters.style.cssText = 'position:absolute;width:0;height:0';
 filters.innerHTML = `<filter id="lab-deutan"><feColorMatrix type="matrix" values="0.367 0.861 -0.228 0 0 0.280 0.673 0.047 0 0 -0.012 0.043 0.969 0 0 0 0 0 1 0"/></filter>
 <filter id="lab-tritan"><feColorMatrix type="matrix" values="1.256 -0.077 -0.179 0 0 -0.078 0.931 0.148 0 0 0.005 0.691 0.304 0 0 0 0 0 1 0"/></filter>`;
 document.body.append(filters);
-root.replaceChildren(header, h('main', { class: 'body' }, h('aside', { class: 'side', 'aria-label': 'Art slots' }, checklist, slotsBox), stage), toast);
+root.replaceChildren(narrowNote, header, h('main', { class: 'body' }, h('aside', { class: 'side', id: 'workbench', 'aria-label': 'Art slots' }, workbenchHead, checklist, slotsBox), stage), toast);
 root.removeAttribute('aria-busy');
 showTab('board');
+
+// A phone has no room for the toolbar, so on narrow screens the same editing keys move below the
+// preview (one node, moved — never duplicated): presentation order, not a second code path.
+const workbenchNarrow = matchMedia('(max-width: 999.98px)');
+const placeActions = () => {
+  const target = workbenchNarrow.matches ? workbenchHead : header;
+  if (headerActions.parentElement !== target) target.append(headerActions);
+};
+placeActions();
+workbenchNarrow.addEventListener('change', () => { placeActions(); renderSlots(); requestAnimationFrame(fitPhone); });
 
 // ---------- art changes ----------
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -202,7 +227,7 @@ function renderChecklist() {
     h('p', { class: 'hint', text: 'Missing slots must be filled; placeholders are optional (the game shows plain colours). Click a slot to jump to it.' }),
     h('ol', { class: 'mini' }, ...SLOTS.map((s) => {
       const st = slotStatus(s, art.slots[s.id]);
-      return h('li', {}, h('a', { href: `#slot-${s.id}`, class: `dot ${st}`, title: `${s.title}: ${STATUS_TEXT[st]}`, text: slotLabel(s) }));
+      return h('li', {}, h('a', { href: `#slot-${s.id}`, class: `dot ${st}`, title: `${s.title}: ${STATUS_TEXT[st]}`, onclick: () => openGroup(s.group), text: slotLabel(s) }));
     })),
   );
   for (const s of SLOTS) {
@@ -237,9 +262,26 @@ const ruleLine = (s: Slot) => {
 
 function renderSlots() {
   const groups: Record<Group, string> = { board: 'Board', cards: 'Cards', planet: 'Planet' };
-  slotsBox.replaceChildren(...(Object.keys(groups) as Group[]).map((g) =>
-    h('section', { class: 'group' }, h('h2', { text: groups[g] }), ...SLOTS.filter((s) => s.group === g).map(slotCard))));
+  slotsBox.replaceChildren(...(Object.keys(groups) as Group[]).map((g) => {
+    const cards = SLOTS.filter((s) => s.group === g).map(slotCard);
+    const heading = h('h2', { text: groups[g] });
+    // Desktop keeps today's plain section, pixel for pixel. Narrow screens get a labelled,
+    // foldable section: the page stays a short stack until the owner asks for the slots.
+    if (!workbenchNarrow.matches) return h('section', { class: 'group', id: `group-${g}` }, heading, ...cards);
+    const box = h('details', { class: 'group group-fold', id: `group-${g}`, open: folded.get(g) ?? false },
+      h('summary', {}, heading, h('span', { class: 'fold-count', text: `${cards.length} slots` })), ...cards);
+    box.addEventListener('toggle', () => { if (workbenchNarrow.matches) folded.set(g, box.open); });
+    return box;
+  }));
   renderChecklist();
+}
+
+/** Narrow screens only: revealing a slot must reveal the section it lives in first. */
+function openGroup(g: Group) {
+  if (!workbenchNarrow.matches) return;
+  folded.set(g, true);
+  const box = document.getElementById(`group-${g}`);
+  if (box instanceof HTMLDetailsElement) box.open = true;
 }
 
 function slotCard(s: Slot): HTMLElement {
