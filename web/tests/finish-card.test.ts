@@ -6,9 +6,9 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { CAMPAIGN, LESSON, RESULT, TUTORIAL_REPLAY } from '../../src/strings.js';
+import { CAMPAIGN, LESSON, ONLINE, RESULT, TUTORIAL_REPLAY } from '../../src/strings.js';
 import { PLANET_TEACH } from '../src/online/seed-icon.js';
-import { barFor, canGrowAt } from '../src/online/endgame-planet.js';
+import { barFor, canGrowAt, growKeyLabel } from '../src/online/endgame-planet.js';
 import { CAMPAIGN_LEVELS, nextCampaignLevel } from '../../src/campaign/index.js';
 import { finishLead } from '../src/logic/finish-actions.js';
 import { LESSONS, lessonFor } from '../src/lessons/lessons.js';
@@ -360,12 +360,39 @@ describe('THE PLANET on the card (owner brief, 2026-11-11)', () => {
     expect(barFor({ kind: 'pentagon' }, false).key).toBeNull();
     expect(barFor({ kind: 'free', growable: true, cost: 100, balance: 150, account: true }, false).key).toBe('grow');
     expect(barFor({ kind: 'free', growable: true, cost: 100, balance: 150, account: true }, true).key).toBe('confirm');
-    expect(barFor({ kind: 'free', growable: true, cost: 100, balance: 150, account: false }, false).key).toBeNull();
+    // A GUEST GETS A PRESSABLE KEY, not a dead instruction (owner, 2026-11-12).
+    expect(barFor({ kind: 'free', growable: true, cost: 100, balance: 150, account: false }, false)).toEqual({
+      line: 'SIGN IN TO GROW', spoken: 'SIGN IN TO GROW', key: 'signin',
+    });
+    // A SIGNED-IN PLAYER NEVER SEES IT — even when the tile or the Seeds are out of reach.
+    for (const tile of [
+      { kind: 'free', growable: true, cost: 100, balance: 150, account: true },
+      { kind: 'free', growable: true, cost: 100, balance: 20, account: true },
+      { kind: 'free', growable: false, cost: 100, balance: 150, account: true },
+    ] as const) expect(barFor(tile, false).key).not.toBe('signin');
     expect(barFor({ kind: 'free', growable: true, cost: 100, balance: 20, account: true }, false).key).toBeNull();
     expect(barFor({ kind: 'free', growable: false, cost: 100, balance: 150, account: true }, false).key).toBeNull();
     // The one key is the game's own sentence, never an invented one.
     expect(goCard).toContain('id="go-world-grow"');
     expect(read('../src/online/endgame-planet.ts')).toMatch(/if \(state\.key === 'grow'\) \{/);
+  });
+
+  it('the guest’s key opens the product’s ONE login, and the pane re-reads on a sign-in', () => {
+    const source = read('../src/online/endgame-planet.ts');
+    // The same entry the Planet page uses: there is no second login UI.
+    expect(source).toMatch(/getElementById\('menu-login'\)/);
+    expect(source).toMatch(/if \(state\.key === 'signin'\) \{ signIn\(\); return; \}/);
+    // The sign-in wording is the product's own (the Planet page's key), never a new string.
+    expect(growKeyLabel('signin')).toBe(ONLINE.worldSignInKey);
+    expect(growKeyLabel('grow')).toBe(ONLINE.worldGrowKey);
+    expect(growKeyLabel('confirm')).toBe(ONLINE.worldGrowConfirm);
+    // After signing in, the pane hears about it (never polls) and re-reads world + wallet.
+    expect(source).toMatch(/subscribeIdentityChanges\(identityChanged\)/);
+    expect(source).toMatch(/'futasaku:identity'/);
+    expect(source).toMatch(/isIdentityStorageEvent\(event\.key, STORAGE_PREFIX\)/);
+    expect(source).toMatch(/const identityChanged = \(\): void => \{\n\s+if \(disposed \|\| host\.hidden\) return;\n\s+read\(\);/);
+    // And it lets go of them when the card closes.
+    expect(source).toMatch(/releaseListeners\(\)/);
   });
 
   it('only grows where this server would take the tile', () => {
