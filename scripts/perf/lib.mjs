@@ -18,6 +18,10 @@ export const launch = async ({ headed = process.env.PERF_HEADED === '1' } = {}) 
       '--disable-dev-shm-usage',
       '--autoplay-policy=no-user-gesture-required',
       '--hide-scrollbars',
+      // DETERMINISM FOR GPU-WORK QUESTIONS: `PW_EXTRA_ARGS="--use-angle=swiftshader --enable-unsafe-swiftshader"`
+      // turns the GPU into CPU work, so an A/B of "how much GPU does this frame cost" stops swinging
+      // 20% -> 80% between identical runs on a shared machine.
+      ...((process.env.PW_EXTRA_ARGS ?? '').split(' ').filter(Boolean)),
       ...(headed ? ['--window-position=-2400,-2400', '--window-size=420,900'] : []),
     ],
   });
