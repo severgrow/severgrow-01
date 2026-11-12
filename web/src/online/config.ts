@@ -36,10 +36,15 @@ export const findOpponentEnabled = (): boolean => {
 
 /**
  * How long a parked Find-opponent search waits before offering a game against the computer.
- * Owner, 2026-11-08: 5 seconds (was three minutes). The search keeps running. A build may
- * override it (VITE_PARKED_OFFER_MS); the e2e walk shortens it so it never waits the real 5 s.
+ * Owner, 2026-11-08: 5 seconds (was three minutes); 2026-11-12, with the tiers (players here now for
+ * the first 7 s, then open games, then your own open game): 12 seconds, after the tiers have run.
+ * The search keeps running. A build may override it (VITE_PARKED_OFFER_MS); the e2e walk shortens it.
  */
-export const PARKED_OFFER_MS = 5_000;
+export const PARKED_OFFER_MS = 12_000;
+/** The first seconds of a search look only for players who are here now (server FIND_LIVE_WINDOW_MS). */
+export const SEARCH_LIVE_MS = 7_000;
+/** While the search screen is open, the page re-sends Find this often: "I am here" (the heartbeat). */
+export const SEARCH_HEARTBEAT_MS = 4_000;
 export const parkedOfferMs = (): number => {
   const env = (import.meta as { env?: Record<string, string | undefined> }).env;
   const raw = Number(env?.VITE_PARKED_OFFER_MS);

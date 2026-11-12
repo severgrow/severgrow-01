@@ -101,6 +101,8 @@ export type ServerConfig = {
     sweepPerIpPerHour: number;
     /** Reads of the PUBLIC shared world map, per IP per hour (it needs no account to view). */
     worldPerIpPerHour: number;
+    /** Repeat Finds from a player who is already searching (the presence heartbeat, every ~3 s). */
+    searchHeartbeatPerPlayerPerHour: number;
   };
 };
 
@@ -303,6 +305,8 @@ export const DEFAULT_SERVER_CONFIG: ServerConfig = Object.freeze({
     // The shared world map is a PUBLIC read (it needs no account to view), so it carries a
     // generous per-IP cap: far above what a human browsing the map could reach, far below a flood.
     worldPerIpPerHour: envInt('RATE_WORLD_PER_IP_PER_HOUR', 1200),
+    // ~3 s while the search screen is open: 1200 an hour, with room for a second device.
+    searchHeartbeatPerPlayerPerHour: envInt('RATE_SEARCH_HEARTBEAT_PER_PLAYER_PER_HOUR', 1800),
   }),
 });
 

@@ -6,7 +6,7 @@ import { ONLINE, PLANET, REPLAY } from '../../../src/strings.js';
 import { FEATURES } from '../channel.js';
 import { createIdentityStore } from './identity.js';
 import type { IdentityStore } from './identity.js';
-import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
+import { SEARCH_HEARTBEAT_MS, SEARCH_LIVE_MS, duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
 import { createLobbyActionGuard, lobbyActionStillCurrent } from './lobby-action.js';
 import { pollDue } from './poll-gate.js';
 import {
@@ -236,7 +236,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   let waitingInFlight = false;
   let serverOffset = 0;
   let worldView: WorldView | null = null;
-  const worldSource = mountWorldSource(() => client.worldMap(), lastWorld(browserStorage()), world => rememberWorld(browserStorage(), world));
+  const worldSource = mountWorldSource((poll) => client.worldMap(null, poll), lastWorld(browserStorage()), world => rememberWorld(browserStorage(), world));
   let living: ReturnType<typeof mountLivingTerritory> | null = null;
 
   /**
@@ -275,7 +275,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
 
   // Phase 7.5: the parked Find-opponent search. It is independent of the invite `waiting` screen
   // and keeps running (its own timer) while the player is on the board playing the computer.
-  let search: { token: string; matchId: string; startedAt: number } | null = null;
+  let search: { token: string; matchId: string; startedAt: number; othersWaiting: number; beatAt: number } | null = null;
   let searchTimer: ReturnType<typeof setInterval> | null = null;
   /** A search request that is still out (poll-gate.ts keeps the 2 s tick from stacking one). */
   let searchInFlight = false;
@@ -787,7 +787,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   worldView = new WorldView(client, async () => {
     const id = await ensureIdentity();
     return id ? { token: id.token, playerId: id.playerId, kind: id.kind } : null;
-  }, () => worldSource.read(), async () => {
+  }, (poll) => worldSource.read(poll), async () => {
     // A late mutation acknowledgement must not reuse a menu read that began before it committed.
     if (menuPass) await menuPass.catch(() => undefined);
     if (menuEl?.hidden === false && worldEl.dataset.livingTerritory === 'menu') await refreshMenu();
@@ -994,7 +994,12 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   const renderSearch = () => {
     if (!search) return;
     setWaitingTitle(ONLINE.searchTitle, false);
-    $('online-waiting-body').textContent = ONLINE.searchBody;
+    // THE TIERS, IN WORDS (owner, 2026-11-12): the first seconds look for players here right now;
+    // with nothing else waiting the game is simply open; once the offer shows, play while we search.
+    const elapsed = now() - search.startedAt;
+    $('online-waiting-body').textContent = elapsed >= parkedOfferMs()
+      ? ONLINE.searchBody
+      : elapsed < SEARCH_LIVE_MS && search.othersWaiting > 0 ? ONLINE.searchLiveBody : ONLINE.searchOpenBody;
     paintSearchOffer();
     // OWNER'S RULE (2026-11-08): the offer (Practice match / Level / Invite a friend) waits 5 s, so
     // the search gets a fair chance before the player is steered away from it.
@@ -1004,7 +1009,9 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     if (options) options.hidden = !parked;
     // One redraw when the window ends (the 2 s poll does not repaint this screen).
     if (offerTimer) { clearTimeout(offerTimer); offerTimer = null; }
-    if (!parked) offerTimer = setTimeout(() => { offerTimer = null; renderSearch(); }, parkedOfferMs() - waited + 20);
+    // The next change of words: the end of the live window, then the offer.
+    const nextAt = waited < SEARCH_LIVE_MS ? SEARCH_LIVE_MS : parkedOfferMs();
+    if (!parked) offerTimer = setTimeout(() => { offerTimer = null; renderSearch(); }, nextAt - waited + 20);
     syncLooking();
   };
 
@@ -1131,6 +1138,27 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     searchInFlight = true;
     const current = search;
     try {
+      // THE HEARTBEAT (tiers, owner 2026-11-12): while the player is here (the tab is visible and no
+      // computer game is running), a repeat Find says so every few seconds. The server keeps this
+      // search PRESENT for other searchers, and after the live window it may join an open game
+      // someone left earlier, retiring this search; the answer is then that game, already active.
+      if (!computerGameActive && !document.hidden && now() - current.beatAt >= SEARCH_HEARTBEAT_MS) {
+        current.beatAt = now();
+        const beat = await client.findOpponent(current.token).catch(() => null);
+        if (search !== current) return;
+        if (beat) {
+          serverOffset = beat.serverNow - now();
+          current.othersWaiting = beat.othersWaiting ?? current.othersWaiting;
+          if (beat.paired && beat.player.status === 'active') {
+            stopSearch();
+            syncLooking();
+            void reloadMatches();
+            launchDuel(current.token, beat.player, true);
+            return;
+          }
+          if (beat.match.matchId !== current.matchId) current.matchId = beat.match.matchId;
+        }
+      }
       const res = await client.getState(current.token, current.matchId);
       serverOffset = res.serverNow - now();
       if (search?.matchId !== current.matchId) return;
@@ -1185,13 +1213,13 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     syncLooking();
   };
 
-  const startSearch = (token: string, matchId: string) => {
+  const startSearch = (token: string, matchId: string, othersWaiting = 0) => {
     // Already in the queue: resume that entry. Adopting a new id here would be a second one.
     if (search) {
       resumeSearch();
       return;
     }
-    search = { token, matchId, startedAt: now() };
+    search = { token, matchId, startedAt: now(), othersWaiting, beatAt: now() };
     resumeSearch();
   };
 
@@ -1340,7 +1368,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
             return;
           }
           // Parked: we stay in the queue and keep polling, even if the player leaves the screen.
-          startSearch(id.token, res.match.matchId);
+          startSearch(id.token, res.match.matchId, res.othersWaiting ?? 0);
         } catch (error) {
           if (lobbyActionStillCurrent(guard, 'find')) notice('online-hub-notice', errorMessage(error));
         }

@@ -80,6 +80,15 @@ export type ServiceOptions = {
   broadcaster?: MatchBroadcaster;
 };
 
+/**
+ * FIND OPPONENT TIERS (owner, 2026-11-12: "first 7s looking only for online players ... after 7
+ * seconds looking for any open games that other people sent"). A search whose page re-sent Find
+ * within FIND_PRESENT_MS is PRESENT; for the first FIND_LIVE_WINDOW_MS a search joins only present
+ * ones, after that its heartbeat may join any open game.
+ */
+export const FIND_PRESENT_MS = 10_000;
+export const FIND_LIVE_WINDOW_MS = 7_000;
+
 export class MatchService {
   private readonly storage: Storage;
   private readonly config: ServerConfig;
@@ -403,9 +412,16 @@ export class MatchService {
   async findOpponent(
     player: PlayerRecord,
     clientIp: string | null = null,
-  ): Promise<{ match: MatchSummary; player: MatchViewPayload; paired: boolean }> {
-    await this.rateLimit(`join:player:${player.id}`, HOUR_MS, this.config.rateLimits.joinPerPlayerPerHour);
-    await this.rateLimit(`join:ip:${clientIp ?? 'unknown'}`, HOUR_MS, this.config.rateLimits.joinPerIpPerHour);
+  ): Promise<{ match: MatchSummary; player: MatchViewPayload; paired: boolean; othersWaiting: number }> {
+    // A repeat Find from a player already searching is the HEARTBEAT (tiers, owner 2026-11-12): it
+    // has its own budget, so a search screen saying "I am here" every few seconds never spends the
+    // fresh-search budget.
+    if (await this.storage.openQueueMatchOfPlayer(player.id)) {
+      await this.rateLimit(`search:beat:${player.id}`, HOUR_MS, this.config.rateLimits.searchHeartbeatPerPlayerPerHour);
+    } else {
+      await this.rateLimit(`join:player:${player.id}`, HOUR_MS, this.config.rateLimits.joinPerPlayerPerHour);
+      await this.rateLimit(`join:ip:${clientIp ?? 'unknown'}`, HOUR_MS, this.config.rateLimits.joinPerIpPerHour);
+    }
 
     const now = this.now();
     for (let attempt = 0; attempt < MAX_INVITE_CODE_ATTEMPTS; attempt++) {
@@ -415,6 +431,8 @@ export class MatchService {
         now,
         turnTimeoutMs: this.config.turnTimeoutMs,
         maxOpenMatches: this.config.maxOpenMatchesPerPlayer,
+        presentSince: now - FIND_PRESENT_MS,
+        liveWindowMs: FIND_LIVE_WINDOW_MS,
       });
       if (!result.ok) {
         if (result.code === 'DUPLICATE_INVITE_CODE') {
@@ -440,6 +458,7 @@ export class MatchService {
         match: await this.summary(result.match),
         player: await this.payload(result.match, result.seat, []),
         paired: result.paired,
+        othersWaiting: result.othersWaiting ?? 0,
       };
     }
     throw new ApiError('INTERNAL', 'Could not find an opponent right now. Please try again.');

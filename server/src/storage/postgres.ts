@@ -640,6 +640,8 @@ export const postgresStorage = (pool: PgPool): Storage => ({
     now: number;
     turnTimeoutMs: number;
     maxOpenMatches: number;
+    presentSince?: number;
+    liveWindowMs?: number;
   }): Promise<OpenQueueSeat> {
     const client = await pool.connect();
     try {
@@ -692,40 +694,20 @@ export const postgresStorage = (pool: PgPool): Storage => ({
         };
       }
 
-      // 2. Already parked? Return the player's own search (a re-tap never creates a second).
-      const own = await client.query(
-        `select m.*, p.seat as my_seat
-           from matches m
-           join match_participants p on p.match_id = m.id
-          where p.player_id = $1 and m.status = 'waiting' and m.open_queue = true
-          order by m.created_at asc
-          limit 1
-          for update of m`,
-        [input.playerId],
-      );
-      if (own.rows[0]) {
-        await client.query('commit');
-        return { ok: true, match: rowToMatch(own.rows[0]), seat: asNumber(own.rows[0].my_seat) === 1 ? 1 : 0, paired: false };
-      }
-
-      // 3. CAP, read once: the limit forbids joining a FRESH search or parking (both add an open
-      // match). It never forbids continuing a game the searchers already share (step 4b below).
-      const cap = await client.query(
-        `select count(*)::int as n
-           from matches m
-           join match_participants p on p.match_id = m.id
-          where p.player_id = $1 and m.status <> 'finished'`,
-        [input.playerId],
-      );
-      const atCap = asNumber(cap.rows[0]?.n ?? 0) >= input.maxOpenMatches;
-
-      // 4. Join the oldest waiting open-queue match with one free seat (FIFO), atomically.
-      const claim = await client.query(
+      /**
+       * The oldest waiting open-queue game this player may be seated in (one seat filled, not theirs,
+       * never a pair that already shares an open game). `present` keeps only searches seen since
+       * `presentSince` (tiers, owner 2026-11-12); `exclude` skips the player's own search.
+       */
+      const presentSince = input.presentSince ?? null;
+      const claimable = (present: boolean, exclude: string | null) => client.query(
         `select m.*, p.seat as opener_seat
            from matches m
            join match_participants p on p.match_id = m.id
           where m.status = 'waiting'
             and m.open_queue = true
+            and ($2::uuid is null or m.id <> $2::uuid)
+            and ($3::bigint is null or m.updated_at >= $3::bigint)
             and not exists (select 1 from match_participants p2 where p2.match_id = m.id and p2.player_id = $1)
             and (select count(*)::int from match_participants p3 where p3.match_id = m.id) = 1
             -- ONE GAME PER PAIR (owner, 2026-11-09): never pair two players who already share an open game.
@@ -738,14 +720,10 @@ export const postgresStorage = (pool: PgPool): Storage => ({
           order by m.created_at asc
           limit 1
           for update of m skip locked`,
-        [input.playerId],
+        [input.playerId, exclude, present ? presentSince : null],
       );
-      if (claim.rows[0]) {
-        if (atCap) {
-          await client.query('rollback');
-          return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
-        }
-        const row = claim.rows[0];
+      /** Seat the player in a claimed row and activate it (the commit is the caller's). */
+      const seatInto = async (row: Record<string, unknown>): Promise<{ match: MatchRecord; seat: Player }> => {
         const matchId = asString(row.id);
         const seat: Player = asNumber(row.opener_seat) === 0 ? 1 : 0;
         await client.query(
@@ -765,9 +743,70 @@ export const postgresStorage = (pool: PgPool): Storage => ({
            returning *`,
           [matchId, input.now, input.turnTimeoutMs, input.now + input.turnTimeoutMs],
         );
+        return { match: activated.rows[0] ? rowToMatch(activated.rows[0]) : rowToMatch(row as PgRow), seat };
+      };
+      const othersWaiting = async (exclude: string | null): Promise<number> => {
+        const counted = await client.query(
+          `select count(*)::int as n from matches m
+            where m.status = 'waiting' and m.open_queue = true and ($2::uuid is null or m.id <> $2::uuid)
+              and (select count(*)::int from match_participants p3 where p3.match_id = m.id) = 1
+              and not exists (select 1 from match_participants p2 where p2.match_id = m.id and p2.player_id = $1)`,
+          [input.playerId, exclude],
+        );
+        return asNumber(counted.rows[0]?.n ?? 0);
+      };
+
+      // 2. Already parked: this repeat Find is the HEARTBEAT. It refreshes the search (the player is
+      // here), and once the live window has passed it may join an open game someone left earlier,
+      // retiring its own search in the same step. Otherwise the same search comes back.
+      const own = await client.query(
+        `select m.*, p.seat as my_seat
+           from matches m
+           join match_participants p on p.match_id = m.id
+          where p.player_id = $1 and m.status = 'waiting' and m.open_queue = true
+          order by m.created_at asc
+          limit 1
+          for update of m`,
+        [input.playerId],
+      );
+      if (own.rows[0]) {
+        const ownId = asString(own.rows[0].id);
+        const touched = await client.query('update matches set updated_at = greatest(updated_at, $2) where id = $1 returning *', [ownId, input.now]);
+        const live = input.liveWindowMs !== undefined && input.now - asNumber(own.rows[0].created_at) < input.liveWindowMs;
+        const other = await claimable(live, ownId);
+        if (other.rows[0]) {
+          await client.query("delete from matches where id = $1 and status = 'waiting'", [ownId]);
+          const seated = await seatInto(other.rows[0]);
+          await client.query('commit');
+          return { ok: true, match: seated.match, seat: seated.seat, paired: true };
+        }
+        const waiting = await othersWaiting(ownId);
         await client.query('commit');
-        const match = activated.rows[0] ? rowToMatch(activated.rows[0]) : rowToMatch(row);
-        return { ok: true, match, seat, paired: true };
+        return { ok: true, match: rowToMatch(touched.rows[0] ?? own.rows[0]), seat: asNumber(own.rows[0].my_seat) === 1 ? 1 : 0, paired: false, othersWaiting: waiting };
+      }
+
+      // 3. CAP, read once: the limit forbids joining a FRESH search or parking (both add an open
+      // match). It never forbids continuing a game the searchers already share (step 4b below).
+      const cap = await client.query(
+        `select count(*)::int as n
+           from matches m
+           join match_participants p on p.match_id = m.id
+          where p.player_id = $1 and m.status <> 'finished'`,
+        [input.playerId],
+      );
+      const atCap = asNumber(cap.rows[0]?.n ?? 0) >= input.maxOpenMatches;
+
+      // 4. Join the oldest PRESENT waiting open-queue match (FIFO), atomically. A fresh search never
+      // joins a game whose owner is away: that waits for the heartbeat after the live window (step 2).
+      const claim = await claimable(input.liveWindowMs !== undefined, null);
+      if (claim.rows[0]) {
+        if (atCap) {
+          await client.query('rollback');
+          return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
+        }
+        const seated = await seatInto(claim.rows[0]);
+        await client.query('commit');
+        return { ok: true, match: seated.match, seat: seated.seat, paired: true };
       }
 
       // 4b. CONTINUE (owner, 2026-11-11): the oldest searcher waiting already shares an open game
@@ -819,8 +858,9 @@ export const postgresStorage = (pool: PgPool): Storage => ({
         'insert into match_participants (match_id, player_id, seat, joined_at, last_seen_at) values ($1,$2,0,$3,$3)',
         [input.parked.id, input.playerId, input.now],
       );
+      const waiting = await othersWaiting(input.parked.id);
       await client.query('commit');
-      return { ok: true, match: copy({ ...input.parked, openQueue: true }), seat: 0, paired: false };
+      return { ok: true, match: copy({ ...input.parked, openQueue: true }), seat: 0, paired: false, othersWaiting: waiting };
     } catch (error) {
       await client.query('rollback').catch(() => undefined);
       throw error;

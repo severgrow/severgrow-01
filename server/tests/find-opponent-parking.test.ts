@@ -16,7 +16,7 @@ import { RecordingBroadcaster } from '../src/broadcast.js';
 import { DEFAULT_SERVER_CONFIG } from '../src/config.js';
 import type { ServerConfig } from '../src/config.js';
 import { ApiError } from '../src/errors.js';
-import { MatchService } from '../src/service.js';
+import { FIND_LIVE_WINDOW_MS, MatchService } from '../src/service.js';
 import { MemoryStorage } from '../src/storage/memory.js';
 
 const testConfig = (overrides: Partial<ServerConfig> = {}): ServerConfig => ({
@@ -78,9 +78,13 @@ describe('parked search persists (gap 1)', () => {
     expect(parked.paired).toBe(false);
     expect(parked.match.status).toBe('waiting');
 
-    // The old ghost rule would have ignored this after ~20s. Parking is intentional now.
+    // The old ghost rule would have ignored this after ~20s. Parking is intentional now: A is away,
+    // so B first looks for players here right now (tiers, owner 2026-11-12) and then, on its own
+    // heartbeat after the live window, joins A's game.
     h.advance(25_000);
     const b = await guest(h, 'B');
+    expect((await h.service.findOpponent(b.player)).paired).toBe(false);
+    h.advance(FIND_LIVE_WINDOW_MS);
     const matched = await h.service.findOpponent(b.player);
     expect(matched.paired).toBe(true);
     expect(matched.match.matchId).toBe(parked.match.matchId);
@@ -228,6 +232,9 @@ describe('matched while away (gap 7)', () => {
 
     h.advance(3_600_000); // an hour later — the parked player is not on the page
     const b = await guest(h, 'B');
+    // B looks for players here right now first; its heartbeat after the live window joins A's game.
+    await h.service.findOpponent(b.player);
+    h.advance(FIND_LIVE_WINDOW_MS);
     const matched = await h.service.findOpponent(b.player);
     expect(matched.match.matchId).toBe(matchId);
     expect(matched.match.status).toBe('active');
@@ -310,8 +317,8 @@ describe('the sweeper reaps abandoned searches and unjoined invites', () => {
 });
 
 describe('rate limits (gap 11)', () => {
-  it('rate-limits repeated Find-opponent calls', async () => {
-    const h = harness(testConfig({ rateLimits: { ...testConfig().rateLimits, joinPerPlayerPerHour: 3 } }));
+  it('rate-limits repeated Find-opponent calls (a repeat while searching is the heartbeat, on its own budget)', async () => {
+    const h = harness(testConfig({ rateLimits: { ...testConfig().rateLimits, joinPerPlayerPerHour: 3, searchHeartbeatPerPlayerPerHour: 2 } }));
     const a = await guest(h, 'A');
     await h.service.findOpponent(a.player);
     await h.service.findOpponent(a.player);

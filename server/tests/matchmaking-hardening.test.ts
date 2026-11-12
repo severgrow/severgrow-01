@@ -71,6 +71,8 @@ describe('cancel stays reliable after Find resumes spend the join budget', () =>
           ...testConfig().rateLimits,
           joinPerPlayerPerHour: 3,
           joinPerIpPerHour: 1000,
+          // A repeat Find while searching is the heartbeat (tiers, 2026-11-12), on its own budget.
+          searchHeartbeatPerPlayerPerHour: 2,
         },
       }),
     );

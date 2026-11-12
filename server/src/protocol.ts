@@ -156,6 +156,8 @@ export type FindOpponentResponse = {
   match: MatchSummary;
   player: MatchViewPayload;
   paired: boolean;
+  /** Other open games waiting for a second player (tiers, 2026-11-12). Absent from older servers. */
+  othersWaiting?: number;
   serverNow: number;
 };
 

@@ -48,6 +48,28 @@ In Postgres the whole step runs inside a transaction holding
 `POST /v1/matchmaking/cancel` retires a parked search (scoped `delete ... where id = $1 and status
 = 'waiting'`, one participant) so no later searcher is ever matched into it.
 
+## 1b. Tiers: players here now first (owner, 2026-11-12)
+
+"First 7s looking only for online players to create a duel together, after 7 seconds looking for any
+open games that other people sent ... it can open game as soon as we know there is no games waiting."
+
+- **Presence.** While the search screen is open and the tab visible (and no computer game runs), the
+  page re-sends Find every 4 s (`SEARCH_HEARTBEAT_MS`): the HEARTBEAT. It refreshes the search's
+  `matches.updated_at`. A search seen within `FIND_PRESENT_MS` (10 s) is PRESENT. No migration.
+- **0-7 s (`FIND_LIVE_WINDOW_MS`).** A fresh search joins only a PRESENT search (step 4 filters on
+  `updated_at`). Two people here now get a normal duel at once (Blitz is offered inside it).
+- **No present partner.** The search is parked AT ONCE as an open game anyone can join. The answer
+  carries `othersWaiting` (other open games waiting): the page says "Looking for players online right
+  now." while some exist, and "Your game is open. The next player to search joins you." when none do.
+- **After 7 s.** The heartbeat (step 2) may join the oldest open game someone left earlier, deleting
+  its own search in the same locked step; the page opens that duel.
+- **12 s (`PARKED_OFFER_MS`).** The offer appears: Practice match / Level / Invite a friend / Keep
+  searching; the search keeps running and an arrival prompts "Opponent found".
+- **Budget.** A heartbeat (a Find from a player already searching) uses its own limit,
+  `searchHeartbeatPerPlayerPerHour` (1800), never the fresh-search budget.
+- Tests: `server/tests/find-opponent-tiers.test.ts` (memory, and real rows with
+  `FIND_TEST_DATABASE_URL` on a local database), `web/e2e/online-find-tiers.ts`.
+
 ## 2. Parked-search expiry
 
 **The old "no heartbeat for 20 seconds = ignored" rule does not exist in the tree** (there is no

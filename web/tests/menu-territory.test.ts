@@ -198,8 +198,9 @@ describe('the menu show pays ONE wallet read and ONE map read, never a poll', ()
     // The public map now starts before identity/settlement, so the living backdrop is never blocked.
     // The SAME promise joins the wallet/challenge read. Still ONE read of each, never a poll.
     expect(lobbySource).toMatch(/Promise\.all\(\[\s*client\.seedWallet\(id\.token\),\s*publicMap,\s*[\s\S]{0,220}?client\.worldChallenges\(id\.token\)/);
-    expect(lobbySource.match(/client\.worldMap\(\)/g)).toHaveLength(1);
-    expect(lobbySource).toContain('mountWorldSource(() => client.worldMap()');
+    // One source of the public map (a timed poll may say `poll`, which the server may cache).
+    expect(lobbySource.match(/client\.worldMap\(null, poll\)/g)).toHaveLength(1);
+    expect(lobbySource).toContain('mountWorldSource((poll) => client.worldMap(null, poll)');
     expect(lobbySource).toContain('await readMenuCounts(undefined, publicMap)');
     // And no timer/interval/rAF drives it.
     expect(moduleSource).not.toMatch(/setInterval|setTimeout|requestAnimationFrame/);

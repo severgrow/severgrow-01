@@ -818,7 +818,7 @@ export class WorldView {
   };
 
   constructor(private readonly client: DuelClient, private readonly ensureIdentity: () => Promise<Identity | null>,
-    private readonly readWorld: () => Promise<WorldMapPayload> = () => client.worldMap(),
+    private readonly readWorld: (poll?: boolean) => Promise<WorldMapPayload> = (poll) => client.worldMap(null, poll),
     private readonly requestMenuRefresh: () => Promise<void> = async () => {}) {
     document.addEventListener('visibilitychange', () => { if (this.active && !document.hidden) void this.refresh(); });
     // ONE WINDOW AT A TIME: the chat shuts the menu window, and the menu window shuts the chat.
@@ -1307,7 +1307,9 @@ export class WorldView {
       const [map, wallet, challenges] = await Promise.all([
         // A forced refresh follows the player's own move: read it fresh (with the token), never from
         // the server's short anonymous cache.
-        force && identityAtRequest ? this.client.worldMap(identityAtRequest.token) : this.readWorld(),
+        // A forced refresh follows the player's own move or an opening: fresh. The timed poll may be
+        // answered from the server's short cache (`poll`).
+        force && identityAtRequest ? this.client.worldMap(identityAtRequest.token) : this.readWorld(!force),
         // A failed wallet read is `undefined`, not null: the last known balance stays on screen.
         identityAtRequest ? this.client.seedWallet(identityAtRequest.token).catch(() => undefined) : Promise.resolve(null),
         identityAtRequest ? this.client.worldChallenges(identityAtRequest.token).catch(() => null) : Promise.resolve(null),

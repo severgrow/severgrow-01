@@ -84,12 +84,19 @@ describe('GET /v1/world through the router', () => {
       authenticate: async (token) => { if (token !== 'good') throw new Error('bad token'); return player; },
       worldReadsPerIpPerHour: 100,
     });
-    const get = (headers: Record<string, string> = {}) =>
-      router(new Request('http://x/v1/world', { headers: { 'x-real-ip': '7.7.7.7', ...headers } }), '/v1/world');
+    const get = (headers: Record<string, string> = {}, poll = true) =>
+      router(new Request(`http://x/v1/world${poll ? '?poll=1' : ''}`, { headers: { 'x-real-ip': '7.7.7.7', ...headers } }), '/v1/world');
     return { router, get, reads: () => reads };
   };
 
-  it('anonymous reads share the cache; a signed-in read is fresh', async () => {
+  it('a one-off read (no `poll`) is always fresh: the menu on return never sees the map from before', async () => {
+    const s = setup();
+    await s.get({}, false);
+    await s.get({}, false);
+    expect(s.reads()).toBe(2);
+  });
+
+  it('anonymous polls share the cache; a signed-in read is fresh', async () => {
     const s = setup();
     await s.get();
     await s.get();

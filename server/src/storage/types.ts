@@ -141,7 +141,9 @@ export type OpenQueueSeat =
       continued?: boolean;
       /** The player's earlier search has already become `match` (an active game); nothing new was
        * created. A repeat Find from either device lands here instead of starting a second search. */
-      resumed?: boolean }
+      resumed?: boolean;
+      /** Other open-queue games waiting for a second player (not this player's, one seat filled). */
+      othersWaiting?: number }
   | Fail;
 
 /** What the rules layer decided for one submitted action, computed inside the atomic section. */
@@ -297,6 +299,15 @@ export interface Storage {
     now: number;
     turnTimeoutMs: number;
     maxOpenMatches: number;
+    /**
+     * TIERS (owner, 2026-11-12). A waiting search whose `updatedAt` is at or after `presentSince` is
+     * PRESENT (its page re-sent Find lately). A fresh search, and a search younger than
+     * `liveWindowMs`, joins only a present one; an older search's repeat Find (the heartbeat) may
+     * join any open game, retiring its own. A repeat Find refreshes the search's `updatedAt`.
+     * Absent: every waiting search counts as present (the behaviour before tiers).
+     */
+    presentSince?: number;
+    liveWindowMs?: number;
   }): Promise<OpenQueueSeat>;
 
   /** The player's own `waiting` open-queue match, or null. Used by cancel and idempotent re-taps. */

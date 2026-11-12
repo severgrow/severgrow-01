@@ -128,10 +128,16 @@ describe('parked-search copy (punchy standard)', () => {
   });
 
   // OWNER CHANGED THE RULE (2026-11-08): offer a computer game after 5 seconds, was 3 minutes.
-  it('offers a computer game after 5 seconds, and not before', () => {
-    expect(PARKED_OFFER_MS).toBe(5_000);
-    expect(isSearchParked(4_999)).toBe(false);
-    expect(isSearchParked(5_000)).toBe(true);
+  // And again (2026-11-12), with the tiers: after 12 seconds, once the 7 s live window has run.
+  it('offers a computer game after 12 seconds, and not before', () => {
+    expect(PARKED_OFFER_MS).toBe(12_000);
+    expect(isSearchParked(11_999)).toBe(false);
+    expect(isSearchParked(12_000)).toBe(true);
+  });
+
+  it('says which tier the search is in', () => {
+    expect(ONLINE.searchLiveBody).toMatch(/online right now/);
+    expect(ONLINE.searchOpenBody).toMatch(/open/);
   });
 
   it('does not churn already-punchy labels', () => {

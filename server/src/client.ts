@@ -476,8 +476,10 @@ export class DuelClient {
    * token it is always fresh (server/src/seeds/world-read.ts), which is how a read right after the
    * player's own claim, sale or challenge can never show the map from before it.
    */
-  async worldMap(token?: string | null): Promise<WorldMapPayload> {
-    return await this.request<WorldMapPayload>('GET', '/v1/world', token ? { retry: true, token } : { retry: true });
+  async worldMap(token?: string | null, poll = false): Promise<WorldMapPayload> {
+    // `poll`: the Territory screen's periodic read, which the server may answer from its short cache.
+    const path = poll && !token ? '/v1/world?poll=1' : '/v1/world';
+    return await this.request<WorldMapPayload>('GET', path, token ? { retry: true, token } : { retry: true });
   }
 
   async seedWallet(token: string): Promise<SeedWallet> {

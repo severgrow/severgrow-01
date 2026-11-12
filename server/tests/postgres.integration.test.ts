@@ -96,6 +96,7 @@ const INTEGRATION_CONFIG = {
     actionsPerPlayerPerMinute: 100_000,
     sweepPerIpPerHour: 100_000,
     worldPerIpPerHour: 100_000,
+    searchHeartbeatPerPlayerPerHour: 100_000,
   },
 };
 

@@ -37,6 +37,7 @@ const soakConfig = (): ServerConfig => ({
     actionsPerPlayerPerMinute: 10_000,
     sweepPerIpPerHour: 1_000,
     worldPerIpPerHour: 1_000,
+    searchHeartbeatPerPlayerPerHour: 1_000,
   },
 });
 

@@ -170,6 +170,10 @@ export const ONLINE = Object.freeze({
   /** Find-opponent states (punchy copy standard). */
   searchTitle: 'Finding an opponent',
   searchBody: "Play while we search. We'll let you know when someone joins.",
+  /** Find-opponent tiers (owner, 2026-11-12): the first seconds look for players who are here now. */
+  searchLiveBody: 'Looking for players online right now.',
+  /** No live player and nothing else waiting: the search is an open game anyone can join. */
+  searchOpenBody: 'Your game is open. The next player to search joins you.',
   searchParkedTitle: 'Finding an opponent',
   /** Owner, 2026-11-08: name the practice match and the player's own level, and say a real opponent still connects. */
   searchParkedBody: (_level: number | null) =>

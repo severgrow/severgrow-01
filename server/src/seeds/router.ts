@@ -39,11 +39,14 @@ export const createWorldEconomyRouter = (deps: {
   return async (req, path) => {
     const ok = (status: number, data: Record<string, unknown>): Outcome => ({ status, body: { ok: true, ...data } });
     if (req.method === 'GET' && path === '/v1/world') {
-      // A signed-in read is fresh (the player may have just changed the map); a bad or missing token is
-      // simply an anonymous read: the public map never fails on a token.
+      // Only the Territory screen's POLL (`?poll=1`, anonymous, every 12 s) may be answered from the
+      // short cache: that is where the read volume is. Every other read is fresh: the menu's one read
+      // on return, a read after the player's own move, a signed-in read. Every read counts against
+      // the per-IP budget. A bad token is simply an anonymous read: the public map never fails on it.
       const token = bearer(req);
-      const fresh = token !== null && await deps.authenticate(token).then(() => true, () => false);
-      return ok(200, { world: await worldRead.read(pickClientIp(req.headers), fresh) });
+      const signedIn = token !== null && await deps.authenticate(token).then(() => true, () => false);
+      const poll = new URL(req.url, 'http://local').searchParams.get('poll') === '1';
+      return ok(200, { world: await worldRead.read(pickClientIp(req.headers), signedIn || !poll) });
     }
     if (!path.startsWith('/v1/world') && !path.startsWith('/v1/seeds')) return null;
     const player = await deps.authenticate(bearer(req));

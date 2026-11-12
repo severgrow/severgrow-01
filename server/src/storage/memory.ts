@@ -241,6 +241,8 @@ export class MemoryStorage implements Storage {
     now: number;
     turnTimeoutMs: number;
     maxOpenMatches: number;
+    presentSince?: number;
+    liveWindowMs?: number;
   }): Promise<OpenQueueSeat> {
     // 0. Lazily expire parked searches past their window so an expired search is never matched.
     for (const [id, match] of this.matches) {
@@ -272,40 +274,32 @@ export class MemoryStorage implements Storage {
       return { ok: true, match: copy(fromSearch), seat, paired: true, resumed: true };
     }
 
-    // 2. Already parked: return the player's own search so a re-tap never creates a second entry.
-    const own = this.ownParked(input.playerId);
-    if (own) {
-      const seat = (this.participants.get(own.id) ?? []).find((p) => p.playerId === input.playerId)!.seat;
-      return { ok: true, match: copy(own), seat, paired: false };
-    }
-
-    // 3. CAP, read once: the limit forbids joining a FRESH search or parking (both add an open
-    // match). It never forbids continuing a game the searchers already share (step 4b below).
-    const atCap = this.openMatchCountFor(input.playerId) >= input.maxOpenMatches;
-
-    // 4. Join the oldest waiting open-queue match with one free seat (FIFO), atomically.
-    const waiting = [...this.matches.values()]
-      .filter((m) => m.status === 'waiting' && m.openQueue)
-      .sort((a, b) => a.createdAt - b.createdAt);
-    for (const match of waiting) {
+    const presentSince = input.presentSince ?? -Infinity;
+    /** Waiting open-queue games this player may be seated in, oldest first. */
+    const joinable = (present: boolean, exclude: string | null): MatchRecord[] =>
+      [...this.matches.values()]
+        .filter((m) => m.status === 'waiting' && m.openQueue && m.id !== exclude && (!present || m.updatedAt >= presentSince))
+        .sort((a, b) => a.createdAt - b.createdAt)
+        .filter((match) => {
+          const parts = this.participants.get(match.id) ?? [];
+          if (parts.length !== 1 || parts.some((p) => p.playerId === input.playerId)) return false;
+          // ONE GAME PER PAIR (owner, 2026-11-09): never pair two players who already share an open game.
+          const opener = parts[0]!.playerId;
+          return ![...this.matches.values()].some((m) => m.id !== match.id && m.status !== 'finished'
+            && (this.participants.get(m.id) ?? []).some((p) => p.playerId === input.playerId)
+            && (this.participants.get(m.id) ?? []).some((p) => p.playerId === opener));
+        });
+    const othersWaiting = (exclude: string | null) =>
+      [...this.matches.values()].filter((m) => m.status === 'waiting' && m.openQueue && m.id !== exclude
+        && (this.participants.get(m.id) ?? []).length === 1
+        && !(this.participants.get(m.id) ?? []).some((p) => p.playerId === input.playerId)).length;
+    const seatInto = (match: MatchRecord): OpenQueueSeat => {
       const parts = this.participants.get(match.id) ?? [];
-      if (parts.some((p) => p.playerId === input.playerId)) continue;
-      if (parts.length !== 1) continue;
-      // ONE GAME PER PAIR (owner, 2026-11-09): never pair two players who already share an open game.
-      const opener = parts[0]!.playerId;
-      const shared = [...this.matches.values()].some((m) => m.id !== match.id && m.status !== 'finished'
-        && (this.participants.get(m.id) ?? []).some((p) => p.playerId === input.playerId)
-        && (this.participants.get(m.id) ?? []).some((p) => p.playerId === opener));
-      if (shared) continue;
-      if (atCap) {
-        return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
-      }
       const seat: Player = parts.some((p) => p.seat === 0) ? 1 : 0;
-      const next: Participant[] = [
+      this.participants.set(match.id, [
         ...parts,
         { matchId: match.id, playerId: input.playerId, seat, joinedAt: input.now, lastSeenAt: input.now },
-      ];
-      this.participants.set(match.id, next);
+      ]);
       const activated: MatchRecord = {
         ...match,
         status: 'active',
@@ -318,6 +312,45 @@ export class MemoryStorage implements Storage {
       };
       this.matches.set(match.id, copy(activated));
       return { ok: true, match: copy(activated), seat, paired: true };
+    };
+
+    // 2. Already parked: this repeat Find is the HEARTBEAT. It refreshes the search (the player is
+    // here), and once the live window has passed it may join an open game someone left earlier,
+    // retiring its own search in the same step. Otherwise the same search comes back: a re-tap never
+    // creates a second entry.
+    const own = this.ownParked(input.playerId);
+    if (own) {
+      const touched: MatchRecord = { ...own, updatedAt: Math.max(own.updatedAt, input.now) };
+      this.matches.set(own.id, copy(touched));
+      const live = input.liveWindowMs !== undefined && input.now - own.createdAt < input.liveWindowMs;
+      const other = joinable(live, own.id)[0];
+      if (other) {
+        this.matches.delete(own.id);
+        this.inviteIndex.delete(own.inviteCode);
+        this.participants.delete(own.id);
+        this.moves.delete(own.id);
+        return seatInto(other);
+      }
+      const seat = (this.participants.get(own.id) ?? []).find((p) => p.playerId === input.playerId)!.seat;
+      return { ok: true, match: copy(touched), seat, paired: false, othersWaiting: othersWaiting(own.id) };
+    }
+
+    // 3. CAP, read once: the limit forbids joining a FRESH search or parking (both add an open
+    // match). It never forbids continuing a game the searchers already share (step 4b below).
+    const atCap = this.openMatchCountFor(input.playerId) >= input.maxOpenMatches;
+
+    // 4. Join the oldest PRESENT waiting open-queue match with one free seat (FIFO), atomically. A
+    // fresh search never joins a game whose owner is away: that waits for the heartbeat after the
+    // live window (step 2).
+    const waiting = [...this.matches.values()]
+      .filter((m) => m.status === 'waiting' && m.openQueue)
+      .sort((a, b) => a.createdAt - b.createdAt);
+    const first = joinable(input.liveWindowMs !== undefined, null)[0];
+    if (first) {
+      if (atCap) {
+        return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
+      }
+      return seatInto(first);
     }
 
     // 4b. CONTINUE (owner, 2026-11-11): the only searcher waiting is someone this player already
@@ -359,7 +392,7 @@ export class MemoryStorage implements Storage {
       { matchId: parked.id, playerId: input.playerId, seat: 0, joinedAt: input.now, lastSeenAt: input.now },
     ]);
     this.moves.set(parked.id, []);
-    return { ok: true, match: copy(parked), seat: 0, paired: false };
+    return { ok: true, match: copy(parked), seat: 0, paired: false, othersWaiting: othersWaiting(parked.id) };
   }
 
   async cancelOpenQueueMatch(playerId: string, _now: number): Promise<boolean> {
