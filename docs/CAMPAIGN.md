@@ -1,8 +1,8 @@
 # Campaign mode
 
-Campaign mode is the primary **offline** experience: 50 planned levels, played in chapters, against
-the bots that already exist. **Chapter I (levels 1-10) is built and playable end to end.** Classic vs
-AI keeps the old difficulty picker, unchanged, as a secondary menu entry.
+Campaign mode is the primary **offline** experience: **70 levels are built today — seven chapters of
+ten (I-VII, levels 1-70)** — played against the bots that already exist, and more levels are planned.
+Classic vs AI keeps the old difficulty picker, unchanged, as a secondary menu entry.
 
 The campaign invents nothing. There is no new card type, currency, ability, XP, star or life. A level
 is *data*: a fixed seed, an existing bot level, and existing `RulesConfig` overrides — including a
@@ -15,6 +15,26 @@ hand-authored board. The campaign is about mastering the game that is already th
 - Player-facing wording: `src/strings.ts` → `CAMPAIGN` (level *names* are level data, exactly as the
   tutorial's lesson lines live in `web/src/logic/tutorial-script.ts`)
 - Balance tool: `src/sim/campaign-balance.ts` → `npm run campaign:balance`
+
+## A note on the tables in this document (2026-11-12)
+
+The campaign is **70 levels in seven chapters** today, and each chapter has its own section with its
+own tables: Chapter I (levels 1-10), II (11-20), III (21-30), IV (31-40), V (41-50), VI (51-60) and
+VII (61-70). They are not all the same kind of evidence:
+
+- **Level data** (`Bot`, `Rocks`, `Gold`, `Map`/`Shape`, open-hex counts) — the values a level ships,
+  read back from `src/campaign/levels.ts` and `src/campaign/levels-late.ts` for this pass. The `Rocks`,
+  `Gold` and `Bot` columns of chapters II-VII match the data; Chapter I's table has one stale column,
+  called out above that table.
+- **"Measured, not assumed"** — a 60-deal balance sweep from the pass that authored the chapter. These
+  were **not re-run for this pass**: seeds 49, 57, 62 and 66 changed after their rows were measured
+  (each section says why), so read those tables as evidence about the board that was measured, not as
+  a live guarantee.
+- **Results under "The balance tool"** — dated snapshots (2026-10-15/16). The table headed "before the
+  bot rebalance" is historical by its own heading and must not be read as current.
+
+Where a table is known to be out of date, the note above it says so and names the stale part, rather
+than asking a reader to trust old numbers presented as current.
 
 ## Levels 1-10 are the tutorial (the /3/ line, 2026-10-18)
 
@@ -240,6 +260,14 @@ Notes when authoring:
 
 `AI` = the existing bot level. `Rocks` = the authored rock count. `Gold` = authored rich hexes.
 `Map` = the board radius (2 = the tutorial's small map, 19 hexes).
+
+> **This table's `Map` column is out of date (noted 2026-11-12).** It reflects the 2026-10-17 pass
+> that put all ten levels on the tutorial's 19-hex map. That part of the pass was reverted: levels
+> **4-8 and 10 play on the 37-hex product board** today, and only levels **1-3 and 9** are radius 2.
+> The `AI`, `Rocks` and `Gold` columns match the shipped levels. Two `Intent` cells also describe
+> the reverted pass: level 9 is now a full game on the small map (not a Bloom lesson), and level 10
+> no longer plays on the small map. The source of truth for the board is `src/campaign/levels.ts`;
+> the measurement table further down is the dated 2026-10-15 sweep.
 
 | Lv | Name | AI | Rocks | Gold | Map | Intent |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -609,9 +637,10 @@ Levels 52 and 54 are the peaks (13 each) — both are boards where two routes me
 commits to the wrong pass can be sealed. Halcyon (55) is the floor (3), which is what a breather
 should look like.
 
-Every board in the chapter still passes the mechanical guarantees that matter most: 25 or more open
-hexes, no single hex whose removal disconnects the homes, and nothing authored inside either root
-zone. The tightest is the finale at 23 open, two above the floor of 20.
+Every board in the chapter still passes the mechanical guarantees that matter most: **at least 23
+open hexes** (the validator's hard floor for a full 37-hex board is **20**), no single hex whose
+removal disconnects the homes, and nothing authored inside either root zone. The tightest boards are
+Maze Garden (59) and the finale (60), both at **23 open** — three above the floor.
 
 ## Chapter VII — Broken Crown (levels 61-70)
 
