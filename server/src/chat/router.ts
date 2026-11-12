@@ -3,6 +3,7 @@ import type { MatchService } from '../service.js';
 import type { Storage } from '../storage/types.js';
 import type { MatchBroadcaster } from '../broadcast.js';
 import { contentFrom, validId } from './rules.js';
+import { assertNotSilenced } from './silence.js';
 import type { ChatOperation, ChatStore } from './types.js';
 
 export const createChatRouter =
@@ -84,6 +85,7 @@ export const createChatRouter =
             'INVALID_REQUEST',
             'A unique request ID is required.',
           );
+        assertNotSilenced(player, now);
         operation = {
           kind: 'send',
           requestId: body.requestId,

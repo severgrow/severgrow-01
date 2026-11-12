@@ -78,7 +78,7 @@ export const startServer = async (options: { port?: number } = {}): Promise<{ po
       createTerritoryChatRouter({ service, storage: live.storage, store: isMemory
         ? memoryTerritoryChatStore(storage)
         : postgresTerritoryChatStore(poolFromUrl(databaseUrlFromEnv()!)) }),
-      createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t) }),
+      createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t), worldReadsPerIpPerHour: config.rateLimits.worldPerIpPerHour }),
       await feedbackRouterNode(storage, service, databaseUrlFromEnv(), memoryFeedback),
       await accountsRouterNode(storage, service, databaseUrlFromEnv(), process.env, memoryLinks),
       admin.router,

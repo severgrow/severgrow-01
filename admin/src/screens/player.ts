@@ -70,6 +70,7 @@ export const renderPlayer = async (host: HTMLElement, ctx: Ctx, params: URLSearc
       ],
     ),
 
+    moderationCard(ctx, player.id, nameOf(player), player.chatSilencedUntil, query),
     addSeedsCard(ctx, player.id, nameOf(player), query),
 
     card('Seeds ledger (newest 20)', [
@@ -265,6 +266,55 @@ const addSeedsCard = (ctx: Ctx, playerId: string, name: string, query: string): 
     ),
     feedback,
   ], { sub: 'Recorded in the Seeds ledger as admin_grant, with your reason.' });
+};
+
+/**
+ * MODERATION (launch readiness, 2026-11-12). Pause this player's chat (duel and Territory) for 24
+ * hours, 7 days or for good, lift it, or reset a bad nickname to a generated nature name. Play is
+ * never touched. Each press is confirmed once and lands in the audit log.
+ */
+const moderationCard = (ctx: Ctx, playerId: string, name: string, silencedUntil: number | null, query: string): HTMLElement => {
+  const now = Date.now();
+  const silenced = silencedUntil !== null && silencedUntil > now;
+  const forever = silenced && silencedUntil! > now + 50 * 365 * 86_400_000;
+  const feedback = el('p', { class: 'muted small', role: 'status', 'aria-live': 'polite' });
+  const state = el('p', {
+    text: !silenced ? 'Chat is open.' : forever ? 'Chat is paused for good.' : `Chat is paused until ${formatDateTime(silencedUntil!)} (${formatAgo(silencedUntil!, now)}).`,
+  });
+  const keys: HTMLButtonElement[] = [];
+  const act = (label: string, body: Record<string, string>, question: string) => {
+    const key = button(label, () => {
+      if (!window.confirm(question)) return;
+      for (const k of keys) k.disabled = true;
+      feedback.textContent = 'Saving…';
+      void ctx.api.post<{ ok: true; displayName: string | null; chatSilencedUntil: number | null }>(
+        `/v1/admin/players/${encodeURIComponent(playerId)}/moderation`, body,
+      ).then((result) => {
+        if (!result.ok) {
+          for (const k of keys) k.disabled = false;
+          if (result.status === 401 || result.status === 403) { ctx.denied(); return; }
+          feedback.textContent = result.message;
+          return;
+        }
+        feedback.textContent = 'Done. Recorded in the audit log.';
+        const next = body.name === 'reset' && result.data.displayName ? result.data.displayName : query;
+        window.setTimeout(() => { if (key.isConnected) ctx.navigate(`#/player?q=${encodeURIComponent(next)}&t=${Date.now()}`); }, 700);
+      });
+    }, { small: true });
+    keys.push(key);
+    return key;
+  };
+  return card('Moderation', [
+    state,
+    el('div', { class: 'controls' },
+      act('Pause chat 24 h', { chat: 'silence-24h' }, `Pause ${name}'s chat for 24 hours?\n\nTheir Territory chat lines are removed. They can still play.`),
+      act('Pause chat 7 days', { chat: 'silence-7d' }, `Pause ${name}'s chat for 7 days?\n\nTheir Territory chat lines are removed. They can still play.`),
+      act('Pause chat for good', { chat: 'silence-forever' }, `Pause ${name}'s chat for good?\n\nTheir Territory chat lines are removed. They can still play.`),
+      silenced ? act('Lift pause', { chat: 'lift' }, `Let ${name} chat again?`) : null,
+      act('Reset name', { name: 'reset' }, `Replace the name "${name}" with a generated nature name?`),
+    ),
+    feedback,
+  ], { sub: 'Chat pauses cover duel chat and Territory chat. Play is never affected. Every action is audited.' });
 };
 
 const newRequestId = (): string => {

@@ -1,5 +1,6 @@
 import { ApiError } from '../errors.js';
 import { QUICK_PHRASES, type ChatContent } from './types.js';
+import { maskChat } from './filter.js';
 export const CHAT_PAGE_SIZE = 40;
 export const CHAT_MAX_LENGTH = 280;
 export const CHAT_MATCH_LIMIT = 2000;
@@ -27,7 +28,8 @@ export const contentFrom = (body: Record<string, unknown>): ChatContent => {
     /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(text)
   )
     throw new ApiError('INVALID_REQUEST', 'Use 1–280 characters on one line.');
-  return { text, phrase: null };
+  // Blocked words are masked here, on the server, for duel chat and the Territory chat alike.
+  return { text: maskChat(text), phrase: null };
 };
 /**
  * Chat is a conversation, not a move: it can be sent at ANY point in an active match, including

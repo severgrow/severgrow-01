@@ -30,6 +30,11 @@ export type PlayerRecord = {
    * absent/null = follow `isTest`. Every admin read treats this as part of the test marker.
    */
   testOverride?: boolean | null;
+  /**
+   * Chat paused by the owner until this time (migration 0025, server/src/chat/silence.ts). Absent or
+   * null: chat is open. Written only by the admin moderation route; play is never affected.
+   */
+  chatSilencedUntil?: number | null;
 };
 
 export type TokenRecord = {

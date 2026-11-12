@@ -69,6 +69,8 @@ const rowToPlayer = (row: PgRow): PlayerRecord => ({
   isTest: row.is_test === true || row.is_test === 't',
   testReason: asNullableString(row.test_reason),
   testOverride: row.test_override === true || row.test_override === 't' ? true : row.test_override === false || row.test_override === 'f' ? false : null,
+  // Migration 0025. Before it is applied the column is simply absent: chat stays open.
+  chatSilencedUntil: asNullableNumber(row.chat_silenced_until),
 });
 
 const rowToMatch = (row: PgRow): MatchRecord => ({

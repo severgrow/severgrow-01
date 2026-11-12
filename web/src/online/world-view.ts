@@ -1305,7 +1305,9 @@ export class WorldView {
     try {
       const identityAtRequest = this.identity;
       const [map, wallet, challenges] = await Promise.all([
-        this.readWorld(),
+        // A forced refresh follows the player's own move: read it fresh (with the token), never from
+        // the server's short anonymous cache.
+        force && identityAtRequest ? this.client.worldMap(identityAtRequest.token) : this.readWorld(),
         // A failed wallet read is `undefined`, not null: the last known balance stays on screen.
         identityAtRequest ? this.client.seedWallet(identityAtRequest.token).catch(() => undefined) : Promise.resolve(null),
         identityAtRequest ? this.client.worldChallenges(identityAtRequest.token).catch(() => null) : Promise.resolve(null),

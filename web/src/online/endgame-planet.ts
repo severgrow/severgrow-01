@@ -597,13 +597,14 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
       note.textContent = PLANET_PANE.grown;
       note.hidden = false;
       planet?.grown(cellId);
-      const map = await deps.client.worldMap().catch(() => null);
+      // Fresh (with the token): the server's anonymous cache could still hold the map from before.
+      const map = await deps.client.worldMap(id.token).catch(() => null);
       const wallet = await deps.client.seedWallet(id.token).catch(() => null);
       if (!disposed) { applyRead(map, wallet); beatWallet(); }
     } catch {
       note.textContent = PLANET_PANE.growFailed;
       note.hidden = false;
-      const map = await deps.client.worldMap().catch(() => null);
+      const map = await deps.client.worldMap(id.token).catch(() => null);
       if (!disposed) applyRead(map, null);
     } finally {
       busy = false;

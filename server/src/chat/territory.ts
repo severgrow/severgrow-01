@@ -17,6 +17,7 @@ import type { PgPool, PgRow } from '../storage/postgres.js';
 import type { Storage } from '../storage/types.js';
 import { playerTag } from '../../../src/player-tag.js';
 import { contentFrom, validId } from './rules.js';
+import { assertNotSilenced, chatSilenced } from './silence.js';
 
 /** The visible history: the newest 30 messages. Older ones are deleted, not hidden. */
 export const TERRITORY_CHAT_KEEP = 30;
@@ -40,7 +41,7 @@ export type TerritoryReportReason = 'abuse' | 'spam' | 'other';
 
 export type TerritoryChatStore = {
   /** The newest messages, oldest first, without anyone the reader has blocked. */
-  history(player: string): Promise<TerritoryChatPage>;
+  history(player: string, now?: number): Promise<TerritoryChatPage>;
   /** Idempotent by (sender, requestId); trims the channel to TERRITORY_CHAT_KEEP. */
   send(player: string, text: string, requestId: string, now: number): Promise<void>;
   /** Block the sender of a message (never yourself). */
@@ -62,11 +63,13 @@ export const memoryTerritoryChatStore = (storage: Storage): TerritoryChatStore =
   const reports = new Map<string, { sender: string; text: string; reason: TerritoryReportReason; createdAt: number }>();
   const find = (id: string) => rows.find((row) => row.id === id) ?? notFound();
   return {
-    async history(player) {
+    async history(player, now = Date.now()) {
       const shown = rows.filter((row) => !blocks.has(`${player}:${row.sender}`));
       const messages: TerritoryMessage[] = [];
       for (const row of shown) {
         const who = await storage.playerById(row.sender);
+        // A silenced sender's lines are gone (the Postgres moderation route deletes them).
+        if (who && chatSilenced(who, now)) continue;
         messages.push({
           id: row.id, sequence: row.sequence, text: row.text, name: who?.displayName ?? 'Player', tag: playerTag(row.sender),
           mine: row.sender === player, createdAt: row.createdAt, requestId: row.requestId,
@@ -178,7 +181,7 @@ export const createTerritoryChatRouter =
     // The same per-player API budget duel chat uses.
     if (!(await deps.storage.hitRateLimit(`chat:api:${player.id}`, minute, 120)).ok) throw new ApiError('RATE_LIMITED', 'Please wait a moment.');
     if (req.method === 'GET' && !route[1]) {
-      return { status: 200, body: { ok: true, ...(await deps.store.history(player.id)) } };
+      return { status: 200, body: { ok: true, ...(await deps.store.history(player.id, now)) } };
     }
     if (req.method !== 'POST') throw new ApiError('NOT_FOUND', 'Chat route not found.');
     const bytes = await req.arrayBuffer();
@@ -194,7 +197,7 @@ export const createTerritoryChatRouter =
       if (!validId(body.messageId)) throw new ApiError('INVALID_REQUEST', 'Choose a message.');
       if (route[1] === 'block') {
         await deps.store.block(player.id, body.messageId);
-        return { status: 200, body: { ok: true, ...(await deps.store.history(player.id)) } };
+        return { status: 200, body: { ok: true, ...(await deps.store.history(player.id, now)) } };
       }
       if (!['abuse', 'spam', 'other'].includes(String(body.reason))) throw new ApiError('INVALID_REQUEST', 'Invalid report.');
       await deps.store.report(player.id, body.messageId, body.reason as TerritoryReportReason, now);
@@ -202,11 +205,12 @@ export const createTerritoryChatRouter =
     }
     if (!validId(body.requestId)) throw new ApiError('INVALID_REQUEST', 'A unique request ID is required.');
     if (body.phrase != null) throw new ApiError('INVALID_REQUEST', 'Type a message.');
+    assertNotSilenced(player, now);
     const { text } = contentFrom(body);
     if (!(await deps.storage.hitRateLimit(`chat:territory:${player.id}`, minute, TERRITORY_CHAT_PER_MINUTE)).ok ||
       !(await deps.storage.hitRateLimit(`chat:territory:day:${player.id}`, Math.floor(now / 86_400_000) * 86_400_000, TERRITORY_CHAT_PER_DAY)).ok) {
       throw new ApiError('RATE_LIMITED', 'Slow down a little.');
     }
     await deps.store.send(player.id, text!, body.requestId, now);
-    return { status: 200, body: { ok: true, ...(await deps.store.history(player.id)) } };
+    return { status: 200, body: { ok: true, ...(await deps.store.history(player.id, now)) } };
   };

@@ -535,6 +535,32 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
       }
     },
 
+    async moderatePlayer(input) {
+      // Migration 0025 adds `chat_silenced_until`. One transaction: the change, and (for a silence
+      // that starts now) the removal of the player's lines from the shared Territory chat.
+      const client = await pool.connect();
+      try {
+        await client.query('begin');
+        const before = (await client.query('select display_name, chat_silenced_until from players where id = $1 for update', [input.playerId])).rows[0];
+        if (!before) {
+          await client.query('rollback');
+          return null;
+        }
+        const until = input.chatSilencedUntil !== undefined ? input.chatSilencedUntil : nnum(before.chat_silenced_until);
+        const name = input.displayName !== undefined ? input.displayName : nstr(before.display_name);
+        await client.query('update players set chat_silenced_until = $2, display_name = $3 where id = $1', [input.playerId, until, name]);
+        if (until !== null && until > input.now) {
+          await client.query('delete from territory_messages where sender_id = $1', [input.playerId]);
+        }
+        await client.query('commit');
+        return { displayName: name, previousName: nstr(before.display_name), chatSilencedUntil: until, previousSilencedUntil: nnum(before.chat_silenced_until) };
+      } catch (error) {
+        await client.query('rollback').catch(() => undefined);
+        throw error;
+      } finally {
+        client.release?.();
+      }
+    },
     async setPlayerVisibility(input) {
       // The owner's correction lives on the player row (`test_override`), so it is one fact read by
       // every screen: no join, no cache to go stale, and a reload cannot lose it. `null` clears the
@@ -893,6 +919,7 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
         createdAt: num(row.created_at),
         upgradedAt: nnum(row.upgraded_at),
         providers: providers.rows.map((p) => str(p.provider)),
+        chatSilencedUntil: nnum(row.chat_silenced_until),
       };
       const result: AdminPlayerResult = {
         player,

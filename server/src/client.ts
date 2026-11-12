@@ -471,8 +471,13 @@ export class DuelClient {
    * The public shared map: the same fixed grid for everyone, with each tile's holder. It needs no
    * account — looking at the map is the point of a shared map — so it takes no token.
    */
-  async worldMap(): Promise<WorldMapPayload> {
-    return await this.request<WorldMapPayload>('GET', '/v1/world', { retry: true });
+  /**
+   * The public map. Without a token it may come from the server's few-second cache; WITH the player's
+   * token it is always fresh (server/src/seeds/world-read.ts), which is how a read right after the
+   * player's own claim, sale or challenge can never show the map from before it.
+   */
+  async worldMap(token?: string | null): Promise<WorldMapPayload> {
+    return await this.request<WorldMapPayload>('GET', '/v1/world', token ? { retry: true, token } : { retry: true });
   }
 
   async seedWallet(token: string): Promise<SeedWallet> {

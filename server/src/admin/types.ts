@@ -135,6 +135,8 @@ export type AdminPlayerRow = {
   upgradedAt: number | null;
   /** How the account is linked, e.g. ['google']. Never the subject or the email. */
   providers: string[];
+  /** Chat paused until (migration 0025); null when chat is open. */
+  chatSilencedUntil: number | null;
 };
 
 export type AdminPlayerQuery = { id?: string; name?: string; tag?: string };
@@ -291,6 +293,13 @@ export type AdminPlayerVisibility = {
 export const ADMIN_GRANT_MAX = 1000;
 export const ADMIN_GRANT_REASON_MAX = 200;
 
+export type AdminModeration = {
+  displayName: string | null;
+  previousName: string | null;
+  chatSilencedUntil: number | null;
+  previousSilencedUntil: number | null;
+};
+
 export interface AdminStore {
   readSeen(adminId: string): Promise<number | null>;
   writeSeen(adminId: string, at: number): Promise<void>;
@@ -318,6 +327,13 @@ export interface AdminStore {
    * Returns null when the player does not exist. The audit row is committed with the change.
    */
   setPlayerVisibility(input: { playerId: string; override: AdminPlayerOverride; actorId: string; now: number }): Promise<AdminPlayerVisibility | null>;
+  /**
+   * MODERATION (launch readiness, 2026-11-12): pause a player's chat until a time (`null` lifts it),
+   * and/or replace their name. A silence that starts now also removes their Territory chat lines.
+   * Returns the player's state before and after, or null when the player does not exist. The router
+   * writes the audit rows.
+   */
+  moderatePlayer(input: { playerId: string; chatSilencedUntil?: number | null; displayName?: string; now: number }): Promise<AdminModeration | null>;
   stuck(now: number, windows: { guestMaxAgeMs: number; waitingExpireMs: number; turnTimeoutMs: number }): Promise<AdminStuck>;
   rulesVersionCounts(): Promise<AdminValueCount[]>;
   funnel(now: number): Promise<AdminFunnel>;

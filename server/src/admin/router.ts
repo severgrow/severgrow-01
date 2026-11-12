@@ -29,6 +29,8 @@ import type {
 } from './types.js';
 import { ADMIN_GRANT_MAX, ADMIN_GRANT_REASON_MAX, CSV_MAX_ROWS, MAX_PAGE, TAG_SCAN_LIMIT, normalizeBuild } from './types.js';
 import { clampLimit } from './util.js';
+import { natureName } from '../nature-names.js';
+import { SILENCE_FOREVER } from '../chat/silence.js';
 
 export type AdminOutcome = {
   status: number;
@@ -359,6 +361,43 @@ export const createAdminRouter = (deps: AdminRouterDeps): AdminRouter => {
       if (result === null) throw new ApiError('NOT_FOUND', 'That player does not exist.');
       log(`ADMIN_VISIBILITY player:${player.id} target:${playerId} override:${value}`);
       return { status: 200, body: { ok: true, playerId: playerId.toLowerCase(), ...result, serverNow: now } };
+    }
+
+    // ---------------------------------------------------------- moderation (launch readiness, 2026-11-12)
+    // Pause a player's chat (24 h, 7 days, for good, or lift it) and/or reset a bad name to a generated
+    // nature name. Play is never touched. Each change is its own audit row.
+    const moderationRoute = /^\/v1\/admin\/players\/([^/]+)\/moderation$/.exec(path);
+    if (moderationRoute && req.method === 'POST') {
+      const playerId = decodeURIComponent(moderationRoute[1]!).toLowerCase();
+      if (!UUID_PATTERN.test(playerId)) throw new ApiError('INVALID_REQUEST', 'That is not a player id.');
+      const body = asRecord(await req.json().catch(() => ({})));
+      const SILENCES: Record<string, number | null> = {
+        'silence-24h': now + 24 * 3_600_000,
+        'silence-7d': now + 7 * 86_400_000,
+        'silence-forever': SILENCE_FOREVER,
+        lift: null,
+      };
+      const chat = body.chat;
+      if (chat !== undefined && (typeof chat !== 'string' || !Object.hasOwn(SILENCES, chat))) {
+        throw new ApiError('INVALID_REQUEST', 'chat must be silence-24h, silence-7d, silence-forever or lift.');
+      }
+      if (body.name !== undefined && body.name !== 'reset') throw new ApiError('INVALID_REQUEST', 'name can only be reset.');
+      if (chat === undefined && body.name === undefined) throw new ApiError('INVALID_REQUEST', 'Choose a moderation action.');
+      const result = await deps.store.moderatePlayer({
+        playerId,
+        now,
+        ...(chat !== undefined ? { chatSilencedUntil: SILENCES[chat as string]! } : {}),
+        ...(body.name === 'reset' ? { displayName: natureName(`${playerId}:${now}`) } : {}),
+      });
+      if (result === null) throw new ApiError('NOT_FOUND', 'That player does not exist.');
+      if (chat !== undefined) {
+        await audit({ actorId: player.id, action: 'player.chat', targetType: 'player', targetId: playerId, detail: { action: chat, from: result.previousSilencedUntil, until: result.chatSilencedUntil }, now });
+      }
+      if (body.name === 'reset') {
+        await audit({ actorId: player.id, action: 'player.name', targetType: 'player', targetId: playerId, detail: { from: result.previousName, to: result.displayName }, now });
+      }
+      log(`ADMIN_MODERATE player:${player.id} target:${playerId} chat:${String(chat ?? '-')} name:${String(body.name ?? '-')}`);
+      return { status: 200, body: { ok: true, playerId, displayName: result.displayName, chatSilencedUntil: result.chatSilencedUntil, serverNow: now } };
     }
 
     // ---------------------------------------------------------------- player lookup

@@ -219,6 +219,10 @@ export const renderReports = async (host: HTMLElement, ctx: Ctx, params: URLSear
       el('p', { class: 'wrap', text: row.message.trim() || '(no message)' }),
       el('h3', { class: 'card-title', text: 'Context' }),
       el('pre', { class: 'wrap small', text: contextLines(row.context) }),
+      // A chat report names the player it is ABOUT: open them to pause their chat or reset their name.
+      typeof row.context?.reportedPlayerId === 'string'
+        ? el('p', {}, button('Open the reported player', () => ctx.navigate(`#/player?q=${encodeURIComponent(String(row.context.reportedPlayerId))}`), { small: true }))
+        : '',
       el('h3', { class: 'card-title', text: 'Triage' }),
       el('div', { class: 'controls' }, el('label', { class: 'control' }, el('span', { text: 'Status' }), statusSelect), el('span', {}, save)),
       el('label', { class: 'field', for: 'triage-note' }, el('span', { text: 'Private note (never shown to the player)' }), noteInput),

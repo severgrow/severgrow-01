@@ -302,7 +302,7 @@ export const DEFAULT_SERVER_CONFIG: ServerConfig = Object.freeze({
     sweepPerIpPerHour: envInt('RATE_SWEEP_PER_IP_PER_HOUR', 120),
     // The shared world map is a PUBLIC read (it needs no account to view), so it carries a
     // generous per-IP cap: far above what a human browsing the map could reach, far below a flood.
-    worldPerIpPerHour: envInt('RATE_WORLD_PER_IP_PER_HOUR', 600),
+    worldPerIpPerHour: envInt('RATE_WORLD_PER_IP_PER_HOUR', 1200),
   }),
 });
 

@@ -136,6 +136,22 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
   };
 
   return {
+    async moderatePlayer(input) {
+      const row = players().find((p) => p.id === input.playerId);
+      if (!row) return null;
+      const updated: PlayerRecord = {
+        ...row,
+        ...(input.chatSilencedUntil !== undefined ? { chatSilencedUntil: input.chatSilencedUntil } : {}),
+        ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
+      };
+      await sources.storage.updatePlayer(updated);
+      return {
+        displayName: updated.displayName,
+        previousName: row.displayName,
+        chatSilencedUntil: updated.chatSilencedUntil ?? null,
+        previousSilencedUntil: row.chatSilencedUntil ?? null,
+      };
+    },
     async setPlayerVisibility(input) {
       const row = players().find((p) => p.id === input.playerId);
       if (!row) return null;
@@ -533,6 +549,7 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
         createdAt: player.createdAt,
         upgradedAt: player.upgradedAt,
         providers: identities.map((link) => link.provider),
+        chatSilencedUntil: player.chatSilencedUntil ?? null,
       };
       return {
         player: row,

@@ -117,7 +117,7 @@ export const filterForm = (raw: string): string => {
     .replace(/(.)\1+/g, '$1');
 };
 
-const BLOCKED_FORMS: readonly string[] = BLOCKED_WORDS.map(filterForm).filter((w) => w.length > 0);
+export const BLOCKED_FORMS: readonly string[] = BLOCKED_WORDS.map(filterForm).filter((w) => w.length > 0);
 
 /** True when the filtered form contains any blocked word. */
 export const isBlockedName = (raw: string): boolean => {
