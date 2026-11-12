@@ -12,7 +12,7 @@
  *  the tiles, the move's length (ms) and how long a peek through an edge arrow lasts. */
 import { measureAtRest } from '../ui/at-rest.js';
 
-export const CAMERA = { minFactor: 1.0, maxFactor: 1.4, margin: 2, ms: 300, peekMs: 2500, restLift: 24 } as const;
+export const CAMERA = { minFactor: 1.0, maxFactor: 1.4, margin: 2, ms: 300, peekMs: 2500, restLift: 16, restDrop: 12 } as const;
 
 const S = 30;
 const HEXW = Math.sqrt(3) * S; // centre to centre, board units
@@ -176,12 +176,15 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
     if (m) {
       // never show past the map's edges when it is bigger than the window; centre it when smaller
       x = w >= m.w ? m.x + (m.w - w) / 2 : Math.min(m.x + m.w - w, Math.max(m.x, x));
-      // Normal play: a short map rests a little above the cards (CAMERA.restLift px of air: the
-      // height it had through the start ritual, which the owner chose to keep).
+      // Normal play: a short map rests just above the cards (CAMERA.restLift px of air), and the
+      // owner moved the whole board lower (2026-11-12: "on mobile the board can go a bit lower").
+      // The start ritual and the first frame use this same rest, so the board loads where it plays.
       // Tutorial: centre it so glass→board and board→hand gaps stay equal.
       if (wh >= m.h) {
         const tutorial = document.documentElement.classList.contains('futa04-tutorial');
-        y = tutorial ? m.y + (m.h - wh) / 2 : Math.min(m.y, m.y + m.h - wh + CAMERA.restLift / s);
+        // Then the whole board sits CAMERA.restDrop px lower still: only the bottom tip of the hex
+        // reaches the dock, into the empty middle between the display keys and the piles.
+        y = tutorial ? m.y + (m.h - wh) / 2 : Math.min(m.y, m.y + m.h - wh + CAMERA.restLift / s) - CAMERA.restDrop / s;
       } else {
         y = Math.min(m.y + m.h - wh, Math.max(m.y, y));
       }
