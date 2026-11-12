@@ -10,6 +10,16 @@ Owner decision, 2026-10-29: "let's do futasaku.com/test and use promote word".
 Both are rebuilt by one workflow, `.github/workflows/futasaku04-preview.yml` ("Publish futasaku.com
 (live + /test)"), on every push to either branch, so a push to one never moves the other.
 
+## The server ships first, automatically (2026-11-12)
+
+`.github/workflows/deploy-server.yml` deploys the Supabase Edge function (`duel`) as soon as CI is
+green on a push to `futa0.5-online`, and proves it with `/v1/health` (it must list this commit's
+`CURRENT_BOT_VERSION`). So by the time /test/ shows a build, its server is already live, and a promote
+never ships a page ahead of its server. It needs the repository secret `SUPABASE_ACCESS_TOKEN`;
+without it the job warns and skips (then deploy by hand: `npx supabase functions deploy duel
+--project-ref wbfrbeedlvjercrukngn --no-verify-jwt --use-api`). The server always keeps accepting older
+pages' bot versions, so the live site keeps working while /test/ runs ahead of it.
+
 ## The words
 
 - **"push"** (to `futa0.5-online`): the change goes to **/test/** in about 20 minutes (CI first; a red
