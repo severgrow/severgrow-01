@@ -246,3 +246,18 @@ without a single-hex chokepoint), keep gold off them, give the bot a gold hex or
 Measured at 150 games each: 82 56%, 83 59%, 85 59% (harsh), 87 56%, 88 61%, 89 60% (harsh), 90 67%
 (harsh), 94 56%, 99 55%; 86 (player-favoured) 44%. Level 79 could not be made bot-favoured honestly
 inside the bridges idea and is now an even board (measured 50%).
+
+### G.1 bots-v0.13: the rivals at level 9's cost (2026-11-12, after release)
+
+A server check found the price of full search: verifying a rival game (the server replays every bot
+move) cost 3.4–6.3 s against 0.5–1.5 s for a bot-9 level, so the finish card's Seeds were slow, and a
+phone thought 2.5–3.7x longer per rival move. Since full search measured no stronger (§G), the rivals
+now use level 9's authored-board caps and Night Bloom level 9's number of moves and hands.
+
+| | before (v0.12) | after (v0.13) |
+| --- | --- | --- |
+| server verify, rival game | 3.4–6.3 s | 0.4–2.3 s |
+| rival vs full level 9 | 10: 55%, 11/12: ~51% | 10: 46%, 11: 49%, 12: 52% (100 each) |
+
+All three now sit at level 9's strength with their own style; Ironwood's small edge did not survive
+the cheaper search. bots-v0.12's rivals are frozen (`RIVAL_CONFIGS_V012`) so its proofs still pay.

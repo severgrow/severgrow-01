@@ -102,12 +102,14 @@ plus one way of playing:
 - **Where they play:** campaign levels 74–100 (chapters VIII–X, `docs/CAMPAIGN-71-100.md`).
   Approved, not yet built: they also rotate with level 9 in the Hard tier and in Blitz practice.
 - **Bots 1–9 do not change.** Their decisions are pinned by `tests/bots/levels-frozen.test.ts`.
-- **Versions:** `bots-v0.11` is current. `bots-v0.10` stays accepted for tickets and proofs issued
-  before it (same moves for levels 1–9) and can never replay a rival.
+- **Versions:** `bots-v0.13` is current: the rivals search an authored board with level 9's own
+  caps (2026-11-12; full search bought no strength and made a rival game cost 3–6 s of server time to
+  verify). `bots-v0.12` (the first rivals, frozen as `RIVAL_CONFIGS_V012`), `bots-v0.11` and
+  `bots-v0.10` stay accepted for proofs issued before; the two oldest can never replay a rival.
 - **Strength** (measured with `src/sim/rivals.ts` on campaign boards, seats swapped, against
-  full-search level 9): Ironwood 55% over 350 games; Strangler Fig and Night Bloom about 51%, i.e.
-  level 9's strength with their own way of playing (owner accepted, 2026-11-12;
-  `docs/CAMPAIGN-71-100.md` G).
+  full-search level 9): level 9's strength, each with its own way of playing (bots-v0.13: Ironwood
+  46%, Strangler Fig 49%, Night Bloom 52% over 100 games each; owner accepted, 2026-11-12;
+  `docs/CAMPAIGN-71-100.md` G). A rival move costs about what a level-9 move costs.
 
 ---
 
