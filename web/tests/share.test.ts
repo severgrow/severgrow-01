@@ -13,7 +13,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { RESULT } from '../../src/strings.js';
+import { GAME_TITLE, REPLAY, RESULT } from '../../src/strings.js';
 import {
   SHARE_CONTENT, SHARE_FONTS, SHARE_FONT_WEIGHTS, SHARE_GRID, SHARE_H, SHARE_LAYOUT, SHARE_LAYOUTS, SHARE_W,
   colSpan, colX, fittedSize, fit, fitName, namesOf, resultOf, rowSpan, rowY, shareLayout, textWidth,
@@ -158,6 +158,70 @@ describe('layout A: each name sits directly under its own score', () => {
     expect(L.names.you.y).toBe(L.score.you.y + L.score.you.h + SHARE_GRID.gutter);
     expect(L.names.you.x).toBe(L.score.you.x);
     expect(L.names.opp.x).toBe(L.score.opp.x);
+  });
+
+  // MORE BOARD, LESS SCORE (owner, 2026-11-12): the board takes four rows and the score drops a
+  // step, so the planet is the hero. These are the grid's own numbers, not pixels.
+  it('gives the board rows 2–5 and the score row 6, the names row 7 and both foot lines row 8', () => {
+    const L = shareLayout(data(), 'a');
+    // the planet is fitted inside the FOUR-row band, and is bigger than the old three-row band
+    expect(L.planet.y).toBeGreaterThanOrEqual(rowSpan(2, 4).y);
+    expect(L.planet.y + L.planet.h).toBeLessThanOrEqual(rowSpan(2, 4).y + rowSpan(2, 4).h);
+    expect(L.planet.h).toBeGreaterThan(rowSpan(2, 3).h);
+    // the score sits on row 6, its box the full row
+    expect(L.score.you.y).toBe(rowY(6));
+    expect(L.score.you.h).toBe(SHARE_GRID.row);
+    expect(L.score.dash.y).toBe(rowY(6));
+    // the names share row 7, one gutter below the score
+    expect(L.names.you.y).toBe(rowY(7));
+    expect(L.names.opp.y).toBe(rowY(7));
+    // the last row carries the tagline (top half) and the address (bottom half): 43 + 24 + 43 = 110
+    const foot = rowSpan(8, 1);
+    const footH = (SHARE_GRID.row - SHARE_GRID.gutter) / 2;
+    const tagline = L.texts.find((t) => t.text === REPLAY.tagline)!;
+    const address = L.texts.find((t) => t.text === REPLAY.mark)!;
+    expect(tagline.y).toBe(foot.y);
+    expect(tagline.h).toBe(footH);
+    expect(address.y).toBe(foot.y + footH + SHARE_GRID.gutter);
+    expect(address.y + address.h).toBe(foot.y + foot.h);
+    expect(tagline.y + tagline.h).toBeLessThanOrEqual(address.y);
+  });
+
+  it('scores at 72–84 px (down from 104), with the dash at half the number', () => {
+    const L = shareLayout(data(), 'a');
+    expect(L.score.you.size).toBeGreaterThanOrEqual(72);
+    expect(L.score.you.size).toBeLessThanOrEqual(84);
+    expect(L.score.opp.size).toBe(L.score.you.size);
+    expect(L.score.dash.size).toBe(Math.round(L.score.you.size / 2));
+    // still comfortably inside its 4-column box, even at three digits
+    const three = shareLayout(data({ score: [123, 99] }), 'a');
+    for (const t of [three.score.you, three.score.opp]) expect(fittedSize(t.text, t.w, t.size, t.min, t.family, t.tracking)).toBe(t.size);
+  });
+
+  // THE WORDMARK AND THE ADDRESS IN BESLEY (owner, 2026-11-12). Still tracked uppercase, still
+  // inside their 12 columns; only the face changes, never the tagline/result/names/score.
+  it('sets the wordmark and the address in the display face, tracked, inside the 12 columns', () => {
+    const L = shareLayout(data(), 'a');
+    const wordmark = L.texts.find((t) => t.text === GAME_TITLE.toUpperCase())!;
+    const address = L.texts.find((t) => t.text === REPLAY.mark)!;
+    for (const t of [wordmark, address]) {
+      expect(t.family).toBe('display');
+      expect(t.weight).toBe(600);
+      expect(t.tracking).toBeGreaterThan(0);
+      expect(t.w).toBe(colSpan(0, 12).w);
+      expect(textWidth(t.text, t.size, t.family, t.tracking)).toBeLessThanOrEqual(t.w);
+    }
+    // Besley is wider than the mono at the same size, so the size can fall if a measured width ever
+    // demands it — but never below the display floor, and never by shrinking the box.
+    expect(wordmark.size).toBeLessThanOrEqual(46);
+    expect(wordmark.size).toBeGreaterThanOrEqual(wordmark.min);
+    expect(address.size).toBeGreaterThanOrEqual(address.min);
+    // The other faces do not move: the tagline and the result stay display, the names stay ui.
+    const tagline = L.texts.find((t) => t.text === REPLAY.tagline)!;
+    expect(tagline.family).toBe('display');
+    expect(L.names.you.family).toBe('ui');
+    expect(L.names.opp.family).toBe('ui');
+    expect(L.score.you.family).toBe('display');
   });
 });
 

@@ -10,6 +10,11 @@
 //   · each NAME's centre x equals its own SCORE's centre x (layout A);
 //   · layout A draws NO circle: pixels sampled on the fit radius are sky, while layout B's ring is
 //     a bright circle at the same radius;
+//   · MORE BOARD, LESS SCORE: the planet's box is taller than the old three-row band, and the score
+//     is 72–84 px, on row 6 with the names on row 7 (layout numbers, not pixels);
+//   · the wordmark and the address are display-face runs, measured in Besley and inside 12 columns;
+//   · the FILM is in the pixels: a margin patch gains grain while the same patch without the film
+//     is calm, and a matte tile face is exactly flat with `film: false` and grainy with it;
 //   · the FONTS really resolved: `document.fonts.load` returns the Besley and Fragment Mono faces,
 //     and the same string measures differently in the real face than in a fallback;
 //   · the canvas is native 1080x1350 and the PNG header agrees.
@@ -19,7 +24,7 @@ import { createServer } from 'vite';
 import { allCoords, coordKey } from '../../src/engine/index.js';
 import type { Player, Tile } from '../../src/engine/index.js';
 import { RESULT } from '../../src/strings.js';
-import { SHARE_GRID, SHARE_H, SHARE_W, SHARE_LAYOUTS } from '../src/logic/share.js';
+import { SHARE_GRID, SHARE_H, SHARE_W, SHARE_LAYOUTS, rowSpan, rowY } from '../src/logic/share.js';
 import type { ShareData, ShareLayoutId } from '../src/logic/share.js';
 
 const OUT = process.env.SHARE_OUT ?? '/tmp/sharpen-share';
@@ -137,12 +142,12 @@ try {
   check('the text is shaped by Fragment Mono, not by the system mono', Math.abs(fonts.withMono - fonts.withoutMono) > 2, `${fonts.withMono.toFixed(1)} vs ${fonts.withoutMono.toFixed(1)}`);
 
   /** Render one card through the REAL export path and hand back the PNG plus its measurements. */
-  const render = async (data: ShareData, layout: ShareLayoutId): Promise<Metrics> => page.evaluate(`(async (args) => {
+  const render = async (data: ShareData, layout: ShareLayoutId, film = true): Promise<Metrics> => page.evaluate(`(async (args) => {
     const m = await import('/src/ui/sharecard.ts');
     const layoutModule = await import('/src/logic/share.ts');
     const L = layoutModule.shareLayout(args.data, args.layout);
     // The export path itself (shareCard() calls exactly this, then toBlob).
-    const canvas = await m.drawShareCard(args.data, args.layout);
+    const canvas = await m.drawShareCard(args.data, args.layout, { film: args.film });
     const png = canvas.toDataURL('image/png');
     // EDGE MEASUREMENT: a horizontal line THROUGH THE PLANET (its own centre row, where tile edges
     // meet the sky). A native vector edge steps by a lot in one or two pixels; an upscaled bitmap
@@ -196,12 +201,23 @@ try {
       meanLuma: Math.round(sum / n), stars, green, ember, creamMark,
       ringLuma: Math.round(ringLuma), ringSky: Math.round(ringSky), crop: crop.toDataURL('image/png'),
     };
-  })(${JSON.stringify({ data, layout })})`) as never;
+  })(${JSON.stringify({ data, layout, film })})`) as never;
   /** The pure layout, as the page module computes it (the same module the app ships). */
   const layoutOf = async (data: ShareData, layout: ShareLayoutId) => page.evaluate(`(async () => {
     const m = await import('/src/logic/share.ts');
     const L = m.shareLayout(${JSON.stringify(data)}, ${JSON.stringify(layout)});
     const cx = (b) => b.x + b.w / 2;
+    // A measured width, in the real face and in Georgia: a difference proves Besley shaped the run.
+    const measure = (t) => {
+      const c = document.createElement('canvas').getContext('2d');
+      c.font = \`\${t.weight} \${t.size}px 'Besley', Georgia, serif\`;
+      c.letterSpacing = \`\${(t.size * t.tracking).toFixed(2)}px\`;
+      const besley = c.measureText(t.text).width;
+      c.font = \`\${t.weight} \${t.size}px Georgia, serif\`;
+      return { besley, georgia: c.measureText(t.text).width };
+    };
+    const wordmark = L.texts.find((t) => t.text === 'FUTASAKU');
+    const address = L.texts.find((t) => t.text === 'FUTASAKU.COM');
     return {
       id: L.id, ring: L.planet.ring,
       scoreYou: cx(L.score.you), scoreOpp: cx(L.score.opp), dash: cx(L.score.dash),
@@ -210,6 +226,13 @@ try {
       textCount: L.texts.length,
       families: [...new Set(L.texts.map((t) => t.family))],
       weights: [...new Set(L.texts.map((t) => t.family + ':' + t.weight))],
+      // MORE BOARD, LESS SCORE: the layout's own numbers (never pixels).
+      planetW: L.planet.w, planetH: L.planet.h, planetHex: L.planet.hex, planetY: L.planet.y,
+      scoreSize: L.score.you.size, dashSize: L.score.dash.size,
+      scoreRowY: L.score.you.y, namesRowY: L.names.you.y,
+      // THE WORDMARK AND THE ADDRESS: face, weight, box and the measured run.
+      wordmark: wordmark ? { family: wordmark.family, weight: wordmark.weight, size: wordmark.size, w: wordmark.w, measured: measure(wordmark) } : null,
+      address: address ? { family: address.family, weight: address.weight, size: address.size, w: address.w, measured: measure(address) } : null,
     };
   })()`) as never;
 
@@ -221,6 +244,10 @@ try {
         id: string; ring: boolean; scoreYou: number; scoreOpp: number; dash: number;
         nameYou: number; nameOpp: number; nameYouY: number; scoreYouBottom: number;
         families: string[]; weights: string[];
+        planetW: number; planetH: number; planetHex: number; planetY: number;
+        scoreSize: number; dashSize: number; scoreRowY: number; namesRowY: number;
+        wordmark: { family: string; weight: number; size: number; w: number; measured: { besley: number; georgia: number } } | null;
+        address: { family: string; weight: number; size: number; w: number; measured: { besley: number; georgia: number } } | null;
       };
       check(`${tag} the canvas is natively ${SHARE_W}x${SHARE_H}`, r.width === SHARE_W && r.height === SHARE_H, `${r.width}x${r.height}`);
       check(`${tag} the picture is drawn, not blank`, r.maxJump >= 60 && r.over40 >= 2, `max jump ${r.maxJump}, ${r.over40} steep pairs`);
@@ -238,6 +265,23 @@ try {
         check(`${tag} the two sides are left and right of the dash`, L.nameYou < L.dash && L.nameOpp > L.dash, `${L.nameYou} < ${L.dash} < ${L.nameOpp}`);
         check(`${tag} the scorecard is symmetric about the page centre`, Math.round(L.nameYou + L.nameOpp) === SHARE_W, `${L.nameYou} + ${L.nameOpp}`);
         check(`${tag} the name sits one grid gutter under its number`, L.nameYouY === L.scoreYouBottom + SHARE_GRID.gutter, `${L.nameYouY} vs ${L.scoreYouBottom} + ${SHARE_GRID.gutter}`);
+        // MORE BOARD, LESS SCORE (owner, 2026-11-12): judged on the layout's numbers, never pixels.
+        // The board used to fit in three rows (its box was 378 px tall); it now takes four.
+        const OLD_BAND = rowSpan(2, 3).h;
+        check(`${tag} the board is bigger: its box is taller than the old three-row band`, L.planetH > OLD_BAND, `${L.planetH} > ${OLD_BAND}`);
+        check(`${tag} the board is the hero: at least half the card wide, on row 2`, L.planetW >= SHARE_W / 2 && L.planetY >= rowY(2), `${L.planetW} wide, y ${L.planetY}`);
+        check(`${tag} the tiles grew with the band (hex > 27 px)`, L.planetHex > 27, `${L.planetHex} px hex`);
+        check(`${tag} the score is smaller: 72–84 px, down from 104`, L.scoreSize >= 72 && L.scoreSize <= 84, `${L.scoreSize} px (dash ${L.dashSize})`);
+        check(`${tag} the score moved to row 6 and the names to row 7`, L.scoreRowY === rowY(6) && L.namesRowY === rowY(7), `score y ${L.scoreRowY}, names y ${L.namesRowY}`);
+        // THE WORDMARK AND THE ADDRESS IN BESLEY (owner, 2026-11-12): displayed-face runs, tracked,
+        // and measured in the real face — a Georgia measurement would be the fallback bug.
+        const mark = L.wordmark, addr = L.address;
+        check(`${tag} the wordmark is in the display face`, !!mark && mark.family === 'display' && mark.weight === 600, mark ? `${mark.family} ${mark.weight}` : 'missing');
+        check(`${tag} the address is in the display face`, !!addr && addr.family === 'display' && addr.weight === 600, addr ? `${addr.family} ${addr.weight}` : 'missing');
+        check(`${tag} Besley really shapes the wordmark, not Georgia`, !!mark && Math.abs(mark.measured.besley - mark.measured.georgia) > 2, mark ? `${mark.measured.besley.toFixed(1)} vs ${mark.measured.georgia.toFixed(1)}` : 'missing');
+        check(`${tag} Besley really shapes the address, not Georgia`, !!addr && Math.abs(addr.measured.besley - addr.measured.georgia) > 2, addr ? `${addr.measured.besley.toFixed(1)} vs ${addr.measured.georgia.toFixed(1)}` : 'missing');
+        check(`${tag} the wordmark does not widen past its 12 columns`, !!mark && mark.measured.besley <= mark.w, mark ? `${mark.measured.besley.toFixed(1)} <= ${mark.w}` : 'missing');
+        check(`${tag} the address does not widen past its 12 columns`, !!addr && addr.measured.besley <= addr.w, addr ? `${addr.measured.besley.toFixed(1)} <= ${addr.w}` : 'missing');
         // NO CIRCLE: the fit radius is sky, not a rim.
         check(`${tag} there is NO drawn circle round the board`, L.ring === false && r.ringLuma <= r.ringSky + 6, `ring luma ${r.ringLuma} vs sky ${r.ringSky}`);
         const width = SHARE_GRID.columns * SHARE_GRID.column + (SHARE_GRID.columns - 1) * SHARE_GRID.gutter + 2 * SHARE_GRID.margin;
@@ -256,6 +300,73 @@ try {
       console.log(`    wrote ${OUT}/${name}.png (${Math.round(bytes.length / 1024)} kB)`);
     }
   }
+  // ---- THE FILM IS IN THE PIXELS (owner, 2026-11-12) -------------------------------------------
+  // Canvas exports do not capture DOM overlays, so the card bakes the game's OWN film last, at its
+  // own 0.085. Two renders of the same card prove it: the shipped one, and the same draw with
+  // `film: false`.
+  //   · a patch of empty SKY in the bottom margin (outside every box) gains the film's grain on top
+  //     of the sky shader's own still dither — the game's sky is never textureless, so the honest
+  //     control is the same patch without the film;
+  //   · a matte TILE FACE is literally one flat colour without the film and grainy with it, so the
+  //     flat-vs-grain proof is exact (and shows the film covers the board, not just the margins).
+  const film = await page.evaluate(`(async (args) => {
+    const m = await import('/src/ui/sharecard.ts');
+    const layoutModule = await import('/src/logic/share.ts');
+    const planet = layoutModule.shareLayout(args.data, 'a').planet;
+    const on = await m.drawShareCard(args.data, 'a');
+    const off = await m.drawShareCard(args.data, 'a', { film: false });
+    const a = on.getContext('2d'), b = off.getContext('2d');
+    const W = 6;
+    const sample = (ctx, x, y) => {
+      const px = ctx.getImageData(x, y, W, W).data;
+      let max = 0, sum = 0;
+      const values = new Set();
+      for (let yy = 0; yy < W; yy++) for (let xx = 0; xx < W; xx++) {
+        const i = (yy * W + xx) * 4;
+        sum += px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11;
+        values.add((px[i] << 16) | (px[i + 1] << 8) | px[i + 2]);
+        if (xx) { const j = i - 4; max = Math.max(max, Math.abs(px[i] - px[j]), Math.abs(px[i + 1] - px[j + 1]), Math.abs(px[i + 2] - px[j + 2])); }
+      }
+      return { max, distinct: values.size, mean: sum / (W * W) };
+    };
+    // The FLATTEST window in a box: for the margin that is the calmest empty sky, for the planet a
+    // plain matte tile face (no outline, no home dot).
+    const flattest = (ctx, box) => {
+      const px = ctx.getImageData(box.x, box.y, box.w, box.h).data;
+      const at = (x, y) => (y * box.w + x) * 4;
+      let best = { x: box.x, y: box.y, max: Infinity };
+      for (let y = 0; y + W <= box.h; y++) for (let x = 0; x + W <= box.w; x++) {
+        let max = 0;
+        for (let yy = 0; yy < W && max < best.max; yy++) for (let xx = 0; xx < W && max < best.max; xx++) {
+          const i = at(x + xx, y + yy);
+          if (xx) { const j = at(x + xx - 1, y + yy); max = Math.max(max, Math.abs(px[i] - px[j]), Math.abs(px[i + 1] - px[j + 1]), Math.abs(px[i + 2] - px[j + 2])); }
+          if (yy) { const j = at(x + xx, y + yy - 1); max = Math.max(max, Math.abs(px[i] - px[j]), Math.abs(px[i + 1] - px[j + 1]), Math.abs(px[i + 2] - px[j + 2])); }
+        }
+        if (max < best.max) best = { x: box.x + x, y: box.y + y, max };
+      }
+      return best;
+    };
+    const marginBox = { x: 84, y: 1270, w: 912, h: 70 };
+    const planetBox = { x: planet.x + 12, y: planet.y + 12, w: planet.w - 24, h: planet.h - 24 };
+    const sky = flattest(b, marginBox);
+    const tile = flattest(b, planetBox);
+    return {
+      sky: { at: { x: sky.x, y: sky.y }, off: sample(b, sky.x, sky.y), on: sample(a, sky.x, sky.y) },
+      tile: { at: { x: tile.x, y: tile.y }, off: sample(b, tile.x, tile.y), on: sample(a, tile.x, tile.y) },
+    };
+  })(${JSON.stringify({ data: base() })})`) as {
+    sky: { at: { x: number; y: number }; off: { max: number; distinct: number; mean: number }; on: { max: number; distinct: number; mean: number } };
+    tile: { at: { x: number; y: number }; off: { max: number; distinct: number; mean: number }; on: { max: number; distinct: number; mean: number } };
+  };
+  console.log(`\n--- film over empty sky at ${film.sky.at.x},${film.sky.at.y}: with film max Δ${film.sky.on.max}, ${film.sky.on.distinct} colours, luma ${film.sky.on.mean.toFixed(2)} · without max Δ${film.sky.off.max}, ${film.sky.off.distinct} colours, luma ${film.sky.off.mean.toFixed(2)}`);
+  console.log(`--- film over a matte tile at ${film.tile.at.x},${film.tile.at.y}: with film max Δ${film.tile.on.max}, ${film.tile.on.distinct} colours · without max Δ${film.tile.off.max}, ${film.tile.off.distinct} colour`);
+  check('the film is baked over the card: a margin patch of empty sky gains grain', film.sky.on.max >= 2, `max Δ ${film.sky.on.max}`);
+  check('…coarser than the same patch without the film (the sky keeps only its shader dither)', film.sky.on.max > film.sky.off.max && film.sky.on.distinct > film.sky.off.distinct, `Δ${film.sky.on.max} / ${film.sky.on.distinct} vs Δ${film.sky.off.max} / ${film.sky.off.distinct}`);
+  check('…and over the board: a flat tile face is grainy with the film', film.tile.on.max >= 2 && film.tile.on.distinct > 1, `max Δ ${film.tile.on.max}, ${film.tile.on.distinct} colours`);
+  check('the SAME tile face is exactly flat with the film disabled', film.tile.off.max === 0 && film.tile.off.distinct === 1, `max Δ ${film.tile.off.max}, ${film.tile.off.distinct} colour`);
+  check('the film covers the margins, not just the planet', film.sky.at.y > rowY(8) + SHARE_GRID.row, `y ${film.sky.at.y} (content ends ${rowY(8) + SHARE_GRID.row})`);
+  check('the film lightens the sky towards the tile’s cream, never darkens it', film.sky.on.mean > film.sky.off.mean, `${film.sky.on.mean.toFixed(2)} > ${film.sky.off.mean.toFixed(2)}`);
+
   check('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 } finally {
   await browser.close();

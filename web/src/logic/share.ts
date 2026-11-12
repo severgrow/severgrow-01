@@ -293,31 +293,36 @@ export const shareLayout = (d: ShareData, id: ShareLayoutId = SHARE_LAYOUT): Sha
 
   if (id === 'a') {
     // ---- ORBIT, ON THE GRID (owner pick) ------------------------------------------------------
-    //   row 0        the wordmark
+    //   row 0        the wordmark (Besley, tracked caps)
     //   row 1        the result
-    //   rows 2–4     the board as a planet (no disc, no rim)
-    //   row 5        the score, 4 | 2 | 4 columns around the centre line
-    //   row 6        each name centred under its OWN number
-    //   row 7        the tagline
-    //   row 8        the address
-    texts.push(text({ ...LABEL, ...cell(0, 12, 0, 1), size: 46, align: 'center', tracking: 0.34, tone: 'bright', text: MARK }));
+    //   rows 2–5     the board as a planet (no disc, no rim) — FOUR rows: more board (owner, 2026-11-12)
+    //   row 6        the score, 4 | 2 | 4 columns around the centre line — smaller, so it reads as
+    //                a score and not a second hero
+    //   row 7        each name centred under its OWN number
+    //   row 8        the tagline (top half) and the address (bottom half) — the board took the
+    //                row the tagline used to have, so the last row carries both foot lines
+    texts.push(text({ ...DISPLAY, ...cell(0, 12, 0, 1), size: 46, align: 'center', tracking: 0.34, tone: 'bright', text: MARK }));
     texts.push(text({ ...LABEL, ...cell(0, 12, 1, 1), size: 26, align: 'center', tracking: 0.36, tone: 'cream', text: result }));
 
     const score = {
-      you: text({ ...DISPLAY, ...cell(1, 4, 5, 1), size: 104, align: 'center', tracking: 0, tone: 'bright', text: String(d.score[0]) }),
-      dash: text({ ...DISPLAY, ...cell(5, 2, 5, 1), size: 56, align: 'center', tracking: 0, tone: 'dim', text: '—' }),
-      opp: text({ ...DISPLAY, ...cell(7, 4, 5, 1), size: 104, align: 'center', tracking: 0, tone: 'bright', text: String(d.score[1]) }),
+      you: text({ ...DISPLAY, ...cell(1, 4, 6, 1), size: 80, align: 'center', tracking: 0, tone: 'bright', text: String(d.score[0]) }),
+      dash: text({ ...DISPLAY, ...cell(5, 2, 6, 1), size: 40, align: 'center', tracking: 0, tone: 'dim', text: '—' }),
+      opp: text({ ...DISPLAY, ...cell(7, 4, 6, 1), size: 80, align: 'center', tracking: 0, tone: 'bright', text: String(d.score[1]) }),
     };
     // THE OWNER'S KEY CORRECTION: a name shares its own number's COLUMNS, so the two centres are
     // the same x by construction — the 9 and the 4 each carry their player underneath.
     const names = {
-      you: text({ ...LABEL, ...cell(1, 4, 6, 1), size: 30, align: 'center', tracking: 0, tone: 'cream', text: fitName(you, colSpan(1, 4).w, 30, 'ui') }),
-      opp: text({ ...LABEL, ...cell(7, 4, 6, 1), size: 30, align: 'center', tracking: 0, tone: 'cream', text: fitName(opp, colSpan(7, 4).w, 30, 'ui') }),
+      you: text({ ...LABEL, ...cell(1, 4, 7, 1), size: 30, align: 'center', tracking: 0, tone: 'cream', text: fitName(you, colSpan(1, 4).w, 30, 'ui') }),
+      opp: text({ ...LABEL, ...cell(7, 4, 7, 1), size: 30, align: 'center', tracking: 0, tone: 'cream', text: fitName(opp, colSpan(7, 4).w, 30, 'ui') }),
     };
     texts.push(score.you, score.dash, score.opp, names.you, names.opp);
-    texts.push(text({ ...DISPLAY, ...cell(0, 12, 7, 1), size: 34, align: 'center', tracking: 0, tone: 'cream', text: TAGLINE }));
-    texts.push(text({ ...LABEL, ...cell(0, 12, 8, 1), size: 20, align: 'center', tracking: 0.32, tone: 'muted', text: ADDRESS }));
-    return { id, texts, score, names, planet: freePlanet(d, cell(0, 12, 2, 3)), frame: null, rules };
+    // THE LAST ROW HOLDS BOTH FOOT LINES. It is still one grid row (43 + 24 + 43 = 110): the
+    // tagline in its top half, the address in its bottom half, one gutter between them.
+    const foot = cell(0, 12, 8, 1);
+    const footH = (SHARE_GRID.row - SHARE_GRID.gutter) / 2;
+    texts.push(text({ ...DISPLAY, x: foot.x, y: foot.y, w: foot.w, h: footH, size: 34, align: 'center', tracking: 0, tone: 'cream', text: TAGLINE }));
+    texts.push(text({ ...DISPLAY, x: foot.x, y: foot.y + footH + SHARE_GRID.gutter, w: foot.w, h: footH, size: 20, align: 'center', tracking: 0.32, tone: 'muted', text: ADDRESS }));
+    return { id, texts, score, names, planet: freePlanet(d, cell(0, 12, 2, 4)), frame: null, rules };
   }
 
   if (id === 'b') {

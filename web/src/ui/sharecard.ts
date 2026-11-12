@@ -9,12 +9,15 @@
 //     rim — the silhouette comes from the tiles"); B and C keep the disc they shipped with;
 //   · the type is Besley (display) and Fragment Mono (ui) — the product's two faces, loaded before
 //     anything is painted, so a card can never be exported in a substitute face;
+//   · the film is the game's ONE grain overlay (`#futa04-film-grain`), baked into the pixels LAST
+//     at its own 0.085, because a canvas export cannot capture a DOM layer;
 //   · the words are the product's (`GAME_TITLE`, `REPLAY.mark`, `REPLAY.tagline`).
 //
 // The layout is pure (`logic/share.ts`): three compositions behind `SHARE_LAYOUT`. Everything here
 // only paints what the layout says, so a change of pick is a one-line change and no geometry moves.
 import { SHARE_FONTS, SHARE_FONT_FAMILIES, SHARE_H, SHARE_W, SHARE_LAYOUT, fittedSize, shareLayout } from '../logic/share.js';
 import type { ShareData, ShareLayoutId, SharePlanet, ShareText } from '../logic/share.js';
+import { FILM_GRAIN_OPACITY, FILM_GRAIN_URL } from '../player/atmosphere.js';
 import { SpaceRenderer } from '../sphere/space.js';
 
 const css = (name: string, fallback: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
@@ -34,10 +37,14 @@ const families = () => ({
  * Besley renders a different card — that is the bug this prevents).
  */
 const FONT_PROBES = [
-  { family: SHARE_FONT_FAMILIES.display, weight: 600, size: 104 },
-  { family: SHARE_FONT_FAMILIES.display, weight: 600, size: 34 },
-  { family: SHARE_FONT_FAMILIES.ui, weight: 400, size: 46 },
-  { family: SHARE_FONT_FAMILIES.ui, weight: 400, size: 20 },
+  { family: SHARE_FONT_FAMILIES.display, weight: 600, size: 80 }, // the score
+  { family: SHARE_FONT_FAMILIES.display, weight: 600, size: 46 }, // the wordmark
+  { family: SHARE_FONT_FAMILIES.display, weight: 600, size: 34 }, // the tagline
+  { family: SHARE_FONT_FAMILIES.display, weight: 600, size: 26 }, // the result
+  { family: SHARE_FONT_FAMILIES.display, weight: 600, size: 20 }, // the address
+  { family: SHARE_FONT_FAMILIES.ui, weight: 400, size: 46 }, // B and C's wordmark
+  { family: SHARE_FONT_FAMILIES.ui, weight: 400, size: 30 }, // the names
+  { family: SHARE_FONT_FAMILIES.ui, weight: 400, size: 20 }, // B and C's address
 ] as const;
 
 /**
@@ -243,13 +250,95 @@ const paintText = (g: CanvasRenderingContext2D, t: ShareText, fonts: { display: 
 };
 
 /**
+ * THE GAME'S FILM, BAKED INTO THE EXPORT (owner, 2026-11-12: the grain is "always on everywhere on
+ * top of everything"). A canvas export never captures a DOM overlay, so the card paints the ONE
+ * film the app shows — `#futa04-film-grain` — into its own pixels, LAST, over the whole card.
+ *
+ * This mirrors `replay/poster.ts` (`warmReplayFilm`/`paintReplayFilm`) instead of inventing a
+ * second treatment: the game's own 1024 px SVG tile (`FILM_GRAIN_URL`), one grain per pixel, at the
+ * game's own 0.085 (`FILM_GRAIN_OPACITY`). There is NO encoder pre-emphasis here — a PNG keeps the
+ * film exactly as the player sees it; the poster's measured gain only compensates video encoding.
+ *
+ * Should a browser refuse to read the SVG back (a tainted canvas), a tile with the same statistics
+ * is built in code, exactly as the poster does, so the card still carries a film and never fails.
+ */
+const GRAIN_TILE = 1024;
+let grainTile: HTMLCanvasElement | null = null;
+let grainWarm: Promise<void> | null = null;
+
+const codeGrainTile = (): HTMLCanvasElement => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d')!;
+  const px = g.createImageData(512, 512);
+  let seed = 0x51f07a5a;
+  const next = () => {
+    seed ^= seed << 13;
+    seed ^= seed >>> 17;
+    seed ^= seed << 5;
+    return (seed >>> 0) / 0xffffffff;
+  };
+  for (let i = 0; i < px.data.length; i += 4) {
+    // fractal noise sits near .5 with a narrow spread; the game maps it through a = 1.1n - .42
+    const n = 0.5 + (next() + next() + next() - 1.5) * 0.17;
+    const a = Math.max(0, Math.min(1, 1.1 * n - 0.42));
+    px.data[i] = px.data[i + 1] = px.data[i + 2] = 191;
+    px.data[i + 3] = Math.round(a * 255);
+  }
+  g.putImageData(px, 0, 0);
+  return c;
+};
+
+/**
+ * Warm the game's own tile. The export path awaits this so the REAL film lands, not the fallback —
+ * the same contract as the replay's warm-up, and the same reason: the card is drawn once and gone.
+ */
+export const shareGrainReady = (): Promise<void> => {
+  grainWarm ??= new Promise<void>((done) => {
+    if (typeof Image === 'undefined') { done(); return; }
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = c.height = GRAIN_TILE;
+        const g = c.getContext('2d')!;
+        g.drawImage(img, 0, 0, GRAIN_TILE, GRAIN_TILE);
+        g.getImageData(0, 0, 1, 1); // throws if the SVG tainted the canvas
+        grainTile = c;
+      } catch {
+        grainTile = codeGrainTile();
+      }
+      done();
+    };
+    img.onerror = () => { grainTile = codeGrainTile(); done(); };
+    img.src = FILM_GRAIN_URL;
+  });
+  return grainWarm;
+};
+
+/** The film over the entire card — margins, sky, planet and type alike. */
+const paintFilm = (g: CanvasRenderingContext2D, width: number, height: number): void => {
+  const tile = grainTile ?? (grainTile = codeGrainTile());
+  const pattern = g.createPattern(tile, 'repeat');
+  if (!pattern) return;
+  g.save();
+  g.globalCompositeOperation = 'source-over';
+  g.globalAlpha = FILM_GRAIN_OPACITY;
+  g.fillStyle = pattern;
+  g.fillRect(0, 0, width, height);
+  g.restore();
+};
+
+/**
  * THE PICTURE. Drawn at the canvas's own 1080x1350 — vector tile edges and text at 1:1, never a
  * smaller bitmap scaled up — so every edge on the exported PNG is a native edge.
  *
  * ASYNC BECAUSE OF THE FACES: it waits for Besley and Fragment Mono before the first fillRect, so no
  * pixel is ever laid down in a fallback and then "fixed" after the picture was already exported.
+ * `opts.film` exists for the export check (grain on vs off on the very same patch of sky); the
+ * product always draws it.
  */
-export const drawShareCard = async (d: ShareData, layout: ShareLayoutId = SHARE_LAYOUT): Promise<HTMLCanvasElement> => {
+export const drawShareCard = async (d: ShareData, layout: ShareLayoutId = SHARE_LAYOUT, opts: { film?: boolean } = {}): Promise<HTMLCanvasElement> => {
   await ensureShareFonts();
   const L = shareLayout(d, layout);
   const c = document.createElement('canvas');
@@ -270,6 +359,12 @@ export const drawShareCard = async (d: ShareData, layout: ShareLayoutId = SHARE_
     g.fillRect(rule.x, rule.y, rule.w, rule.h);
   }
   for (const t of L.texts) paintText(g, t, fonts);
+  // THE FILM LANDS LAST, over everything. It rides with the shipped composition (`SHARE_LAYOUT`),
+  // so B and C stay byte-identical alternates and flipping the pick moves the film with it.
+  if (opts.film !== false && layout === SHARE_LAYOUT) {
+    await shareGrainReady();
+    paintFilm(g, SHARE_W, SHARE_H);
+  }
   return c;
 };
 
