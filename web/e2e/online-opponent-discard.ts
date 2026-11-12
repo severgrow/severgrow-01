@@ -46,7 +46,11 @@ try {
           if (!(node instanceof HTMLElement) || !node.matches('.flyer.opp')) continue;
           if (node.matches('.back')) {
             const box = layer.getBoundingClientRect();
-            (window as any).__opponentDraw.push({x: box.x + parseFloat(node.style.left), y: box.y + parseFloat(node.style.top)});
+            // Where both piles ARE at the instant the card launches (a pile can carry a small lift at
+            // that moment on a wide screen), so the check compares the flight with the live pile.
+            const at = (sel: string) => { const r = document.querySelector(sel)?.getBoundingClientRect(); return r ? { x: r.x, y: r.y } : null; };
+            (window as any).__opponentDraw.push({x: box.x + parseFloat(node.style.left), y: box.y + parseFloat(node.style.top),
+              deck: at('#deck .pile-card'), discard: at('#discard .pile-card')});
             continue;
           }
           const sample = () => {
@@ -99,9 +103,13 @@ try {
     assert(visible.length >= 3, 'opponent card is visible, not just a pile replacement');
     if (mode !== 'reduced') assert(Math.hypot(visible.at(-1)!.x-visible[0]!.x, visible.at(-1)!.y-visible[0]!.y) > 40, 'card travels from opponent hand');
     if(drawFrom === 'deck') assert(visible.some(s => s.pile === before), 'old pile remains under the approaching card');
-    const starts = await seat.page.evaluate(() => (window as any).__opponentDraw) as {x:number;y:number}[];
+    const starts = await seat.page.evaluate(() => (window as any).__opponentDraw) as {x:number;y:number;deck:{x:number;y:number}|null;discard:{x:number;y:number}|null}[];
     assert.equal(starts.length, 1, 'one opponent draw');
-    assert(Math.hypot(starts[0]!.x-drawOrigin.x, starts[0]!.y-drawOrigin.y)<2, `draw starts at the actual ${drawFrom} pile`);
+    // The pile as it stood WHEN the card launched (the flight's own frame), never a reading taken
+    // before the turn: at desktop width the pile is 2px lifted at that moment (2026-11-12, this check
+    // compared the flight with a pre-move reading and failed on exactly those 2px).
+    const pileAtLaunch = starts[0]![drawFrom] ?? { x: drawOrigin.x, y: drawOrigin.y };
+    assert(Math.hypot(starts[0]!.x-pileAtLaunch.x, starts[0]!.y-pileAtLaunch.y)<2, `draw starts at the actual ${drawFrom} pile (flight ${JSON.stringify({x:starts[0]!.x,y:starts[0]!.y})}, pile at launch ${JSON.stringify(pileAtLaunch)})`);
     assert.equal(await seat.page.locator('#discard-top').getAttribute('data-face-key'), `${thrown!.id}:${thrown!.suit}:${thrown!.rank}`);
     assert.equal(await seat.page.locator('.flyer.opp').count(), 0, 'flight cleans up');
     const presence = seat.page.locator('[data-duel-presence]');
