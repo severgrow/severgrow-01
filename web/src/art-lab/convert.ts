@@ -67,12 +67,63 @@ const encode = (c: HTMLCanvasElement, opaque: boolean): Promise<{ bytes: Uint8Ar
   }, mime, opaque ? 0.86 : 0.9);
 });
 
+/** Gold art is the complete bonus hex, not a floating nugget. Normalise the alpha
+ * silhouette to the *actual point-up* hex and trim external transparent margins.
+ * This runs only when a designer uploads Gold, never in the live renderer.
+ * All output pixels remain within that exact six-sided shape.
+ */
+const drawEdgeFittedGold = (g: CanvasRenderingContext2D, bitmap: ImageBitmap, w: number, h: number) => {
+  const dim = 768, base = 512;
+  const sampled = canvas(base, base), sc = sampled.getContext('2d', { willReadFrequently: true })!;
+  sc.drawImage(bitmap, 0, 0, base, base);
+  const alphaBox = (ctx: CanvasRenderingContext2D, size: number) => {
+    const pixels = ctx.getImageData(0, 0, size, size).data;
+    let x0 = size, y0 = size, x1 = -1, y1 = -1;
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      if (pixels[(y * size + x) * 4 + 3]! < 64) continue;
+      x0 = Math.min(x0, x); y0 = Math.min(y0, y);
+      x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+    }
+    return x1 >= x0 ? { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 } : null;
+  };
+  const original = alphaBox(sc, base);
+  if (!original) return;
+  // A wide hex was authored flat-top; rotate the artwork ONCE into FUTASAKU's
+  // point-up family. Point-up art is never rotated simply for being on the board.
+  const turn = original.w > original.h * 1.07 ? Math.PI / 6 : 0;
+  const rotated = canvas(dim, dim), rg = rotated.getContext('2d', { willReadFrequently: true })!;
+  rg.translate(dim / 2, dim / 2);
+  rg.rotate(turn);
+  rg.drawImage(sampled, -base / 2, -base / 2, base, base);
+  rg.setTransform(1, 0, 0, 1, 0, 0);
+  const box = alphaBox(rg, dim);
+  if (!box) return;
+
+  const radius = Math.min(w, h) / 2;
+  g.save();
+  g.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = (-90 + 60 * i) * Math.PI / 180;
+    const x = w / 2 + radius * Math.cos(a), y = h / 2 + radius * Math.sin(a);
+    if (!i) g.moveTo(x, y); else g.lineTo(x, y);
+  }
+  g.closePath(); g.clip();
+  // Height reaches the top/bottom vertices; width reaches the left/right pair.
+  // No inset padding, no shared-edge enlargement and no oversized prop canvas.
+  const fullW = radius * Math.sqrt(3), fullH = radius * 2;
+  g.drawImage(rotated, box.x, box.y, box.w, box.h,
+    (w - fullW) / 2, (h - fullH) / 2, fullW, fullH);
+  g.restore();
+};
+
 /** The picture at exactly w×h (covering, centred). A single card becomes a sheet of nine. */
 export const render = async (d: Decoded, slot: Slot, w: number, h: number) => {
   const c = canvas(w, h);
   const g = c.getContext('2d')!;
   g.imageSmoothingQuality = 'high';
-  if (slot.rule.shape === 'card-sheet' && d.bitmap.width < CARD.w * 2) {
+  if (slot.id === 'gold') {
+    drawEdgeFittedGold(g, d.bitmap, w, h);
+  } else if (slot.rule.shape === 'card-sheet' && d.bitmap.width < CARD.w * 2) {
     for (let r = 0; r < 3; r++) for (let col = 0; col < 3; col++) g.drawImage(d.bitmap, (col * w) / 3, (r * h) / 3, w / 3, h / 3);
   } else {
     const k = Math.max(w / d.bitmap.width, h / d.bitmap.height);
