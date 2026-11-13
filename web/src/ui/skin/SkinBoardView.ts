@@ -65,6 +65,10 @@ export class SkinBoardView extends BoardView {
   private recheck: ReturnType<typeof setTimeout> | undefined;
   /** the game's own trimmed look (Futasaku): no skin links, plates or gold piles */
   private futa = IS_FUTA04;
+  /** Art Lab can show the complete skin with the game's existing physical 1-9 stones. */
+  private readonly nativeStones: boolean;
+  /** Wider image bounds only for opt-in artwork with transparent foliage overhangs. */
+  private readonly overhangingTiles: boolean;
   private readonly coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
   constructor(
@@ -72,10 +76,12 @@ export class SkinBoardView extends BoardView {
     handlers: BoardHandlers,
     readonly skin: SkinDef,
     /** `full`: draw everything the skin has (links, plates, gold piles, scars), whatever the channel (the Art Lab) */
-    opts: { full?: boolean } = {},
+    opts: { full?: boolean; nativeStones?: boolean; overhangingTiles?: boolean } = {},
   ) {
     super(svg, handlers);
     this.futa = IS_FUTA04 && !opts.full;
+    this.nativeStones = opts.nativeStones ?? this.futa;
+    this.overhangingTiles = opts.overhangingTiles ?? false;
     this.assets = new SkinAssets(skin);
     this.painter = new GroundPainter(skin, this.assets);
     // Warm first-frame art while the menu is visible. A quick start shares
@@ -793,7 +799,9 @@ export class SkinBoardView extends BoardView {
         const o = toScreen(1, 0);
         const turn = (Math.atan2(o.y, o.x) * 180) / Math.PI;
         // a little larger where it crossfades, so two neighbours overlap across their shared side
-        const sz = S * 2.07 * (shared.size ? 1.1 : 1);
+        // Experimental transparent source sprites keep a margin for grass/smoke outside the
+        // point-up hex. Enlarge only their visual image, never the real hex hit geometry.
+        const sz = S * (this.overhangingTiles ? 2.27 : 2.07) * (shared.size ? 1.1 : 1);
         // sides shared with the same player fade into the territory's ground below (one continuous
         // painting), so neighbouring tiles melt into one field; outer sides stay crisp
         const holder = shared.size && this.netDefs ? el('g', { mask: `url(#${this.seamMask(key, shared)})` }, g) : g;
@@ -813,7 +821,7 @@ export class SkinBoardView extends BoardView {
     for (const pr of placeProps(key, defs, budget, cut ? 9 : s9)) this.prop(g, x, y, pr, key);
     // the channel's ownership shape (a circle or diamond) where it keeps them, for colour-blind players
     this.mark(g, x, y + S * 0.56, t.owner === 0 ? this.style.youMark : this.style.botMark);
-    if (this.futa) drawSeedStone(g, key, x, y, t.strength, t.owner);
+    if (this.nativeStones) drawSeedStone(g, key, x, y, t.strength, t.owner);
     else {
       const n = skin.numbers[t.owner];
       el('circle', { cx: x, cy: y - S * 0.06, r: S * 0.34, class: 'num-plate', fill: this.url(`skin-plate-${t.owner}`), style: `opacity:${n.plateAlpha}` }, g);
