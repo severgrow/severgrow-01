@@ -101,6 +101,10 @@ const headerActions = h('div', { class: 'actions' },
     onpointerdown: () => setCompare(true), onpointerup: () => setCompare(false), onpointerleave: () => setCompare(false),
     onkeydown: (e) => { if ((e as KeyboardEvent).key === ' ') setCompare(true); }, onkeyup: () => setCompare(false) }),
   h('label', { class: 'key file' }, 'Import pack', h('input', { type: 'file', accept: '.zip,application/zip', id: 'import', onchange: onImport })),
+  // A terrain-only zip changes the two painted tile sets and homes, leaving today's cards,
+  // gold, rocks, cockpit, effects and every other slot untouched.
+  h('label', { class: 'key file', title: 'Overlay only the four terrain/home slots of a Futasaku Art Lab pack' },
+    'Import terrain only', h('input', { type: 'file', accept: '.zip,application/zip', id: 'import-terrain', onchange: onImportTerrain })),
   h('button', { type: 'button', class: 'key primary', id: 'export', onclick: onExport, text: 'Export art pack' }),
   h('button', { type: 'button', class: 'key quiet', id: 'clear', onclick: onClear, text: 'Clear all' }),
 );
@@ -622,6 +626,23 @@ async function onImport(e: Event) {
     changed();
     renderSlots();
     say(`Opened “${art.label}”.`);
+  } catch (err) { say((err as Error).message); }
+}
+/** Overlay just painted terrain and home sprites on the current art. Never clear old assets. */
+async function onImportTerrain(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const f = input.files?.[0];
+  input.value = '';
+  if (!f) return;
+  try {
+    const incoming = importPack(new Uint8Array(await f.arrayBuffer()));
+    const ids = ['p1-tiles', 'p2-tiles', 'p1-home', 'p2-home'] as const;
+    const active = ids.filter((id) => (incoming.slots[id]?.files.length ?? 0) > 0);
+    if (!active.length) throw new Error('The pack has no painted terrain or home art.');
+    for (const id of active) art.slots[id] = incoming.slots[id]!;
+    changed();
+    renderSlots();
+    say(`Imported ${active.length} terrain/home slots from “${incoming.label}”. Other art, cards and effects kept.`);
   } catch (err) { say((err as Error).message); }
 }
 let clearArmed = false;
