@@ -98,7 +98,7 @@ describe('the keys speak, because their text is gone', () => {
     const paint = source.slice(source.indexOf('private paintSelection()'), source.indexOf('private async claim()'));
     expect(paint.match(/key\.(textContent|innerText)\s*=/g) ?? []).toHaveLength(2);
     expect(paint).toMatch(/if \(action\.kind === 'sell'\) \{[^}]*key\.textContent = /);
-    expect(paint).toMatch(/action\.kind === 'signin'[\s\S]*key\.textContent = ONLINE\.worldSignInKey/);
+    expect(paint).toMatch(/action\.kind === 'signin'[\s\S]*key\.textContent = line/);
     expect(ONLINE.worldSellKey(50)).toBe('SELL · +50');
     expect(ONLINE.worldSellKeyArmed).toBe('TAP TO SELL');
     expect(ONLINE.worldSignInKey).toBe('Sign in');

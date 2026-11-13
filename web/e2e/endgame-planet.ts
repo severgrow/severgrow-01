@@ -1,6 +1,6 @@
 // THE END SCREEN'S PLANET (owner brief, 2026-11-11): the finish card's red band is a live view of
 // THE PLANET — the Planet page's own map, owner lines and grow key, without its MENU row — and four
-// half-width keys sit under it in two rows of two. This suite drives a real offline game to its end
+// half-width keys sit under it in two rows of two. This suite finishes a legal winning offline position
 // on the live (futa05) build and measures the card the owner will actually get:
 //
 //   1. the planet card, not the classic one: `#go-world` carries a real canvas at a real height;
@@ -24,13 +24,15 @@ import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { preview } from 'vite';
-import { legalActions, viewFor } from '../../src/engine/index.js';
-import type { Action, State } from '../../src/engine/index.js';
+import { apply, coordKey, legalActions, newGame, viewFor } from '../../src/engine/index.js';
+import type { State } from '../../src/engine/index.js';
 import { WORLD_CELLS, worldNeighbours } from '../../server/src/world.js';
 import { ONLINE } from '../../src/strings.js';
 import { SEEDS_WORD } from '../src/online/seed-icon.js';
 import { focusCell } from '../src/online/world-planet.js';
-import { seedSettings } from './helpers/settings-seed.js';
+import { seedSettings, SETTINGS_PREFIXES } from './helpers/settings-seed.js';
+import { positionSave } from './position.js';
+import { resumeSavedGame } from './helpers/menu-nav.js';
 
 const OUT = new URL('../../docs/screens/finish/', import.meta.url).pathname;
 const PORT = Number(process.env.PORT ?? 4319);
@@ -135,50 +137,27 @@ const waitStarterRitual = async (page: Page): Promise<void> => {
   }, undefined, { timeout: 15_000 }).catch(() => undefined);
 };
 
-/** Play the human's seat with real, legal moves; the computer plays its own turns. */
-const toGameOver = async (page: Page, maxSteps = 2000): Promise<string> => {
-  await waitStarterRitual(page);
-  const read = () => page.evaluate('(() => { const h = window.__severgrow; return h.state(); })()') as Promise<State | null>;
-  const idle = () => page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state() && !h.busy(); })()', undefined, { timeout: 30_000 });
-  let waiting = 0;
-  let refused = 0;
-  for (let i = 0; i < maxSteps; i++) {
-    const s = await read();
-    if (!s) return 'no state';
-    if (s.phase === 'GAME_OVER') return 'ended';
-    await idle();
-    const now = (await read())!;
-    if (now.phase === 'GAME_OVER') return 'ended';
-    if (now.actor !== 0) {
-      if (++waiting > 400) return `the computer never finished its turn (${now.actor}, ${now.phase})`;
-      await page.waitForTimeout(80);
-      continue;
-    }
-    waiting = 0;
-    const legal = legalActions(viewFor(now, 0));
-    if (!legal.length) return `no legal move for the human (${now.phase})`;
-    const pick = (t: Action['t']) => legal.find((a) => a.t === t) ?? null;
-    const natural = (now.phase === 'DRAW'
-      ? [pick('Draw'), pick('EndAct'), pick('Discard')]
-      : [pick('Bloom'), pick('Sprout'), pick('EndAct'), pick('Discard')])
-      .filter((a): a is Action => !!a);
-    const candidates: Action[] = [...natural, ...legal.filter((a) => !natural.includes(a))];
-    let applied = false;
-    for (const candidate of candidates) {
-      const ok = await page.evaluate(
-        ([a, who]) => Boolean((window as unknown as { __severgrow: { playFor: (x: unknown, p: number) => boolean } }).__severgrow.playFor(a, who)),
-        [candidate, 0] as const,
-      );
-      if (ok) { applied = true; break; }
-    }
-    if (!applied) {
-      if (++refused > 6) return `the app refused every legal action (${now.phase})`;
-      await page.waitForTimeout(150);
-      continue;
-    }
-    refused = 0;
+/** The current finish policy shows the Planet after a win with enough Seeds.
+ * Start one legal Grow from a surround win, rather than accidentally test the loss/board branch. */
+const winningPosition = (): State => {
+  const base = newGame(23), board = { ...base.board }, terrain = { ...base.terrain };
+  for (const [i,key] of ['-1,1','0,0','1,0','2,0','2,-1','3,-2','3,-3','2,-3','1,-2','0,1','0,2','-1,2','-2,1','-2,0'].entries()) {
+    if (key in board && !board[key]) { board[key] = { owner:0, strength:2+i%7 }; terrain[key]='normal'; }
   }
-  return `still playing after ${maxSteps} steps`;
+  board['1,-1']=null; terrain['1,-1']='normal';
+  return { ...base,board,terrain,phase:'ACT',actor:0,turnPlayer:0,
+    hands:[[{id:1200,suit:1,rank:9}],base.hands[1]],history:[] };
+};
+const toGameOver = async (page: Page): Promise<string> => {
+  await waitStarterRitual(page);
+  await page.waitForFunction(() => !(window as any).__severgrow.busy());
+  const state = await page.evaluate(() => (window as any).__severgrow.state()) as State;
+  const action = legalActions(viewFor(state,0)).find(a => a.t==='Sprout' && coordKey(a.coord)==='1,-1');
+  if (!action || apply(state,action).result?.winner!==0) throw Error('Planet fixture must finish through a legal win');
+  const accepted = await page.evaluate(a => (window as any).__severgrow.playFor(a,0),action);
+  if (!accepted) return 'winning Grow was not accepted';
+  await page.waitForFunction(() => (window as any).__severgrow.state().phase==='GAME_OVER');
+  return 'ended';
 };
 
 const dismissInstall = async (page: Page): Promise<void> => {
@@ -303,7 +282,9 @@ const playToCard = async (vp: { width: number; height: number }, scenario: Scena
   page.on('pageerror', (e) => errors.push(e.message));
   await seedSettings(page, { sound: false, music: false, coach: false, speed: 'skip', reduceMotion: true, autoSkip: false, confirmPolicy: 'always' });
   await stub(page, scenario, delayMs);
-  await page.goto(`${origin}/?seed=219682080`, { waitUntil: 'load' });
+  await page.addInitScript(({save,prefixes}) => { (window as any).__name=(f:unknown)=>f; for(const prefix of prefixes){localStorage.setItem(prefix+'severgrow.save.v7',save);localStorage.setItem(prefix+'severgrow.install-prompt.v1',JSON.stringify({games:0,shown:true,never:true}));} },{save:positionSave({state:winningPosition(),coach:{step:99,taught:[],known:[],choice:0,summaryDone:true}}),prefixes:[...SETTINGS_PREFIXES]});
+  await page.goto(origin, { waitUntil: 'load' });
+  await resumeSavedGame(page);
   await page.waitForFunction('(() => { const h = window.__severgrow; return !!h && !!h.state(); })()', undefined, { timeout: 40_000 });
   const ended = await toGameOver(page);
   check(`[${scenario}${delayMs ? '+slow' : ''}] the practice game reached its end`, ended === 'ended', ended);

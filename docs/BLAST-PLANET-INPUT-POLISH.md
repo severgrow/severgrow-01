@@ -64,3 +64,14 @@ Release: use the existing CI-gated /test/ workflow. Live promotion remains a sep
 - Local WebKit launch was attempted and failed because the WebKit executable is absent.
   The new iOS suites are required in CI; that does not constitute physical-device testing.
 - Full local check and broader release gates are still pending at this commit's creation.
+
+The first full local run passed 4,781 tests and exposed one old source-contract assertion that
+still expected the short sign-in key. It now pins the full visible prompt instead, preserving
+its restriction that other tile actions remain icons. The complete suite is rerun after this fix.
+
+The endgame browser fixture now finishes a legal surround win, matching the current approved
+finish policy (losses show the final board, wins with enough Seeds show the Planet). It records
+an already-seen install invitation so that unrelated overlay cannot steal the tested tile tap.
+No outcome is mocked and no application rule or finish-window policy is changed.
+
+Future card-skin ownership decisions are recorded separately in `CARD-SKIN-PERSPECTIVE.md`.

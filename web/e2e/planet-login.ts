@@ -5,6 +5,7 @@ import { chromium, webkit } from 'playwright-core';
 import { productFixture } from './helpers/product-fixture.js';
 import { WORLD_VERSION, seenWorld } from '../../server/src/world.js';
 import { ONLINE } from '../../src/strings.js';
+const cors={'access-control-allow-origin':'*','access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'apikey,authorization,content-type,x-futasaku-client-version,x-futasaku-rules-version'};
 const out='/tmp/planet-login';mkdirSync(out,{recursive:true});
 const fixture=await productFixture({offlineApiPort:65530});
 const ios=process.env.BLAST_WEBKIT==='1';
@@ -17,9 +18,9 @@ try{
   await p.route('**/v1/**',async route=>{
    const path=new URL(route.request().url()).pathname;
    const body=path.endsWith('/auth/methods')?{ok:true,email:true}:/\/world$/.test(path)?{ok:true,world}:path.includes('challenges')?{ok:true,outgoing:[],incoming:[],serverNow:Date.now()}:null;
-   await route.fulfill({status:body?200:503,headers:{'access-control-allow-origin':'*'},contentType:'application/json',body:JSON.stringify(body??{error:'test service unavailable'})});
+   await route.fulfill({status:body?200:503,headers:cors,contentType:'application/json',body:JSON.stringify(body??{error:'test service unavailable'})});
   });
-  await p.route('**/auth/v1/settings',r=>r.fulfill({status:200,headers:{'access-control-allow-origin':'*'},contentType:'application/json',body:JSON.stringify({external:{email:true,google:false}})}));
+  await p.route('**/auth/v1/settings',r=>r.fulfill({status:200,headers:cors,contentType:'application/json',body:JSON.stringify({external:{email:true,google:false}})}));
   await p.addInitScript(({world})=>{
    (window as any).__name=(f:unknown)=>f;
    localStorage.setItem('futa05-test:severgrow.settings.v1',JSON.stringify({sound:false,music:false,reduceMotion:false}));
