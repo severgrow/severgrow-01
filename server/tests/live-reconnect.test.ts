@@ -214,7 +214,8 @@ describe('both players drop at once (the hold)', () => {
 
     // Only ~15 s since they both went quiet (and about a minute of headroom): HOLD, no ladder.
     const held = await match(h, matchId);
-    await h.live.status(a, matchId);
+    // The server's own tick: both are gone, so neither reads (a read would count as presence).
+    await h.live.tickMatch(matchId);
     const afterHold = await match(h, matchId);
     expect(afterHold.status).toBe('active');
     expect(afterHold.result).toBeNull();
@@ -246,6 +247,7 @@ describe('both players drop at once (the hold)', () => {
 
     // Walk past the hold (each tick re-arms it in short steps), then past its end.
     h.advance(STALE + HOLD + 1_000);
+    await h.live.tickMatch(matchId);
     const s = await h.live.status(a, matchId);
     const after = await match(h, matchId);
     expect(after.status).toBe('finished');

@@ -33,7 +33,17 @@ export type RetrySubmitOptions = {
   sleep?: (ms: number) => Promise<void>;
   /** Called to refetch after STALE_REVISION / conflict. */
   refetch?: () => Promise<{ player: MatchViewPayload; serverNow: number }>;
+  /** Injected timers for the per-attempt deadline (tests). */
+  setTimer?: (fn: () => void, ms: number) => unknown;
+  clearTimer?: (id: unknown) => void;
 };
+
+/**
+ * One attempt that has not answered by now is abandoned and sent again with the SAME request id
+ * (the server applies a request id once), so a stalled connection can never hold a move forever
+ * (owner, 2026-11-13: in Blitz one phone "couldnt move").
+ */
+export const SUBMIT_TIMEOUT_MS = 12_000;
 
 const defaultSleep = (ms: number): Promise<void> =>
   ms <= 0 ? Promise.resolve() : new Promise((r) => setTimeout(r, ms));
@@ -88,7 +98,16 @@ export const submitWithRetries = async (options: RetrySubmitOptions): Promise<Su
   let lastError: unknown = null;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      const response = await options.client.submitAction(options.token, options.matchId, body);
+      const setTimer = options.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
+      const clearTimer = options.clearTimer ?? ((id: unknown) => clearTimeout(id as ReturnType<typeof setTimeout>));
+      const abort = typeof AbortController === 'function' ? new AbortController() : null;
+      const deadline = abort ? setTimer(() => abort.abort(), SUBMIT_TIMEOUT_MS) : null;
+      let response: Awaited<ReturnType<typeof options.client.submitAction>>;
+      try {
+        response = await options.client.submitAction(options.token, options.matchId, body, abort ? { signal: abort.signal } : {});
+      } finally {
+        if (deadline !== null) clearTimer(deadline);
+      }
       return { ok: true, response };
     } catch (error) {
       lastError = error;

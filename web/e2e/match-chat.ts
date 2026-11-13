@@ -809,7 +809,8 @@ try {
           .getBoundingClientRect(),
         context = document
           .querySelector('#smart-context')!
-          .getBoundingClientRect();
+          .getBoundingClientRect(),
+        led = document.querySelector('#smart-led')!.getBoundingClientRect();
       const gap = parseFloat(
         getComputedStyle(document.querySelector('#smart-panel')!).rowGap,
       );
@@ -854,20 +855,16 @@ try {
           p.right <= innerWidth + 1 &&
           p.bottom <= innerHeight + 1,
         scroll: document.documentElement.scrollWidth <= innerWidth,
+        // Above the DISPLAY, on its left edge, a key's size (owner, 2026-11-13).
         cockpitKey:
-          Math.abs(t.left - context.left) < 1 &&
+          Math.abs(t.left - led.left) < 1 &&
           Math.abs(t.width - context.width) < 1 &&
           Math.abs(t.height - context.height) < 1 &&
-          Math.abs(context.top - t.bottom - gap) < 1,
+          Math.abs(led.top - t.bottom - gap) < 1,
+        // No key frame: just the icon (owner, 2026-11-13).
         hardware:
-          getComputedStyle(
-            document.querySelector('#match-chat-toggle')!,
-            '::before',
-          ).backgroundImage ===
-          getComputedStyle(
-            document.querySelector('#smart-context')!,
-            '::before',
-          ).backgroundImage,
+          getComputedStyle(document.querySelector('#match-chat-toggle')!, '::before').backgroundImage === 'none' &&
+          getComputedStyle(document.querySelector('#match-chat-toggle')!).backgroundColor === 'rgba(0, 0, 0, 0)',
         // The owner's rule is 44x44, not "about 44 tall": the quick-phrase key was 36x44 and passed
         // this check because it only ever measured HEIGHT. Measure both sides of every chat key.
         targets: buttons.every((b) => {
@@ -931,7 +928,7 @@ try {
           return (
             e === document.activeElement &&
             s.outlineStyle === 'none' &&
-            s.boxShadow !== 'none'
+            getComputedStyle(e.querySelector('svg')!).filter !== 'none'
           );
         }),
       );

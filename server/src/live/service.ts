@@ -104,6 +104,9 @@ export type LiveServiceOptions = {
   notifier?: LiveNotifier;
 };
 
+/** A live status read refreshes the reader's presence once it is older than this. */
+export const PRESENCE_FROM_READ_MS = 15_000;
+
 export class LiveService {
   private readonly storage: Storage;
   private readonly live: LiveStore;
@@ -485,7 +488,16 @@ export class LiveService {
   // ---------------------------------------------------------------- status (also the lazy clock check)
 
   async status(player: PlayerRecord, matchId: string): Promise<LiveStatusWire> {
-    const seat = await this.seatIn(player, matchId);
+    const [seat, before] = await Promise.all([this.seatIn(player, matchId), this.live.player(player.id)]);
+    // READING THE DUEL IS PRESENCE (owner, 2026-11-13: a phone that was online showed as "away"). This
+    // authenticated read comes every few seconds from an open duel; when the last heartbeat is getting
+    // old it refreshes presence, so a lost heartbeat or two never makes an active player "away" (or
+    // starts their reconnect ladder). Done BEFORE the tick, which judges presence.
+    const readAt = this.now();
+    if (!before || before.presenceAt === null || readAt - before.presenceAt > PRESENCE_FROM_READ_MS) {
+      const status: PresenceStatus = before?.presence === 'in_live' || before?.presence === 'in_match' ? before.presence : 'in_match';
+      await this.live.setPresence(player.id, status, matchId, readAt);
+    }
     await this.tickMatch(matchId);
     const now = this.now();
     // Independent reads in parallel: this is polled every 1-3 s by both players while in a match.

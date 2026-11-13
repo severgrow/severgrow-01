@@ -235,6 +235,8 @@ describe('Blitz timeouts END THE TURN (no strikes, no escape back to 24-hour pla
     const { a, b, matchId } = await h.pair();
     await h.goLive(a, b, matchId);
     h.advance(10 * 60_000);
+    // The server's own tick (a gone player sends nothing; reading the duel would count as presence).
+    await h.live.tickMatch(matchId);
     const s = await h.live.status(a, matchId);
     expect(s.live).toBe(false);
     expect(s.endedReason).toBe('finished');

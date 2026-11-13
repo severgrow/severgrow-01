@@ -9,6 +9,12 @@ import { mark } from '../logic/timing.js';
 import type { ConnectionStatus, MatchChannel, MatchPing, PresenceSnapshot, PresenceStatus } from './types.js';
 
 export const POLL_ACTIVE_MS = 2_000;
+/**
+ * A match view that has not answered by now is abandoned (owner, 2026-11-13: on two phones in Blitz
+ * one "couldnt move"). A stalled request with no answer and no error used to own the one in-flight
+ * slot forever, so no later poll or ping ever reached the server and the board stopped.
+ */
+export const VIEW_TIMEOUT_MS = 10_000;
 export const POLL_HIDDEN_MS = 30_000;
 /**
  * While it is the opponent's turn, we are waiting for a whole turn to complete. Poll faster than
@@ -135,7 +141,13 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
       let res: Awaited<ReturnType<typeof options.client.getState>>;
       try {
         mark('view:sent', { reason, since: revision });
-        res = await options.client.getState(options.token, options.matchId, revision);
+        const abort = typeof AbortController === 'function' ? new AbortController() : null;
+        const deadline = abort ? setTimer(() => abort.abort(), VIEW_TIMEOUT_MS) : null;
+        try {
+          res = await options.client.getState(options.token, options.matchId, revision, abort ? { signal: abort.signal } : {});
+        } finally {
+          if (deadline !== null) clearTimer(deadline);
+        }
       } catch (error) {
         if (error instanceof DuelError && error.code === 'CLIENT_TOO_OLD') {
           setConnection('client_too_old', 'Reload to update FUTASAKU');

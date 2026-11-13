@@ -338,9 +338,9 @@ export class DuelClient {
   }
 
   /** The current player view (optionally only events newer than `sinceRevision`). */
-  getState(token: string, matchId: string, sinceRevision?: number): Promise<GetViewResponse> {
+  getState(token: string, matchId: string, sinceRevision?: number, options: { signal?: AbortSignal } = {}): Promise<GetViewResponse> {
     const query = sinceRevision === undefined ? '' : `?since=${sinceRevision}`;
-    return this.request<GetViewResponse>('GET', `/v1/matches/${encodeURIComponent(matchId)}/view${query}`, { token });
+    return this.request<GetViewResponse>('GET', `/v1/matches/${encodeURIComponent(matchId)}/view${query}`, { token, ...(options.signal ? { signal: options.signal } : {}) });
   }
 
   /**
@@ -359,10 +359,11 @@ export class DuelClient {
     });
   }
 
-  submitAction(token: string, matchId: string, request: SubmitActionRequest): Promise<SubmitActionResponse> {
+  submitAction(token: string, matchId: string, request: SubmitActionRequest, options: { signal?: AbortSignal } = {}): Promise<SubmitActionResponse> {
     return this.request<SubmitActionResponse>('POST', `/v1/matches/${encodeURIComponent(matchId)}/actions`, {
       token,
       body: request,
+      ...(options.signal ? { signal: options.signal } : {}),
     });
   }
 

@@ -8,13 +8,16 @@ export const CHAT_CSS = `
      one decimal (7.4px); the saturate is untouched, and the tint keeps the shared --dark-glass. */
   --chat-glass-blur: blur(7.4px) saturate(1.05); }
 #match-chat-toggle { position:absolute;left:52px;top:2px;width:44px;height:44px;z-index:12;pointer-events:auto;display:grid;place-items:center;color:#e8ddc5; }
-/* An extra hardware key above the context slot; absolute placement leaves cockpit layout intact. */
-#smart-panel > #match-chat-toggle {left:auto;right:0;top:calc(-1 * (var(--control-size,44px) + var(--control-gap,4px)));width:var(--control-size,44px);height:var(--control-size,44px);min-width:var(--control-size,44px);min-height:var(--control-size,44px);margin:0;padding:0;box-sizing:border-box;border:0;border-radius:12px;background:#111312;color:var(--control-ivory,#f5edda);box-shadow:none;touch-action:manipulation;}
-#smart-panel > #match-chat-toggle::before {content:'';position:absolute;inset:0;pointer-events:none;background:url('./hardware/button-frame-supplied.webp') center / contain no-repeat;}
+/* The chat key sits ABOVE THE DISPLAY, on its left edge, with NO key frame: just the icon, where a
+   key would be (owner, 2026-11-13: "make the button of chat have no frame ... it sits on the left
+   aligned with the display on the left as if it had the button but the button is not visible").
+   Absolute placement leaves the cockpit layout intact. */
+#smart-panel > #match-chat-toggle {left:0;right:auto;top:calc(-1 * (var(--control-size,44px) + var(--control-gap,4px)));width:var(--control-size,44px);height:var(--control-size,44px);min-width:var(--control-size,44px);min-height:var(--control-size,44px);margin:0;padding:0;box-sizing:border-box;border:0;border-radius:12px;background:transparent;color:var(--control-ivory,#f5edda);box-shadow:none;touch-action:manipulation;}
 #smart-panel > #match-chat-toggle svg {position:relative;width:21px;height:21px;z-index:1;opacity:.94;}
-#smart-panel > #match-chat-toggle:is(:hover,:focus-visible,[aria-expanded='true']) {color:#fff1cf;box-shadow:0 0 9px var(--light-bloom,rgba(196,150,88,.22));}
+#smart-panel > #match-chat-toggle:is(:hover,:focus-visible,[aria-expanded='true']) {color:#fff1cf;}
+#smart-panel > #match-chat-toggle:is(:hover,:focus-visible,[aria-expanded='true']) svg {filter:drop-shadow(0 0 5px var(--light-bloom,rgba(196,150,88,.45)));}
 #smart-panel > #match-chat-toggle:focus-visible {outline:none;}
-#smart-panel > .match-chat-preview {position:absolute;top:auto;left:auto;right:0;bottom:calc(100% + var(--control-size,44px) + var(--control-gap,4px) + 8px);color:#e8ddc5;box-sizing:border-box;}
+#smart-panel > .match-chat-preview {position:absolute;top:auto;left:0;right:auto;bottom:calc(100% + var(--control-size,44px) + var(--control-gap,4px) + 8px);color:#e8ddc5;box-sizing:border-box;}
 #match-chat-toggle[aria-expanded='true']{visibility:hidden;pointer-events:none;}
 #match-chat-toggle svg {width:19px;height:19px;stroke:currentColor;stroke-width:1.5;fill:none;}
 /* MUTED IN THE COCKPIT (owner, 2026-10-26): the key is dimmed AND carries a slash through the
