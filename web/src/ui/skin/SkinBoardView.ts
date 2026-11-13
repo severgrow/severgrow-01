@@ -748,6 +748,21 @@ export class SkinBoardView extends BoardView {
     return id;
   }
 
+  /** The board polygon is the single source of truth for the experimental painted core.
+   * Its foliage is copied separately above adjacent tiles by the Art Lab preview.
+   * The clip is the *same path as the game's actual tap hex*, in the current orientation.
+   */
+  private experimentalArtClip(key: string): string {
+    const name = `art-lab-tile-core-${key.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    const id = this.id(name);
+    const defs = this.svg.querySelector('defs')!;
+    if (!defs.querySelector(`#${id}`)) {
+      const clip = el('clipPath', { id, clipPathUnits: 'userSpaceOnUse' }, defs);
+      el('path', { d: hexPath(key, S, 'flat') }, clip);
+    }
+    return this.url(name);
+  }
+
   protected override drawTile(parent: SVGGElement, key: string, t: Tile): SVGGElement {
     const skin = this.skin;
     const g = el('g', { class: `tile ${t.owner === 0 ? 'you' : 'bot'}${t.root ? ' root' : ''} skin-tile`, 'data-key': key }, parent);
@@ -804,10 +819,15 @@ export class SkinBoardView extends BoardView {
         // Source grass has deeper foliage overhang than ash. Both keep the same
         // visual *hex radius* once their transparent margins are accounted for.
         const bleedSize = t.owner === 0 ? 2.50 : 2.33;
-        const sz = S * (this.overhangingTiles ? bleedSize : 2.07) * (shared.size ? 1.1 : 1);
-        // sides shared with the same player fade into the territory's ground below (one continuous
-        // painting), so neighbouring tiles melt into one field; outer sides stay crisp
-        const holder = shared.size && this.netDefs ? el('g', { mask: `url(#${this.seamMask(key, shared)})` }, g) : g;
+        // Crucial: do NOT multiply designer sprites by shared.size ? 1.1 : 1.
+        // That scaled the inner painted hex away from the board's actual point-up footprint.
+        const sz = S * (this.overhangingTiles ? bleedSize : 2.07 * (shared.size ? 1.1 : 1));
+        // Cut the *body* precisely to the existing board hex, while the lab's separate,
+        // pointer-transparent overhang layer paints only foliage/smoke outside the boundary.
+        // The normal live skin retains its existing seam softening unchanged.
+        const holder = this.overhangingTiles
+          ? el('g', { 'clip-path': this.experimentalArtClip(key) }, g)
+          : shared.size && this.netDefs ? el('g', { mask: `url(#${this.seamMask(key, shared)})` }, g) : g;
         el('image', { href: this.assets.url(src), x: x - sz / 2, y: y - sz / 2, width: sz, height: sz, class: `skin-tile-art${cut ? ' cut' : ''}`, preserveAspectRatio: 'none', ...(turn ? { style: `transform-box:fill-box;transform-origin:center;transform:rotate(${turn.toFixed(2)}deg)` } : {}) }, holder);
         if (look?.lava && !cut) this.liveLava(g, holder, key, src, x, y, sz, turn, s9);
       }
