@@ -55,7 +55,7 @@ const SEED = Number(process.env.OG_SEED ?? 8080);
 const MOVES = Number(process.env.OG_MOVES ?? 12);
 
 /** The app's default (ink) look: the cream accent the app tints its mark with, on near-black paper. */
-const PAPER = '#0d0e11';
+const PAPER = '#0e0f10';
 
 const asset = (rel: string) => resolve(REPO, 'web/src/assets', rel);
 const dataUri = (buf: Buffer, mime: string) => `data:${mime};base64,${buf.toString('base64')}`;
@@ -120,8 +120,11 @@ const { server, url: BASE } = await serveStaticDist(DIST);
 const browser = await chromium.launch({ executablePath: CHROME });
 
 let boardPng: Buffer;
+let boardBox = { x: 0, y: 0, width: 1, height: 1 };
 try {
-  const page = await browser.newPage({ viewport: { width: CARD_W, height: CARD_H }, deviceScaleFactor: 1 });
+  // THE PHONE GAME (owner, 2026-11-13: "keep the cockpit and hand view"): the board, the cockpit and the
+  // hand as one column, captured at 3x so it stays sharp when scaled into the card.
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
   await page.addInitScript(() => {
     (window as unknown as { __name: (f: unknown) => unknown }).__name = (f) => f;
     if (sessionStorage.getItem('og-card')) return;
@@ -168,12 +171,32 @@ try {
       + '*,*::before,*::after{animation:none !important;transition:none !important}',
   });
   await page.evaluate('document.activeElement instanceof HTMLElement && document.activeElement.blur()');
-  await page.mouse.move(CARD_W - 2, CARD_H - 2);
+  // Everything behind the board takes the card's own ground, so the crop has no visible rectangle.
+  await page.evaluate((ground: string) => {
+    const svg = document.querySelector('#board .hex-cell')?.closest('svg');
+    let el: HTMLElement | null = svg?.parentElement ?? null;
+    while (el) {
+      el.style.setProperty('background', ground, 'important');
+      el.style.setProperty('background-image', 'none', 'important');
+      el.style.setProperty('box-shadow', 'none', 'important');
+      el = el.parentElement;
+    }
+  }, PAPER);
+  // The header's own chrome (menu key, small wordmark, history key) is not part of the picture.
+  await page.addStyleTag({ content: '#hud-menu,#hud-history,#futasaku-hud-plain,#staging-badge{visibility:hidden !important}' });
   await page
     .waitForFunction('!!(window.__severgrow && window.__severgrow.particles().alive === 0)', undefined, { timeout: 10_000 })
     .catch(() => undefined);
   await page.waitForTimeout(900);
-  boardPng = await page.screenshot({ animations: 'disabled' });
+  // The game column: from the board's top to the hand's lowest card, across the screen.
+  boardBox = (await page.evaluate(`(() => {
+    const rs = [...document.querySelectorAll('#board .hex-cell, #dock, #hand .card, #hand > *')].map((c) => c.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+    const x = Math.min(...rs.map((r) => r.left)), y = Math.min(...rs.map((r) => r.top));
+    const r = Math.max(...rs.map((r) => r.right)), b = Math.max(...rs.map((r) => r.bottom));
+    const top = Math.max(0, y - 10), bottom = Math.min(innerHeight, b + 10);
+    return { x: 0, y: top, width: innerWidth, height: bottom - top };
+  })()`)) as { x: number; y: number; width: number; height: number };
+  boardPng = await page.screenshot({ clip: boardBox, animations: 'disabled' });
   const boardState = (await page.evaluate('window.__severgrow.state()')) as State;
   if (DEBUG_DIR) {
     mkdirSync(DEBUG_DIR, { recursive: true });
@@ -189,38 +212,26 @@ server.close();
 
 // ---------- 2. compose the card ----------
 
-/** PLAIN wordmark (owner brand pack) — cream on transparent. Prefer SVG; PNG is the OG fallback. */
-const painted = (id: string, file: string, srcW: number, srcH: number, w: number, mime = 'image/png') => {
-  const h = Math.round((w * srcH) / srcW);
-  return `<svg class="${id}" width="${w}" height="${h}" viewBox="0 0 ${srcW} ${srcH}" role="img" aria-label="${TITLE}">`
-    + `<image href="${dataUri(readFileSync(file), mime)}" width="${srcW}" height="${srcH}" preserveAspectRatio="xMidYMid meet"/></svg>`;
-};
-
+// THE CARD (owner, 2026-11-13): the real board on the left, floating on the app's own charcoal; on the
+// right the PAINT wordmark (the home menu's own mark, owner brand pack) with the share copy under it,
+// one sentence per line, in the product's monospace. Nothing else: no interface, no decoration.
+const BOARD_H = 590;
+const boardW = Math.round((BOARD_H * boardBox.width) / boardBox.height);
 const cardHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8" />
 <title>${TITLE}</title>
 <style>
-  @font-face { font-family:'Besley'; src:url(${dataUri(readFileSync(distAsset(/besley.*\.woff2$/)), 'font/woff2')}) format('woff2'); font-weight:600 800; font-display:block; }
   @font-face { font-family:'Fragment Mono'; src:url(${dataUri(readFileSync(distAsset(/fragment-mono.*\.woff2$/)), 'font/woff2')}) format('woff2'); font-weight:400; font-display:block; }
-  html, body { margin:0; width:${CARD_W}px; height:${CARD_H}px; overflow:hidden; background:${PAPER}; --band:196px; }
-  /* the REAL game, full bleed */
-  .board { position:absolute; inset:0; background-image:url(${dataUri(boardPng, 'image/png')}); background-size:cover; background-position:center; }
-  /* The board's own growth sits in the lower two-thirds of the 1200x630 frame, so the lockup owns
-     the TOP band — the only part of the frame the product leaves quiet — and the scrim fades out
-     before the first tile. Nothing is washed out and nothing has to fight the type. */
-  .scrim { position:absolute; inset:0; background:
-      linear-gradient(180deg, rgba(10,11,14,.96) 0%, rgba(10,11,14,.90) 11%, rgba(10,11,14,.42) 24%, rgba(10,11,14,0) 34%); }
-  .lock { position:absolute; left:68px; top:44px; display:flex; align-items:center; gap:28px; }
-  .emblem { display:block; }
-  .wordmark { display:block; }
-  .tag { position:absolute; right:76px; top:0; height:var(--band); margin:0; display:flex; flex-direction:column;
-         justify-content:center; align-items:flex-end; gap:2px;
-         font-family:'Fragment Mono', ui-monospace, monospace; font-size:21px; line-height:1.45;
-         letter-spacing:.005em; color:rgba(239,229,203,.80); }
+  html, body { margin:0; width:${CARD_W}px; height:${CARD_H}px; overflow:hidden; background:${PAPER}; }
+  .board { position:absolute; left:${Math.round(320 - boardW / 2)}px; top:${Math.round((CARD_H - BOARD_H) / 2)}px; width:${boardW}px; height:${BOARD_H}px;
+    background:url(${dataUri(boardPng, 'image/png')}) center/contain no-repeat; }
+  .side { position:absolute; left:640px; width:470px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; align-items:center; gap:44px; }
+  .side img { display:block; width:100%; height:auto; }
+  .tag { margin:0; text-align:center; font-family:'Fragment Mono', ui-monospace, monospace; font-size:21px; line-height:1.6; letter-spacing:.005em; color:rgba(239,229,203,.74); }
   .tag span { display:block; }
 </style></head><body>
-  <div class="board"></div><div class="scrim"></div>
-  <div class="lock">${painted('wordmark', asset('brand/plain-wordmark.svg'), 2106, 662, 428, 'image/svg+xml')}</div>
-  <p class="tag">${TAGLINE.map((line) => `<span>${line}</span>`).join('')}</p>
+  <div class="board"></div>
+  <div class="side"><img src="${dataUri(readFileSync(asset('brand/paint-wordmark.svg')), 'image/svg+xml')}" alt="${TITLE}" />
+  <p class="tag">${TAGLINE.map((line) => `<span>${line}</span>`).join('')}</p></div>
 </body></html>`;
 
 const renderCard = async (b: Browser): Promise<Buffer> => {
@@ -315,9 +326,12 @@ check('the share copy carries no stale Severor branding', !/severor|severgrow/i.
 const iconRefs = [...indexHtml.matchAll(/<link rel="(?:icon|apple-touch-icon)"[^>]*href="\.\/([^"]+)"/g)].map((m) => m[1]!);
 check('index.html names at least one icon', iconRefs.length > 0, iconRefs.join(', '));
 for (const ref of iconRefs) {
-  const file = resolve(REPO, 'web/src/assets/futa04-icons', ref);
-  // Favicon is the tree-hex (futasaku-favicon-*); apple-touch / PWA tiles are futasaku-icon-*.
-  const current = /^(futasaku-icon-|futasaku-favicon-)/.test(ref);
+  // App icons come from the icon pipeline; the browser-tab set (futasaku-tab-*, light and dark) ships
+  // from web/public with the 0.83 brand pack.
+  const file = [resolve(REPO, 'web/src/assets/futa04-icons', ref), resolve(REPO, 'web/public', ref)].find((f) => existsSync(f))
+    ?? resolve(REPO, 'web/src/assets/futa04-icons', ref);
+  // Favicon is the tree-hex (futasaku-favicon-* / futasaku-tab-*); apple-touch / PWA tiles are futasaku-icon-*.
+  const current = /^(futasaku-icon-|futasaku-favicon-|futasaku-tab-)/.test(ref);
   check(`icon ${ref} exists (current futasaku art)`, existsSync(file) && current,
     existsSync(file) ? ref : `${file} is missing`);
 }

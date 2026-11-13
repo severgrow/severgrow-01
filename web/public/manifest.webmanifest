@@ -1,7 +1,7 @@
 {
   "name": "Futasaku",
   "short_name": "Futasaku",
-  "description": "Grow your network. Keep it joined to your root. Cut the bot's links.",
+  "description": "A strategy card game for two. Grow from your home. Cut your opponent off.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -99,7 +99,7 @@ ${section.lines.map((line) => `          <li>${esc(line)}</li>`).join('\n')}
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${esc(privacy.title)} - Futasaku</title>
     <meta name="description" content="${attr(privacy.intro)}" />
-    <link rel="canonical" href="https://www.futasaku.com/${path}" />
+    <link rel="canonical" href="https://www.futasaku.com/${path}/" />
     <style>
 ${STYLE}    </style>
   </head>

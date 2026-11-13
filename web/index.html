@@ -87,8 +87,15 @@
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0e0f10" />
-    <meta name="description" content="Futasaku: grow your network, keep it joined to your home, cut your opponent's links." />
+    <meta name="description" content="Futasaku is a strategy card game for two on a hex board. Grow from your home, keep your land connected and cut your opponent off. Play the campaign, practise against the computer or play friends online." />
     <title>Futasaku</title>
+    <link rel="canonical" href="https://www.futasaku.com/" />
+    <!-- Search may show the large preview image (Google Search and Discover). The /test/ copy replaces
+         this with noindex (scripts/compose-test-route.mjs), so there is never a second robots tag. -->
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="application-name" content="Futasaku" />
+    <!-- What the page is, for search (static: never fetched, never executed). -->
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://www.futasaku.com/#website","url":"https://www.futasaku.com/","name":"Futasaku","inLanguage":"en"},{"@type":"VideoGame","@id":"https://www.futasaku.com/#game","name":"Futasaku","url":"https://www.futasaku.com/","description":"A strategy card game for two on a hex board. Grow from your home, keep your land connected and cut your opponent off. Play the campaign, practise against the computer or play friends online.","image":"https://www.futasaku.com/og.jpg","genre":["Strategy","Card game","Board game"],"gamePlatform":"Web browser","applicationCategory":"Game","operatingSystem":"Any","playMode":["SinglePlayer","MultiPlayer"],"numberOfPlayers":{"@type":"QuantitativeValue","value":2},"inLanguage":"en","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}]}</script>
     <!-- Tab icon (owner, 2026-11-09): the tree-hex edge to edge, no margin. Cream on a dark browser,
          FUTASAKU off-black (#0e0f10) on a light one. The light-mode set comes LAST so a browser that
          ignores `media` still shows a mark that reads on a light tab bar. -->
@@ -105,11 +112,13 @@
          cache that the artwork changed. Regenerate the picture with
          `npx tsx web/e2e/og-image.ts` (and bump `?v=` in the same commit). -->
     <meta property="og:title" content="Futasaku" />
-    <meta property="og:description" content="Grow your network. Keep it joined to your home. Cut your opponent's links." />
+    <meta property="og:description" content="A strategy card game for two. Grow from your home. Cut your opponent off." />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Futasaku" />
+    <meta property="og:locale" content="en_GB" />
     <meta property="og:url" content="https://www.futasaku.com/" />
     <meta property="og:image" content="https://www.futasaku.com/og.jpg?v=7" />
+    <meta property="og:image:secure_url" content="https://www.futasaku.com/og.jpg?v=7" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -117,7 +126,7 @@
     <!-- X/Twitter does not read the og:* tags for a large-image card; it needs its own. -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Futasaku" />
-    <meta name="twitter:description" content="Grow your network. Keep it joined to your home. Cut your opponent's links." />
+    <meta name="twitter:description" content="A strategy card game for two. Grow from your home. Cut your opponent off." />
     <meta name="twitter:image" content="https://www.futasaku.com/og.jpg?v=7" />
     <meta name="twitter:image:alt" content="A Futasaku duel board: green growth around your home, the opponent's red pushing in, with the Futasaku wordmark." />
     <link rel="manifest" href="./manifest.webmanifest" />
@@ -192,6 +201,15 @@
     </style>
   </head>
   <body>
+    <!-- For anything that reads the page without running it (search crawlers, link previews). The
+         game itself needs JavaScript; this block is never shown when it runs. -->
+    <noscript>
+      <h1>Futasaku</h1>
+      <p>Futasaku is a strategy card game for two on a hex board. Grow from your home, keep your land
+        connected and cut your opponent off. Play the campaign, practise against the computer or play
+        friends online.</p>
+      <p>Futasaku needs JavaScript to play. <a href="./privacy/">Privacy</a> · <a href="./terms/">Terms of use</a></p>
+    </noscript>
     <div id="boot-cover" aria-hidden="true"></div>
     <div id="splash" class="splash" hidden aria-hidden="true"></div>
     <pre id="debug-corner" class="debug-corner" hidden></pre>

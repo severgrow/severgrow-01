@@ -39,6 +39,10 @@ const badge =
 writeFileSync(
   indexPath,
   html
+    // The test copy is not the official page: it carries no canonical of its own and is never indexed.
+    .replace(/\s*<link rel="canonical"[^>]*>/, '')
+    // ONE robots tag: the live page's (index, large previews) is removed before noindex is added.
+    .replace(/\s*<meta name="robots"[^>]*>/, '')
     .replace('</head>', '    <meta name="robots" content="noindex" />\n  </head>')
     .replace(/<title>([^<]*)<\/title>/, (_m, title) => `<title>TEST · ${title}</title>`)
     .replace('</body>', `  ${badge}\n  </body>`),

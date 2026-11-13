@@ -21,7 +21,7 @@ describe('/terms static page', () => {
   it('is emitted at terms/index.html with its own canonical address', () => {
     expect(TERMS_PAGE_PATH).toBe('terms/index.html');
     expect(file.endsWith(join('terms', 'index.html'))).toBe(true);
-    expect(html).toContain('<link rel="canonical" href="https://www.futasaku.com/terms" />');
+    expect(html).toContain('<link rel="canonical" href="https://www.futasaku.com/terms/" />');
     expect(html).toMatch(/<title>Terms of use - Futasaku<\/title>/);
   });
 
@@ -41,7 +41,7 @@ describe('/terms static page', () => {
   });
 
   it('the privacy page is unchanged in shape (its own canonical address)', () => {
-    expect(renderPrivacyPage(PRIVACY)).toContain('<link rel="canonical" href="https://www.futasaku.com/privacy" />');
+    expect(renderPrivacyPage(PRIVACY)).toContain('<link rel="canonical" href="https://www.futasaku.com/privacy/" />');
   });
 });
 

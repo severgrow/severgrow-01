@@ -1,0 +1,5 @@
+# Futasaku. The public game is the site root; test and preview copies carry noindex.
+User-agent: *
+Disallow: /admin/
+
+Sitemap: https://www.futasaku.com/sitemap.xml
