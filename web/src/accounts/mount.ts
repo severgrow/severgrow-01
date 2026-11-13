@@ -15,6 +15,7 @@ import type { KeyValue } from '../../../server/src/client.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { duelApiUrl, duelRegion } from '../online/config.js';
 import { IDENTITY_STORAGE_KEY } from '../online/identity.js';
+import { clearAccountBoundProgress } from './signout-reset.js';
 import { DISPLAY_NAME_MAX } from '../../../server/src/display-name.js';
 import { cachedTerritory, readTerritory } from '../online/territory-cache.js';
 import { glassBaseCss } from '../player/glass-surface.js';
@@ -900,6 +901,8 @@ export const mountAccounts = async (): Promise<void> => {
         /* storage blocked */
       }
       clearAccount(kv);
+      // The campaign place belongs to the account: the reloaded page is a fresh guest at level 1.
+      clearAccountBoundProgress(kv);
       location.reload();
       return true;
     });
