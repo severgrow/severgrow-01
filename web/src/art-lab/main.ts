@@ -101,9 +101,9 @@ const headerActions = h('div', { class: 'actions' },
     onpointerdown: () => setCompare(true), onpointerup: () => setCompare(false), onpointerleave: () => setCompare(false),
     onkeydown: (e) => { if ((e as KeyboardEvent).key === ' ') setCompare(true); }, onkeyup: () => setCompare(false) }),
   h('label', { class: 'key file' }, 'Import pack', h('input', { type: 'file', accept: '.zip,application/zip', id: 'import', onchange: onImport })),
-  // A terrain-only zip changes the two painted tile sets and homes, leaving today's cards,
-  // gold, rocks, cockpit, effects and every other slot untouched.
-  h('label', { class: 'key file', title: 'Overlay only the four terrain/home slots of a Futasaku Art Lab pack' },
+  // A terrain-only zip changes painted tiles, homes and optional full-hex Gold art.
+  // Today's cards, rocks, cockpit, input and effect assets remain untouched.
+  h('label', { class: 'key file', title: 'Overlay painted terrain, homes and optional Gold hexes without altering cards or gameplay' },
     'Import terrain only', h('input', { type: 'file', accept: '.zip,application/zip', id: 'import-terrain', onchange: onImportTerrain })),
   h('button', { type: 'button', class: 'key primary', id: 'export', onclick: onExport, text: 'Export art pack' }),
   h('button', { type: 'button', class: 'key quiet', id: 'clear', onclick: onClear, text: 'Clear all' }),
@@ -636,13 +636,13 @@ async function onImportTerrain(e: Event) {
   if (!f) return;
   try {
     const incoming = importPack(new Uint8Array(await f.arrayBuffer()));
-    const ids = ['p1-tiles', 'p2-tiles', 'p1-home', 'p2-home'] as const;
+    const ids = ['p1-tiles', 'p2-tiles', 'p1-home', 'p2-home', 'gold'] as const;
     const active = ids.filter((id) => (incoming.slots[id]?.files.length ?? 0) > 0);
-    if (!active.length) throw new Error('The pack has no painted terrain or home art.');
+    if (!active.length) throw new Error('The pack has no painted terrain, home or Gold art.');
     for (const id of active) art.slots[id] = incoming.slots[id]!;
     changed();
     renderSlots();
-    say(`Imported ${active.length} terrain/home slots from “${incoming.label}”. Other art, cards and effects kept.`);
+    say(`Imported ${active.length} terrain/home/Gold slots from “${incoming.label}”. Cards, rocks and effects kept.`);
   } catch (err) { say((err as Error).message); }
 }
 let clearArmed = false;
