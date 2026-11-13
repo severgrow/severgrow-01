@@ -1,5 +1,10 @@
-# Futasaku. The public game is the site root; test and preview copies carry noindex.
+# Futasaku. The public game is the site root; /test/ carries noindex. The older preview copies are
+# locked builds (their files must stay byte-identical), so crawlers are kept out of them here instead.
 User-agent: *
 Disallow: /admin/
+Disallow: /futa0.4/
+Disallow: /futa-test/
+Disallow: /test2/
+Disallow: /firststep/
 
 Sitemap: https://www.futasaku.com/sitemap.xml

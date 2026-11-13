@@ -75,10 +75,11 @@ describe('indexing', () => {
     }
   });
 
-  it('the older preview copies published beside the root are marked noindex', () => {
-    const composer = read('../../scripts/compose-retired-routes.mjs');
-    expect(composer).toMatch(/for \(const route of \['futa0\.4', 'futa-test', 'test2', 'firststep'\]\)/);
-    expect(composer).toMatch(/<meta name="robots" content="noindex" \/>/);
+  it('the older preview copies are kept out of search by robots.txt, never by editing their locked files', () => {
+    const robots = read('../public/robots.txt');
+    for (const route of ['futa0.4', 'futa-test', 'test2', 'firststep']) expect(robots).toContain(`Disallow: /${route}/`);
+    // The publish job's parity check refuses any change to those copies' own pages.
+    expect(read('../../scripts/compose-retired-routes.mjs')).not.toMatch(/'futa0\.4', 'futa-test', 'test2', 'firststep'/);
   });
 });
 

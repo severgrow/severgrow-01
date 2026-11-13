@@ -65,18 +65,5 @@ for (const [route, prefix] of Object.entries(RETIRED)) {
   console.log(`/${route}/      = retired, forwards to /`);
 }
 
-// NOT FOR SEARCH (owner, 2026-11-13: "/test/, experimental builds and internal routes are not
-// indexed"). The older preview copies still published beside the root are full copies of the game, so
-// a search engine could list them in place of the real site. Each page is marked noindex here (its own
-// build is a locked line this script must not change). Idempotent: an existing robots tag is kept.
-for (const route of ['futa0.4', 'futa-test', 'test2', 'firststep']) {
-  const indexPath = join(site, route, 'index.html');
-  if (!existsSync(indexPath)) continue;
-  const html = readFileSync(indexPath, 'utf8');
-  if (/<meta\s+name="robots"/i.test(html) || !html.includes('</head>')) continue;
-  writeFileSync(indexPath, html.replace('</head>', '    <meta name="robots" content="noindex" />\n  </head>'));
-  console.log(`/${route}/  marked noindex`);
-}
-
 const rootWorker = readFileSync(join(site, 'futa04-sw.js'), 'utf8');
 assert(/\|2\|3\)\(\\\/\|\$\)/.test(rootWorker), 'the root worker guard must cover /2/ and /3/');
