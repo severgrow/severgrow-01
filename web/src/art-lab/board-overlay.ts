@@ -4,20 +4,20 @@
 // styles it), while the game's board stays hidden underneath.
 import type { State, Tile } from '../../../src/engine/index.js';
 import { NO_OVERLAY } from '../ui/board.js';
-import { S, centerOf, el, hexPath } from '../ui/geom.js';
+import { S, SQ3, centerOf, el, hash, hexPath } from '../ui/geom.js';
 import type { Overlay } from '../ui/board.js';
 import { createEffects } from '../ui/effects.js';
 import { forgetSkinFiles, provideSkinFiles } from '../ui/skin/assets.js';
 import { SkinBoardView } from '../ui/skin/SkinBoardView.js';
 import { SKIN_CSS } from '../ui/skin/skin-css.js';
 import type { SkinDef, Tier } from '../ui/skin/types.js';
-import { homeRotation, setOrient, setRotation } from '../logic/orient.js';
+import { homeRotation, setOrient, setRotation, toScreen } from '../logic/orient.js';
 import { materialLook } from '../logic/materials.js';
 import { THEMES } from '../logic/themes.js';
 import type { PhoneFrame } from './frame.js';
-import { skinOf, tierFiles } from './pack.js';
+import { filePath, skinOf, tierFiles } from './pack.js';
 import type { LabState, SystemFiles } from './pack.js';
-import { TIERS } from './slots.js';
+import { TIERS, slotById } from './slots.js';
 
 const typeOf = (path: string) => (path.endsWith('.json') ? 'application/json' : path.endsWith('.png') ? 'image/png' : path.endsWith('.svg') ? 'image/svg+xml' : 'image/webp');
 
@@ -43,6 +43,7 @@ export const memorySkin = (state: LabState, system: SystemFiles) => {
     skin,
     /** blob: URLs of a pack path (both tiers), so the lab can point at where a slot appears */
     urlsOf: (path: string) => [...(byPath.get(path) ?? [])],
+    urlAt: (path: string, tier: Tier) => urls[tier].get(path),
     release: () => {
       forgetSkinFiles(root);
       for (const t of TIERS) for (const u of urls[t].values()) URL.revokeObjectURL(u);
@@ -67,6 +68,7 @@ export class BoardOverlay {
   private bleedDefs: SVGDefsElement | null = null;
   private bleed = false;
   private boardNow: State['board'] = {};
+  private goldPaths: string[] = [];
   private maskId = 0;
 
   constructor(private frame: PhoneFrame) {}
@@ -135,8 +137,13 @@ export class BoardOverlay {
       }
     }
     this.boardNow = state.board;
+    // Gold is a full-hex tile *treatment*, not an overhanging prop. The visual must
+    // touch each real point-up edge while remaining clipped inside that same path.
+    this.goldPaths = (art.slots.gold?.files ?? []).flatMap((f, i) =>
+      f.source === 'designer' ? [filePath(slotById('gold')!, i, f)] : []);
     this.view!.render(state.board, { ...NO_OVERLAY, scars, fresh });
     this.paintBleed();
+    this.paintGold();
   }
 
   /** Draw ONLY the transparent overhang outside each tile's point-up hit polygon.
@@ -178,6 +185,38 @@ export class BoardOverlay {
       copy.setAttribute('pointer-events', 'none');
       copy.setAttribute('aria-hidden', 'true');
       clip.append(copy);
+    }
+  }
+
+  /** A supplied Gold tile fills the exact six-sided gameplay footprint, never its neighbours.
+   *
+   * Gold artwork belongs on the existing rich overlay layer, not on an enlarged
+   * 64-unit prop which would leak across adjacent cells. It must not claim pointer
+   * events or change which hex the board considers rich.
+   */
+  private paintGold() {
+    const layer = this.svg?.querySelector<SVGGElement>('.l-rich-frames');
+    if (!layer || !this.memory || !this.goldPaths.length) return; // current game frames untouched
+    layer.replaceChildren();
+    const defs = this.svg!.querySelector<SVGDefsElement>('defs')!;
+    const boardTurn = Math.atan2(toScreen(1, 0).y, toScreen(1, 0).x) * 180 / Math.PI;
+    for (const key of this.view!.richKeysForLab()) {
+      const { x, y } = centerOf(key);
+      const which = Math.floor(hash(`${key}:art-lab-gold`) * this.goldPaths.length);
+      const path = this.goldPaths[which]!;
+      const src = this.memory.urlAt(path, this.view!.assets.tier ?? 'lo');
+      if (!src) continue;
+      const id = `art-lab-gold-clip-${++this.maskId}`;
+      const clip = el('clipPath', { id, clipPathUnits: 'userSpaceOnUse' }, defs);
+      el('path', { d: hexPath(key, S, 'flat') }, clip);
+      const g = el('g', { class: 'art-lab-gold-frame', 'data-key': key, 'data-variant': which,
+        'pointer-events': 'none', 'aria-hidden': 'true', 'clip-path': `url(#${id})` }, layer);
+      // A point-up hex is SQ3*S wide by 2*S high. No 10% shared-edge boost,
+      // and no spacing inset: the art ends precisely on the gameplay polygon.
+      const image = el('image', { href: src, x: x - SQ3 * S / 2, y: y - S,
+        width: SQ3 * S, height: S * 2, preserveAspectRatio: 'none',
+        'pointer-events': 'none' }, g);
+      if (boardTurn) image.setAttribute('transform', `rotate(${boardTurn.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)})`);
     }
   }
 
