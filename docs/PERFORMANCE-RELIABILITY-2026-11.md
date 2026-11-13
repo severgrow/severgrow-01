@@ -104,6 +104,10 @@ do not claim all repeated readbacks are identical.
 
 During scripted drag, panel rectangle reads per globe draw fall from approximately 2.04 to 1.04.
 The three shader attribute locations are looked up once per renderer rather than every frame.
+They are resolved lazily at the original first-draw point; construction does not move those GL
+queries ahead of the first frame. Full-window draws keep the original unclipped GL path, while
+cropped draws apply and release the scissor exactly once. Native GL counters and exact pixels
+verify both paths. This preserves baseline ordering without changing startup timers.
 The scissor limits submitted pixel bounds, not geometry submission; it does not claim to cull
 3,000 simultaneously visible faces or measure actual GPU fragment execution.
 

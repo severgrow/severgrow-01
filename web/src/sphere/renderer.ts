@@ -205,7 +205,7 @@ export class PlanetRenderer {
   private selected: number | null = null;
   private kin: number[] = [];
   private u: Record<string, WebGLUniformLocation | null> = {};
-  private attributes: {position: number; look: number; stamp: number};
+  private attributes: {position: number; look: number; stamp: number} | null = null;
   private pixel = 1;
   private cssWidth = 1;
   private cssHeight = 1;
@@ -219,7 +219,6 @@ export class PlanetRenderer {
     this.gl = gl;
     this.derivatives = !!gl.getExtension('OES_standard_derivatives');
     this.ground = this.program(GROUND_VERTEX, opts.textures ? texturedFragment(this.derivatives) : groundFragment(this.derivatives));
-    this.attributes = {position: gl.getAttribLocation(this.ground, 'aPosition'), look: gl.getAttribLocation(this.ground, 'aLook'), stamp: gl.getAttribLocation(this.ground, 'aStamp')};
     for (const name of ['uRotation', 'uAspect', 'uFocal', 'uShift', 'uPulse', 'uPixel', ...(opts.textures ? ['uAtlas', 'uStrA', 'uStrB', 'uRepeat'] : [])]) this.u[name] = gl.getUniformLocation(this.ground, name);
     this.triangle = this.buffer(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]));
     this.space = spacePass(gl, (v, f) => this.program(v, f), this.triangle);
@@ -338,7 +337,9 @@ export class PlanetRenderer {
     gl.viewport(0, 0, w, h);
     // CSS hides the rest of this full-screen canvas. Do not shade those invisible pixels.
     // The viewport/projection stay fixed, including throughout the menu's moving iris.
-    if (crop) { gl.enable(gl.SCISSOR_TEST); gl.scissor(...scissorFor(crop, w, h, this.pixel)); }
+    const bounds = crop ? scissorFor(crop, w, h, this.pixel) : null;
+    const clipped = bounds && (bounds[0] !== 0 || bounds[1] !== 0 || bounds[2] !== w || bounds[3] !== h);
+    if (clipped) { gl.enable(gl.SCISSOR_TEST); gl.scissor(...bounds); }
     // 1. Space.
     gl.disable(gl.CULL_FACE);
     this.space.draw(w, h, [at.cx * this.pixel, h - at.cy * this.pixel], at.radius * this.pixel, drift, this.pixel);
@@ -361,7 +362,11 @@ export class PlanetRenderer {
     }
     // Without derivatives, one pixel of the side ramp is estimated from the tile's size on screen.
     gl.uniform1f(this.u.uPixel!, 1 / Math.max(4, at.radius * this.pixel * (Math.PI / 5) / this.sphere.frequency));
-    const {position, look, stamp} = this.attributes;
+    // Resolve once, at the original first-draw point. Moving synchronous GL queries into
+    // construction changes cold-start ordering before the first frame can be announced.
+    const {position, look, stamp} = this.attributes ??= {
+      position:gl.getAttribLocation(this.ground,'aPosition'),look:gl.getAttribLocation(this.ground,'aLook'),stamp:gl.getAttribLocation(this.ground,'aStamp'),
+    };
     gl.bindBuffer(gl.ARRAY_BUFFER, this.stamps);
     gl.enableVertexAttribArray(stamp);
     gl.vertexAttribPointer(stamp, 2, gl.BYTE, true, 0, 0);
@@ -375,7 +380,7 @@ export class PlanetRenderer {
     gl.disableVertexAttribArray(position);
     gl.disableVertexAttribArray(look);
     gl.disableVertexAttribArray(stamp);
-    if (crop) gl.disable(gl.SCISSOR_TEST);
+    if (clipped) gl.disable(gl.SCISSOR_TEST);
   }
   dispose(release = false) {
     if (this.disposed) return;
