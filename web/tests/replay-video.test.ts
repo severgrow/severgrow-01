@@ -169,10 +169,10 @@ describe('the replay video', () => {
   it('uses the share sheet when the phone takes a file, and never calls a dismissed sheet saved', async () => {
     const model = buildReplay(input());
     const video = { blob: new Blob([new Uint8Array(64)], { type: 'video/webm' }), mime: 'video/webm', ms: 1, width: 1080, height: 1350, painted: 2 };
-    const shared: { files?: File[]; title?: string }[] = [];
+    const shared: { files?: File[]; title?: string; text?: string }[] = [];
     const nav = {
       canShare: (x: { files: File[] }) => x.files.length === 1 && x.files[0]!.name.endsWith('.webm'),
-      share: async (x: { files?: File[]; title?: string }) => {
+      share: async (x: { files?: File[]; title?: string; text?: string }) => {
         shared.push(x);
       },
     };
@@ -184,6 +184,7 @@ describe('the replay video', () => {
       expect(shared[0]!.files![0]!.name).toBe('futasaku-ryk-9-0.webm');
       expect(shared[0]!.files![0]!.type).toBe('video/webm');
       expect(shared[0]!.title).toBe('FUTASAKU');
+      expect(shared[0]!.text).toBe('https://www.futasaku.com/');
       // A dismissed sheet is not a saved file: the caller must not tell the player it was.
       nav.share = async () => {
         throw new Error('AbortError');

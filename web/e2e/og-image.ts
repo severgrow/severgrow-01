@@ -182,8 +182,9 @@ try {
       el = el.parentElement;
     }
   }, PAPER);
-  // The header's own chrome (menu key, small wordmark, history key) is not part of the picture.
-  await page.addStyleTag({ content: '#hud-menu,#hud-history,#futasaku-hud-plain,#staging-badge{visibility:hidden !important}' });
+  // The header's own chrome (menu key, small wordmark, history key) is not part of the picture, and the
+  // display is held still (a scrolling message caught mid-crossfade reads as garbage in a still).
+  await page.addStyleTag({ content: '#hud-menu,#hud-history,#futasaku-hud-plain,#staging-badge{visibility:hidden !important} #smart-led *{transition:none !important;animation:none !important}' });
   await page
     .waitForFunction('!!(window.__severgrow && window.__severgrow.particles().alive === 0)', undefined, { timeout: 10_000 })
     .catch(() => undefined);
@@ -213,7 +214,7 @@ server.close();
 // ---------- 2. compose the card ----------
 
 // THE CARD (owner, 2026-11-13): the real board on the left, floating on the app's own charcoal; on the
-// right the PAINT wordmark (the home menu's own mark, owner brand pack) with the share copy under it,
+// right the PLAIN wordmark (owner, 2026-11-13: "dont use the paint logo on banners - just plain") with the share copy under it,
 // one sentence per line, in the product's monospace. Nothing else: no interface, no decoration.
 const BOARD_H = 590;
 const boardW = Math.round((BOARD_H * boardBox.width) / boardBox.height);
@@ -230,7 +231,7 @@ const cardHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8" />
   .tag span { display:block; }
 </style></head><body>
   <div class="board"></div>
-  <div class="side"><img src="${dataUri(readFileSync(asset('brand/paint-wordmark.svg')), 'image/svg+xml')}" alt="${TITLE}" />
+  <div class="side"><img src="${dataUri(readFileSync(asset('brand/plain-wordmark.svg')), 'image/svg+xml')}" alt="${TITLE}" />
   <p class="tag">${TAGLINE.map((line) => `<span>${line}</span>`).join('')}</p></div>
 </body></html>`;
 

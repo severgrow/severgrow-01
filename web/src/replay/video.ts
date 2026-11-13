@@ -212,7 +212,8 @@ export const shareOrSaveVideo = async (
   const nav = navigator as Navigator & { canShare?: (x: { files: File[] }) => boolean };
   if (nav.share && nav.canShare?.({ files: [file] })) {
     try {
-      await nav.share({ files: [file], title });
+      // The game's address travels with every shared replay (a caption in most messengers).
+      await nav.share({ files: [file], title, text: 'https://www.futasaku.com/' });
       return 'shared';
     } catch (error) {
       if (error && typeof error === 'object' && (('name' in error && error.name === 'AbortError') || ('message' in error && error.message === 'AbortError'))) return 'cancelled';

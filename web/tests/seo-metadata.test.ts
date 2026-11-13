@@ -102,3 +102,59 @@ describe('six discoverability extras (owner, 2026-11-13)', () => {
     expect(read('../public/sitemap.xml').match(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/g)).toHaveLength(3);
   });
 });
+
+describe('ten easy wins (owner, 2026-11-13)', () => {
+  const pub = (p: string) => read(`../public/${p}`);
+
+  it('the approved card ships under a new cache key, with alt text that describes it', () => {
+    expect(meta('og:image')).toBe('https://www.futasaku.com/og.jpg?v=8');
+    expect(meta('og:image:secure_url')).toBe(meta('og:image'));
+    expect(meta('og:image:alt')).toMatch(/phone.*hand of cards/);
+    expect(meta('twitter:image:alt')).toBe(meta('og:image:alt'));
+  });
+
+  it('a branded, unindexed 404 that leads back to the game', () => {
+    const page = pub('404.html');
+    expect(page).toContain('<title>Futasaku</title>');
+    expect(page).toContain('<meta name="robots" content="noindex" />');
+    expect(page).toContain('href="/"');
+    expect(page).not.toMatch(/<script/i);
+  });
+
+  it('the legal pages carry the icon, theme colour and their own preview', async () => {
+    const { renderTermsPage } = await import('../src/privacy-page.js');
+    const { TERMS } = await import('../src/terms.js');
+    const page = renderTermsPage(TERMS);
+    expect(page).toContain('<link rel="icon" href="/favicon.ico" sizes="any" />');
+    expect(page).toContain('<meta name="theme-color" content="#0e0f10" />');
+    expect(page).toContain('<meta property="og:url" content="https://www.futasaku.com/terms/" />');
+    expect(page).toContain('og.jpg?v=8');
+  });
+
+  it('the manifest has an id, a language and store categories', () => {
+    const m = JSON.parse(pub('manifest.webmanifest'));
+    expect(m).toMatchObject({ id: '/', lang: 'en', dir: 'ltr', categories: ['games', 'entertainment'] });
+  });
+
+  it('llms.txt and security.txt are plain, current and on www', () => {
+    expect(pub('llms.txt')).toMatch(/^# Futasaku\n/);
+    expect(pub('llms.txt')).toContain('https://www.futasaku.com/');
+    const sec = pub('.well-known/security.txt');
+    expect(sec).toContain('Contact: mailto:info@futasaku.com');
+    expect(new Date(/Expires: (\S+)/.exec(sec)![1]!).getTime()).toBeGreaterThan(Date.parse('2026-11-13'));
+  });
+
+  it('iOS does not turn numbers into phone links; the sitemap and JSON-LD name the screenshot and how to play', () => {
+    expect(meta('format-detection')).toBe('telephone=no');
+    expect(pub('sitemap.xml')).toContain('<image:loc>https://www.futasaku.com/og.jpg</image:loc>');
+    const ld = JSON.parse(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(html)![1]!);
+    const game = ld['@graph'].find((n: { '@type': string }) => n['@type'] === 'VideoGame');
+    expect(game.screenshot).toBe('https://www.futasaku.com/og.jpg');
+    expect(game.potentialAction).toEqual({ '@type': 'PlayAction', target: 'https://www.futasaku.com/' });
+  });
+
+  it('shared result cards and replays carry the game address', () => {
+    expect(read('../src/ui/sharecard.ts')).toMatch(/text: GAME_URL/);
+    expect(read('../src/replay/video.ts')).toContain("text: 'https://www.futasaku.com/'");
+  });
+});

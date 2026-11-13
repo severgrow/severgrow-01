@@ -273,6 +273,9 @@ export const drawShareCard = async (d: ShareData, layout: ShareLayoutId = SHARE_
   return c;
 };
 
+/** The official address (index.html's canonical). */
+export const GAME_URL = 'https://www.futasaku.com/';
+
 /** Shares the card (Web Share with a file), or saves it when sharing files isn't possible. */
 export const shareCard = async (d: ShareData): Promise<'shared' | 'saved' | 'cancelled'> => {
   const canvas = await drawShareCard(d);
@@ -283,7 +286,8 @@ export const shareCard = async (d: ShareData): Promise<'shared' | 'saved' | 'can
   const nav = navigator as Navigator & { canShare?: (x: { files: File[] }) => boolean };
   if (nav.share && nav.canShare?.({ files: [file] })) {
     try {
-      await nav.share({ files: [file], title: d.game });
+      // The game's address travels with every shared result (a caption in most messengers).
+      await nav.share({ files: [file], title: d.game, text: GAME_URL });
       return 'shared';
     } catch {
       return 'cancelled';

@@ -1,0 +1,17 @@
+# Futasaku
+
+> Futasaku is a free strategy card game for two, played in the browser on a hex board. Each player grows from a home tile, keeps their land connected and tries to cut the opponent off.
+
+- Play: https://www.futasaku.com/
+- Modes: a single-player campaign, practice against the computer at several levels, and online duels with friends or a random opponent (with an optional Blitz clock).
+- Works on phones and desktops; no download or install needed. It can be added to the home screen.
+- Accounts are optional; a guest can play straight away.
+
+## Pages
+
+- [Privacy policy](https://www.futasaku.com/privacy/)
+- [Terms of use](https://www.futasaku.com/terms/)
+
+## Contact
+
+info@futasaku.com

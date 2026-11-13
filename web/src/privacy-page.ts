@@ -61,7 +61,7 @@ footer { margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid rgba(214
 
 /**
  * Render the whole `/privacy` document from the policy data. Deterministic and dependency-free:
- * one inline <style>, no <script>, no external <link>, no images.
+ * one inline <style>, no <script>, no images, no third-party requests (the icon links are the site's own).
  */
 export function renderPrivacyPage(privacy: PrivacyPolicy): string {
   return renderLegalPage(privacy, 'privacy', 'The in-app policy sits in Settings; this page is the same document at futasaku.com/privacy.');
@@ -100,6 +100,16 @@ ${section.lines.map((line) => `          <li>${esc(line)}</li>`).join('\n')}
     <title>${esc(privacy.title)} - Futasaku</title>
     <meta name="description" content="${attr(privacy.intro)}" />
     <link rel="canonical" href="https://www.futasaku.com/${path}/" />
+    <meta name="theme-color" content="#0e0f10" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/futasaku-tab-32.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Futasaku" />
+    <meta property="og:title" content="${attr(privacy.title)} - Futasaku" />
+    <meta property="og:description" content="${attr(privacy.intro)}" />
+    <meta property="og:url" content="https://www.futasaku.com/${path}/" />
+    <meta property="og:image" content="https://www.futasaku.com/og.jpg?v=8" />
+    <meta name="twitter:card" content="summary_large_image" />
     <style>
 ${STYLE}    </style>
   </head>
