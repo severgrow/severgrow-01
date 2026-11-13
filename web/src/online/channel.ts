@@ -114,20 +114,23 @@ export type RealtimeChannelOptions = {
    * Calls back when the page may have been asleep or offline (tab visible again, network back).
    * Default: `visibilitychange` (to visible) and `online` on the browser. Returns an unsubscribe.
    */
-  wake?: (cb: () => void) => () => void;
+  wake?: (cb: (hidden?: boolean) => void) => () => void;
   /** Clock for "when did we last hear from the socket" (tests). Default Date.now. */
   now?: () => number;
 };
 
 /** The browser's wake signals: the page shown again, the network back. */
-const browserWake = (cb: () => void): (() => void) => {
+const browserWake = (cb: (hidden?: boolean) => void): (() => void) => {
   const doc = (globalThis as { document?: Document }).document;
   const win = (globalThis as { window?: Window }).window;
   if (!doc || !win) return () => undefined;
-  const visible = (): void => { if (!doc.hidden) cb(); };
-  doc.addEventListener('visibilitychange', visible);
-  win.addEventListener('online', cb);
-  return () => { doc.removeEventListener('visibilitychange', visible); win.removeEventListener('online', cb); };
+  const changed = (): void => cb(doc.hidden);
+  const hide = (): void => cb(true);
+  doc.addEventListener('visibilitychange', changed);
+  win.addEventListener('online', changed);
+  win.addEventListener('pagehide', hide);
+  win.addEventListener('pageshow', changed);
+  return () => { doc.removeEventListener('visibilitychange', changed); win.removeEventListener('online', changed); win.removeEventListener('pagehide',hide); win.removeEventListener('pageshow',changed); };
 };
 
 type RealtimeSocket = {
@@ -161,6 +164,9 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
   const heartbeatMs = options.heartbeatMs ?? 25_000;
   /** When the socket last opened or sent anything (the server answers every heartbeat). */
   let heardAt = 0;
+  let paused = false;
+  let deadline: ReturnType<typeof setTimeout> | null = null;
+  const hidden = () => paused || !!(globalThis as {document?:Document}).document?.hidden;
 
   const send = (topic: string, event: string, payload: unknown): void => {
     if (socket?.readyState !== OPEN) return;
@@ -176,12 +182,14 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
       clearInterval(heartbeat);
       heartbeat = null;
     }
+    if (deadline !== null) { clearTimeout(deadline); deadline = null; }
+    const old = socket;
+    socket = null;
     try {
-      socket?.close();
+      old?.close();
     } catch {
       /* already gone */
     }
-    socket = null;
   };
 
   const joinAll = (): void => {
@@ -193,7 +201,7 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
   };
 
   const scheduleReconnect = (): void => {
-    if (reconnectTimer !== null || subs.size === 0) return;
+    if (hidden() || reconnectTimer !== null || subs.size === 0) return;
     failures += 1;
     // Realtime is a hint, not the truth (P-11): if it cannot connect, stop trying and let the
     // sync engine's polling carry the match. Never churn a socket for a ping that may not exist.
@@ -206,7 +214,7 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
   };
 
   const open = (): void => {
-    if (socket || subs.size === 0) return;
+    if (hidden() || socket || subs.size === 0) return;
     let next: RealtimeSocket;
     try {
       next = socketCtor(options.url);
@@ -219,17 +227,23 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
     }
     socket = next;
     heardAt = now();
+    deadline = setTimeout(()=>{if(socket===next){stopSocket();scheduleReconnect();}},12000);
     next.addEventListener('open', () => {
+      if (socket !== next || hidden()) return;
       heardAt = now();
       reconnectDelay = 500;
       failures = 0;
       joinAll();
       if (heartbeat === null) {
-        heartbeat = setInterval(() => send('phoenix', 'heartbeat', {}), heartbeatMs);
+        heartbeat = setInterval(() => {
+          if (now()-heardAt >= 2*heartbeatMs) { stopSocket(); scheduleReconnect(); return; }
+          send('phoenix', 'heartbeat', {});
+        }, heartbeatMs);
       }
     });
     next.addEventListener('message', (ev) => {
-      if (socket === next) heardAt = now();
+      if (socket !== next) return;
+      heardAt = now();
       let frame: RealtimeFrame;
       try {
         frame = JSON.parse(String(ev.data)) as RealtimeFrame;
@@ -239,8 +253,9 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
       if (typeof frame.topic !== 'string') return;
       for (const [matchId, handlers] of subs) {
         if (frame.topic === topicFor(matchId)) {
-          if (frame.event === 'phx_reply' && frame.payload?.status === 'ok') {
+          if (frame.event === 'phx_reply' && frame.payload?.status === 'ok' && !joined.has(matchId)) {
             joined.add(matchId);
+            if (joined.size === subs.size && deadline !== null) { clearTimeout(deadline); deadline = null; }
             for (const h of handlers) {
               h.onConnection?.(true);
               h.onReconnect?.();
@@ -248,8 +263,7 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
           }
           if (frame.event === 'phx_error' || frame.event === 'phx_close' ||
               (frame.event === 'phx_reply' && frame.payload?.status === 'error')) {
-            joined.delete(matchId);
-            for (const h of handlers) h.onConnection?.(false);
+            stopSocket(); scheduleReconnect(); return;
           }
           const event = frame.event === 'broadcast' ? frame.payload?.event : frame.event;
           if (event === 'chat') for (const h of handlers) h.onChat?.();
@@ -275,8 +289,13 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
    * has said nothing for two heartbeats (mobile browsers freeze sockets without closing them), is
    * replaced at once with a fresh retry budget, so the opponent's pings arrive again straight away.
    */
-  const onWake = (): void => {
+  const onWake = (suspended?: boolean): void => {
+    paused = suspended ?? !!(globalThis as {document?:Document}).document?.hidden;
     if (subs.size === 0) return;
+    if (hidden()) {
+      if (reconnectTimer !== null) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      stopSocket(); return;
+    }
     const silent = socket !== null && now() - heardAt > 2 * heartbeatMs;
     if (socket && !silent) return;
     if (reconnectTimer !== null) {
@@ -320,6 +339,9 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
           if (subs.size === 0) {
             stopWake?.();
             stopWake = null;
+            // No listener remains to observe pageshow. A future subscription starts from the
+            // document's current visibility, rather than inheriting an old pagehide flag.
+            paused = false;
             if (reconnectTimer !== null) {
               clearTimeout(reconnectTimer);
               reconnectTimer = null;

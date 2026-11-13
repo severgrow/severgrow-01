@@ -54,6 +54,30 @@ describe.skipIf(!enabled)('mutual rematch on real Postgres', () => {
     expect(bSearch.match.matchId).toBe(shared.match.matchId);
     await expect(svc.getMatch(pa, parked.match.matchId)).rejects.toThrow();
   });
+  it('continues the shared game when BOTH players already parked while the other was away',async()=>{
+    await pool!.query("update matches set open_queue = false where status = 'waiting' and open_queue = true");
+    let now=Date.now();
+    const svc=new MatchService({storage:postgresStorage(pool!),config:DEFAULT_SERVER_CONFIG,now:()=>now});
+    const a=await svc.authenticate((await svc.createGuest('Alder')).token),b=await svc.authenticate((await svc.createGuest('Birch')).token);
+    const shared=await svc.createMatch(a);await svc.joinMatch(b,shared.match.inviteCode!);
+    expect((await svc.findOpponent(a,null,null)).paired).toBe(false);now+=11000;
+    const parked=await svc.findOpponent(b,null,null);expect(parked.paired).toBe(false);
+    const continued=await svc.findOpponent(a,null,null);
+    expect(continued.paired).toBe(true);expect(continued.match.matchId).toBe(shared.match.matchId);
+    expect(await postgresStorage(pool!).openQueueMatchOfPlayer(a.id)).toBeNull();
+    expect(await postgresStorage(pool!).openQueueMatchOfPlayer(b.id)).toBeNull();
+    expect((await svc.getMatch(b,shared.match.matchId)).status).toBe('active');
+  });
+  it('a fresh Find pairs with a stranger even with an untouched old search game',async()=>{
+    await pool!.query("update matches set open_queue = false where status = 'waiting' and open_queue = true");
+    const svc=service(),a=await svc.authenticate((await svc.createGuest('Alder')).token),third=await svc.authenticate((await svc.createGuest('Cedar')).token);
+    const old=await svc.findOpponent(a,null,null);await svc.findOpponent(third,null,null);
+    const fresh=await svc.authenticate((await svc.createGuest('Birch')).token),parked=await svc.findOpponent(fresh,null,null);
+    const paired=await svc.findOpponent(a,null,null);
+    expect(paired.paired).toBe(true);expect(paired.match.matchId).toBe(parked.match.matchId);
+    expect((await svc.findOpponent(fresh,null,parked.match.matchId)).match.matchId).toBe(paired.match.matchId);
+    expect((await svc.getMatch(a,old.match.matchId)).status).toBe('active');
+  });
   // The owner's FRESH-GUEST case (2026-11-12): the one-game-per-pair rule is pair-scoped, so an
   // open game against a THIRD party must never stop either searcher meeting a stranger.
   it('a player with an open game against a third party still pairs with a fresh stranger', async () => {

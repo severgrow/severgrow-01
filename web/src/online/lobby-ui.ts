@@ -9,6 +9,7 @@ import type { IdentityStore } from './identity.js';
 import { SEARCH_HEARTBEAT_MS, SEARCH_LIVE_MS, duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
 import { createLobbyActionGuard, lobbyActionStillCurrent } from './lobby-action.js';
 import { pollDue } from './poll-gate.js';
+import { realtimeChannelFromEnv } from './channel.js';
 import {
   countNeedingResponse,
   needsMyResponse,
@@ -281,6 +282,9 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   let searchTimer: ReturnType<typeof setInterval> | null = null;
   /** A search request that is still out (poll-gate.ts keeps the 2 s tick from stacking one). */
   let searchInFlight = false;
+  const searchChannel = realtimeChannelFromEnv();
+  let searchWire: {matchId:string;stop:()=>void} | null = null;
+  let searchAgain = false;
   /** True while a cancel has not landed. A Find tap during it must not park another entry. */
   let cancelPending = false;
   /**
@@ -1024,6 +1028,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   };
 
   const stopSearchTimer = () => {
+    searchWire?.stop(); searchWire = null; searchAgain = false;
     if (searchTimer) {
       clearInterval(searchTimer);
       searchTimer = null;
@@ -1056,6 +1061,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     } catch {
       if (search === s) {
         if (!searchTimer) searchTimer = setInterval(() => void pollSearch(), 2000);
+        watchSearch();
         syncLooking();
         return 'kept';
       }
@@ -1065,6 +1071,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
     if (search !== s) return 'left';
     search = null;
+    watchSearch();
     setWaitingMode('invite');
     syncLooking();
     return 'cleared';
@@ -1152,7 +1159,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       // someone left earlier, retiring this search; the answer is then that game, already active.
       if (!computerGameActive && !document.hidden && now() - current.beatAt >= SEARCH_HEARTBEAT_MS) {
         current.beatAt = now();
-        const beat = await client.findOpponent(current.token).catch(() => null);
+        const beat = await client.findOpponent(current.token,current.matchId).catch(() => null);
         if (search !== current) return;
         if (beat) {
           serverOffset = beat.serverNow - now();
@@ -1164,7 +1171,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
             launchDuel(current.token, beat.player, true);
             return;
           }
-          if (beat.match.matchId !== current.matchId) current.matchId = beat.match.matchId;
+          if (beat.match.matchId !== current.matchId) { current.matchId = beat.match.matchId; watchSearch(); }
         }
       }
       const res = await client.getState(current.token, current.matchId);
@@ -1199,8 +1206,25 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       }
     } finally {
       searchInFlight = false;
+      if (searchAgain) { searchAgain = false; void pollSearch(); }
     }
     renderSearch();
+  };
+
+  // Listen for the activation the server already broadcasts. The first device should not have
+  // to wait for the 2 s fallback after the second device joins. This temporary subscription ends
+  // before entering the duel and while hidden; the duel then owns its normal match subscription.
+  const watchSearch = () => {
+    if (searchWire?.matchId === search?.matchId && !document.hidden) return;
+    searchWire?.stop(); searchWire = null;
+    if (!search || document.hidden) return;
+    const matchId = search.matchId;
+    const hint = () => {
+      if (search?.matchId !== matchId || document.hidden) return;
+      if (searchInFlight) searchAgain = true;
+      else void pollSearch();
+    };
+    searchWire = {matchId,stop:searchChannel.subscribe(matchId,{onPing:hint,onPresence:()=>{},onConnection:on=>{if(on)hint();}})};
   };
 
   /** Show the search already in hand. Does not reset its clock and does not ask the server. */
@@ -1218,6 +1242,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     notice('online-waiting-notice', `${ONLINE.findOpponentLooking}…`);
     flashIdentityReplaced();
     if (!searchTimer) searchTimer = setInterval(() => void pollSearch(), 2000);
+    watchSearch();
     syncLooking();
   };
 
@@ -1363,7 +1388,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         }
         noticeWithDots('online-hub-notice', ONLINE.findOpponentLooking);
         try {
-          const res = await client.findOpponent(id.token);
+          const res = await client.findOpponent(id.token,null);
           if (!lobbyActionStillCurrent(guard, 'find')) return;
           serverOffset = res.serverNow - now();
           if (search) {
@@ -1694,6 +1719,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   // Coming back to the tab: the polls were silent while it was hidden, so ask once immediately
   // rather than leaving the waiting screen (or the parked search) one tick stale.
   document.addEventListener('visibilitychange', () => {
+    watchSearch();
     if (document.hidden) return;
     living?.settle();
     if(menuEl?.hidden === false) void refreshMenu();

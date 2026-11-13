@@ -35,15 +35,16 @@ export type PopupPort = {
 };
 
 /** Per-player ping channel: a hint to poll now. */
+export type PlayerChannelReason = 'connected' | 'notification' | 'disconnected';
 export type PlayerChannel = {
-  subscribe(playerId: string, onPing: (reason?: 'connected' | 'notification') => void): () => void;
+  subscribe(playerId: string, onPing: (reason?: PlayerChannelReason) => void): () => void;
   /** True while the Realtime channel is joined (pings can arrive). Absent = never connected. */
   connected?(): boolean;
 };
 
 export type CenterEvents = {
   onActionError?(error: unknown): void;
-  onPing?(reason?: 'connected' | 'notification'): void;
+  onPing?(reason?: PlayerChannelReason): void;
   /** A live session began for this player (as the accepter OR as the sender whose challenge was accepted). */
   onLiveStarted?(liveMatchId: string, via: ChallengeWire | null): void;
   /** Every fresh inbox (the controller uses outgoing statuses for the sender's window). */
@@ -56,6 +57,8 @@ export type ChallengeCenter = {
   stop(): void;
   pollNow(): Promise<void>;
   heartbeatNow(): Promise<void>;
+  /** Authenticated match status is another hint when a broadcast was missed; deduplicated by id. */
+  hintPending(challenge: ChallengeWire | null): void;
   /** The live match the server says this player is in. */
   liveMatchId(): string | null;
   /** Tell the center the client itself started/left a live match (no duplicate onLiveStarted). */
@@ -93,6 +96,7 @@ export const createChallengeCenter = (deps: {
   let beating: Promise<void> | null = null;
   let beatAgain = false;
   let announceNext = false;
+  let hintedPending: string | null = null;
   /** The first inbox is the baseline (a reload while live must not replay the go-live moment). */
   let baseline = true;
 
@@ -314,6 +318,12 @@ export const createChallengeCenter = (deps: {
     },
     pollNow,
     heartbeatNow,
+    hintPending(challenge) {
+      if (!challenge) { hintedPending = null; return; }
+      if (!running || !probe.visible() || challenge.fromMe || challenge.status !== 'pending' || challenge.id === hintedPending) return;
+      hintedPending = challenge.id;
+      if (current?.id !== challenge.id) void pollNow();
+    },
     liveMatchId: () => live,
     noteLive(matchId) {
       live = matchId;

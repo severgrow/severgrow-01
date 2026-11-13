@@ -14,6 +14,7 @@ import type { ServerConfig } from '../src/config.js';
 import { ApiError } from '../src/errors.js';
 import { MatchService } from '../src/service.js';
 import { MemoryStorage } from '../src/storage/memory.js';
+import { RecordingBroadcaster } from '../src/broadcast.js';
 
 const testConfig = (overrides: Partial<ServerConfig> = {}): ServerConfig => ({
   ...DEFAULT_SERVER_CONFIG,
@@ -32,11 +33,13 @@ const testConfig = (overrides: Partial<ServerConfig> = {}): ServerConfig => ({
 
 const harness = (config: ServerConfig = testConfig()) => {
   const storage = new MemoryStorage();
+  const broadcaster = new RecordingBroadcaster();
   let now = 1_000_000;
-  const service = new MatchService({ storage, config, now: () => now });
+  const service = new MatchService({ storage, config, now: () => now, broadcaster });
   return {
     storage,
     service,
+    broadcaster,
     setNow: (t: number) => { now = t; },
   };
 };
@@ -67,6 +70,26 @@ const expectCode = async (promise: Promise<unknown>, code: string): Promise<void
 };
 
 describe('Find Opponent when the two searchers already share an open game', () => {
+  it('reconnects two already parked searchers who share a game instead of leaving both searching', async () => {
+    const h = harness();
+    const { a, b, sharedId } = await sharedPair(h);
+    const aFind = await h.service.findOpponent(a.player);
+    h.setNow(1_011_000); // A was away long enough for B to park a separate search.
+    const bFind = await h.service.findOpponent(b.player);
+    expect(aFind.paired).toBe(false);
+    expect(bFind.paired).toBe(false);
+    expect(bFind.match.matchId).not.toBe(aFind.match.matchId);
+
+    // Both pages are now here. A heartbeat must take the SAME continuation path as a fresh Find.
+    const resumed = await h.service.findOpponent(a.player);
+    expect(resumed.paired).toBe(true);
+    expect(resumed.match.matchId).toBe(sharedId);
+    expect(await h.storage.openQueueMatchOfPlayer(a.player.id)).toBeNull();
+    expect(await h.storage.openQueueMatchOfPlayer(b.player.id)).toBeNull();
+    expect(await openIds(h, a.player)).toEqual([sharedId]);
+    expect(await openIds(h, b.player)).toEqual([sharedId]);
+    expect(h.broadcaster.published.map(p=>p.matchId)).toEqual(expect.arrayContaining([aFind.match.matchId,bFind.match.matchId,sharedId]));
+  });
   it('both taps land both players in the SAME shared game, never a second one', async () => {
     const h = harness();
     const { a, b, sharedId } = await sharedPair(h);
@@ -115,6 +138,27 @@ describe('Find Opponent when the two searchers already share an open game', () =
 });
 
 describe('Find Opponent when one searcher already has a game against a THIRD party', () => {
+  it('a supplied search id never grants access to another pair or accepts an invalid database id',async()=>{
+    const h=harness(),a=await guest(h,'Alder'),b=await guest(h,'Birch'),outsider=await guest(h,'Cedar');
+    const original=await h.service.findOpponent(a.player);await h.service.findOpponent(b.player);
+    const result=await h.service.findOpponent(outsider.player,null,original.match.matchId);
+    expect(result.paired).toBe(false);expect(result.match.matchId).not.toBe(original.match.matchId);
+    expect(result.player.seat).toBe(0);
+    await expectCode(h.service.findOpponent(outsider.player,null,'not-a-uuid'),'INVALID_REQUEST');
+  });
+  for(const freshFirst of [true,false])it(`an explicit fresh Find ignores an unmoved OLD search game (stranger first: ${freshFirst})`,async()=>{
+    const h=harness(),a=await guest(h,'Alder'),third=await guest(h,'Cedar'),fresh=await guest(h,'Birch');
+    const old=await h.service.findOpponent(a.player);await h.service.findOpponent(third.player);
+    h.setNow(1_020_000);
+    const first=freshFirst?fresh:a,second=freshFirst?a:fresh;
+    const parked=await h.service.findOpponent(first.player,null,null);
+    expect(parked.paired).toBe(false);expect(parked.match.matchId).not.toBe(old.match.matchId);
+    const paired=await h.service.findOpponent(second.player,null,null);
+    expect(paired.paired).toBe(true);expect(paired.match.matchId).toBe(parked.match.matchId);
+    const caughtUp=await h.service.findOpponent(first.player,null,parked.match.matchId);
+    expect(caughtUp.paired).toBe(true);expect(caughtUp.match.matchId).toBe(paired.match.matchId);
+    expect((await h.service.getMatch(a.player,old.match.matchId)).status).toBe('active');
+  });
   it('pairs with a fresh stranger when the stranger taps first', async () => {
     const h = harness();
     const a = await guest(h, 'Alder'); // will have an open game against Third

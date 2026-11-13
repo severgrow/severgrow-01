@@ -356,6 +356,16 @@ describe('challenge listener', () => {
 });
 
 describe('polling cost (Supabase quota)', () => {
+  it('a pending invitation in the existing match status repairs a missed broadcast once, without faster idle polling',async()=>{
+    const t=setup({realtime:true});t.center.start();await t.flush();
+    const before=t.server.calls.filter(c=>c==='inbox').length;
+    const incoming=challenge();t.server.setInbox({incoming:[incoming]});
+    t.center.hintPending(incoming);await t.flush();
+    expect(t.popup.shown).toEqual([incoming.id]);
+    for(let i=0;i<100;i++)t.center.hintPending(incoming);
+    await t.flush();expect(t.server.calls.filter(c=>c==='inbox')).toHaveLength(before+1);
+    t.center.stop();
+  });
   const inboxCalls = (t: ReturnType<typeof setup>) => t.server.calls.filter((c) => c === 'inbox').length;
 
   it('with the Realtime ping connected and nothing pending, the inbox is checked only every 30 s', async () => {

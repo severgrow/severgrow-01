@@ -19,6 +19,8 @@ import { memoryChatStore } from '../../server/src/chat/memory.js';
 
 const out=process.env.SHOTS??'/tmp/online-presence-journey';mkdirSync(out,{recursive:true});
 const baseline=process.env.JOURNEY_BASELINE==='1';
+const missedInvite=process.env.JOURNEY_DROP_INVITE==='1';
+let dropChallenge=false,dropped=0;
 const wires=new Map<WebSocketRoute,Set<string>>();
 const send=(topic:string,event:string,payload:unknown)=>{
  for(const [ws,topics] of wires)if(topics.has(`realtime:${topic}`))ws.send(JSON.stringify({topic:`realtime:${topic}`,event:'broadcast',payload:{event,payload}}));
@@ -28,7 +30,10 @@ const broadcaster={async publish(id:string,payload:unknown){send(id,'ping',paylo
 const liveStore = new MemoryLiveStore(memory);
 const live=createLiveRuntime({storage:memory,live:liveStore,server:config,
  config:{...DEFAULT_LIVE_CONFIG,turnMs:37_000,presencePerPlayerPerMinute:1000,challengesPerPlayerPerHour:1000},broadcaster,
- notifier:{async publish(topic,payload){send(topic,'challenge',payload);}}});
+ notifier:{async publish(topic,payload){
+  if(dropChallenge&&'challengeId' in payload){dropChallenge=false;dropped++;return;}
+  send(topic,'challenge',payload);
+ }}});
 const service=new MatchService({storage:live.storage,config,broadcaster});
 const server=createHttpServer({service,config,live:chainRouters(live.router(service),createChatRouter({service,storage:memory,
  store:memoryChatStore(memory,new MemoryFeedbackStore()),notifier:{async publish(id,payload){send(id,'chat',payload);}}}))});
@@ -54,6 +59,11 @@ try {
   if(process.env.JOURNEY_ONE==='1'&&(!accountFirst||!accountSends))continue;
   const credential=await service.createGuest();const registered=await service.authenticate(credential.token);
   await memory.updatePlayer({...registered,kind:'account',displayName:'RYK'});
+  if(process.env.JOURNEY_OLD_SEARCH==='1'){
+   await service.findOpponent(registered,null,null);
+   const third=await service.authenticate((await service.createGuest('Away player')).token);
+   await service.findOpponent(third,null,null);
+  }
   const traces:{at:number;url:string;device:string}[]=[];
   const errors:string[]=[];
   lastTraces=traces;
@@ -141,6 +151,20 @@ try {
   const normalStart=Date.now();if(metric)await desktop.waitForTimeout(60000);
   const normalRequests=traces.filter(t=>t.at>=normalStart&&!t.url.endsWith(':response')).length;
   const sender=accountSends?desktop:phone,receiver=accountSends?phone:desktop;
+  let releaseSent=()=>{};
+  if(process.env.JOURNEY_HOLD_SENT==='1'){
+   const hold=new Promise<void>(resolve=>{releaseSent=resolve;});
+   await sender.route('**/v1/matches/*/live/challenge*',async route=>{
+    const response=await route.fetch(); // Committed on the real service, only its HTTP reply stalls.
+    await hold;await route.fulfill({response});
+   });
+  }
+  if(process.env.JOURNEY_INTERRUPTED_POINTER==='1')await receiver.evaluate(()=>{
+   // A pointer release outside the app/window need not reach this document. Losing focus must
+   // clear the drag deferral, otherwise an authenticated invitation is fetched but never shown.
+   document.dispatchEvent(new PointerEvent('pointerdown',{pointerId:19,bubbles:true}));
+   window.dispatchEvent(new Event('blur'));
+  });
   let release:()=>void=()=>{};let held:Promise<void>|null=null;
   if(accountFirst&&!accountSends) {
    let started!:()=>void;const ready=new Promise<void>(r=>{started=r;});held=new Promise<void>(r=>{release=r;});let once=true;
@@ -161,15 +185,27 @@ try {
   const copy=await sender.locator('[data-live="confirm"]').textContent();
   if(!baseline)assert(copy?.includes('37 seconds'),'confirmation uses authoritative configured limit');
   await sender.locator('[data-live="confirm-send"]').evaluate(el=>el.addEventListener('click',()=>{(window as any).__journey.sentAt=Date.now();},{once:true}));
+  if(missedInvite)dropChallenge=true;
   const sentAt=Date.now();await sender.locator('[data-live="confirm-send"]').click();
   if(held){await sender.waitForTimeout(150);release();}
-  await receiver.locator('[data-mode="challenge"]').waitFor({state:'visible',timeout:baseline?45000:2500});
+  await receiver.locator('[data-mode="challenge"]').waitFor({state:'visible',timeout:baseline?45000:missedInvite?12000:2500});
+  if(process.env.JOURNEY_HOLD_SENT==='1'){
+   await sender.locator('[data-live="pill"][data-state="waiting"]').waitFor({state:'visible',timeout:2500});
+   releaseSent();
+  }
   const invitationAutomationMs=Date.now()-sentAt;
   const invitationMs=await receiver.evaluate(()=>(window as any).__journey.incomingAt)-await sender.evaluate(()=>(window as any).__journey.sentAt);
-  if(!baseline)assert(invitationMs<1000,`healthy notification must arrive promptly: ${invitationMs}ms`);
+  if(!baseline)assert(invitationMs<(missedInvite?12000:1000),`invitation ${missedInvite?'recovers through the existing status read':'arrives promptly'}: ${invitationMs}ms`);
   await receiver.screenshot({path:`${out}/receiver-${accountFirst}-${accountSends}.png`});
   await receiver.locator('[data-live="accept"]').click();
   await Promise.all(pages.map(p=>p.waitForFunction(()=>(window as any).__futasakuLive?.()?.status?.live)));
+  const liveState=await status(desktop);
+  const actorPage=liveState.actor===liveState.mySeat?desktop:phone,watcher=actorPage===desktop?phone:desktop;
+  await Promise.all(pages.map(p=>p.waitForFunction(()=>!(window as any).__severgrow.busy()&&!(window as any).__severgrow.online()?.revealing)));
+  const beforeRevision=await watcher.evaluate(()=>(window as any).__severgrow.online().revision),moveAt=Date.now();
+  await actorPage.locator('#deck').click();
+  await watcher.waitForFunction(before=>(window as any).__severgrow.online().revision>before&&(window as any).__severgrow.state().phase==='ACT',beforeRevision,{timeout:5000});
+  const moveMs=Date.now()-moveAt;
   if(metric)await desktop.waitForTimeout(11000);
   const liveStart=Date.now();if(metric)await desktop.waitForTimeout(60000);
   const blitzRequests=traces.filter(t=>t.at>=liveStart&&!t.url.endsWith(':response')).length;
@@ -187,7 +223,7 @@ try {
   await Promise.all(pages.map(p=>p.waitForFunction(()=>{
    const s=(window as any).__futasakuLive?.()?.status;return s?.endedReason==='finished'&&!s.live;
   })));
-  results.push({accountFirst,accountSends,pairingMs,onlineMs,firstBoardToBothOnlineMs,invitationMs,invitationAutomationMs,endMs:Date.now()-endedAt,...(metric?{normalRequestsPerMinute:normalRequests,blitzRequestsPerMinute:blitzRequests}:{}),traces});
+  results.push({accountFirst,accountSends,pairingMs,onlineMs,firstBoardToBothOnlineMs,invitationMs,invitationAutomationMs,moveMs,dropped,endMs:Date.now()-endedAt,...(metric?{normalRequestsPerMinute:normalRequests,blitzRequestsPerMinute:blitzRequests}:{}),traces});
   assert.deepEqual(errors,[],'no unhandled client errors');
   console.log(JSON.stringify(results[results.length-1],(k,v)=>k==='traces'?undefined:v));
   if(accountFirst&&accountSends) {

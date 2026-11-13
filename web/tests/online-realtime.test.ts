@@ -1,7 +1,7 @@
 // Realtime ping transport: the broadcast frame parser, the no-dependency subscriber, and the
 // server publisher. The ping is only a hint — these tests pin the shape so a silent regression
 // (which would fall back to polling) is caught here instead of live.
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createRealtimeChannel, pingFromFrame } from '../src/online/channel.js';
 import { broadcastBody, createSupabaseBroadcaster } from '../../server/src/broadcast-supabase.js';
 
@@ -27,6 +27,39 @@ class FakeSocket {
     for (const cb of this.listeners.get(type) ?? []) cb(ev);
   }
 }
+
+afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();});
+describe('match transport lifecycle and stale connections',()=>{
+ const setup=()=>{
+  vi.useFakeTimers();const sockets:FakeSocket[]=[];let wake:(hidden?:boolean)=>void=()=>{};
+  const channel=createRealtimeChannel({url:'wss://unused.invalid',socket:url=>{const s=new FakeSocket(url);sockets.push(s);return s;},wake:cb=>{wake=cb;return ()=>{};}});
+  const onConnection=vi.fn(),onPing=vi.fn();const stop=channel.subscribe('m',{onPing,onPresence:()=>{},onConnection});
+  const join=(s:FakeSocket)=>{s.emit('open');s.emit('message',{data:JSON.stringify({topic:'realtime:m',event:'phx_reply',payload:{status:'ok'}})});};
+  return {channel,sockets,onConnection,onPing,stop,join,wake:(hidden?:boolean)=>wake(hidden)};
+ };
+ it('rejoins a failed topic without waiting for a socket close',async()=>{
+  const t=setup(),first=t.sockets[0]!;t.join(first);
+  first.emit('message',{data:JSON.stringify({topic:'realtime:m',event:'phx_error'})});
+  expect(first.readyState).toBe(3);expect(t.onConnection).toHaveBeenLastCalledWith(false);
+  await vi.advanceTimersByTimeAsync(500);expect(t.sockets).toHaveLength(2);t.join(t.sockets[1]!);t.stop();
+ });
+ it('never lets an old socket acknowledge a replacement or deliver its pings',async()=>{
+  const t=setup(),first=t.sockets[0]!;t.join(first);first.emit('close');await vi.advanceTimersByTimeAsync(500);
+  first.emit('open');first.emit('message',{data:JSON.stringify({topic:'realtime:m',event:'phx_reply',payload:{status:'ok'}})});
+  first.emit('message',{data:JSON.stringify({topic:'realtime:m',event:'ping',payload:{revision:90,status:'active'}})});
+  expect(t.onConnection).toHaveBeenLastCalledWith(false);expect(t.onPing).not.toHaveBeenCalled();t.stop();
+ });
+ it('holds no socket heartbeat/retry timer while suspended, then rejoins immediately',async()=>{
+  const t=setup(),first=t.sockets[0]!;t.join(first);t.wake(true);
+  expect(first.readyState).toBe(3);await vi.advanceTimersByTimeAsync(120000);expect(vi.getTimerCount()).toBe(0);
+  t.wake(false);expect(t.sockets).toHaveLength(2);t.join(t.sockets[1]!);t.stop();expect(vi.getTimerCount()).toBe(0);
+ });
+ it('a later subscription does not inherit suspension after the last subscriber left',()=>{
+  const t=setup();t.join(t.sockets[0]!);t.wake(true);t.stop();
+  const stop=t.channel.subscribe('next',{onPing:()=>{},onPresence:()=>{}});
+  expect(t.sockets).toHaveLength(2);stop();expect(vi.getTimerCount()).toBe(0);
+ });
+});
 
 describe('pingFromFrame', () => {
   it('reads the broadcast envelope and the inlined user event', () => {

@@ -33,6 +33,8 @@ import {
 } from './ui.js';
 import type { PillModel } from './ui.js';
 import { blitzClockIn } from '../../blitz/timer.js';
+import { createLiveTicker } from './ticker.js';
+import { mountPointerBusy } from './pointer-busy.js';
 
 export type LiveHost = ReturnHost;
 
@@ -109,11 +111,9 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
   };
 
   // ---- what the screen is doing ----
-  let pointerDown = false;
-  for (const t of ['pointerdown'] as const) document.addEventListener(t, () => (pointerDown = true), { capture: true });
-  for (const t of ['pointerup', 'pointercancel'] as const) document.addEventListener(t, () => (pointerDown = false), { capture: true });
+  const pointer = mountPointerBusy();
   const hardBusy = () =>
-    pointerDown || !!document.querySelector('.drag-source-dim') || !!document.querySelector('#draw-info:not([hidden])');
+    pointer.active() || !!document.querySelector('.drag-source-dim') || !!document.querySelector('#draw-info:not([hidden])');
   const softBusy = () => !!page().busy?.() || !!page().online?.()?.revealing;
   const tutorial = () => !!page().tutorial?.();
   const currentMatchId = getOnlineMatchId;
@@ -236,6 +236,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     const token = readIdentity()?.token;
     sending = true;
     paint();
+    scheduleStatus();
     try {
       const res = await api.challenge(matchId, kind);
       if (attempt !== sendGeneration || readIdentity()?.token !== token || currentMatchId() !== matchId) return;
@@ -347,6 +348,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
   const presentation: {at:number;kind:PillModel['kind'];matchId:string|null}[] = [];
   const paint = () => {
     const s = status && status.matchId === currentMatchId() ? status : null;
+    seconds.setActive(document.visibilityState === 'visible' && (!!s?.live || !!waiting));
     const model = pillModel(s);
     // The opponent may leave, the invite may be started elsewhere, or their own invitation may
     // arrive: the confirmation stands down rather than showing a decision that is no longer real.
@@ -404,7 +406,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     }
     if (waiting) paint(); // the waiting countdown
   };
-  window.setInterval(second, 250);
+  const seconds = createLiveTicker(second, {setTimeout:(fn,ms)=>window.setTimeout(fn,ms),clearTimeout:id=>window.clearTimeout(id as number)});
 
   // ---- the per-match status poll (1 s while live or waiting, 10 s otherwise; only in a match) ----
   let inflight: Promise<void> | null = null;
@@ -414,7 +416,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     if (statusTimer !== null) window.clearTimeout(statusTimer);
     statusTimer = null;
     if (document.visibilityState !== 'visible' || !currentMatchId() || !readIdentity()) return;
-    const fast = !!status?.live || !!waiting || !!status?.pending;
+    const fast = sending || !!status?.live || !!waiting || !!status?.pending;
     statusTimer = window.setTimeout(loop, fast ? 1_000 : 10_000);
   };
   const refresh = async (): Promise<void> => {
@@ -439,6 +441,14 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
           offset = next.serverNow - Date.now();
           status = next;
           statusFor = m;
+          if(sending && next.pending?.fromMe){
+            // The server accepted the invitation even if its POST reply is still travelling.
+            // Adopt that authoritative row and retire the stale send continuation.
+            sendGeneration++; sending=false; waiting=next.pending;
+            seenOutgoing.set(next.pending.id,'pending');
+            void center?.pollNow();
+          }
+          center?.hintPending(next.pending);
           if (next.live) liveSeen.add(m);
           if (prev && prev.live && !next.live && next.endedAt !== lastEndedAt) {
             lastEndedAt = next.endedAt;
@@ -501,6 +511,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     if (isIdentityStorageEvent(event.key, STORAGE_PREFIX)) identityChanged();
   });
   document.addEventListener('visibilitychange', () => {
+    seconds.setActive(document.visibilityState === 'visible' && (!!status?.live || !!waiting));
     if (document.visibilityState === 'visible') void refresh();
     else if (statusTimer !== null) { window.clearTimeout(statusTimer); statusTimer = null; }
   });

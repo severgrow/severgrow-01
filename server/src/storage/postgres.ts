@@ -642,6 +642,7 @@ export const postgresStorage = (pool: PgPool): Storage => ({
     maxOpenMatches: number;
     presentSince?: number;
     liveWindowMs?: number;
+    resumeMatchId?: string | null;
   }): Promise<OpenQueueSeat> {
     const client = await pool.connect();
     try {
@@ -669,10 +670,11 @@ export const postgresStorage = (pool: PgPool): Storage => ({
           where p.player_id = $1 and m.status = 'active' and m.open_queue = true
             -- Only the game this search JUST made (owner report, 2026-11-13): once this player has
             -- moved in it, it is an ordinary game and a new Find starts a new search.
-            and not exists (select 1 from match_moves mv where mv.match_id = m.id and mv.player_id = $1)
+            and (($2::boolean and not exists (select 1 from match_moves mv where mv.match_id = m.id and mv.player_id = $1))
+                 or m.id = $3::uuid)
           order by m.updated_at desc
           limit 1`,
-        [input.playerId],
+        [input.playerId, input.resumeMatchId === undefined, input.resumeMatchId ?? null],
       );
       if (resume.rows[0]) {
         // A leftover solo search (rows the old behaviour left behind) is a duplicate of a search
@@ -759,6 +761,40 @@ export const postgresStorage = (pool: PgPool): Storage => ({
         return asNumber(counted.rows[0]?.n ?? 0);
       };
 
+      // The heartbeat and a fresh Find share this atomic continuation path.
+      const continueShared = async (ownId: string | null = null): Promise<OpenQueueSeat | null> => {
+        const cont = await client.query(
+          `select m.id as parked_id, shared.id as shared_id, mine.seat as my_seat
+             from matches m
+             join match_participants p on p.match_id = m.id
+             join match_participants theirs on theirs.player_id = p.player_id
+             join match_participants mine on mine.match_id = theirs.match_id and mine.player_id = $1
+             join matches shared on shared.id = theirs.match_id
+            where m.status = 'waiting' and m.open_queue = true
+              and p.player_id <> $1
+              and (select count(*)::int from match_participants p3 where p3.match_id = m.id) = 1
+              and shared.status <> 'finished' and shared.id <> m.id
+              -- Only a searcher who is HERE now (owner report, 2026-11-13).
+              and ($2::bigint is null or m.updated_at >= $2::bigint)
+            order by m.created_at asc, shared.updated_at desc
+            limit 1
+            for update of m skip locked`,
+          [input.playerId, presentSince],
+        );
+        if (cont.rows[0]) {
+          const parkedId = asString(cont.rows[0].parked_id);
+          const sharedId = asString(cont.rows[0].shared_id);
+          await client.query("delete from matches where id = $1 and status = 'waiting'", [parkedId]);
+          if (ownId) await client.query("delete from matches where id = $1 and status = 'waiting' and open_queue = true", [ownId]);
+          const touched = await client.query('update matches set updated_at = $2 where id = $1 returning *', [sharedId, input.now]);
+          if (touched.rows[0]) {
+            return { ok: true, match: rowToMatch(touched.rows[0]), seat: asNumber(cont.rows[0].my_seat) === 1 ? 1 : 0, paired: true, continued: true, wakeMatchIds:ownId ? [parkedId,ownId] : [parkedId] };
+          }
+          return { ok: false, code: 'MATCH_FULL', reason: 'The shared game moved on; try again.' };
+        }
+        return null;
+      };
+
       // 2. Already parked: this repeat Find is the HEARTBEAT. It refreshes the search (the player is
       // here), and once the live window has passed it may join an open game someone left earlier,
       // retiring its own search in the same step. Otherwise the same search comes back.
@@ -783,6 +819,8 @@ export const postgresStorage = (pool: PgPool): Storage => ({
           await client.query('commit');
           return { ok: true, match: seated.match, seat: seated.seat, paired: true };
         }
+        const continued = await continueShared(ownId);
+        if (continued) { await client.query('commit'); return continued; }
         const waiting = await othersWaiting(ownId);
         await client.query('commit');
         return { ok: true, match: rowToMatch(touched.rows[0] ?? own.rows[0]), seat: asNumber(own.rows[0].my_seat) === 1 ? 1 : 0, paired: false, othersWaiting: waiting };
@@ -812,38 +850,8 @@ export const postgresStorage = (pool: PgPool): Storage => ({
         return { ok: true, match: seated.match, seat: seated.seat, paired: true };
       }
 
-      // 4b. CONTINUE (owner, 2026-11-11): the oldest searcher waiting already shares an open game
-      // with this player. Retire that search (scoped delete, status guard) and hand back their
-      // existing game, touched so the other page finds it at the top of its list.
-      const cont = await client.query(
-        `select m.id as parked_id, shared.id as shared_id, mine.seat as my_seat
-           from matches m
-           join match_participants p on p.match_id = m.id
-           join match_participants theirs on theirs.player_id = p.player_id
-           join match_participants mine on mine.match_id = theirs.match_id and mine.player_id = $1
-           join matches shared on shared.id = theirs.match_id
-          where m.status = 'waiting' and m.open_queue = true
-            and p.player_id <> $1
-            and (select count(*)::int from match_participants p3 where p3.match_id = m.id) = 1
-            and shared.status <> 'finished' and shared.id <> m.id
-            -- Only a searcher who is HERE now (owner report, 2026-11-13).
-            and ($2::bigint is null or m.updated_at >= $2::bigint)
-          order by m.created_at asc, shared.updated_at desc
-          limit 1
-          for update of m skip locked`,
-        [input.playerId, presentSince],
-      );
-      if (cont.rows[0]) {
-        const parkedId = asString(cont.rows[0].parked_id);
-        const sharedId = asString(cont.rows[0].shared_id);
-        await client.query("delete from matches where id = $1 and status = 'waiting'", [parkedId]);
-        const touched = await client.query('update matches set updated_at = $2 where id = $1 returning *', [sharedId, input.now]);
-        await client.query('commit');
-        if (touched.rows[0]) {
-          return { ok: true, match: rowToMatch(touched.rows[0]), seat: asNumber(cont.rows[0].my_seat) === 1 ? 1 : 0, paired: true, continued: true };
-        }
-        return { ok: false, code: 'MATCH_FULL', reason: 'The shared game moved on; try again.' };
-      }
+      const continued = await continueShared();
+      if (continued) { await client.query('commit'); return continued; }
 
       // 5. Nobody is waiting: park the player's search (unless the cap forbids one more open game).
       if (atCap) {

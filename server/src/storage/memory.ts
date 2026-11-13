@@ -243,6 +243,7 @@ export class MemoryStorage implements Storage {
     maxOpenMatches: number;
     presentSince?: number;
     liveWindowMs?: number;
+    resumeMatchId?: string | null;
   }): Promise<OpenQueueSeat> {
     // 0. Lazily expire parked searches past their window so an expired search is never matched.
     for (const [id, match] of this.matches) {
@@ -262,7 +263,9 @@ export class MemoryStorage implements Storage {
     const fromSearch = [...this.matches.values()]
       .filter((m) => m.status === 'active' && m.openQueue
         && (this.participants.get(m.id) ?? []).some((p) => p.playerId === input.playerId)
-        && !(this.moves.get(m.id) ?? []).some((mv) => mv.playerId === input.playerId))
+        && (input.resumeMatchId === undefined
+          ? !(this.moves.get(m.id) ?? []).some((mv) => mv.playerId === input.playerId)
+          : m.id === input.resumeMatchId))
       .sort((a, b) => b.updatedAt - a.updatedAt)[0];
     if (fromSearch) {
       // A leftover solo search (rows the old behaviour left behind) is a duplicate of a search that
@@ -318,6 +321,40 @@ export class MemoryStorage implements Storage {
       return { ok: true, match: copy(activated), seat, paired: true };
     };
 
+    // Fresh taps and already parked searchers must use the same shared-game continuation.
+    const continueShared = (): OpenQueueSeat | null => {
+      for (const match of [...this.matches.values()].filter(m => m.status === 'waiting' && m.openQueue).sort((a,b) => a.createdAt - b.createdAt)) {
+        // Only a searcher who is HERE now (owner report, 2026-11-13): a search left hours ago by someone
+        // this player already plays must not send a fresh Find into their old game.
+        if (match.updatedAt < presentSince) continue;
+        const parts = this.participants.get(match.id) ?? [];
+        if (parts.length !== 1 || parts.some((p) => p.playerId === input.playerId)) continue;
+        const opener = parts[0]!.playerId;
+        const shared = [...this.matches.values()]
+          .filter((m) => m.id !== match.id && m.status !== 'finished'
+            && (this.participants.get(m.id) ?? []).some((p) => p.playerId === input.playerId)
+            && (this.participants.get(m.id) ?? []).some((p) => p.playerId === opener))
+          .sort((x, y) => y.updatedAt - x.updatedAt)[0];
+        if (!shared) continue;
+        this.matches.delete(match.id);
+        this.inviteIndex.delete(match.inviteCode);
+        this.participants.delete(match.id);
+        this.moves.delete(match.id);
+        const own = this.ownParked(input.playerId);
+        if (own) {
+          this.matches.delete(own.id);
+          this.inviteIndex.delete(own.inviteCode);
+          this.participants.delete(own.id);
+          this.moves.delete(own.id);
+        }
+        const touched: MatchRecord = { ...shared, updatedAt: input.now };
+        this.matches.set(shared.id, copy(touched));
+        const seat = (this.participants.get(shared.id) ?? []).find((p) => p.playerId === input.playerId)!.seat;
+        return { ok: true, match: copy(touched), seat, paired: true, continued: true, wakeMatchIds: own ? [match.id,own.id] : [match.id] };
+      }
+      return null;
+    };
+
     // 2. Already parked: this repeat Find is the HEARTBEAT. It refreshes the search (the player is
     // here), and once the live window has passed it may join an open game someone left earlier,
     // retiring its own search in the same step. Otherwise the same search comes back: a re-tap never
@@ -335,6 +372,8 @@ export class MemoryStorage implements Storage {
         this.moves.delete(own.id);
         return seatInto(other);
       }
+      const continued = continueShared();
+      if (continued) return continued;
       const seat = (this.participants.get(own.id) ?? []).find((p) => p.playerId === input.playerId)!.seat;
       return { ok: true, match: copy(touched), seat, paired: false, othersWaiting: othersWaiting(own.id) };
     }
@@ -346,9 +385,6 @@ export class MemoryStorage implements Storage {
     // 4. Join the oldest PRESENT waiting open-queue match with one free seat (FIFO), atomically. A
     // fresh search never joins a game whose owner is away: that waits for the heartbeat after the
     // live window (step 2).
-    const waiting = [...this.matches.values()]
-      .filter((m) => m.status === 'waiting' && m.openQueue)
-      .sort((a, b) => a.createdAt - b.createdAt);
     const first = joinable(input.liveWindowMs !== undefined, null)[0];
     if (first) {
       if (atCap) {
@@ -357,33 +393,8 @@ export class MemoryStorage implements Storage {
       return seatInto(first);
     }
 
-    // 4b. CONTINUE (owner, 2026-11-11): the only searcher waiting is someone this player already
-    // shares an open game with. Never a second game for the pair, and never two people waiting for
-    // each other forever: retire that search and hand back their existing game, freshly touched so
-    // the other page (whose search just ended) finds it at the top of its list. It creates no match,
-    // so the open-match cap never blocks it.
-    for (const match of waiting) {
-      // Only a searcher who is HERE now (owner report, 2026-11-13): a search left hours ago by someone
-      // this player already plays must not send a fresh Find into their old game.
-      if (match.updatedAt < presentSince) continue;
-      const parts = this.participants.get(match.id) ?? [];
-      if (parts.length !== 1 || parts.some((p) => p.playerId === input.playerId)) continue;
-      const opener = parts[0]!.playerId;
-      const shared = [...this.matches.values()]
-        .filter((m) => m.id !== match.id && m.status !== 'finished'
-          && (this.participants.get(m.id) ?? []).some((p) => p.playerId === input.playerId)
-          && (this.participants.get(m.id) ?? []).some((p) => p.playerId === opener))
-        .sort((x, y) => y.updatedAt - x.updatedAt)[0];
-      if (!shared) continue;
-      this.matches.delete(match.id);
-      this.inviteIndex.delete(match.inviteCode);
-      this.participants.delete(match.id);
-      this.moves.delete(match.id);
-      const touched: MatchRecord = { ...shared, updatedAt: input.now };
-      this.matches.set(shared.id, copy(touched));
-      const seat = (this.participants.get(shared.id) ?? []).find((p) => p.playerId === input.playerId)!.seat;
-      return { ok: true, match: copy(touched), seat, paired: true, continued: true };
-    }
+    const continued = continueShared();
+    if (continued) return continued;
 
     // 5. Nobody is waiting: park the player's search (unless the cap forbids one more open game).
     if (atCap) {

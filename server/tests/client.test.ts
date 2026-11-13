@@ -26,6 +26,12 @@ const memoryStore = (): KeyValue => {
 const SESSION_KEY = 'severgrow.duel.session.v1';
 
 describe('DuelClient', () => {
+  it('distinguishes a fresh Find from checking a specific parked search, retaining legacy requests',async()=>{
+    const {fetchImpl,calls}=makeFetch({'POST /v1/matchmaking/find':{status:200,body:{ok:true}}});
+    const client=new DuelClient({baseUrl:'https://api.example',fetch:fetchImpl,storage:memoryStore()});
+    await client.findOpponent('token',null);await client.findOpponent('token','search-id');await client.findOpponent('token');
+    expect(calls.map(c=>JSON.parse(c.init.body!))).toEqual([{searchMatchId:null},{searchMatchId:'search-id'},{}]);
+  });
   it('creates a guest without an Authorization header', async () => {
     const { fetchImpl, calls } = makeFetch({
       'POST /v1/guests': { status: 201, body: { ok: true, player: { id: 'p1', kind: 'guest', displayName: null }, token: 't'.repeat(40) } },

@@ -249,6 +249,22 @@ jobs:
         run: node --import tsx web/e2e/online-presence-journey.ts
         env:
           JOURNEY_METRICS: '1'
+      - name: Recover interrupted gestures, an old search game and a stalled invitation reply
+        run: node --import tsx web/e2e/online-presence-journey.ts
+        env:
+          JOURNEY_ONE: '1'
+          JOURNEY_SKIP_BUILD: '1'
+          JOURNEY_INTERRUPTED_POINTER: '1'
+          JOURNEY_OLD_SEARCH: '1'
+          JOURNEY_HOLD_SENT: '1'
+          SHOTS: /tmp/online-presence-faults/interrupted
+      - name: Recover a missed invitation broadcast without faster idle polling
+        run: node --import tsx web/e2e/online-presence-journey.ts
+        env:
+          JOURNEY_ONE: '1'
+          JOURNEY_SKIP_BUILD: '1'
+          JOURNEY_DROP_INVITE: '1'
+          SHOTS: /tmp/online-presence-faults/missed
       - name: Verify ritual centring through the actual menu
         run: node --import tsx web/e2e/ritual-centering.ts
         env:
@@ -260,5 +276,6 @@ jobs:
           name: online-presence-journey-evidence
           path: |
             /tmp/online-presence-journey/
+            /tmp/online-presence-faults/
             /tmp/ritual-centering/
           retention-days: 7

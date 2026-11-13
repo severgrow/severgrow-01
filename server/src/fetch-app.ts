@@ -268,8 +268,9 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
 
     if (method === 'POST' && path === '/v1/matchmaking/find') {
       const player = await service.authenticate(bearer(req.headers.get('authorization')));
-      await readJson(req, config.maxBodyBytes);
-      const found = await service.findOpponent(player, clientIpOf(req));
+      const body = asRecord(await readJson(req, config.maxBodyBytes));
+      const searchMatchId = body.searchMatchId === undefined || body.searchMatchId === null ? body.searchMatchId : requireString(body.searchMatchId,'searchMatchId');
+      const found = await service.findOpponent(player, clientIpOf(req),searchMatchId);
       return { status: 200, body: { ok: true, ...found, serverNow: service.serverNow() } };
     }
 

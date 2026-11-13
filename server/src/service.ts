@@ -412,7 +412,12 @@ export class MatchService {
   async findOpponent(
     player: PlayerRecord,
     clientIp: string | null = null,
+    searchMatchId?: string | null,
   ): Promise<{ match: MatchSummary; player: MatchViewPayload; paired: boolean; othersWaiting: number }> {
+    if (searchMatchId !== undefined && searchMatchId !== null &&
+        (typeof searchMatchId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(searchMatchId))) {
+      throw new ApiError('INVALID_REQUEST','A valid search match id is required.');
+    }
     // A repeat Find from a player already searching is the HEARTBEAT (tiers, owner 2026-11-12): it
     // has its own budget, so a search screen saying "I am here" every few seconds never spends the
     // fresh-search budget.
@@ -433,6 +438,7 @@ export class MatchService {
         maxOpenMatches: this.config.maxOpenMatchesPerPlayer,
         presentSince: now - FIND_PRESENT_MS,
         liveWindowMs: FIND_LIVE_WINDOW_MS,
+        ...(searchMatchId === undefined ? {} : {resumeMatchId:searchMatchId}),
       });
       if (!result.ok) {
         if (result.code === 'DUPLICATE_INVITE_CODE') {
@@ -452,7 +458,8 @@ export class MatchService {
         // The parked player's page learns about the activation from this ping. A resume changes no
         // state (the game was already active), so it must not look like a fresh pairing to the
         // opponent's page.
-        await safePublish(this.broadcaster, result.match.id, { revision: result.match.revision, status: result.match.status });
+        await Promise.all([...new Set([result.match.id,...(result.wakeMatchIds??[])])].map(id=>
+          safePublish(this.broadcaster,id,{revision:result.match.revision,status:result.match.status})));
       }
       return {
         match: await this.summary(result.match),

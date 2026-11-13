@@ -39,8 +39,9 @@ export const createLiveApi = (options: { baseUrl: string; token: () => string | 
       init.body = JSON.stringify(body);
     }
     // A suspended mobile request must not own the coalesced presence/status queue forever.
-    // Only reads and the idempotent heartbeat get this deadline; never replay a timed-out invite.
-    const abort = method === 'GET' || path === '/v1/players/me/presence' ? new AbortController() : null;
+    // An invitation reply can stall after the server commits it too. Bound that local wait;
+    // the existing status/inbox reads reconcile the outcome. Never automatically replay an invite.
+    const abort = method === 'GET' || path === '/v1/players/me/presence' || path.endsWith('/live/challenge') ? new AbortController() : null;
     const deadline = abort ? setTimeout(() => abort.abort(), 12000) : null;
     if (abort) init.signal = abort.signal;
     try {

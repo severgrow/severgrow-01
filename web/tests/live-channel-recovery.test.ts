@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPlayerChannel } from '../src/online/live/channel.js';
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 const setup = () => {
   vi.useFakeTimers();
   const sockets: ReturnType<typeof make>[] = [];
@@ -34,7 +34,7 @@ describe('mobile Realtime transport repair', () => {
     first.emit('message', JSON.stringify({ topic: 'realtime:player:p', event }));
     expect(t.channel.connected?.()).toBe(false);
     await vi.advanceTimersByTimeAsync(1000);
-    t.join(); expect(t.ping).toHaveBeenCalledTimes(2);
+    t.join(); expect(t.ping.mock.calls.map(c=>c[0])).toEqual(['connected','disconnected','connected']);
     t.stop(); expect(vi.getTimerCount()).toBe(0);
   });
   it('repairs an open socket whose subscription never joins', async () => {
@@ -55,5 +55,26 @@ describe('mobile Realtime transport repair', () => {
     first.emit('message', JSON.stringify({ topic: 'phoenix', ref: heartbeat.ref, event: 'phx_reply', payload: { status: 'ok' } }));
     expect(t.channel.connected?.()).toBe(true);
     t.stop(); expect(vi.getTimerCount()).toBe(0);
+  });
+  it('closes a hidden tab socket and reconnects immediately on return, with no hidden heartbeat',async()=>{
+    const doc=Object.assign(new EventTarget(),{hidden:false}), win=new EventTarget();
+    vi.stubGlobal('document',doc);vi.stubGlobal('window',win);
+    const t=setup(), first=t.join();
+    doc.hidden=true;doc.dispatchEvent(new Event('visibilitychange'));
+    expect(first.close).toHaveBeenCalledTimes(1);expect(t.channel.connected?.()).toBe(false);
+    const sent=first.sent.length;await vi.advanceTimersByTimeAsync(120000);
+    expect(first.sent).toHaveLength(sent);expect(vi.getTimerCount()).toBe(0);
+    doc.hidden=false;doc.dispatchEvent(new Event('visibilitychange'));
+    expect(t.sockets).toHaveLength(2);t.join();expect(t.channel.connected?.()).toBe(true);
+    t.stop();doc.dispatchEvent(new Event('visibilitychange'));win.dispatchEvent(new Event('online'));
+    expect(t.sockets).toHaveLength(2);expect(vi.getTimerCount()).toBe(0);
+  });
+  it('online retries after exhausting the bounded reconnect attempts',async()=>{
+    const doc=Object.assign(new EventTarget(),{hidden:false}),win=new EventTarget();
+    vi.stubGlobal('document',doc);vi.stubGlobal('window',win);
+    const t=setup();await vi.advanceTimersByTimeAsync(180000);
+    const count=t.sockets.length;expect(vi.getTimerCount()).toBe(0);
+    win.dispatchEvent(new Event('online'));expect(t.sockets).toHaveLength(count+1);
+    t.join();expect(t.channel.connected?.()).toBe(true);t.stop();
   });
 });

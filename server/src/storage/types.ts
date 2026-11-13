@@ -139,6 +139,8 @@ export type OpenQueueSeat =
   | { ok: true; match: MatchRecord; seat: Player; paired: boolean;
       /** The searcher met someone they already share an open game with: `match` is THAT game. */
       continued?: boolean;
+      /** Retired search topics to wake, so their pages can read and open the continued game. */
+      wakeMatchIds?: readonly string[];
       /** The player's earlier search has already become `match` (an active game); nothing new was
        * created. A repeat Find from either device lands here instead of starting a second search. */
       resumed?: boolean;
@@ -308,6 +310,8 @@ export interface Storage {
      */
     presentSince?: number;
     liveWindowMs?: number;
+    /** null: fresh Find; id: recover only that search; absent: compatibility with older pages. */
+    resumeMatchId?: string | null;
   }): Promise<OpenQueueSeat>;
 
   /** The player's own `waiting` open-queue match, or null. Used by cancel and idempotent re-taps. */

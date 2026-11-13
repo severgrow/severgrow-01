@@ -40,6 +40,10 @@ export const createPlayerChannel = (socketCtor?: (url: string) => Socket, config
       let ref = 0;
       let joinRef: string | null = null;
       let isJoined = false;
+      let pageHidden = false;
+      const doc = typeof document === 'undefined' ? null : document;
+      const win = typeof window === 'undefined' ? null : window;
+      const visible = () => !pageHidden && !doc?.hidden;
       const setJoined = (on: boolean) => {
         if (on === isJoined) return;
         isJoined = on;
@@ -52,8 +56,19 @@ export const createPlayerChannel = (socketCtor?: (url: string) => Socket, config
         socket.send(JSON.stringify({ topic: t, event, payload, ref: String(ref), join_ref: t === 'phoenix' ? null : joinRef }));
         return String(ref);
       };
+      const disconnect = () => {
+        setJoined(false);
+        if (beat) clearInterval(beat);
+        if (retry) clearTimeout(retry);
+        if (deadline) clearTimeout(deadline);
+        beat = retry = deadline = null;
+        heartbeatRef = null;
+        const old = socket;
+        socket = null; // Its close event must not start a second reconnect.
+        try { old?.close(); } catch { /* Already disconnected. */ }
+      };
       const open = () => {
-        if (closed) return;
+        if (closed || socket || !visible()) return;
         try {
           socket = make(wsUrl);
         } catch {
@@ -66,13 +81,9 @@ export const createPlayerChannel = (socketCtor?: (url: string) => Socket, config
         };
         const down = () => {
           if (closed || socket !== attempt) return;
-          setJoined(false);
-          clearDeadline();
-          heartbeatRef = null;
-          if (beat) clearInterval(beat);
-          beat = null;
-          socket = null;
-          try { attempt.close(); } catch { /* already disconnected */ }
+          disconnect();
+          // Re-arm the center's cheap fallback now, rather than waiting out its 30 s idle timer.
+          if (visible()) onPing('disconnected');
           schedule();
         };
         socket.addEventListener('open', () => {
@@ -119,24 +130,32 @@ export const createPlayerChannel = (socketCtor?: (url: string) => Socket, config
         deadline = setTimeout(down, 12000);
       };
       const schedule = () => {
-        if (closed || retry || (failures += 1) > 5) return; // give up quietly: polling carries it
+        if (closed || !visible() || retry || (failures += 1) > 5) return; // polling carries an outage
         retry = setTimeout(() => {
           retry = null;
           open();
         }, Math.min(15_000, 500 * 2 ** failures));
       };
+      const wake = () => {
+        if (closed) return;
+        if (!visible()) { disconnect(); return; }
+        if (!socket) { failures = 0; open(); }
+      };
+      const online = () => { if (visible()) { disconnect(); failures = 0; open(); } };
+      const hide = () => { pageHidden = true; wake(); };
+      const show = () => { pageHidden = false; wake(); };
+      doc?.addEventListener('visibilitychange', wake);
+      win?.addEventListener('online', online);
+      win?.addEventListener('pagehide', hide);
+      win?.addEventListener('pageshow', show);
       open();
       return () => {
         closed = true;
-        setJoined(false);
-        if (beat) clearInterval(beat);
-        if (retry) clearTimeout(retry);
-        if (deadline) clearTimeout(deadline);
-        try {
-          socket?.close();
-        } catch {
-          /* gone */
-        }
+        doc?.removeEventListener('visibilitychange', wake);
+        win?.removeEventListener('online', online);
+        win?.removeEventListener('pagehide', hide);
+        win?.removeEventListener('pageshow', show);
+        disconnect();
       };
     },
   };

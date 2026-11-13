@@ -364,7 +364,7 @@ describe('postgres storage: Find-Opponent is one atomic, serialized step', () =>
 
   it('returns the player own parked search without creating a second', async () => {
     const fake = fakePool();
-    fake.script('as my_seat', [{ ...matchRow({ status: 'waiting' }), my_seat: 0 }]);
+    fake.script('select m.*, p.seat as my_seat', [{ ...matchRow({ status: 'waiting' }), my_seat: 0 }]);
     const storage = postgresStorage(fake.pool);
     const result = await storage.claimOpenQueueOrPark({
       playerId: 'p1',
