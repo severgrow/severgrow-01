@@ -184,7 +184,9 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
         const tutorial = document.documentElement.classList.contains('futa04-tutorial');
         // Then the whole board sits CAMERA.restDrop px lower still: only the bottom tip of the hex
         // reaches the dock, into the empty middle between the display keys and the piles.
-        y = tutorial ? m.y + (m.h - wh) / 2 : Math.min(m.y, m.y + m.h - wh + CAMERA.restLift / s) - CAMERA.restDrop / s;
+        // Phones only (the map runs on under the dock there); a desktop board keeps its whole frame.
+        const drop = under() > 0 ? CAMERA.restDrop / s : 0;
+        y = tutorial ? m.y + (m.h - wh) / 2 : Math.min(m.y, m.y + m.h - wh + CAMERA.restLift / s) - drop;
       } else {
         y = Math.min(m.y + m.h - wh, Math.max(m.y, y));
       }
