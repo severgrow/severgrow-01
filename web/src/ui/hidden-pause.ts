@@ -36,19 +36,28 @@ export const resumePausedAnimations = (paused: readonly PlayableAnimation[]): vo
 
 /** Mount the gate on the real document. Returns the unsubscribe function (tests and remounts). */
 export const mountHiddenPause = (doc: Document = document): (() => void) => {
-  let paused: PlayableAnimation[] = [];
+  const paused = new Set<PlayableAnimation>();
+  let pageHidden = false;
   const onVisibility = () => {
-    if (doc.hidden) {
-      paused = pausePlayingAnimations(doc.getAnimations() as unknown as PlayableAnimation[]);
+    if (doc.hidden || pageHidden) {
+      // Visibility and pagehide can both arrive for one suspension. Keep the original set;
+      // a second pause must not forget the animations that this gate owns.
+      for (const animation of pausePlayingAnimations(doc.getAnimations() as unknown as PlayableAnimation[])) paused.add(animation);
       return;
     }
-    resumePausedAnimations(paused);
-    paused = [];
+    resumePausedAnimations([...paused]);
+    paused.clear();
   };
+  const onHide = () => { pageHidden = true; onVisibility(); };
+  const onShow = () => { pageHidden = false; onVisibility(); };
   doc.addEventListener('visibilitychange', onVisibility, { passive: true });
+  doc.defaultView?.addEventListener('pagehide', onHide, { passive: true });
+  doc.defaultView?.addEventListener('pageshow', onShow, { passive: true });
   return () => {
     doc.removeEventListener('visibilitychange', onVisibility);
-    resumePausedAnimations(paused);
-    paused = [];
+    doc.defaultView?.removeEventListener('pagehide', onHide);
+    doc.defaultView?.removeEventListener('pageshow', onShow);
+    resumePausedAnimations([...paused]);
+    paused.clear();
   };
 };

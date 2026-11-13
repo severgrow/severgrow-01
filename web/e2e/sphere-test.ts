@@ -201,8 +201,8 @@ try {
       insets.length >= 4 && Math.abs(insets[0]! - grid.y) < 1 && Math.abs(insets[3]! - grid.x) < 1 &&
       Math.abs(canvas.width - width!) < 1 && Math.abs(canvas.height - height!) < 1,
       `${JSON.stringify(sheet.frame)} vs ${JSON.stringify(grid)}; ${sheet.clip}`);
-    check(`[${tag}] the flat map is hidden underneath, the MENU key is on top`,
-      await p.locator('.world-map-svg').evaluate((el) => getComputedStyle(el).visibility === 'hidden') &&
+    check(`[${tag}] no flat map is allocated underneath, the MENU key is on top`,
+      await p.locator('.world-map-svg').count() === 0 &&
       await p.locator('#online-world-menu').isVisible());
     await p.screenshot({ path: `${out}/planet-open-${tag}.png` });
 

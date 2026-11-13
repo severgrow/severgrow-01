@@ -2,7 +2,7 @@ import type { DuelClient } from '../../../server/src/client.js';
 import { shouldReportFailure } from './blips.js';
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
 import type { SeedWallet, WorldChallengeWire, WorldChallengesPayload, WorldDispute } from '../../../server/src/seeds/types.js';
-import { isPlanetCell, worldNeighbours } from '../../../server/src/world.js';
+import { worldNeighbours } from '../../../server/src/world.js';
 import { planetTileCount } from '../../../src/planet/geometry.js';
 import {
   HELD_DARK,
@@ -52,7 +52,7 @@ import {
 } from './achievement-state.js';
 import { SWORD_PATH } from './swords-glyph.js';
 import { TILE_BAR_ICONS } from './tile-bar-icons.js';
-import { meLine, ownerLine, ownerSpokenLine } from './world-selection.js';
+import { freeWorldTile, meLine, ownerLine, ownerSpokenLine } from './world-selection.js';
 import { storedDisplayName } from './identity.js';
 import { browserStorage } from '../../../server/src/client.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
@@ -966,7 +966,7 @@ export class WorldView {
     this.world = world;
     this.fromMemory = fromMemory;
     this.disputes = world.disputes ?? [];
-    if (!this.svg || this.paintSignatureOf() !== this.paintSignature) this.paint();
+    if ((!FEATURES.planet && !this.svg) || this.paintSignatureOf() !== this.paintSignature) this.paint();
     else this.applyView();
     // THE MENU FRAMES THE SAME WORLD TO THE WHOLE SCREEN (owner, 2026-11-02). Unless the player
     // chose a camera, the menu's view is re-derived from the LIVE full-bleed box on every show, so
@@ -1209,7 +1209,7 @@ export class WorldView {
     this.bounds = this.boundsFor(this.aspect);
     if (this.svg) this.applyView();
     this.settleWarp(true);
-    this.notice(this.svg ? '' : ONLINE.worldLoading);
+    this.notice((FEATURES.planet ? this.world : this.svg) ? '' : ONLINE.worldLoading);
     this.openPlanet('world');
     // Drawn at once from the last good map this device saw, so the panel is never empty while the
     // server answers (owner, 2026-10-22). The first fresh answer replaces it, whatever its revision.
@@ -1347,6 +1347,7 @@ export class WorldView {
       // The ground that changed hands, captured BEFORE the new map replaces the old one: this is the
       // only moment that knows both answers, and it is what the takeover ceremony points at.
       const moved = takeovers(this.world?.claims ?? null, map.world.claims, interfaceMotionAllowed());
+      let painted = false;
       if (this.fromMemory || !this.world || map.world.revision > this.world.revision ||
         (map.world.revision === this.world.revision && (force || walletChanged || ownerChanged || challengeChanged || colourChanged))) {
         if (this.world?.version !== map.world.version) {
@@ -1364,7 +1365,7 @@ export class WorldView {
         // SMOOTH REFRESH (owner, 2026-10-28): rebuilding the map throws away every node, its running
         // glints and halos, and a focused tile. Only a change in what the map is drawn from may do
         // that; a forced re-read that brings the same world back keeps the drawn one.
-        if (this.paintSignatureOf() !== this.paintSignature) this.paint();
+        if (this.paintSignatureOf() !== this.paintSignature) { this.paint(); painted = true; }
         rememberWorld(browserStorage(), map.world);
         if (moved.length) this.cueTakeover(moved);
       }
@@ -1376,6 +1377,9 @@ export class WorldView {
       // bump ownership). These only touch attributes, the swords and the challenge strip, never the map.
       this.paintRings();
       this.paintSwords();
+      // Disputes can change without a world revision. The sphere deduplicates its own look uploads;
+      // it must receive this metadata even when there is no legacy SVG to repaint.
+      if (!painted) this.pushPlanet();
       this.paintStakes();
       this.paintChallenges();
       // Achievements are re-read when something they count may have moved, and after any transient
@@ -1487,6 +1491,14 @@ export class WorldView {
     return ringPhase(Number(current), delay, period);
   }
   private paint() {
+    if (FEATURES.planet) {
+      // The globe owns geometry, interaction, fog and the camera. Building the hidden flat map
+      // too cost thousands of DOM nodes/listeners and a second geometry/animation system.
+      // Keep all authoritative data and the surrounding UI, and pass it to the existing renderer.
+      this.paintSignature = this.paintSignatureOf();
+      this.pushPlanet();
+      return;
+    }
     const container = document.getElementById('online-world-grid')!;
     const world = this.world!;
     if (!world.cells.length) {
@@ -2333,12 +2345,13 @@ export class WorldView {
   }
   /**
    * GROW ANYWHERE ON THE PLANET (owner, 2026-11-04): any free planet tile, seen or not, once the
-   * server says it takes them (`growAnywhere`). An older server keeps the seen-map rule.
+   * server says it takes them (`growAnywhere`). An older server keeps its seen-map rule,
+   * evaluated from data even though the globe no longer builds the hidden flat SVG.
    */
   private planetGrowable(cellId: string): boolean {
     const world = this.world;
-    if (!this.planet || !world?.growAnywhere || !this.wallet || this.wallet.balance < world.cost) return false;
-    return isPlanetCell(cellId) && !world.claims.some((claim) => claim.cellId === cellId);
+    if (!this.planet || !world || !this.wallet || this.wallet.balance < world.cost) return false;
+    return freeWorldTile(cellId, world, this.identity?.playerId ?? null);
   }
   private markSelection() {
     this.pushPlanet();

@@ -292,12 +292,15 @@ export function drawLedCells(
   const layout = ledLayout(message, repeat, mode, scale, span);
   const s = layout.scale;
   const dpr = Math.min(3, window.devicePixelRatio || 1);
-  canvas.width = Math.ceil(layout.width * dpr);
-  canvas.height = Math.ceil(layout.height * dpr);
+  const width = Math.ceil(layout.width * dpr), height = Math.ceil(layout.height * dpr);
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
   canvas.style.width = `${layout.width}px`;
   canvas.style.height = `${layout.height}px`;
   const ctx = canvas.getContext('2d');
   if (!ctx) return layout.width;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, width, height);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   for (const dot of layout.dots) {
     const ink = INK[dot.tone];
@@ -387,6 +390,33 @@ const rgbOf = (hex: string): string => {
 
 export type LedSprite = { canvas: HTMLCanvasElement; width: number; height: number };
 
+// Common captions recur every turn. Reuse their exact baked pixels, with a hard memory cap so
+// scores/marquee widths cannot accumulate across games. Eviction only drops our reference: the
+// currently playing motif may still hold a sprite and must never have its canvas cleared.
+const sprites = new Map<string,LedSprite>();
+let spriteBytes = 0, spriteHits = 0;
+const spriteKey = (kind: string, message: string, repeat: boolean, mode: LedTone, scale: number, span: number | undefined) =>
+  JSON.stringify([kind,message,repeat,mode,scale,span,Math.min(3,window.devicePixelRatio||1)]);
+const cachedSprite = (key: string): LedSprite | undefined => {
+  const found = sprites.get(key);
+  if (found) { sprites.delete(key); sprites.set(key,found); spriteHits++; }
+  return found;
+};
+const keepSprite = (key: string, sprite: LedSprite): LedSprite => {
+  const bytes = sprite.canvas.width * sprite.canvas.height * 4;
+  if (bytes > 512 * 1024) return sprite;
+  while (sprites.size >= 24 || spriteBytes + bytes > 2 * 1024 * 1024) {
+    const oldest = sprites.keys().next().value;
+    if (oldest === undefined) break;
+    const old = sprites.get(oldest)!;
+    spriteBytes -= old.canvas.width * old.canvas.height * 4; sprites.delete(oldest);
+  }
+  sprites.set(key,sprite); spriteBytes += bytes;
+  return sprite;
+};
+/** Diagnostic counters, with no canvas/resource exposure. */
+export const ledSpriteCacheStats = () => ({entries:sprites.size,bytes:spriteBytes,hits:spriteHits});
+
 /**
  * The soft bloom for a message: the actual lit dots, blown up in soft layers (a baked blur) into
  * a sprite whose dot strip sits `BLOOM_PAD` px inside every edge, so the light starts on the glyphs
@@ -400,6 +430,8 @@ export function ledBloomSprite(
   span?: number,
 ): LedSprite | null {
   if (typeof document === 'undefined') return null;
+  const key = spriteKey('bloom',message,repeat,mode,scale,span);
+  const cached = cachedSprite(key); if (cached) return cached;
   const layout = ledLayout(message, repeat, mode, scale, span);
   const width = layout.width + BLOOM_PAD * 2;
   const height = layout.height + BLOOM_PAD * 2;
@@ -473,7 +505,7 @@ export function ledBloomSprite(
   ctx.globalCompositeOperation = 'source-over';
   canvas.style.width = `${width}px`;
   canvas.style.height = `${height}px`;
-  return { canvas, width, height };
+  return keepSprite(key,{ canvas, width, height });
 }
 
 /** Paint a baked bloom into a visible canvas (one drawImage; no blur, no readback). */
@@ -487,11 +519,13 @@ export function drawLedBloom(
 ): number {
   const sprite = ledBloomSprite(message, repeat, mode, scale, span);
   if (!sprite) return 0;
-  canvas.width = sprite.canvas.width;
-  canvas.height = sprite.canvas.height;
+  if (canvas.width !== sprite.canvas.width) canvas.width = sprite.canvas.width;
+  if (canvas.height !== sprite.canvas.height) canvas.height = sprite.canvas.height;
   canvas.style.width = `${sprite.width}px`;
   canvas.style.height = `${sprite.height}px`;
-  canvas.getContext('2d')?.drawImage(sprite.canvas, 0, 0);
+  const ctx = canvas.getContext('2d');
+  ctx?.clearRect(0,0,canvas.width,canvas.height);
+  ctx?.drawImage(sprite.canvas, 0, 0);
   return sprite.width;
 }
 
@@ -507,6 +541,8 @@ export function ledHotSprite(
   span?: number,
 ): LedSprite | null {
   if (typeof document === 'undefined') return null;
+  const key = spriteKey('hot',message,repeat,mode,scale,span);
+  const cached = cachedSprite(key); if (cached) return cached;
   const layout = ledLayout(message, repeat, mode, scale, span);
   const canvas = document.createElement('canvas');
   const dpr = Math.min(3, window.devicePixelRatio || 1);
@@ -523,7 +559,7 @@ export function ledHotSprite(
   }
   canvas.style.width = `${layout.width}px`;
   canvas.style.height = `${layout.height}px`;
-  return { canvas, width: layout.width, height: layout.height };
+  return keepSprite(key,{ canvas, width: layout.width, height: layout.height });
 }
 
 /** Paint a baked hot layer into a visible canvas. */
@@ -537,10 +573,12 @@ export function drawLedHot(
 ): number {
   const sprite = ledHotSprite(message, repeat, mode, scale, span);
   if (!sprite) return 0;
-  canvas.width = sprite.canvas.width;
-  canvas.height = sprite.canvas.height;
+  if (canvas.width !== sprite.canvas.width) canvas.width = sprite.canvas.width;
+  if (canvas.height !== sprite.canvas.height) canvas.height = sprite.canvas.height;
   canvas.style.width = `${sprite.width}px`;
   canvas.style.height = `${sprite.height}px`;
-  canvas.getContext('2d')?.drawImage(sprite.canvas, 0, 0);
+  const ctx = canvas.getContext('2d');
+  ctx?.clearRect(0,0,canvas.width,canvas.height);
+  ctx?.drawImage(sprite.canvas, 0, 0);
   return sprite.width;
 }

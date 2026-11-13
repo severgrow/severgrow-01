@@ -1,4 +1,18 @@
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
+import { isPlanetCell } from '../../../server/src/world.js';
+
+/** The selection bar reads data, not an invisible SVG's CSS classes. Keep older servers' rules. */
+export const freeWorldTile = (
+  cellId: string, world: WorldMapPayload['world'], me: string | null,
+): boolean => {
+  if (world.claims.some(claim => claim.cellId === cellId)) return false;
+  if (world.growAnywhere) return isPlanetCell(cellId);
+  const cell = world.cells.find(cell => cell.id === cellId);
+  if (!cell) return false;
+  if (world.version >= 3) return true;
+  const own = new Set(world.claims.filter(claim => claim.ownerId === me).map(claim => claim.cellId));
+  return !own.size || [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]].some(([q,r]) => own.has(`${cell.q+q!},${cell.r+r!}`));
+};
 
 /** One claim as the public world payload carries it. */
 export type WorldClaimView = WorldMapPayload['world']['claims'][number];

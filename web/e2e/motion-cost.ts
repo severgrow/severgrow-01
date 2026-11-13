@@ -95,6 +95,9 @@ try {
     await measure('bloom', bloomFixture().state, bloomFixture().bloom),
   );
   assert(results.every((r) => r.frames > 0), 'every move was measured');
+  if (process.env.MOTION_OUT) writeFileSync(process.env.MOTION_OUT,JSON.stringify({
+    label:process.env.LABEL??'candidate',conditions:'390x844, CPU slowdown 4; frame opportunities measured by rAF, not physical display frames; serial runs',results,
+  },null,2));
   console.log('motion-cost: measured (report only)');
 } finally {
   await browser.close();

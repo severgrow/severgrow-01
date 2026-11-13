@@ -20,6 +20,11 @@ try{
   await p.goto(f.origin+path);
   await p.waitForFunction(()=>(window as any).__launch.length>0,undefined,{timeout:15000});
   const first=await p.evaluate(()=>(window as any).__launch[0]);
+  if(!first.ready || first.painted!=='true'){
+   const diagnostic=()=>p.evaluate(()=>{const h=(window as any).__severgrow,s=h?.planet?.();return {ready:h?.ready?.(),planet:s?{...s,screenOf:undefined}:null,hidden:document.hidden,errors:(window as any).__launch};});
+   console.error('First reveal diagnostic',JSON.stringify(await diagnostic()),errors);
+   await p.waitForTimeout(3000);console.error('After reveal diagnostic',JSON.stringify(await diagnostic()),errors);
+  }
   assert(first.ready&&first.painted==='true'&&first.fonts==='loaded',JSON.stringify(first));
   // OWNER CHANGED THE RULE (2026-11-07): one ~1 s fade into the composed menu.
   assert.deepEqual(first.durations,[1000],'one short first fade (~1 s)');
@@ -46,8 +51,8 @@ try{
   }
   await p.close();console.log('PASS fresh map/API-independent first reveal',path,planet.fallback?'graphics fallback':'rendered planet',JSON.stringify(first));
  }
- // Cached ownership can draw the retired map before a delayed planet import. Even after the
- // bounded fail-open, it must stay unpainted rather than flashing through the menu.
+ // Cached ownership used to allocate the retired map before a delayed planet import. Even after
+ // the bounded fail-open, there must be no flat renderer that could flash through the menu.
  const p=await b.newPage({viewport:{width:393,height:852},hasTouch:true});
  const world={version:WORLD_VERSION,revision:1,cost:100,challengeStake:0,cells:seenWorld(['0,0']),claims:[],disputes:[]};
  await p.addInitScript(init+`localStorage.setItem('futa05:futasaku.world.last.v1',${JSON.stringify(JSON.stringify(world))});`);
@@ -57,9 +62,7 @@ try{
  await p.goto(f.origin+'/');await request;
  await p.waitForTimeout(4000);
  assert(await p.locator('#menu-play').isVisible(),'bounded fallback leaves controls usable');
- const flat=await p.locator('.world-map-svg').evaluateAll(nodes=>nodes.map(n=>getComputedStyle(n).visibility));
- assert(flat.length>0,'the regression really contains the old renderer underlay');
- assert(flat.every(v=>v==='hidden'),'no retired flat-map frame while the planet is late');
+ assert.equal(await p.locator('.world-map-svg').count(),0,'no retired flat-map allocation while the planet is late');
  await p.screenshot({path:`${out}/delayed.png`});
  release();await p.waitForFunction(()=>document.querySelector<HTMLElement>('.planet-canvas')?.dataset.planetReady==='true');
  await p.close();console.log('PASS late planet never exposes the flat renderer');

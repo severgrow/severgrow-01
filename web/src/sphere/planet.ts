@@ -158,7 +158,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
 
   const abort = new AbortController(), signal = abort.signal;
   let renderer: PlanetRenderer | null = null, lost = false, disposed = false, frozen = false;
-  let raf = 0, lastFrame = 0, driftTimer=0;
+  let raf = 0, lastFrame = 0, driftTimer=0, pageHidden=false;
   // THE CANVAS IS ONE FIXED SHEET OVER THE WHOLE SCREEN, behind the menu and in the window alike; only
   // the FRAME the planet is drawn into moves (see `projection`). `view` is the canvas in viewport px.
   // In a CONTAINED pane (the finish card) the canvas is the pane's own box instead; `view` is still
@@ -227,7 +227,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   /** The last touch, key or wheel anywhere on the page, and whether the drift has gone to rest. */
   let lastInput = performance.now();
   let asleep = false;
-  const ask = () => { cancelDrift();if (!raf && !disposed && !frozen && !lost && !document.hidden) raf = requestAnimationFrame(frame); };
+  const ask = () => { cancelDrift();if (!raf && !disposed && !frozen && !lost && !pageHidden && !document.hidden) raf = requestAnimationFrame(frame); };
   const stopCoast = () => { coastVel = { x: 0, y: 0 }; };
   const stop = () => { cancelDrift();flight = null; targetZoom = zoom; stopCoast(); };
   const centre = () => ({ x: view.left + frameNow.x + frameNow.width / 2, y: view.top + frameNow.y + frameNow.height / 2 });
@@ -297,7 +297,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
 
   function frame(now: number) {
     raf = 0;
-    if (disposed || frozen || lost || document.hidden || !renderer) return;
+    if (disposed || frozen || lost || pageHidden || document.hidden || !renderer) return;
     // THE VEIL IS UP (a sheet, the finish card, the install invitation): the last frame stays on the
     // canvas behind the blur, and the loop stops dead instead of redrawing pixels nobody can see.
     // `onBackdropChange` restarts it at the moment the veil goes. A planet that IS the veil's own
@@ -318,6 +318,9 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       if (t === 1) flight = null;
     }
     const target = frameTarget();
+    // In world mode the projection and visible crop use the same measured panel. Read it once,
+    // rather than querying its geometry again between the iris' style writes and the draw.
+    const crop = mode === 'world' ? target : full();
     if (frameTween && motion()) {
       // THE FRAME CLOSES IN LIKE AN IRIS, a little ahead of the camera (done by ~60% of the flight),
       // so the window is in place before the ground arrives. The light rises (or falls) over the
@@ -327,10 +330,10 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       // The planet's own frame glides with the camera; the crop (the window closing in, or opening
       // back to the whole screen) leads it, like an iris.
       frameNow = mix(frameTween.from, target, kl);
-      cropNow = mix(frameTween.cropFrom, cropTarget(), kf);
+      cropNow = mix(frameTween.cropFrom, crop, kf);
       light = frameTween.lightFrom + (frameTween.lightTo - frameTween.lightFrom) * kl;
-      if (t === 1) { frameTween = null; frameNow = target; cropNow = cropTarget(); }
-    } else { frameTween = null; frameNow = target; cropNow = cropTarget(); light = mode === 'menu' ? MENU_LIGHT : 1; }
+      if (t === 1) { frameTween = null; frameNow = target; cropNow = crop; }
+    } else { frameTween = null; frameNow = target; cropNow = crop; light = mode === 'menu' ? MENU_LIGHT : 1; }
     // Behind the menu the planet turns slowly by itself, about its own up axis on screen.
     if (mode === 'menu' && !flight && motion()) {
       const s = Math.sin((MENU_SPIN_RAD_PER_MS * dt) / 2);
@@ -368,7 +371,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     const pulse = pulseUntil > now ? Math.sin(Math.PI * (1 - (pulseUntil - now) / 420)) : 0;
     paintFrame();
     const offset: [number, number] = [drift[0] + turn[0] * 40, drift[1] + turn[1] * 40];
-    renderer.render(q, zoom, pulse, offset, frameNow);
+    renderer.render(q, zoom, pulse, offset, frameNow, cropNow);
     if(input&&ground)announcePaint();
     spaceDrift.x = offset[0]; spaceDrift.y = offset[1];
     const coasting = (Math.abs(coastVel.x) + Math.abs(coastVel.y)) > .02;
@@ -586,7 +589,21 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   }, { signal });
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); lost = true; stop(); cancelAnimationFrame(raf); raf = 0; }, { signal });
   canvas.addEventListener('webglcontextrestored', () => { renderer?.dispose(); initialise(); }, { signal });
-  document.addEventListener('visibilitychange', () => { stop(); cancelAnimationFrame(raf); raf = 0; if (!document.hidden) { lastFrame = 0; lastInput = performance.now(); asleep = false; ask(); } }, { signal });
+  const visibility = () => {
+    stop(); cancelAnimationFrame(raf); raf = 0;
+    if (pageHidden || document.hidden) {
+      // A locked phone may never send the final pointer-up. Discard suspended gesture state,
+      // preserving the camera itself, so a fresh touch cannot inherit an abandoned pinch.
+      for (const id of [...pointers.keys()]) {
+        try { if (canvas.hasPointerCapture(id)) canvas.releasePointerCapture(id); } catch { /* Already released. */ }
+      }
+      pointers.clear(); start = null; multi = dragged = false; pinch = 0; lastTap = null;
+      dragVel = {x:0,y:0};
+    } else { lastFrame = 0; lastInput = performance.now(); asleep = false; ask(); }
+  };
+  document.addEventListener('visibilitychange',visibility,{signal});
+  window.addEventListener('pagehide',()=>{pageHidden=true;visibility();},{signal});
+  window.addEventListener('pageshow',()=>{pageHidden=false;visibility();},{signal});
   // Any input anywhere wakes a resting planet (IDLE_STOP_MS); the listeners are passive and cheap.
   const wake = () => { lastInput = performance.now(); if (asleep) { asleep = false; ask(); } };
   for (const type of ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const) document.addEventListener(type, wake, { signal, passive: true, capture: true });

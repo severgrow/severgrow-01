@@ -16,7 +16,8 @@
 // fact the server has) and WRONG for your own, where the device knows exactly where you are. So an
 // own tile now shows the number this device can stand behind, and never an older one.
 import { describe, expect, it } from 'vitest';
-import { ownLevel, ownerLine, ownerSpokenLine } from '../src/online/world-selection.js';
+import { freeWorldTile, ownLevel, ownerLine, ownerSpokenLine } from '../src/online/world-selection.js';
+import { WORLD_VERSION, seenWorld } from '../../server/src/world.js';
 import type { WorldClaimView } from '../src/online/world-selection.js';
 
 const claim = (overrides: Partial<WorldClaimView> = {}): WorldClaimView => ({
@@ -28,6 +29,27 @@ const claim = (overrides: Partial<WorldClaimView> = {}): WorldClaimView => ({
   colour: 'hsl(163 34% 49%)',
   claimedAt: 1,
   ...overrides,
+});
+
+describe('globe selection without a hidden flat map', () => {
+  const world = (version: number, growAnywhere = false) => ({version, revision:1, cost:100, challengeStake:0,
+    cells:seenWorld(['0,0']), claims:[claim()], growAnywhere});
+  it('keeps the seen-map rule on older servers without relying on SVG nodes', () => {
+    expect(freeWorldTile('1,0',world(3),'player-1')).toBe(true);
+    expect(freeWorldTile('90,90',world(3),'player-1')).toBe(false);
+    expect(freeWorldTile('0,0',world(3),'player-1')).toBe(false);
+  });
+  it('keeps the original adjacency rule and first-land exception', () => {
+    const old=world(2); old.cells.push({id:'5,0',q:5,r:0});
+    expect(freeWorldTile('1,0',old,'player-1')).toBe(true);
+    expect(freeWorldTile('5,0',old,'player-1')).toBe(false);
+    expect(freeWorldTile('5,0',old,'new-player')).toBe(true);
+  });
+  it('uses the current server capability for valid free planet ground', () => {
+    expect(freeWorldTile('5,0',world(WORLD_VERSION,true),'player-1')).toBe(true);
+    expect(freeWorldTile('0,0',world(WORLD_VERSION,true),'player-1')).toBe(false);
+    expect(freeWorldTile('not-a-cell',world(WORLD_VERSION,true),'player-1')).toBe(false);
+  });
 });
 
 describe('the world selection line', () => {

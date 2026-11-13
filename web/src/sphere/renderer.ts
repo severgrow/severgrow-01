@@ -22,6 +22,14 @@ export const discRadius = (width: number, height: number, zoom: number) =>
 
 /** A rectangle in CSS px, relative to the canvas's own top-left. */
 export type Frame = { x: number; y: number; width: number; height: number };
+/** Cover the visible CSS crop, rounded outward, in WebGL's bottom-left device pixels. */
+export const scissorFor = (crop: Frame, width: number, height: number, pixel: number): [number, number, number, number] => {
+  const x = Math.max(0, Math.min(width, Math.floor(crop.x * pixel)));
+  const y = Math.max(0, Math.min(height, Math.floor(height - (crop.y + crop.height) * pixel)));
+  const right = Math.max(x, Math.min(width, Math.ceil((crop.x + crop.width) * pixel)));
+  const top = Math.max(y, Math.min(height, Math.ceil(height - crop.y * pixel)));
+  return [x, y, right - x, top - y];
+};
 /**
  * ONE CANVAS, ANY FRAME (owner, 2026-11-04: "There is a jump of the planet as it's not exactly the same
  * in menu and the planet ... they have to be in identical position"). The canvas never moves or
@@ -197,6 +205,7 @@ export class PlanetRenderer {
   private selected: number | null = null;
   private kin: number[] = [];
   private u: Record<string, WebGLUniformLocation | null> = {};
+  private attributes: {position: number; look: number; stamp: number};
   private pixel = 1;
   private cssWidth = 1;
   private cssHeight = 1;
@@ -210,6 +219,7 @@ export class PlanetRenderer {
     this.gl = gl;
     this.derivatives = !!gl.getExtension('OES_standard_derivatives');
     this.ground = this.program(GROUND_VERTEX, opts.textures ? texturedFragment(this.derivatives) : groundFragment(this.derivatives));
+    this.attributes = {position: gl.getAttribLocation(this.ground, 'aPosition'), look: gl.getAttribLocation(this.ground, 'aLook'), stamp: gl.getAttribLocation(this.ground, 'aStamp')};
     for (const name of ['uRotation', 'uAspect', 'uFocal', 'uShift', 'uPulse', 'uPixel', ...(opts.textures ? ['uAtlas', 'uStrA', 'uStrB', 'uRepeat'] : [])]) this.u[name] = gl.getUniformLocation(this.ground, name);
     this.triangle = this.buffer(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]));
     this.space = spacePass(gl, (v, f) => this.program(v, f), this.triangle);
@@ -315,16 +325,20 @@ export class PlanetRenderer {
     const dpr = Math.min(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, 2) * quality;
     this.cssWidth = Math.max(1, width); this.cssHeight = Math.max(1, height);
     this.pixel = dpr;
-    this.canvas.width = Math.max(1, Math.round(width * dpr));
-    this.canvas.height = Math.max(1, Math.round(height * dpr));
+    const w = Math.max(1, Math.round(width * dpr)), h = Math.max(1, Math.round(height * dpr));
+    if (this.canvas.width !== w) this.canvas.width = w;
+    if (this.canvas.height !== h) this.canvas.height = h;
   }
-  render(q: Quat, zoom: number, pulse: number, drift: readonly [number, number], frame?: Frame) {
+  render(q: Quat, zoom: number, pulse: number, drift: readonly [number, number], frame?: Frame, crop?: Frame) {
     const gl = this.gl;
     if (this.disposed || gl.isContextLost()) return;
     this.frames++;
     const w = this.canvas.width, h = this.canvas.height;
     const at = projection({ width: this.cssWidth, height: this.cssHeight }, frame ?? { x: 0, y: 0, width: this.cssWidth, height: this.cssHeight }, zoom);
     gl.viewport(0, 0, w, h);
+    // CSS hides the rest of this full-screen canvas. Do not shade those invisible pixels.
+    // The viewport/projection stay fixed, including throughout the menu's moving iris.
+    if (crop) { gl.enable(gl.SCISSOR_TEST); gl.scissor(...scissorFor(crop, w, h, this.pixel)); }
     // 1. Space.
     gl.disable(gl.CULL_FACE);
     this.space.draw(w, h, [at.cx * this.pixel, h - at.cy * this.pixel], at.radius * this.pixel, drift, this.pixel);
@@ -347,7 +361,7 @@ export class PlanetRenderer {
     }
     // Without derivatives, one pixel of the side ramp is estimated from the tile's size on screen.
     gl.uniform1f(this.u.uPixel!, 1 / Math.max(4, at.radius * this.pixel * (Math.PI / 5) / this.sphere.frequency));
-    const position = gl.getAttribLocation(this.ground, 'aPosition'), look = gl.getAttribLocation(this.ground, 'aLook'), stamp = gl.getAttribLocation(this.ground, 'aStamp');
+    const {position, look, stamp} = this.attributes;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.stamps);
     gl.enableVertexAttribArray(stamp);
     gl.vertexAttribPointer(stamp, 2, gl.BYTE, true, 0, 0);
@@ -361,6 +375,7 @@ export class PlanetRenderer {
     gl.disableVertexAttribArray(position);
     gl.disableVertexAttribArray(look);
     gl.disableVertexAttribArray(stamp);
+    if (crop) gl.disable(gl.SCISSOR_TEST);
   }
   dispose(release = false) {
     if (this.disposed) return;

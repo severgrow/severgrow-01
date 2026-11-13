@@ -40,6 +40,7 @@ try{
    console.error('Boot after fail-open',await p.evaluate(()=>{const h=(window as any).__severgrow,s=h?.planet?.();return {ready:h?.ready?.(),frames:s?.frames,mode:s?.mode,hidden:document.hidden};}),errors);
   }
   assert(boot.ready&&boot.frames>0&&boot.fonts==='loaded',JSON.stringify(boot));
+  assert.equal(await p.locator('.world-map-svg').count(),0,'the globe does not also allocate an invisible flat map');
   // OWNER CHANGED THE RULE (2026-11-07): one ~1 s fade into the composed menu.
   assert.deepEqual(boot.animations,[1000],'one coherent ~1s first reveal');
   await p.waitForTimeout(1200);
@@ -83,6 +84,19 @@ try{
   await p.locator('#levels-back').click();
   if(await p.locator('#play-back').isVisible())await p.locator('#play-back').click();
   await p.locator('#menu-world').click();await settled(p);
+  if(width===390){
+   const at=await p.evaluate(()=>(window as any).__severgrow.planet().screenOf('0,0'));
+   await p.mouse.move(at.x,at.y);await p.mouse.down();
+   const hidden=await p.evaluate(()=>{
+    window.dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true}));
+    const s=(window as any).__severgrow.planet();return {frames:s.frames,q:s.q};
+   });
+   await p.waitForTimeout(250);
+   assert.equal(await p.evaluate(()=>(window as any).__severgrow.planet().frames),hidden.frames,'pagehide leaves no globe frame loop');
+   await p.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true})));
+   await p.mouse.up();await settled(p);
+   assert.deepEqual(await p.evaluate(()=>(window as any).__severgrow.planet().q),hidden.q,'suspension preserves the camera and drops the unfinished gesture');
+  }
   // Selection belongs to this visit, not the retained globe behind the main menu.
   const tile=await p.evaluate(()=>(window as any).__severgrow.planet().screenOf('0,0'));
   assert(tile,'home tile is visible for the selection lifecycle check');
