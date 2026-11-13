@@ -4,7 +4,7 @@
 // styles it), while the game's board stays hidden underneath.
 import type { State, Tile } from '../../../src/engine/index.js';
 import { NO_OVERLAY } from '../ui/board.js';
-import { S, SQ3, centerOf, el, hash, hexPath } from '../ui/geom.js';
+import { S, centerOf, el, hash, hexPath } from '../ui/geom.js';
 import type { Overlay } from '../ui/board.js';
 import { createEffects } from '../ui/effects.js';
 import { forgetSkinFiles, provideSkinFiles } from '../ui/skin/assets.js';
@@ -69,6 +69,7 @@ export class BoardOverlay {
   private bleed = false;
   private boardNow: State['board'] = {};
   private goldPaths: string[] = [];
+  private richKeysNow: string[] = [];
   private maskId = 0;
 
   constructor(private frame: PhoneFrame) {}
@@ -137,6 +138,7 @@ export class BoardOverlay {
       }
     }
     this.boardNow = state.board;
+    this.richKeysNow = Object.keys(state.terrain).filter((key) => state.terrain[key] === 'rich');
     // Gold is a full-hex tile *treatment*, not an overhanging prop. The visual must
     // touch each real point-up edge while remaining clipped inside that same path.
     this.goldPaths = (art.slots.gold?.files ?? []).flatMap((f, i) =>
@@ -199,22 +201,41 @@ export class BoardOverlay {
     if (!layer || !this.memory || !this.goldPaths.length) return; // current game frames untouched
     layer.replaceChildren();
     const defs = this.svg!.querySelector<SVGDefsElement>('defs')!;
+    for (const old of defs.querySelectorAll('.art-lab-gold-clip, .art-lab-gold-mask')) old.remove();
     const boardTurn = Math.atan2(toScreen(1, 0).y, toScreen(1, 0).x) * 180 / Math.PI;
-    for (const key of this.view!.richKeysForLab()) {
+    for (const key of this.richKeysNow) {
       const { x, y } = centerOf(key);
       const which = Math.floor(hash(`${key}:art-lab-gold`) * this.goldPaths.length);
       const path = this.goldPaths[which]!;
       const src = this.memory.urlAt(path, this.view!.assets.tier ?? 'lo');
       if (!src) continue;
       const id = `art-lab-gold-clip-${++this.maskId}`;
-      const clip = el('clipPath', { id, clipPathUnits: 'userSpaceOnUse' }, defs);
+      const clip = el('clipPath', { id, class: 'art-lab-gold-clip', clipPathUnits: 'userSpaceOnUse' }, defs);
+      // The game's six vertices, not a guessed inset or a flat-topped sprite polygon.
       el('path', { d: hexPath(key, S, 'flat') }, clip);
-      const g = el('g', { class: 'art-lab-gold-frame', 'data-key': key, 'data-variant': which,
-        'pointer-events': 'none', 'aria-hidden': 'true', 'clip-path': `url(#${id})` }, layer);
-      // A point-up hex is SQ3*S wide by 2*S high. No 10% shared-edge boost,
-      // and no spacing inset: the art ends precisely on the gameplay polygon.
-      const image = el('image', { href: src, x: x - SQ3 * S / 2, y: y - S,
-        width: SQ3 * S, height: S * 2, preserveAspectRatio: 'none',
+      const occupied = !!this.boardNow[key];
+      const attrs: Record<string, string> = {
+        class: 'art-lab-gold-frame', 'data-key': key, 'data-variant': String(which),
+        'data-occupied': String(occupied),
+        'pointer-events': 'none', 'aria-hidden': 'true', 'clip-path': `url(#${id})`,
+      };
+      if (occupied) {
+        // A claimed gold cell keeps only the border. Its centre belongs to the
+        // grass/ash and physical number stone, never a painted overlay on top.
+        const maskId = `art-lab-gold-border-${++this.maskId}`;
+        const mask = el('mask', { id: maskId, class: 'art-lab-gold-mask',
+          maskUnits: 'userSpaceOnUse', x: x - S, y: y - S, width: S * 2, height: S * 2 }, defs);
+        el('path', { d: hexPath(key, S, 'flat'), fill: '#fefefe' }, mask);
+        el('path', { d: hexPath(key, S * 0.86, 'flat'), fill: '#080908' }, mask);
+        attrs.mask = `url(#${maskId})`;
+      }
+      const g = el('g', attrs, layer);
+      // Sources are canonical 1:1 square canvases containing a point-up hex.
+      // Keep the ENTIRE square canvas at 2*S: squeezing it to SQ3*S wide
+      // would shrink the artwork's inner hex and create visible corner gaps.
+      // The clip follows the existing pointy-up gameplay hex at its exact edge.
+      const image = el('image', { href: src, x: x - S, y: y - S,
+        width: S * 2, height: S * 2, preserveAspectRatio: 'none',
         'pointer-events': 'none' }, g);
       if (boardTurn) image.setAttribute('transform', `rotate(${boardTurn.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)})`);
     }
