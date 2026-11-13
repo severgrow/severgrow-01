@@ -119,6 +119,43 @@ try {
   }), 'overhang is decorative; native hit polygons and stones stay in place');
 
 
+  // Two full Gold hex treatments must snap to the actual point-up board footprint.
+  // A rich hex occupied by a tile must still expose its original number stone.
+  const goldSource = async (tone: string) => Buffer.from(await page.evaluate((colour) => {
+    const c = document.createElement('canvas'); c.width = c.height = 512;
+    const g = c.getContext('2d')!;
+    g.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (-90 + 60 * i) * Math.PI / 180;
+      const x = 256 + 245 * Math.cos(a), y = 256 + 245 * Math.sin(a);
+      if (!i) g.moveTo(x, y); else g.lineTo(x, y);
+    }
+    g.closePath(); g.fillStyle = '#503b27'; g.fill();
+    g.lineWidth = 34; g.strokeStyle = colour; g.stroke();
+    return c.toDataURL('image/png').split(',')[1]!;
+  }, tone), 'base64');
+  await page.locator('#slot-gold input[type=file]').setInputFiles([
+    { name: 'gold-outer-one.png', mimeType: 'image/png', buffer: await goldSource('#ba9e4e') },
+    { name: 'gold-outer-two.png', mimeType: 'image/png', buffer: await goldSource('#d7bb67') },
+  ]);
+  await page.waitForFunction(() => {
+    const board = document.querySelector('iframe')?.contentDocument?.querySelector('#board');
+    return document.querySelector('#slot-gold')?.getAttribute('data-status') === 'done' &&
+      !!board?.querySelector('.art-lab-gold-frame');
+  }, undefined, { timeout: 30_000 });
+  check(await (await frame()).evaluate(() => {
+    const board = document.querySelector('#board')!;
+    const frames = [...board.querySelectorAll<SVGGElement>('.art-lab-gold-frame')];
+    const naturalHex = board.querySelector('.l-base .hex-cell.rich path');
+    return frames.length > 0 && !!naturalHex && frames.every((f) => {
+      const image = f.querySelector('image');
+      const clip = board.querySelector(f.getAttribute('clip-path')!.replace('url(#', '#').replace(')', ''));
+      return !!clip && f.getAttribute('pointer-events') === 'none' &&
+        image?.getAttribute('width') === '60' && image?.getAttribute('height') === '60' &&
+        (f.getAttribute('data-occupied') === 'false' || !!f.getAttribute('mask'));
+    }) && board.querySelectorAll('.seed-stone').length > 0;
+  }), 'custom Gold art fills its clipped hex boundary, does not intercept taps or hide claimed stones');
+
   // a good, seamless ground
   await page.locator('#slot-ground input[type=file]').setInputFiles({ name: 'sand.png', mimeType: 'image/png', buffer: await picture(page, 'seamless') });
   await page.waitForFunction(() => document.querySelector('#slot-ground')?.getAttribute('data-status') === 'done', undefined, { timeout: 30_000 });
