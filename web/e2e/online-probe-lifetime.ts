@@ -44,6 +44,18 @@ try {
   });
   assert.deepEqual(result, { active: 1, automaticallyRemoved: 0, cancelledCalls: 0, afterAbort: 1, nativeCalls: 1, alreadyAborted: 0, deduplicated: 1, empty: 0 });
   console.log('Probe agrees with native cancellation, callback identity and duplicate registration.');
+  const cdp=await context.newCDPSession(page);
+  const before=await page.evaluate(()=>(window as any).__probe.snap().listenerRecords);
+  await page.evaluate(()=>{
+    for(let i=0;i<1000;i++)document.createElement('div').addEventListener('click',()=>{});
+    document.addEventListener('futasaku-probe-once',()=>{},{once:true});
+    document.dispatchEvent(new Event('futasaku-probe-once'));
+  });
+  await cdp.send('HeapProfiler.collectGarbage');
+  const collected=await page.evaluate(()=>({records:(window as any).__probe.snap().listenerRecords,once:(window as any).__probe.listeners()['document|futasaku-probe-once|0']??0}));
+  assert.equal(collected.once,0,'a collected once callback is not a live listener');
+  assert(collected.records<=before,'the measuring tool does not retain bookkeeping for collected targets');
+  console.log('Native GC removes collected listener bookkeeping, including once callbacks.');
   await context.close();
 } finally {
   await browser.close();

@@ -10,7 +10,8 @@
 //  - `rafs` is the number of OUTSTANDING animation-frame callbacks. A self-re-arming loop shows as
 //    exactly 1; a loop left running per match shows as N.
 //  - `socketsLive` is open WebSockets. The duel opens one Realtime socket per match and must close it.
-//  - `listenersLive` counts listeners whose target is still alive AND (for DOM nodes) still connected.
+//  - `listenersLive` estimates listeners whose callback/target are alive and whose DOM target is
+//    connected. Native CDP listener counts are preferable for totals; this probe supplies keys.
 //    This is the metric that separates a REAL leak from the harmless case of a listener left on an
 //    element the app has already replaced: `setup()` on the board swaps every hex element, so a
 //    naive add-minus-remove count climbs by ~185 per match while nothing is actually retained.
@@ -24,10 +25,12 @@ export type ResourceSnapshot = {
   intervals: number;
   timeouts: number;
   rafs: number;
-  /** Listeners on targets still alive (`isConnected` for nodes). The real-leak signal. */
+  /** Estimated reachable registrations (`isConnected` for nodes); use CDP for native totals. */
   listenersLive: number;
-  /** Listeners left on targets that are gone (harmless; the target is garbage). */
+  /** Reachable registrations on detached DOM targets. Collected records are swept. */
   listenersDetached: number;
+  /** Weak bookkeeping records still reachable after the last sweep (not native listener count). */
+  listenerRecords: number;
   listenerKeysLive: number;
   topLive: [string, number][];
   socketsCreated: number;
@@ -202,9 +205,11 @@ export const PROBE_SCRIPT = `(() => {
 
   function readListeners() {
     var liveCount = 0, detached = 0, byKey = new Map();
-    for (var i = 0; i < entries.length; i++) {
-      var t = entries[i].r.deref();
-      if (t === undefined || t === null) { detached++; continue; }
+    for (var i = entries.length - 1; i >= 0; i--) {
+      var t = entries[i].r.deref(), fn = entries[i].f.deref();
+      // Weak references avoid retaining the app, but the record/key/WeakRef objects themselves
+      // still cost memory. Forget collected records instead of making the probe grow per game.
+      if (t == null || fn == null) { entries.splice(i, 1); continue; }
       var nt = t.nodeType;
       if ((nt === 1 || nt === 9 || nt === 11) && t.isConnected === false) { detached++; continue; }
       liveCount++;
@@ -254,6 +259,7 @@ export const PROBE_SCRIPT = `(() => {
         rafs: live.rafs.size,
         listenersLive: l.live,
         listenersDetached: l.detached,
+        listenerRecords: entries.length,
         listenerKeysLive: l.byKey.size,
         topLive: top.slice(0, 30),
         socketsCreated: sockets.created,

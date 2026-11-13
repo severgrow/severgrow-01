@@ -3,7 +3,8 @@
 //   LIVE_DATABASE_URL=postgres://postgres@127.0.0.1:55432/futalive npx vitest run server/tests/live-postgres.integration.test.ts
 //
 // Use a THROWAWAY database that has Supabase-like `anon` / `authenticated` roles. The suite applies
-// every migration except 0005 (pg_cron/pg_net are Supabase extensions) into a fresh schema state,
+// every application migration except 0005/0007 (pg_cron/pg_net and the job's reschedule require
+// Supabase extensions) into a fresh schema state,
 // then proves: RLS + revokes on every live table/column (anon/authenticated DENIED with 42501),
 // nothing in the realtime publication, the one-pending index, and real row-locked races.
 import { mkdtempSync, copyFileSync, readdirSync } from 'node:fs';
@@ -75,8 +76,8 @@ const pair = async () => {  const ga = await service.createGuest();
 
 /**
  * Advance the fake clock to `to` while `players` keep heartbeating, so they count as PRESENT. A
- * player who is present when the clock runs out loses outright; a player whose heartbeat has gone
- * stale gets the reconnect ladder instead (that is `live-reconnect.test.ts`, on the memory store).
+ * player who is present when the clock runs out has that turn auto-played; a stale heartbeat gets
+ * the reconnect ladder instead (that is `live-reconnect.test.ts`, on the memory store).
  */
 const advanceConnected = async (to: number, ...players: { id: string }[]): Promise<void> => {
   while (clock < to) {
@@ -104,7 +105,7 @@ suite('live duels on real Postgres', () => {
     pool = poolFromUrl(URL_) as typeof pool;
     const dir = mkdtempSync(join(tmpdir(), 'futa-live-mig-'));
     const src = fileURLToPath(new URL('../migrations', import.meta.url));
-    for (const f of readdirSync(src)) if (f.endsWith('.sql') && !f.startsWith('0005')) copyFileSync(join(src, f), join(dir, f));
+    for (const f of readdirSync(src)) if (f.endsWith('.sql') && !/^(0005|0007)_/.test(f)) copyFileSync(join(src, f), join(dir, f));
     await migrate(pool, () => 1, false, dir);
     // Idempotent: a second run applies nothing.
     const again = await migrate(pool, () => 1, false, dir);
@@ -157,7 +158,9 @@ suite('live duels on real Postgres', () => {
     expect(rows).toEqual([]);
   });
 
-  it('a whole live session: go live, then a real-time timeout FINISHES the match (the board unchanged by the switch)', async () => {
+  // OWNER CHANGED THE RULE in 6ccf625e (2026-11-06): a connected Blitz timeout ends the TURN,
+  // not the match. Prove the shipped rule on Postgres, as live-duels.test.ts already does in memory.
+  it('a connected Blitz timeout plays exactly one turn and keeps the match live', async () => {
     const { a, b, matchId } = await pair();
     const before = await service.viewPayload(a, matchId);
     const c = await live.challenge(a, matchId, 'live');
@@ -167,13 +170,14 @@ suite('live duels on real Postgres', () => {
     expect(mid.turnDeadlineAt).toBe(clock + LIMIT + ENTRY);
     await advanceConnected(clock + LIMIT + ENTRY + 1, a, b);
     const s = await live.status(a, matchId);
-    expect(s.live).toBe(false);
-    expect(s.status).toBe('finished');
-    expect(s.endedReason).toBe('finished');
+    expect(s.live).toBe(true);
+    expect(s.status).toBe('active');
+    expect(s.actor).toBe(before.actor === 0 ? 1 : 0);
+    expect(s.turnNumber).toBe(before.view.turnNumber + 1);
+    const after = await service.viewPayload(a,matchId);
+    expect(after.view.board).toEqual(before.view.board);
     const { rows } = await pool.query('select status, result from matches where id = $1', [matchId]);
-    expect(rows[0]!.status).toBe('finished');
-    expect((rows[0]!.result as { reason: string }).reason).toBe('timeout');
-    expect((rows[0]!.result as { winner: number }).winner).toBe(before.actor === 0 ? 1 : 0);
+    expect(rows[0]!.status).toBe('active');expect(rows[0]!.result).toBeNull();
     void b;
   });
 
@@ -232,7 +236,7 @@ suite('live duels on real Postgres', () => {
     expect((s as unknown as { status: string }).status).toBe('active');
   });
 
-  it('a racing late move and the real-time timeout: exactly ONE finish, and no turn is applied', async () => {
+  it('a late move racing the Blitz timeout cannot land or duplicate the automatic turn', async () => {
     const { a, b, matchId } = await pair();
     const c = await live.challenge(a, matchId, 'live');
     await live.accept(b, c.challenge.id);
@@ -246,13 +250,16 @@ suite('live duels on real Postgres', () => {
       live.status(a, matchId),
       live.status(b, matchId),
     ]);
-    const finished = await pool.query(`select status, result, revision from matches where id = $1`, [matchId]);
-    expect(finished.rows[0]!.status).toBe('finished');
-    expect((finished.rows[0]!.result as { reason: string }).reason).toBe('timeout');
-    // The late move never landed: no move row, and the revision never moved past the last real turn.
-    const moves = await pool.query(`select request_id from match_moves where match_id = $1`, [matchId]);
+    const after = await service.viewPayload(actor,matchId);
+    expect(after.status).toBe('active');expect(after.view.turnNumber).toBe(v.view.turnNumber+1);
+    expect(after.actor).not.toBe(v.actor);
+    expect(after.view.board).toEqual(v.view.board);
+    // The late request never lands. Every committed automatic action belongs to the expired actor,
+    // and the revision accounts for exactly those actions, even when two status reads race it.
+    const moves = await pool.query(`select request_id, player_id from match_moves where match_id = $1`, [matchId]);
     expect(moves.rows.map((r) => String(r.request_id))).not.toContain('late-race');
-    expect(Number(finished.rows[0]!.revision)).toBe(v.revision);
-    void b;
+    expect(moves.rows.length).toBeGreaterThan(0);
+    expect(moves.rows.every(r=>r.player_id===actor.id)).toBe(true);
+    expect(after.revision-v.revision).toBe(moves.rows.length);
   });
 });

@@ -478,6 +478,21 @@ const report: {
 
 const EXIT_ROUTES = ['pause-main', 'pause-new', 'finish-menu', 'finish-other', 'finish-back'] as const;
 
+/** No Realtime server exists in this fixture. Visible returns legitimately retry the app-level
+ * invitation socket. Compare the same bounded quiet state at boot and after suspension. Keep
+ * zero-socket assertions; duel polling is checked immediately after exit, before this wait. */
+const settleRealtime = async (seats: readonly SeatSession[]): Promise<boolean> => {
+  const start=Date.now();let last=-1,quietSince=Date.now();
+  while(Date.now()-start<60_000){
+    const rows=await Promise.all(seats.map(s=>readResources(s.page)));
+    const created=rows.reduce((n,r)=>n+r.socketsCreated,0),live=rows.reduce((n,r)=>n+r.socketsLive,0);
+    if(created!==last||live>0){last=created;quietSince=Date.now();}
+    if(Date.now()-quietSince>=16_000)return true;
+    await sleep(1000);
+  }
+  return false;
+};
+
 const duel = await startLocalDuel({ port: PORT });
 try {
   const g0 = await duel.api.createGuest();
@@ -502,20 +517,7 @@ try {
   // since this harness has no Realtime server. Its last attempt can be mid-connect at any later
   // check and read as a duel's leftover socket. Wait until neither seat has opened a socket for 16 s
   // (longer than its largest backoff) and none is open, so "boot" includes the settled listener.
-  {
-    const settleStart = Date.now();
-    let last = -1;
-    let quietSince = Date.now();
-    while (Date.now() - settleStart < 60_000) {
-      const r = await Promise.all([readResources(seat0.page), readResources(seat1.page)]);
-      const created = r[0].socketsCreated + r[1].socketsCreated;
-      const live = r[0].socketsLive + r[1].socketsLive;
-      if (created !== last || live > 0) { last = created; quietSince = Date.now(); }
-      if (Date.now() - quietSince >= 16_000) break;
-      await sleep(1000);
-    }
-    console.log(`app-level Realtime retries settled after ${Math.round((Date.now() - settleStart) / 1000)} s`);
-  }
+  check('app-level Realtime retries settle at boot',await settleRealtime(seats));
   await sleep(400);
   const boot0 = await readResources(seat0.page);
   const boot1 = await readResources(seat1.page);
@@ -752,6 +754,7 @@ try {
       `${requestsAfterLeave} duel request(s) in ${QUIET_WATCH_MS}ms${listenerPolls ? ` (+${listenerPolls} app-level live-listener poll(s) ignored)` : ''}${afterLeaving[0] ? ` (first ${afterLeaving[0].path})` : ''}`,
     );
 
+    check(`match ${m}: app-level resume retries converge`,await settleRealtime(seats));
     const s0 = await readResources(seat0.page);
     const s1 = await readResources(seat1.page);
     if (exitFailed) console.log(`    match ${m}: excluded from the drift baseline (the exit route failed)`);
