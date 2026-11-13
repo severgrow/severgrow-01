@@ -128,7 +128,7 @@ export const SLOTS: readonly Slot[] = [
     rule: tex(260), count: { min: 1, max: 2 }, optional: false, path: (i) => `textures/empty_ground_0${i + 1}.webp`, settings: [{ key: 'proxy', label: 'Fallback colour', type: 'colour', default: '#262a28' }] },
   { id: 'rock', group: 'board', n: 2, title: 'Rock tile', where: 'Blocked hexes nobody can grow on: one picture per rock hex, picked by position.',
     rule: hex(30), count: { min: 1, max: 5 }, optional: false, path: (i) => `props/rock/rock_${String(i + 1).padStart(2, '0')}.webp`, settings: [] },
-  { id: 'gold', group: 'board', n: 3, title: 'Rich / gold tile', where: 'Bonus hexes (score twice): a pile drawn on the empty ground until a tile takes the hex.',
+  { id: 'gold', group: 'board', n: 3, title: 'Rich / gold tile', where: 'Bonus hexes (score twice): up to five full-hex treatments; custom art fits flush to all six edges, clips inside the gameplay hex, and keeps the occupied tile’s number stone visible.',
     rule: hex(30), count: { min: 1, max: 5 }, optional: false, path: (i) => `props/gold/gold_${String(i + 1).padStart(2, '0')}.webp`, settings: [] },
   ...playerSlots(0),
   ...playerSlots(1),
