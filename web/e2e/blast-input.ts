@@ -32,6 +32,7 @@ const point=async(p:Page,selector:string)=>p.evaluate(sel=>{
 },selector);
 const tap=async(p:Page,selector:string,touch:boolean)=>{const q=await point(p,selector);if(touch)await p.touchscreen.tap(q.x,q.y);else await p.mouse.click(q.x,q.y);};
 const startDrag=async(p:Page,sel:string,to:{x:number;y:number},touch:boolean)=>{
+ await p.evaluate(()=>{(window as any).__inputTrace=[];for(const t of ['pointerdown','pointermove','pointerup','pointercancel','touchstart','touchend','touchcancel'])document.addEventListener(t,e=>{const v=e as PointerEvent;(window as any).__inputTrace.push({t,target:(e.target as HTMLElement)?.id,pointer:v.pointerId,x:v.clientX,y:v.clientY});},{capture:true});});
  const a=await point(p,sel),session=touch?(ios?wk!.session:await p.context().newCDPSession(p)):null;
  if(touch)assert(session,'the real WebKit tap captured its touch transport');
  const send=(type:string,points:{x:number;y:number;id:number}[])=>session!.send('Input.dispatchTouchEvent',{type,touchPoints:ios?points.map(q=>({...q,x:Math.round(q.x),y:Math.round(q.y)})):points});
@@ -65,7 +66,7 @@ try{
    const picked=await p.locator(`#hand [data-card="${first}"],#hand [data-card="${second}"]`).evaluateAll(es=>es.map(e=>getComputedStyle(e).getPropertyValue('--lift')));
    assert.equal(picked[0],picked[1],'both Bombs lift together');
    await tap(p,`#board .hex-cell[data-key="${boardKey}"]`,touch);
-   await p.waitForFunction(ids=>{const h=(window as any).__severgrow;return !h.busy()&&ids.every(id=>!h.state().hands[0].some((c:any)=>c.id===id));},blast.cards);
+   await p.waitForFunction(ids=>{const h=(window as any).__severgrow;return !h.busy()&&ids.every(id=>!h.state().hands[0].some((c:any)=>c.id===id));},blast.cards).catch(async error=>{const trace=await p.evaluate(()=>({events:(window as any).__inputTrace,ghost:document.querySelector('.drag-ghost')?.outerHTML.slice(0,300),selection:(window as any).__severgrow.sel(),busy:(window as any).__severgrow.busy(),touch:getComputedStyle(document.getElementById('smart-bloom-button')!).touchAction,dim:document.getElementById('smart-bloom-button')?.hasAttribute('data-drag-dim')}));throw new Error('Native Blast trace '+JSON.stringify(trace),{cause:error});});
    assert.deepEqual(await p.evaluate(()=>(window as any).__severgrow.state().board),apply(state,blast).board);
    console.log('PASS',width,'Bomb + Bomb selects Blast; one target tap plays it');await p.close();
   }
@@ -73,7 +74,7 @@ try{
    const p=await open();await pair(p);const to=await point(p,`#board .hex-cell[data-key="${boardKey}"]`);
    const release=await startDrag(p,'#smart-bloom-button',to,touch);
    await p.screenshot({path:`${shots}/aiming-${width}.png`});await release();
-   await p.waitForFunction(ids=>{const h=(window as any).__severgrow;return !h.busy()&&ids.every(id=>!h.state().hands[0].some((c:any)=>c.id===id));},blast.cards);
+   await p.waitForFunction(ids=>{const h=(window as any).__severgrow;return !h.busy()&&ids.every(id=>!h.state().hands[0].some((c:any)=>c.id===id));},blast.cards).catch(async error=>{const trace=await p.evaluate(()=>({events:(window as any).__inputTrace,ghost:document.querySelector('.drag-ghost')?.outerHTML.slice(0,300),selection:(window as any).__severgrow.sel(),busy:(window as any).__severgrow.busy(),touch:getComputedStyle(document.getElementById('smart-bloom-button')!).touchAction,dim:document.getElementById('smart-bloom-button')?.hasAttribute('data-drag-dim')}));throw new Error('Native Blast trace '+JSON.stringify(trace),{cause:error});});
    assert.deepEqual(await p.evaluate(()=>(window as any).__severgrow.state().board),apply(state,blast).board);
    await p.screenshot({path:`${shots}/played-${width}.png`});
    console.log('PASS',width,'cockpit drag lands on the exact pointer tile and spends two Bombs');await p.close();
