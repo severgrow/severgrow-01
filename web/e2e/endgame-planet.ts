@@ -103,7 +103,7 @@ const holdingOf = (scenario: ScenarioKey, home: string): string[] => {
 
 const stub = async (page: Page, scenario: ScenarioKey, delayMs = 0): Promise<void> => {
   const world = SCENARIOS[scenario];
-  await page.route('**/v1/world', async (r) => {
+  await page.route(/\/v1\/world(\?|$)/, async (r) => {
     if (delayMs) await new Promise((done) => setTimeout(done, delayMs));
     await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(world) });
   });

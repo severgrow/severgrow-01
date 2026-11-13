@@ -337,7 +337,7 @@ try {
         challenge: { ...base, id: 'new-1', cellId: String(body.cellId), status: 'pending', createdAt: NOW, expiresAt: NOW + 24 * HOUR },
       }) });
     });
-    await page.route('**/v1/world', (route) => route.fulfill({
+    await page.route(/\/v1\/world(\?|$)/, (route) => route.fulfill({
       status: 200, contentType: 'application/json', body: JSON.stringify(SAMPLE),
     }));
     // Achievements (2026-10-29) are not what this suite tests: an empty list keeps their key quiet.
@@ -865,7 +865,7 @@ try {
   await page.route('**/v1/world/challenges*', (route) => route.fulfill({
     status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, ...hot, serverNow: NOW }),
   }));
-  await page.route('**/v1/world', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SAMPLE) }));
+  await page.route(/\/v1\/world(\?|$)/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SAMPLE) }));
   await page.route('**/v1/seeds/wallet', (route) => route.fulfill({
     status: 200, contentType: 'application/json',
     body: JSON.stringify({ ok: true, wallet: { balance: 150, lifetimeEarned: 150, lifetimeSpent: 0, worldInvitationSeen: true } }),
@@ -931,7 +931,7 @@ try {
   await land.route('**/v1/world/challenges*', (route) => route.fulfill({
     status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, ...challenges, serverNow: NOW }),
   }));
-  await land.route('**/v1/world', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SAMPLE) }));
+  await land.route(/\/v1\/world(\?|$)/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SAMPLE) }));
   await land.route('**/v1/seeds/achievements', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, achievements: [] }) }));
   await land.route('**/v1/seeds/wallet', (route) => route.fulfill({
     status: 200, contentType: 'application/json',

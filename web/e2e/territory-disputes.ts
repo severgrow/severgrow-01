@@ -171,7 +171,7 @@ try {
     page.setDefaultTimeout(120_000);
     await page.addInitScript(() => localStorage.clear());
     await page.addInitScript({ content: 'window.__name = (f) => f;' });
-    await page.route('**/v1/world', (route) => route.fulfill({
+    await page.route(/\/v1\/world(\?|$)/, (route) => route.fulfill({
       status: 200, contentType: 'application/json', body: JSON.stringify(world()),
     }));
     await page.route(/\/v1\/world\/challenges(\/.*)?$/, async (route) => {

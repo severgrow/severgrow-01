@@ -215,7 +215,7 @@ const routeWorld = async (page: Page) => {
     state.outgoing = [sent, ...state.outgoing.filter((c) => c.id !== 'new-1')];
     await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ ok: true, replayed: false, challenge: sent }) });
   });
-  await page.route('**/v1/world', (route) => route.fulfill({
+  await page.route(/\/v1\/world(\?|$)/, (route) => route.fulfill({
     status: 200, contentType: 'application/json', body: JSON.stringify(WORLD),
   }));
   await page.route('**/v1/seeds/wallet', (route) => route.fulfill({

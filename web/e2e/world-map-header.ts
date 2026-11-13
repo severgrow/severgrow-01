@@ -135,7 +135,7 @@ try {
     // tsx/esbuild rewrites named inner functions with a `__name` helper that does not exist in the
     // page; define it up front so `page.evaluate` closures with inner arrow functions run.
     await page.addInitScript({ content: 'window.__name = (f) => f;' });
-    await page.route('**/v1/world', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SAMPLE) }));
+    await page.route(/\/v1\/world(\?|$)/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SAMPLE) }));
     await page.route('**/v1/seeds/wallet', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
       ok: true, wallet: { balance: 150, lifetimeEarned: 150, lifetimeSpent: 0, worldInvitationSeen: true },
     }) }));

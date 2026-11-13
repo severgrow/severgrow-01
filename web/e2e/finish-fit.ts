@@ -396,7 +396,7 @@ const FINISH_WORLD = {
 };
 
 const stubWorld = async (page: Page): Promise<void> => {
-  await page.route('**/v1/world', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FINISH_WORLD) }));
+  await page.route(/\/v1\/world(\?|$)/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FINISH_WORLD) }));
   await page.route('**/v1/world/challenges*', (r) => r.fulfill({
     status: 200, contentType: 'application/json',
     body: JSON.stringify({ ok: true, incoming: [], outgoing: [], serverNow: Date.now() }),

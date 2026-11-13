@@ -63,7 +63,7 @@ try {
   for(let q=-32;q<=32;q++)for(let r=-32;r<=32;r++)if(Math.max(Math.abs(q),Math.abs(r),Math.abs(q+r))<=32)cells.push({id:`${q},${r}`,q,r});
   cells.sort((a,b)=>Math.max(Math.abs(a.q),Math.abs(a.r),Math.abs(a.q+a.r))-Math.max(Math.abs(b.q),Math.abs(b.r),Math.abs(b.q+b.r))||a.q-b.q||a.r-b.r);cells.length=Number(process.env.STRESS_CELLS ?? 3000);
   await page.route('**/auth/v1/settings',r=>r.fulfill({json:{external:{google:true}}}));
-  await page.route('**/v1/world',async route=>{
+  await page.route(/\/v1\/world(\?|$)/,async route=>{
    const response=await route.fetch();const body=await response.json();
    body.world.cells=cells;
    const fragmented=process.env.STRESS_FRAGMENTED==='1';

@@ -182,7 +182,7 @@ try {
     //         online hub) ----
     {
       const { context, page } = await device(vp, false, `world-${vp.key}`);
-      await page.route('**/v1/world', (r) => r.fulfill({
+      await page.route(/\/v1\/world(\?|$)/, (r) => r.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({

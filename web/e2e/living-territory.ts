@@ -83,8 +83,8 @@ const boot=async(page:Page,options:{cached?:boolean;fail?:boolean;delay?:number;
   },{camera:options.legacyCamera,version:payload.world.version});
  }
  if(options.failAuth)await page.route('**/v1/guests',route=>route.fulfill({status:503,contentType:'application/json',body:'{"ok":false}'}));
- if(options.empty){const payload=await(await fetch(`${base}/v1/world`)).json();payload.world.cells=[];payload.world.claims=[];await page.route('**/v1/world',route=>route.fulfill({contentType:'application/json',body:JSON.stringify(payload)}));}
- if(options.fail||options.delay)await page.route('**/v1/world',async route=>{
+ if(options.empty){const payload=await(await fetch(`${base}/v1/world`)).json();payload.world.cells=[];payload.world.claims=[];await page.route(/\/v1\/world(\?|$)/,route=>route.fulfill({contentType:'application/json',body:JSON.stringify(payload)}));}
+ if(options.fail||options.delay)await page.route(/\/v1\/world(\?|$)/,async route=>{
   if(options.delay)await new Promise(r=>setTimeout(r,options.delay));
   if(options.fail)await route.fulfill({status:503,contentType:'application/json',body:'{"ok":false}'});else await route.continue();
  });
@@ -941,7 +941,7 @@ try{
    await page.click('#online-world-back');await page.waitForTimeout(150);
    check(`${scenario.name}: navigation remains recoverable`,await page.locator('#menu-world').isEnabled());
    if('empty' in scenario&&scenario.empty){
-    await page.unroute('**/v1/world');await page.evaluate(()=>window.dispatchEvent(new Event('futasaku:menu')));
+    await page.unroute(/\/v1\/world(\?|$)/);await page.evaluate(()=>window.dispatchEvent(new Event('futasaku:menu')));
     await page.waitForSelector('[data-living-territory="menu"] .world-map-svg');
     check(`${scenario.name}: a later valid map recovers one surface`,await page.locator('.world-map-svg').count()===1);
    }
