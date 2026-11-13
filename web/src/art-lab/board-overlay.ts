@@ -166,9 +166,9 @@ export class BoardOverlay {
       const margin = S * 1.6;
       const mask = el('mask', { id, maskUnits: 'userSpaceOnUse', maskContentUnits: 'userSpaceOnUse',
         x: here.x - margin, y: here.y - margin, width: margin * 2, height: margin * 2 }, this.bleedDefs);
-      el('rect', { x: here.x - margin, y: here.y - margin, width: margin * 2, height: margin * 2, fill: '#fff' }, mask);
+      el('rect', { x: here.x - margin, y: here.y - margin, width: margin * 2, height: margin * 2, fill: '#fefefe' }, mask);
       // Keep the source tile's owned hex from painting a second time over its neighbours.
-      el('path', { d: hexPath(key, S * 1.015, 'flat'), fill: '#000' }, mask);
+      el('path', { d: hexPath(key, S, 'flat'), fill: '#000' }, mask);
       // Neighbouring numbers remain fully visible (and their original stones still receive glints).
       for (const p of occupied) if (Math.hypot(p.x - here.x, p.y - here.y) < S * 3)
         el('circle', { cx: p.x, cy: p.y, r: S * 0.42, fill: '#000' }, mask);
