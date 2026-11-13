@@ -159,6 +159,13 @@ try {
   const zipPath = await (await dl).path();
   check(!!zipPath && statSync(zipPath).size > 100_000, 'the pack downloads');
   const zip = readFileSync(zipPath!);
+  // Terrain-only import is intentionally additive: it must not change a previously
+  // uploaded background or any of the real card artwork.
+  const customGround = await page.locator('#slot-ground .file figcaption').first().innerText();
+  await page.locator('#import-terrain').setInputFiles({ name: 'terrain-test.zip', mimeType: 'application/zip', buffer: zip });
+  await page.waitForTimeout(350);
+  check((await page.locator('#slot-ground .file figcaption').first().innerText()) === customGround,
+    'terrain-only pack import keeps all supporting current/custom art unchanged');
   for (const name of ['skin.json', 'manifest.json', 'README.md', 'pack.json', 'lo/textures/empty_ground_01', 'hi/masks/flat/coverage_09.png', 'cards/moss']) check(zip.includes(Buffer.from(name)), `the pack has ${name}`);
   await page.locator('#import').setInputFiles({ name: 'pack.zip', mimeType: 'application/zip', buffer: zip });
   await page.waitForFunction(() => document.querySelector('.toast')?.textContent?.startsWith('Opened'), undefined, { timeout: 15_000 });
