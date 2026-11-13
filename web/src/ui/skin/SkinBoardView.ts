@@ -801,7 +801,10 @@ export class SkinBoardView extends BoardView {
         // a little larger where it crossfades, so two neighbours overlap across their shared side
         // Experimental transparent source sprites keep a margin for grass/smoke outside the
         // point-up hex. Enlarge only their visual image, never the real hex hit geometry.
-        const sz = S * (this.overhangingTiles ? 2.27 : 2.07) * (shared.size ? 1.1 : 1);
+        // Source grass has deeper foliage overhang than ash. Both keep the same
+        // visual *hex radius* once their transparent margins are accounted for.
+        const bleedSize = t.owner === 0 ? 2.50 : 2.33;
+        const sz = S * (this.overhangingTiles ? bleedSize : 2.07) * (shared.size ? 1.1 : 1);
         // sides shared with the same player fade into the territory's ground below (one continuous
         // painting), so neighbouring tiles melt into one field; outer sides stay crisp
         const holder = shared.size && this.netDefs ? el('g', { mask: `url(#${this.seamMask(key, shared)})` }, g) : g;
