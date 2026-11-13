@@ -24,6 +24,7 @@ import { mountChallengeHandoff } from './challenge-handoff.js';
 import { WorldView } from './world-view.js';
 import { lastWorld, rememberWorld } from './world-memory.js';
 import { mountWorldSource } from './living-world-source.js';
+import { TURN_COMMITTED_EVENT } from './turn-committed.js';
 import { mountEndgamePlanet as mountEndgamePlanetPane } from './endgame-planet.js';
 import { mountLivingTerritory } from './living-territory.js';
 import { requestPlayerProfile } from '../accounts/profile-request.js';
@@ -254,6 +255,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   let matchesSignature = '';
   /** One list request at a time, so a 10s poll can never stack behind a slow network. */
   let reloadInFlight = false;
+  let reloadAgain = false;
   let hubPollTimer: ReturnType<typeof setTimeout> | null = null;
 
   const stopHubPoll = () => {
@@ -816,10 +818,13 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   worldView.setMyLevel(() => hooks.campaignLevel?.() ?? null);
   if (hooks.onAchievementsDone) worldView.setAchievementNote(hooks.onAchievementsDone);
 
-  const reloadMatches = async () => {
-    // Single flight: a slow request must not let the 10s hub poll stack a second list read.
-    if (reloadInFlight) return;
+  const reloadMatches = async (): Promise<void> => {
+    // Single flight: a slow request must not let the 10s hub poll stack a second list read. But a
+    // reload asked for WHILE one runs is never dropped (owner report, 2026-11-13): that earlier read
+    // may predate a turn the player just took, so one more read follows it.
+    if (reloadInFlight) { reloadAgain = true; return; }
     reloadInFlight = true;
+    reloadAgain = false;
     try {
       const id = await ensureIdentity();
       if (!id) return;
@@ -835,8 +840,11 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       }
     } finally {
       reloadInFlight = false;
+      if (reloadAgain) void reloadMatches();
     }
   };
+  // A turn the player just committed: the list (and the PLAY ONLINE marker) re-read at once.
+  window.addEventListener(TURN_COMMITTED_EVENT, () => { void reloadMatches(); });
 
   /**
    * A quiet list refresh while the hub is the visible screen. The red "!" lives on a COLLAPSED

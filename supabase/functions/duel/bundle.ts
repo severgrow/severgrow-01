@@ -60,6 +60,9 @@ import Xp from "npm:postgres@3.4.5";var Tc=(e,t,r)=>({messages:[{topic:e,event:t
            from matches m
            join match_participants p on p.match_id = m.id
           where p.player_id = $1 and m.status = 'active' and m.open_queue = true
+            -- Only the game this search JUST made (owner report, 2026-11-13): once this player has
+            -- moved in it, it is an ordinary game and a new Find starts a new search.
+            and not exists (select 1 from match_moves mv where mv.match_id = m.id and mv.player_id = $1)
           order by m.updated_at desc
           limit 1`,[t.playerId]);if(n.rows[0])return await r.query(`delete from matches
             where id in (
@@ -116,9 +119,11 @@ import Xp from "npm:postgres@3.4.5";var Tc=(e,t,r)=>({messages:[{topic:e,event:t
             and p.player_id <> $1
             and (select count(*)::int from match_participants p3 where p3.match_id = m.id) = 1
             and shared.status <> 'finished' and shared.id <> m.id
+            -- Only a searcher who is HERE now (owner report, 2026-11-13).
+            and ($2::bigint is null or m.updated_at >= $2::bigint)
           order by m.created_at asc, shared.updated_at desc
           limit 1
-          for update of m skip locked`,[t.playerId]);if(p.rows[0]){let f=ee(p.rows[0].parked_id),h=ee(p.rows[0].shared_id);await r.query("delete from matches where id = $1 and status = 'waiting'",[f]);let m=await r.query("update matches set updated_at = $2 where id = $1 returning *",[h,t.now]);return await r.query("commit"),m.rows[0]?{ok:!0,match:le(m.rows[0]),seat:L(p.rows[0].my_seat)===1?1:0,paired:!0,continued:!0}:{ok:!1,code:"MATCH_FULL",reason:"The shared game moved on; try again."}}if(d)return await r.query("rollback"),{ok:!1,code:"TOO_MANY_MATCHES",reason:"Finish or leave a match before starting another."};try{await r.query(Ko,zo({...t.parked,openQueue:!0}))}catch(f){if(Wo(f))return await r.query("rollback"),{ok:!1,code:"DUPLICATE_INVITE_CODE",reason:"Invite code already exists."};throw f}await r.query("insert into match_participants (match_id, player_id, seat, joined_at, last_seen_at) values ($1,$2,0,$3,$3)",[t.parked.id,t.playerId,t.now]);let g=await s(t.parked.id);return await r.query("commit"),{ok:!0,match:ue({...t.parked,openQueue:!0}),seat:0,paired:!1,othersWaiting:g}}catch(n){throw await r.query("rollback").catch(()=>{}),n}finally{r.release?.()}},async cancelOpenQueueMatch(t,r){let n=await e.connect();try{await n.query("begin"),await n.query("select pg_advisory_xact_lock($1)",[Ci]);let{rows:o}=await n.query(`select m.id
+          for update of m skip locked`,[t.playerId,o]);if(p.rows[0]){let f=ee(p.rows[0].parked_id),h=ee(p.rows[0].shared_id);await r.query("delete from matches where id = $1 and status = 'waiting'",[f]);let m=await r.query("update matches set updated_at = $2 where id = $1 returning *",[h,t.now]);return await r.query("commit"),m.rows[0]?{ok:!0,match:le(m.rows[0]),seat:L(p.rows[0].my_seat)===1?1:0,paired:!0,continued:!0}:{ok:!1,code:"MATCH_FULL",reason:"The shared game moved on; try again."}}if(d)return await r.query("rollback"),{ok:!1,code:"TOO_MANY_MATCHES",reason:"Finish or leave a match before starting another."};try{await r.query(Ko,zo({...t.parked,openQueue:!0}))}catch(f){if(Wo(f))return await r.query("rollback"),{ok:!1,code:"DUPLICATE_INVITE_CODE",reason:"Invite code already exists."};throw f}await r.query("insert into match_participants (match_id, player_id, seat, joined_at, last_seen_at) values ($1,$2,0,$3,$3)",[t.parked.id,t.playerId,t.now]);let g=await s(t.parked.id);return await r.query("commit"),{ok:!0,match:ue({...t.parked,openQueue:!0}),seat:0,paired:!1,othersWaiting:g}}catch(n){throw await r.query("rollback").catch(()=>{}),n}finally{r.release?.()}},async cancelOpenQueueMatch(t,r){let n=await e.connect();try{await n.query("begin"),await n.query("select pg_advisory_xact_lock($1)",[Ci]);let{rows:o}=await n.query(`select m.id
            from matches m
            join match_participants p on p.match_id = m.id
           where p.player_id = $1 and m.status = 'waiting' and m.open_queue = true

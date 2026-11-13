@@ -256,9 +256,13 @@ export class MemoryStorage implements Storage {
     // one device polling a brand-new empty match while its opponent sat in the real one. A game
     // that began as an INVITE is never resumed: an open invite is how a player still meets a
     // stranger, and one-game-per-pair is scoped to that pair, never global.
+    // ONLY THE GAME THIS SEARCH JUST MADE (owner report, 2026-11-13: "Find opponent ... opens my
+    // existing game with someone offline"): once this player has moved in it, it is an ordinary game
+    // and a new Find starts a new search.
     const fromSearch = [...this.matches.values()]
       .filter((m) => m.status === 'active' && m.openQueue
-        && (this.participants.get(m.id) ?? []).some((p) => p.playerId === input.playerId))
+        && (this.participants.get(m.id) ?? []).some((p) => p.playerId === input.playerId)
+        && !(this.moves.get(m.id) ?? []).some((mv) => mv.playerId === input.playerId))
       .sort((a, b) => b.updatedAt - a.updatedAt)[0];
     if (fromSearch) {
       // A leftover solo search (rows the old behaviour left behind) is a duplicate of a search that
@@ -359,6 +363,9 @@ export class MemoryStorage implements Storage {
     // the other page (whose search just ended) finds it at the top of its list. It creates no match,
     // so the open-match cap never blocks it.
     for (const match of waiting) {
+      // Only a searcher who is HERE now (owner report, 2026-11-13): a search left hours ago by someone
+      // this player already plays must not send a fresh Find into their old game.
+      if (match.updatedAt < presentSince) continue;
       const parts = this.participants.get(match.id) ?? [];
       if (parts.length !== 1 || parts.some((p) => p.playerId === input.playerId)) continue;
       const opener = parts[0]!.playerId;

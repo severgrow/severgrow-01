@@ -667,6 +667,9 @@ export const postgresStorage = (pool: PgPool): Storage => ({
            from matches m
            join match_participants p on p.match_id = m.id
           where p.player_id = $1 and m.status = 'active' and m.open_queue = true
+            -- Only the game this search JUST made (owner report, 2026-11-13): once this player has
+            -- moved in it, it is an ordinary game and a new Find starts a new search.
+            and not exists (select 1 from match_moves mv where mv.match_id = m.id and mv.player_id = $1)
           order by m.updated_at desc
           limit 1`,
         [input.playerId],
@@ -823,10 +826,12 @@ export const postgresStorage = (pool: PgPool): Storage => ({
             and p.player_id <> $1
             and (select count(*)::int from match_participants p3 where p3.match_id = m.id) = 1
             and shared.status <> 'finished' and shared.id <> m.id
+            -- Only a searcher who is HERE now (owner report, 2026-11-13).
+            and ($2::bigint is null or m.updated_at >= $2::bigint)
           order by m.created_at asc, shared.updated_at desc
           limit 1
           for update of m skip locked`,
-        [input.playerId],
+        [input.playerId, presentSince],
       );
       if (cont.rows[0]) {
         const parkedId = asString(cont.rows[0].parked_id);

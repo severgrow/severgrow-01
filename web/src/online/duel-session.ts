@@ -17,6 +17,7 @@ import { boardSignature, buildOpponentTurnReplay, openingBoard } from './opponen
 import type { OpponentTurnReplay, ReplayReason } from './opponent-turn-replay.js';
 import { shadowFromView } from './shadow.js';
 import { stepContextFor, stepsFromEvents, syncStep } from './steps-from-events.js';
+import { announceTurnCommitted } from './turn-committed.js';
 
 /**
  * A Blitz duel is on (the live controller marks the page while the match is in Blitz mode,
@@ -372,6 +373,7 @@ export class OnlineSession {
         return { ok: false, message: res.message ?? ONLINE.errTurnFailed };
       }
       this.refresh();
+      announceTurnCommitted();
       this.log.push(engine);
       const catchUp = this.consumeCatchUp();
       const ownDiscard = engine.t === 'Discard'
@@ -420,6 +422,7 @@ export class OnlineSession {
         return { ok: false, message: res.message ?? ONLINE.errTurnFailed };
       }
       this.refresh();
+      announceTurnCommitted();
       return { ok: true, played, catchUp: this.consumeCatchUp(), finished: this.finished };
     }
     // BLITZ (owner, 2026-11-06: "the moves should be shown as soon as they're done"; 2026-11-09:

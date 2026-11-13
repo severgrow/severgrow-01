@@ -136,3 +136,64 @@ describe(`${kind}: find opponent tiers`, () => {
     expect((caught as ApiError).code).toBe('RATE_LIMITED');
   });
 });
+
+// OWNER REPORT (2026-11-13): "When I go Find opponent instead of pairing me with a new opponent it
+// opens my existing game with someone offline ... after I took my turn ... still takes me to the
+// same game." Find must start a NEW search unless the game it would return is the one this search
+// JUST made (nobody of mine has moved in it yet), or the other player is searching right now.
+for (const kind of ['memory', ...(localUrl ? ['postgres'] : [])] as const)
+describe(`${kind}: find opponent never sends a fresh search into an old game`, () => {
+  beforeEach(async () => {
+    storageKind = kind as 'memory' | 'postgres';
+    if (kind === 'postgres') await pool!.query("delete from matches where open_queue = true or invite_code is not null and status <> 'finished'");
+  });
+  it('after I have moved in a game that came from Find, Find starts a NEW search', async () => {
+    const h = harness();
+    const a = await h.guest('A');
+    const b = await h.guest('B');
+    await h.service.findOpponent(a);
+    h.advance(1_000);
+    const paired = await h.service.findOpponent(b);
+    expect(paired.paired).toBe(true);
+    const matchId = paired.match.matchId;
+    // Whoever's turn it is plays one real action.
+    const view = await h.service.viewPayload(a, matchId);
+    const mover = view.turnPlayer === view.seat ? a : b;
+    const moverView = mover === a ? view : await h.service.viewPayload(b, matchId);
+    await h.service.submitAction(mover, matchId, { expectedRevision: moverView.revision, requestId: 'm-1', action: moverView.legalActions[0]! });
+    h.advance(60_000);
+    const again = await h.service.findOpponent(mover);
+    expect(again.match.matchId).not.toBe(matchId);
+    expect(again.paired).toBe(false);
+  });
+
+  it('a just-paired game where I have not moved is still resumed (a second device catching up)', async () => {
+    const h = harness();
+    const a = await h.guest('A');
+    const b = await h.guest('B');
+    const parked = await h.service.findOpponent(a);
+    await h.service.findOpponent(b);
+    const view = await h.service.viewPayload(a, parked.match.matchId);
+    if (view.turnPlayer === view.seat) {
+      const again = await h.service.findOpponent(a);
+      expect(again.match.matchId).toBe(parked.match.matchId);
+    } else {
+      const again = await h.service.findOpponent(a);
+      expect(again.match.matchId).toBe(parked.match.matchId);
+    }
+  });
+
+  it('a stale search left by someone I already play is NOT a reason to send me into our old game', async () => {
+    const h = harness();
+    const a = await h.guest('A');
+    const b = await h.guest('B');
+    const shared = await h.service.createMatch(a);
+    await h.service.joinMatch(b, shared.match.inviteCode!);
+    // B searched long ago and left.
+    await h.service.findOpponent(b);
+    h.advance(FIND_PRESENT_MS + 3_600_000);
+    const mine = await h.service.findOpponent(a);
+    expect(mine.match.matchId).not.toBe(shared.match.matchId);
+    expect(mine.paired).toBe(false);
+  });
+});
