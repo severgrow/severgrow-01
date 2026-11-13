@@ -75,7 +75,49 @@ try {
     return tiles.length > 0 && tiles.every((t) => t.querySelector('.skin-tile-art'));
   }, undefined, { timeout: 20_000 });
   check(true, "today's painted tiles are on every player tile");
+  // The art workbench must retain exactly the same physical strength stones as the game.
+  const physical = await (await frame()).evaluate(() => {
+    const board = document.getElementById('board')!;
+    const tiles = board.querySelectorAll('.skin-tile:not(.root)');
+    return { tiles: tiles.length, stones: board.querySelectorAll('.skin-tile:not(.root) .seed-stone').length,
+      plates: board.querySelectorAll('.skin-tile .num-plate').length };
+  });
+  check(physical.tiles > 0 && physical.stones === physical.tiles && physical.plates === 0,
+    'the Art Lab keeps one original physical number stone per claimed non-home tile');
   await page.screenshot({ path: `${shots}/1-board-today.png` });
+
+  // A truly transparent point-up tile with one grass blade outside the original hex.
+  // The sprite may paint beyond its boundary, but the hit target and number remain native.
+  const foliage = Buffer.from(await page.evaluate(() => {
+    const canvas = document.createElement('canvas'); canvas.width = canvas.height = 512;
+    const g = canvas.getContext('2d')!;
+    const pt = Array.from({ length: 6 }, (_, i) => {
+      const a = (-90 + 60 * i) * Math.PI / 180;
+      return [256 + 225 * Math.cos(a), 256 + 225 * Math.sin(a)];
+    });
+    g.beginPath(); g.moveTo(pt[0]![0], pt[0]![1]);
+    for (const [x, y] of pt.slice(1)) g.lineTo(x, y);
+    g.closePath(); g.fillStyle = '#386b39'; g.fill();
+    g.beginPath(); g.moveTo(242, 50); g.lineTo(273, 4); g.lineTo(276, 63);
+    g.closePath(); g.fillStyle = '#8dcd43'; g.fill();
+    return canvas.toDataURL('image/png').split(',')[1]!;
+  }), 'base64');
+  await page.locator('#slot-p1-tiles input[type=file]').setInputFiles({
+    name: 'transparent-foliage.png', mimeType: 'image/png', buffer: foliage,
+  });
+  await page.waitForFunction(() => {
+    const d = document.querySelector('iframe')?.contentDocument;
+    return document.querySelector('#slot-p1-tiles')?.getAttribute('data-status') === 'done' &&
+      !!d?.querySelector('#board .art-lab-overhangs image');
+  }, undefined, { timeout: 30_000 });
+  check(true, 'designer foliage renders in the overlay above shared hex edges');
+  check(await (await frame()).evaluate(() => {
+    const d = document, board = d.getElementById('board')!;
+    const overhang = board.querySelector('.art-lab-overhangs image');
+    return !!overhang && overhang.getAttribute('pointer-events') === 'none' &&
+      !!board.querySelector('.l-base .hex-cell') && !!board.querySelector('.seed-stone');
+  }), 'overhang is decorative; native hit polygons and stones stay in place');
+
 
   // a good, seamless ground
   await page.locator('#slot-ground input[type=file]').setInputFiles({ name: 'sand.png', mimeType: 'image/png', buffer: await picture(page, 'seamless') });
