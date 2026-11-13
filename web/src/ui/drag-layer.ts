@@ -5,6 +5,7 @@
 // existing board painting are untouched.
 import type { Action, View } from '../../../src/engine/index.js';
 import type { Sel } from '../logic/interaction.js';
+import { kindCards } from '../logic/interaction.js';
 import { DRAG_THRESHOLD_PX, FLICK_WINDOW_MS, resolveDrag } from '../logic/drag.js';
 import type { DragHover, DragLedWord, DragMode, DragResolution, DragSource } from '../logic/drag.js';
 
@@ -39,6 +40,8 @@ export type DragLayerHooks = {
   onShape?: (shape: readonly string[]) => void;
   /** Show the dragged hand card's legal hexes on the board without changing the tap selection. */
   onCardFocus?: (cardId: number | null) => void;
+  /** Preview a cockpit recipe without changing the tap selection. */
+  onRecipeFocus?: (kind: string | null) => void;
   /** The legal hex the finger is over (for the board's selected cue), or null. */
   onHoverKey?: (key: string | null) => void;
   /** A drag began (measure once here) or ended (drop any cached measurement). */
@@ -55,7 +58,7 @@ const DRAG_CSS = `
 /* The drag sources take the touch gesture themselves, so a drag is never stolen by a
    scroll (the game screen scrolls). Only the hand and the two piles: the rest of the
    page keeps its normal scrolling and pinch-zoom. */
-#hand .card, #deck, #discard { touch-action: none; }
+#hand .card, #deck, #discard, #smart-bloom-button, #smart-bloom-selector button { touch-action: none; }
 .drag-ghost {
   position: fixed; left: 0; top: 0; margin: 0; padding: 0; z-index: 90;
   pointer-events: none; touch-action: none; will-change: transform;
@@ -72,6 +75,17 @@ const DRAG_CSS = `
 .drag-ghost.drag-mini .c-suit svg { width: 13px !important; height: 13px !important; }
 .drag-ghost.drag-mini .futa04-card-art { border-radius: 3px; }
 .drag-source-dim { opacity: .45 !important; }
+.drag-ghost.drag-recipe { display:flex; gap:3px; background:none; border:0; box-shadow:none; }
+.drag-ghost.drag-recipe .futa04-mini-card {
+  display:grid; place-items:center; position:relative; flex:0 0 26px; width:26px; min-width:26px;
+  height:40px; padding:2px; box-sizing:border-box; border:1px solid var(--instrument-selection,#f2e5c5);
+  border-radius:4px; background:rgba(10,14,11,.9); color:var(--instrument-selection,#f2e5c5);
+  box-shadow:inset 0 1px 0 #fff2,0 4px 8px #0005;
+}
+.drag-ghost.drag-recipe :is(.c-num,.c-suit,.c-fruit) { position:static; inset:auto; display:grid; place-items:center; transform:none; padding:0; width:auto; height:auto; line-height:1; }
+.drag-ghost.drag-recipe .c-num { font-size:11px; }
+.drag-ghost.drag-recipe .c-num:empty { display:none; }
+.drag-ghost.drag-recipe :is(.c-fruit,.c-suit) svg { width:17px; height:17px; }
 /* The source keeps its dim through a re-render: the attribute is not touched by renderHand. */
 #hand .card[data-drag-dim], #deck[data-drag-dim], #discard[data-drag-dim] { opacity: .45 !important; }
 /* Legal / pile / flick: soft lift, no white frame on the discard pile. */
@@ -202,12 +216,14 @@ export function mountDragLayer(hooks: DragLayerHooks) {
     // A card dragged off the Draw pile is face down: it wears the game's real card back
     // (`.card.back`, cards.ts), never a copy of the pile's own markup (owner, 2026-10-24).
     g.className = fromDeck ? 'drag-ghost card back drag-from-deck' : `drag-ghost ${cls}`;
+    if (a.source.kind === 'recipe') g.className = 'drag-ghost drag-recipe';
     g.innerHTML = fromDeck ? '' : a.faceEl.innerHTML;
     const fromPile = a.source.kind === 'deck' || a.source.kind === 'discard';
     g.classList.toggle('drag-from-pile', fromPile);
     const r = a.faceEl.getBoundingClientRect();
-    const w = Math.max(8, r.width);
-    const h = Math.max(8, r.height);
+    const count = a.source.kind === 'recipe' ? kindCards(a.source.recipe).length : 0;
+    const w = count ? count * 26 + (count - 1) * 3 : Math.max(8, r.width);
+    const h = count ? 40 : Math.max(8, r.height);
     g.style.width = `${w}px`;
     g.style.height = `${h}px`;
     g.dataset.fullW = String(w);
@@ -254,6 +270,8 @@ export function mountDragLayer(hooks: DragLayerHooks) {
 
   /** Aim point for board hit-testing: tiles under the raised mini + chevron tip, not the thumb. */
   const aimPoint = (a: Active): { x: number; y: number } => {
+    // A recipe is an instrument stamp, not a single raised card: its target is under the pointer.
+    if (a.source.kind === 'recipe') return { x:a.x, y:a.y };
     const g = ghost;
     const mini = !!g?.classList.contains('drag-mini');
     // Stable mini height so a mid-morph bounding box does not shove aim off the board.
@@ -308,6 +326,7 @@ export function mountDragLayer(hooks: DragLayerHooks) {
       buildGhost(a);
       hooks.onDragBegin?.();
       if (a.source.kind === 'hand') hooks.onCardFocus?.(a.source.cardId);
+      if (a.source.kind === 'recipe') hooks.onRecipeFocus?.(a.source.recipe);
     }
     if (!a.started || !ghost) return;
     // Upward speed over a window, never one frame: a slow drag with a 3px pointer jitter is not a
@@ -430,6 +449,7 @@ export function mountDragLayer(hooks: DragLayerHooks) {
     hooks.setThrowZone?.(false);
     if (a.hoverKey) hooks.onHoverKey?.(null);
     if (a.source.kind === 'hand' && a.started) hooks.onCardFocus?.(null);
+    if (a.source.kind === 'recipe' && a.started) hooks.onRecipeFocus?.(null);
     if (!a.started) {
       stopGhost();
       return;
@@ -472,6 +492,13 @@ export function mountDragLayer(hooks: DragLayerHooks) {
   document.addEventListener('pointercancel', onCancel, true);
   // A drag must never stick: leaving the page (alt-tab, a call) cancels it cleanly.
   window.addEventListener('blur', abort);
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !event.isComposing && active) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      abort();
+    }
+  }, true);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) abort();
   });
@@ -481,7 +508,7 @@ export function mountDragLayer(hooks: DragLayerHooks) {
       if (performance.now() >= suppressUntil) return;
       // Only swallow the synthetic click that lands back on the hand or a pile after a drag.
       // Any other click (Confirm, menu, board tools) must keep working normally.
-      const target = (event.target as Element | null)?.closest?.('#hand, #deck, #discard');
+      const target = (event.target as Element | null)?.closest?.('#hand, #deck, #discard, #smart-bloom-button, #smart-bloom-selector');
       if (!target) return;
       suppressUntil = 0;
       event.stopPropagation();
@@ -497,7 +524,7 @@ export function mountDragLayer(hooks: DragLayerHooks) {
       pointerId: event.pointerId,
       source,
       sourceEl: el,
-      faceEl: faceOf(el),
+      faceEl: source.kind === 'recipe' ? el.querySelector<HTMLElement>('.futa04-combination') ?? el : faceOf(el),
       startX: event.clientX,
       startY: event.clientY,
       x: event.clientX,
@@ -523,6 +550,17 @@ export function mountDragLayer(hooks: DragLayerHooks) {
   };
 
   return {
+    /** Delegation also covers recipe buttons replaced when the hand changes. */
+    attachCombinations(host: HTMLElement) {
+      host.addEventListener('pointerdown', event => {
+        const el = (event.target as Element | null)?.closest<HTMLButtonElement>('#smart-bloom-button[data-kind], #smart-bloom-selector button[data-kind]');
+        if (!el || !host.contains(el) || el.disabled) return;
+        const recipe = el.dataset.kind!;
+        const cardId = kindCards(recipe)[0];
+        if (cardId === undefined) return;
+        begin(event, { kind: 'recipe', recipe, cardId }, el);
+      });
+    },
     /** Hand cards: delegated, so a re-render never leaves a stale listener behind. */
     attachHand(hand: HTMLElement) {
       hand.addEventListener('pointerdown', (event) => {

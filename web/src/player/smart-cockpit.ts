@@ -435,7 +435,7 @@ html.futa04-information #smart-bloom-button {
   grid-template-columns:minmax(0,1fr);
   border:0; border-radius:0; padding:4px 2px 8px;
   background:none; color:var(--control-ivory); cursor:pointer; box-shadow:none;
-  touch-action:manipulation;
+  touch-action:none;
   /* The recipe is sized against the control it lives in (see the fit rules below). */
   container-type:inline-size;
 }
@@ -519,7 +519,7 @@ html.futa04-information #smart-bloom-selector[hidden] { display:none; }
 html.futa04-information #smart-bloom-selector button {
   display:flex; align-items:center; justify-content:center; flex:1 0 auto; min-width:76px; min-height:44px;
   border:0; border-radius:0; padding:3px 6px;
-  background:transparent; color:var(--control-ivory); touch-action:manipulation;
+  background:transparent; color:var(--control-ivory); touch-action:none;
 }
 html.futa04-information #smart-bloom-selector button:hover .futa04-combination { filter:brightness(1.2); }
 html.futa04-information #smart-bloom-selector button:focus-visible { outline:1px solid var(--control-amber); outline-offset:-2px; }
@@ -816,12 +816,14 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null; gui
     const cardCount = (button: HTMLButtonElement) => button.querySelectorAll('.futa04-mini-card').length;
     bloomSources = [...byKind.values()].sort((a,b) =>
       cardCount(b) - cardCount(a) || highestRank(b) - highestRank(a) || (a.dataset.kind ?? '').localeCompare(b.dataset.kind ?? '', 'en', { numeric: true }));
-    const next = bloomSources.map(button => `${button.dataset.kind}:${button.getAttribute('aria-label')}`).join('|');
+    const next = bloomSources.map(button => `${button.dataset.kind}:${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`).join('|');
     bloom.hidden = bloomSources.length === 0;
     if (next === bloomSignature) return;
     bloomSignature = next; closeBloom();
     if (!bloomSources.length) return;
-    const first = bloomSources[0]!;
+    const first = bloomSources.find(button => button.getAttribute('aria-pressed') === 'true') ?? bloomSources[0]!;
+    bloomButton.dataset.kind = first.dataset.kind;
+    bloomButton.setAttribute('aria-pressed', String(first.getAttribute('aria-pressed') === 'true'));
     const face = first.querySelector('.futa04-combination')?.cloneNode(true);
     bloomButton.replaceChildren(...(face ? [face] : [document.createTextNode('BLOOM')]),bloomCount);
     bloomButton.setAttribute('aria-label',bloomSources.length === 1 ? first.getAttribute('aria-label') || 'Bloom' : `${bloomSources.length} Bloom combinations`);
@@ -829,6 +831,7 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null; gui
     bloomCount.hidden = true; // The visible control is the recipe cards alone.
     bloomSelector.replaceChildren(...bloomSources.map((button,index) => {
       const choice = document.createElement('button'); choice.type = 'button'; choice.setAttribute('role','menuitem');
+      choice.dataset.kind = button.dataset.kind;
       choice.setAttribute('aria-label',button.getAttribute('aria-label') || `Bloom combination ${index+1}`);
       const cards = button.querySelector('.futa04-combination')?.cloneNode(true);
       if (cards) choice.append(cards);
@@ -1157,7 +1160,7 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null; gui
      * REPLAY sign), so the sign is up on the frame the board starts moving.
      */
     led: (word:string|null, opts?: { immediate?: boolean }) => {
-      if (word) machine.hold(word, word === 'THROW' ? 'red' : word === 'BLOOM' || word === 'MEGA' ? 'green' : 'amber', opts);
+      if (word) machine.hold(word, word === 'THROW' ? 'red' : word === 'BLOOM' || word === 'MEGA' || word === 'BLAST' ? 'green' : 'amber', opts);
       else machine.release();
     },
     reset: (you=0,opp=0) => machine.reset(phaseMessage(),you,opp),

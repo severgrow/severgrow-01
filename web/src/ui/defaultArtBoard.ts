@@ -130,9 +130,9 @@ export class DefaultArtBoardView extends BoardView {
       }
       el('path', { d: hexPath(key, S * 1.015, 'flat'), fill: this.url('default-ground'), class: 'default-ground-art' }, g);
     }
-    el('path', { d: hexPath(key, S - 1.1, 'flat'), fill: 'none',
-      stroke: 'rgba(178,174,163,0.18)', 'stroke-width': 0.75, class: 'default-cell-rim' }, g);
     if (terrain === 'rock') {
+      el('path', { d: hexPath(key, S - 1.1, 'flat'), fill: 'none',
+        stroke: 'rgba(178,174,163,0.18)', 'stroke-width': 0.75, class: 'default-cell-rim' }, g);
       const { x, y } = centerOf(key);
       const rock = rockUrls[Math.floor(hash(`${key}:v3-rock`) * rockUrls.length)]!;
       // A rock picture that failed to load leaves the cell bare, never a broken-image placeholder.

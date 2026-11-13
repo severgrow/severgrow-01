@@ -1476,8 +1476,8 @@ export const PROFILE = Object.freeze({
   title: 'Profile',
   /** The account key's spoken label while signed in; the name is part of the label. */
   open: (name: string): string => `${name}. Your profile`,
-  /** The identity line names the tag too, because that is what the value carries (`name #TAG`). */
-  nameTag: 'Name & tag',
+  /** Profiles show the display name, without the account tag. */
+  nameTag: 'Name',
   /** The Seeds line's label is the ECONOMY's word, and it lives with the wallet's own wording in
    *  web/src/online/seed-icon.ts (`SEEDS_WORD`): this file must stay free of that word
    *  (web/tests/seed-words.test.ts), and the profile takes it from the one place the currency is

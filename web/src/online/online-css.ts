@@ -484,6 +484,8 @@ export const ONLINE_CSS = `
   white-space: nowrap;
 }
 .duel-hud [data-duel-presence][data-presence="unknown"] { display: none; }
+/* Blitz already communicates opponent availability through its accessible bolt. */
+html[data-blitz-duel='1'] .duel-hud [data-duel-presence] { display: none; }
 .duel-hud [data-duel-presence]::before {
   content: '';
   display: inline-block;
@@ -720,6 +722,10 @@ html.slim-hud .game > .hud:has(> .live-pill:not([hidden])) + .duel-hud { padding
 .world-selection:not(.has-action) { padding: 6px 16px; }
 .world-selection[hidden], .world-grid.pane-open .world-selection { display: none; }
 .world-selection-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.world-signin-prompt { min-height:44px; padding:0 8px; border:0; background:transparent; color:inherit; font:inherit; letter-spacing:inherit; text-transform:inherit; cursor:pointer; pointer-events:auto; touch-action:manipulation; }
+.world-signin-prompt:focus-visible { outline:2px solid var(--instrument-selection,#f2e5c5); outline-offset:2px; border-radius:8px; }
+.world-selection .world-claim-button.world-signin-prompt { flex:1; width:auto; min-width:0; padding:0 8px; background:none; box-shadow:none; }
+.world-selection-line[hidden] { display:none; }
 @keyframes world-bar-in { from { opacity: 0; translate: -50% 4px; } to { opacity: 1; translate: -50% 0; } }
 /* THE TILE BAR'S KEYS (owner, 2026-11-01: "grow a tile/challenge/sell a tile/see profile etc in
    territory should be all icons in buttons rather than text buttons"). They ARE the MENU row's
@@ -1232,7 +1238,7 @@ html.reduce-motion .world-colour-chip { animation:none!important; }
 .world-achievement-meter i { display: block; height: 100%; border-radius: 2px; background: linear-gradient(90deg, #b8955099, #f2c879); }
 .world-achievement.claimed .world-achievement-meter { display: none; }
 .world-achievement-done { font-size: .9rem; color: #f2c879; padding-right: 10px; }
-.world-achievement-claim { min-height: 40px; }
+.world-achievement-claim { min-height: 44px; }
 /* the moment it pays: one warm flash across the row, finite */
 .world-achievement.just-claimed { animation: world-paid 900ms cubic-bezier(.2, .8, .3, 1) both; }
 @keyframes world-paid { 0% { background: #f2c87959; } 100% { background: #e8ddc508; } }
@@ -1241,7 +1247,7 @@ html.reduce-motion .world-achievement.just-claimed { animation: none; }
 .world-ranking-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .world-ranking-row {
   width: 100%; display: grid; grid-template-columns: 2.4ch 10px minmax(0, 1fr) auto; align-items: center; gap: 9px;
-  min-height: 40px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: #e8ddc5;
+  min-height: 44px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: #e8ddc5;
   font: inherit; font-size: .74rem; text-align: left; cursor: pointer; font-variant-numeric: tabular-nums;
 }
 .world-ranking-row:active { background: #e8ddc50d; }

@@ -199,6 +199,11 @@ try {
   await receiver.screenshot({path:`${out}/receiver-${accountFirst}-${accountSends}.png`});
   await receiver.locator('[data-live="accept"]').click();
   await Promise.all(pages.map(p=>p.waitForFunction(()=>(window as any).__futasakuLive?.()?.status?.live)));
+  for(const p of pages){
+   await p.waitForFunction(()=>document.documentElement.dataset.blitzDuel==='1');
+   assert(!(await p.locator('[data-duel-presence]').isVisible()),'Blitz uses the bolt instead of a second presence label');
+   assert(await p.locator('[data-live="pill"]').isVisible(),'the presence-aware bolt stays visible');
+  }
   const liveState=await status(desktop);
   const actorPage=liveState.actor===liveState.mySeat?desktop:phone,watcher=actorPage===desktop?phone:desktop;
   await Promise.all(pages.map(p=>p.waitForFunction(()=>!(window as any).__severgrow.busy()&&!(window as any).__severgrow.online()?.revealing)));

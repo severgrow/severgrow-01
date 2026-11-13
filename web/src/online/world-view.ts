@@ -439,7 +439,7 @@ type Identity = { token: string; playerId: string; kind?: 'guest' | 'account' };
 export const walletLine = (s: { identityKnown: boolean; hasIdentity: boolean; wallet: SeedWallet | null }): string | null => {
   if (s.wallet) return seedBalanceLabel(s.wallet.balance);
   if (!s.identityKnown || s.hasIdentity) return null;
-  return 'SIGN IN TO GROW';
+  return ONLINE.worldSignInToGrow;
 };
 type World = WorldMapPayload['world'];
 const NS = 'http://www.w3.org/2000/svg';
@@ -1441,9 +1441,14 @@ export class WorldView {
       node.append(who);
     }
     if (line) {
-      const seeds = document.createElement('span');
-      seeds.className = 'world-seeds';
-      seeds.append(seedIcon(22), document.createTextNode(line));
+      const signin = this.identityKnown && !identity && !this.wallet;
+      const seeds = document.createElement(signin ? 'button' : 'span');
+      seeds.className = signin ? 'world-seeds world-signin-prompt' : 'world-seeds';
+      if (seeds instanceof HTMLButtonElement) {
+        seeds.type = 'button';
+        seeds.onclick = () => (document.getElementById('menu-login') as HTMLButtonElement | null)?.click();
+        seeds.textContent = line;
+      } else seeds.append(seedIcon(22), document.createTextNode(line));
       node.append(seeds);
     }
   }
@@ -2438,8 +2443,8 @@ export class WorldView {
           // a price with no key to pay it.
           : !available && this.wallet ? ONLINE.worldUnclaimedFar
           : ONLINE.worldUnclaimed(world.cost, SEEDS_WORD);
-        if (available && !this.busy) {
-          if (!canPlace) {
+        if (!this.busy) {
+          if (!canPlace && this.identityKnown) {
             actions = [{
               kind: 'signin',
               label: ONLINE.worldSignInKey,
@@ -2447,7 +2452,7 @@ export class WorldView {
                 (document.getElementById('menu-login') as HTMLButtonElement | null)?.click();
               },
             }];
-          } else {
+          } else if (canPlace && available) {
             const armed = this.growArmed === cellId;
             actions = [{
               kind: 'grow',
@@ -2467,6 +2472,7 @@ export class WorldView {
       const text = document.createElement('span');
       text.className = 'world-selection-line';
       text.textContent = line;
+      text.hidden = actions.some(action => action.kind === 'signin');
       // The tag stays in the TITLE only: visible text never carries it, and the live region still
       // announces just the line a sighted player reads.
       if (spoken) text.title = spoken;
@@ -2487,8 +2493,10 @@ export class WorldView {
           key.classList.add('world-key-text');
           key.textContent = action.armed ? ONLINE.worldSellKeyArmed : ONLINE.worldSellKey(this.world?.saleReturn ?? this.world?.cost ?? 0);
         } else if (action.kind === 'signin') {
-          key.classList.add('world-key-text');
-          key.textContent = ONLINE.worldSignInKey;
+          key.classList.add('world-signin-prompt');
+          key.textContent = line;
+          key.setAttribute('aria-label', line);
+          key.title = line;
         } else key.insertAdjacentHTML('afterbegin', action.armed ? TILE_BAR_ICONS.confirm : TILE_BAR_ICONS[action.kind]);
         return key;
       });

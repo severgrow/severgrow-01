@@ -55,19 +55,18 @@ const record = (value: unknown): Record3 | null => {
 };
 
 /**
- * `null` in, `null` out: the panel's honest loading/failed state. The name keeps its `#tag`, the
- * same disambiguator the Territory uses for two players who share a name. The colour is resolved
+ * `null` in, `null` out: the panel's honest loading/failed state. Profiles show the display name
+ * without the account tag. The colour is resolved
  * from the one shared palette by `colourId` — the wire carries the slot, never a second copy of
  * the palette — so the visitor's swatch and hex are exactly the map's colour.
  */
 export const visitorFacts = (profile: PublicPlayerProfile | null | undefined): VisitorFacts | null => {
   if (!profile) return null;
   const name = typeof profile.displayName === 'string' ? profile.displayName.trim() : '';
-  const tag = typeof profile.tag === 'string' ? profile.tag.trim() : '';
   const colourId = count(profile.colourId);
   const palette = colourId === null ? null : TILE_COLOURS[colourId] ?? null;
   return {
-    name: name ? (tag ? `${name} #${tag}` : name) : null,
+    name: name || null,
     level: count(profile.level),
     tiles: count(profile.tiles),
     connectedTiles: count(profile.connectedTiles),

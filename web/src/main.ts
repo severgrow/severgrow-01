@@ -42,6 +42,7 @@ import type { ReplayHandle } from './replay/player.js';
 import type { ReplayPayload } from '../../server/src/protocol.js';
 import { displayEventForPlay } from './player/display-readout.js';
 import { bloomNoRoom } from './logic/bloom-room.js';
+import { blastForPair } from './logic/blast-input.js';
 import { throwPileCompletesBloom } from './logic/pile-glow.js';
 import type { DisplayEvent } from './player/display-readout.js';
 import { createTheirsDim, replayedByOpponent } from './player/replay-display.js';
@@ -8176,7 +8177,7 @@ function renderHand(v: View, advice: Advice | null) {
     // Picked toward a Bloom, or in the Bloom being painted: every one of its cards is lifted, and
     // by the same height whatever its number (owner, 2026-10-24: "all of them should be equally
     // lifted") — a group reads as one choice, not as one card and three stragglers.
-    const inBloom = IS_FUTA04 && (bloomPick.includes(c.id) || (!!sel.kind?.startsWith('bloom-') && !sel.kind.startsWith('bloom-mega-') && kindCards(sel.kind).includes(c.id)));
+    const inBloom = IS_FUTA04 && (bloomPick.includes(c.id) || (!!sel.kind?.startsWith('bloom-') && kindCards(sel.kind).includes(c.id)));
     const liftWeight = inBloom ? BLOOM_LIFT_WEIGHT : weight;
     b.style.setProperty('--weight', weight.toFixed(3));
     b.style.setProperty('--lift', `${liftOf(liftWeight).toFixed(1)}px`);
@@ -9573,6 +9574,27 @@ function onCardTap(id: number) {
     return;
   }
   if (IS_FUTA04 && session.view.phase === 'ACT') {
+    const bomb = session.view.hand.find(c => c.id === id)?.suit === null;
+    if (bomb && session.sel.kind?.startsWith('bloom-mega-') && kindCards(session.sel.kind).includes(id)) {
+      session.cancel();
+      bloomPick = [];
+      render();
+      return;
+    }
+    const blast = blastForPair(session.legal, session.sel.card, id);
+    if (blast) {
+      session.cancel();
+      draw = { ...DRAW0 };
+      board.ghost(null);
+      bloomPick = [];
+      bloomMenu = false;
+      inspectKey = null;
+      session.tapKind(blast);
+      sound.cardSelect();
+      smartCockpit?.hint('BLAST');
+      render();
+      return;
+    }
     const hasCombo = session.legal.some(a => a.t === 'Bloom' || a.t === 'MegaBomb');
     const matchingBlooms = bloomKindsForCard(id);
     const inBloomCard = matchingBlooms.length > 0;
@@ -9656,9 +9678,6 @@ function onCardTap(id: number) {
       // a card that cannot bloom ends the pick and is chosen as usual
       bloomPick = [];
     }
-    // The double-Bomb recipe is entered only through its cockpit control.
-    // Picking a Bomb from the hand remains the existing single-card action.
-    if (session.sel.kind?.startsWith('bloom-mega-') && session.view.hand.some(c=>c.id===id && c.suit===null)) session.cancel();
   }
   // The classic / test copies: no Confirm box, tapping a card of the waiting move again places it.
   // The product Throw step is NOT in this path: a second tap on the picked card deselects, and a
@@ -10955,7 +10974,7 @@ const dragLayer = mountDragLayer({
     render();
     if (draw.shape.length) paintDraw();
   },
-  led: (word) => smartCockpit?.led(word),
+  led: (word) => smartCockpit?.led(word === 'MEGA' ? 'BLAST' : word),
   onShape: (shape) => {
     // Mirror a Bloom drag into the board's existing paint ghost, only when the board is not
     // itself being painted (one gesture at a time). Empty clears it.
@@ -10978,10 +10997,12 @@ const dragLayer = mountDragLayer({
       refreshBoardDrag();
       return;
     }
-    const card = session.view.hand.find((c) => c.id === cardId);
-    const mega = card?.suit === null ? session.legal.find((a) => a.t === 'MegaBomb' && a.cards.includes(cardId)) : undefined;
-    const kind = session.sel.kind?.startsWith('bloom-') ? session.sel.kind : mega ? kindOf(mega) : null;
+    const kind = session.sel.kind?.startsWith('bloom-') ? session.sel.kind : null;
     dragSel = { card: cardId, hex: null, kind, option: 0 };
+    refreshBoardDrag();
+  },
+  onRecipeFocus: (kind) => {
+    dragSel = kind ? { card: null, hex: null, kind, option: 0 } : null;
     refreshBoardDrag();
   },
   onHoverKey: (key) => {
@@ -11007,6 +11028,7 @@ const dragLayer = mountDragLayer({
 dragLayer.attachHand($('hand'));
 dragLayer.attachDeck($('deck'));
 dragLayer.attachDiscard($('discard'));
+dragLayer.attachCombinations($('game'));
 // Tap empty board chrome (gaps — not hexes/targets/ghosts) after Grow → skip Bloom to Throw,
 // or step back one Bloom paint hex. Capture is off so draw/paint handlers win on real hexes.
 $('board-wrap').addEventListener('pointerup', (event) => {

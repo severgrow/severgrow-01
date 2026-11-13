@@ -34,7 +34,7 @@ const menuSection = html.slice(html.indexOf('<section id="menu"'), html.indexOf(
 const profileSection = html.slice(html.indexOf('<section id="sheet-profile"'), html.indexOf('</section>', html.indexOf('<section id="sheet-profile"')));
 
 const facts = (over: Partial<ProfileFacts> = {}): ProfileFacts => ({
-  name: 'Ann #7QK2',
+  name: 'Ann',
   country: 'PL',
   colour: { css: 'hsl(341 42% 53%)', name: 'Rose' },
   seeds: 128,
@@ -47,17 +47,17 @@ const facts = (over: Partial<ProfileFacts> = {}): ProfileFacts => ({
 
 describe('the identity block is four lines, in the owner’s order', () => {
   it('names the lines from the one strings module', () => {
-    expect(PROFILE.nameTag).toBe('Name & tag');
+    expect(PROFILE.nameTag).toBe('Name');
     // The currency's word lives with the wallet's own wording (web/src/online/seed-icon.ts): the
     // strings module and the page markup stay free of it (web/tests/seed-words.test.ts).
     expect(SEEDS_WORD).toBe('Seeds');
     expect(PROFILE.tiles).toBe('TOTAL TILES');
     expect(PROFILE.matchesWon).toBe('Matches won');
-    expect(profileRows(facts()).map((r) => r.label)).toEqual(['Name & tag', SEEDS_WORD, 'TOTAL TILES', 'Matches won', 'CONNECTED TILES']);
+    expect(profileRows(facts()).map((r) => r.label)).toEqual(['Name', SEEDS_WORD, 'TOTAL TILES', 'Matches won', 'CONNECTED TILES']);
   });
 
   it('shows the name with its #TAG', () => {
-    expect(profileRows(facts())[0]!.value).toBe('Ann #7QK2');
+    expect(profileRows(facts())[0]!.value).toBe('Ann');
   });
 
   it('has dropped the sign-in line completely (owner: "that’s silly")', () => {

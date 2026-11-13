@@ -438,7 +438,7 @@ try {
       console.log(`\n--- guest: bar "${guest.bar}" · key "${guest.key}" ${guest.h}px`);
       check('[guest] the bar says SIGN IN TO GROW', guest.bar === ONLINE.worldSignInToGrow, guest.bar);
       check('[guest] …and it offers a REAL button, not dead text', guest.keyShown && guest.tag === 'BUTTON', `${guest.tag} "${guest.key}"`);
-      check('[guest] the key is the Planet page’s own word', guest.key === ONLINE.worldSignInKey, guest.key);
+      check('[guest] the key is the Planet page’s own word', guest.key === ONLINE.worldSignInToGrow, guest.key);
       check('[guest] the key is a 44px target inside the viewport', guest.h >= 44 && guest.inside, `${guest.h}px`);
       check('[guest] the key is keyboard reachable', guest.focusable);
       // Focus the key by keyboard, then press it: ONE gesture opens the product's login.

@@ -7,7 +7,7 @@
 import { coordKey } from '../../../src/engine/index.js';
 import type { Action, Card, View } from '../../../src/engine/index.js';
 import { moveCards, moveHexes } from '../../../src/playtest/names.js';
-import { kindCards } from './interaction.js';
+import { kindCards, kindOf } from './interaction.js';
 import type { Sel } from './interaction.js';
 import { comboFor, drawNext, paintEnter, paintMatch } from './draw.js';
 
@@ -59,7 +59,8 @@ export type DragMode =
 /** The four visible states (plus none): legal hover, illegal hover, pile hover, flick-ready. */
 export type DragHover = 'none' | 'legal' | 'illegal' | 'pile' | 'flick';
 
-export type DragSource = { kind: 'hand'; cardId: number } | { kind: 'deck' } | { kind: 'discard' };
+export type DragSource = { kind: 'hand'; cardId: number } | { kind: 'deck' } | { kind: 'discard' }
+  | { kind: 'recipe'; recipe: string; cardId: number };
 
 export type DragInput = {
   view: View;
@@ -175,7 +176,7 @@ function resolveThrow(input: DragInput, card: Card): DragResolution {
 /** A hand card in the Grow step: Mega Bomb, Bloom paint, one-tile place, or open options. */
 function resolveAct(input: DragInput, card: Card): DragResolution {
   // Two Bombs: the drag is legal only on a Mega Bomb target.
-  if (card.suit === null) {
+  if (card.suit === null && input.sel.kind?.startsWith('bloom-mega-')) {
     const mega = input.legal.find((a) => a.t === 'MegaBomb' && usesCard(input.view, a, card));
     if (mega) {
       const key = input.boardKey;
@@ -234,6 +235,12 @@ export function resolveDrag(input: DragInput): DragResolution {
   if (source.kind === 'discard') return resolveDiscardSource(input);
   const card = input.view.hand.find((c) => c.id === source.cardId);
   if (!card) return cancel(input);
+  if (source.kind === 'recipe') {
+    if (input.view.phase !== 'ACT' || !kindCards(source.recipe).includes(card.id)) return cancel(input);
+    const legal = input.legal.filter(a => kindOf(a) === source.recipe);
+    if (!legal.length) return cancel(input);
+    return resolveAct({ ...input, legal, sel: { ...input.sel, card: null, hex: null, kind: source.recipe } }, card);
+  }
   if (input.view.phase === 'DISCARD') return resolveThrow(input, card);
   if (input.view.phase === 'ACT') return resolveAct(input, card);
   // DRAW with a hand card has no meaning; the phase decides.

@@ -136,6 +136,10 @@ jobs:
           - { suite: sphere-test, artifact: futa05-sphere }
           - { suite: sphere-test-ios, artifact: futa05-sphere }
           - { suite: planet-matte, artifact: futa05-sphere }
+          - { suite: blast-input, artifact: futa05-sphere }
+          - { suite: blast-input-ios, artifact: futa05-sphere }
+          - { suite: planet-login, artifact: futa05-sphere }
+          - { suite: planet-login-ios, artifact: futa05-sphere }
           - { suite: art-lab, artifact: futa05-sphere }
           - { suite: art-lab-ios, artifact: futa05-sphere }
     # PINNED, not `ubuntu-latest`: GitHub moved `ubuntu-latest` to 26.04 during 2026-10-28, and
@@ -162,7 +166,25 @@ jobs:
         with:
           name: dist-${{ matrix.artifact }}
           path: web/dist
+      - name: Build the isolated login-enabled fixture
+        if: startsWith(matrix.suite, 'planet-login')
+        run: >
+          CHANNEL=futa05
+          VITE_DUEL_API_URL=http://127.0.0.1:65530/functions/v1/duel
+          VITE_SUPABASE_URL=https://stub.invalid
+          VITE_SUPABASE_ANON_KEY=local
+          npm run web:build
       - run: node --import tsx --import ./scripts/browser-ci-errors.mjs web/e2e/${{ matrix.suite }}.ts
+
+      - name: Keep Blast and Planet login screenshots
+        if: always() && (startsWith(matrix.suite, 'blast-input') || startsWith(matrix.suite, 'planet-login'))
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.suite }}-screens
+          path: |
+            /tmp/blast-input/
+            /tmp/planet-login/
+          retention-days: 7
 
       - name: Keep 0.81 board and Match Intel visual evidence
         if: always() && matrix.suite == 'futa04-information'

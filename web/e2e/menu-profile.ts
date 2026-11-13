@@ -476,7 +476,7 @@ try {
         nameStress: (() => {
           const n = document.getElementById('profile-name');
           const before = n.textContent;
-          n.textContent = 'ABCDEFGH #7QK2';
+          n.textContent = 'ABCDEFGH';
           void n.offsetWidth;
           const out = {
             clientW: n.clientWidth, scrollW: n.scrollWidth, clipped: n.scrollWidth > n.clientWidth,
@@ -568,9 +568,9 @@ try {
       tileOverflow: number; rowRightSpread: number;
     };
     check(`${label}: the identity block includes only the five requested rows`, rows.n === 5, String(rows.n));
-    check(`${label}: the rows are name & tag, Seeds, tiles, matches won`,
+    check(`${label}: the rows are name, Seeds, tiles, matches won`,
       JSON.stringify(rows.labels) === JSON.stringify([PROFILE.nameTag, SEEDS_WORD, PROFILE.connectedTiles, PROFILE.tiles, PROFILE.matchesWon]), rows.labels.join(' | '));
-    check(`${label}: the first row is the player's name`, rows.values[0] === name, rows.values[0] ?? '');
+    check(`${label}: the first row is the player's name`, rows.values[0] === 'Ann', rows.values[0] ?? '');
     // No API in this build: all three numbers are unknown, so all three are em dashes — never 0.
     check(`${label}: unknown Seeds are an em dash`, rows.values[1] === PROFILE.unknown, rows.values[1] ?? '');
     check(`${label}: unknown connected tiles are an em dash`, rows.values[4] === PROFILE.unknown, rows.values[4] ?? '');
@@ -685,13 +685,9 @@ try {
     // It closes the name line on the same right edge as every other row's value.
     check(`${label}: the tile closes the name row on the values' right edge`,
       Math.abs(rows.hex.right - rows.hex.rowRight) <= 0.5, `${rows.hex.right}/${rows.hex.rowRight}`);
-    // THE WIDEST LEGAL IDENTITY. DISPLAY_NAME_MAX is 8, so "ABCDEFGH #7QK2" is the longest name a
-    // real account can wear. It fits exactly at 360, 390 and 844 in BOTH type scales. At 320 it does
-    // not: the row is 272px, the label takes 79.2 (93.6 with Large text), and the flag + the 20.5px
-    // hex + two 8px gaps take 55.8 — the name is ellipsized by 15px at standard text and 55px at
-    // Large text. Closing that budget is a task in the report; pinned here so it cannot get worse.
-    const nameBudget = size.w <= 320 ? (size.large ? 56 : 16) : 0;
-    check(`${label}: the widest legal name fits (320 allows a measured ellipsis)`,
+    // Profiles no longer print the account tag. The full eight-character name must fit at every size.
+    const nameBudget = 0;
+    check(`${label}: the widest legal name fits without clipping`,
       rows.nameStress.scrollW - rows.nameStress.clientW <= nameBudget,
       `${rows.nameStress.scrollW}/${rows.nameStress.clientW} in dd ${rows.nameStress.ddW} of row ${rows.nameStress.rowW}`);
     // The pass really is what its label says: Large text is html.large-text (118% root).

@@ -966,6 +966,9 @@ html.kbd .board:focus-visible {
   stroke: var(--c-line);
   stroke-width: 1;
 }
+/* Empty ground keeps its material, without an individual contour. Legal targets and gold remain. */
+html.futa04-information #board .hex.normal,
+html.futa04-information #board .hex.rich { stroke:none; }
 .hex.rock {
   fill: var(--c-hexFill);
   stroke: var(--c-line);

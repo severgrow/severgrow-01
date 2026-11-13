@@ -755,7 +755,7 @@ export const mountAccounts = async (): Promise<void> => {
     const pair = cachedTerritory(identity.playerId);
     const offline = localRecord();
     return {
-      name: shownName(identity),
+      name: identity.displayName?.trim() || null,
       country: browserCountry(),
       // NOT null: a player who never chose a colour still has the one the game derived for them,
       // which is what their tiles wear on the map. The read below only replaces it with a stored

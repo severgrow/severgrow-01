@@ -30,7 +30,7 @@ import { enterSurface, exitSurface } from '../ui/interface-motion.js';
 export type ProfileColour = Readonly<{ css: string; name: string }>;
 
 export type ProfileFacts = {
-  /** The player's display name with its #TAG, or null when the device has none. */
+  /** The player's display name, without the account tag, or null when absent. */
   name: string | null;
   /** ISO 3166-1 alpha-2 of the country the device places itself in, or null when unknown. */
   country: string | null;

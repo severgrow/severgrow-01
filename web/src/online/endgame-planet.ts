@@ -245,7 +245,8 @@ const CSS = `
   color: var(--fu-cream); font-family: var(--font-ui); font-size: .6rem;
   letter-spacing: .1em; text-transform: uppercase; cursor: pointer;
 }
-.go-world-grow[hidden] { display: none; }
+.go-world-grow[hidden], .go-world-line[hidden] { display: none; }
+.go-world-grow.go-world-signin { flex:1; text-align:center; }
 .go-world-grow[data-armed='1'] { background: var(--fu-cream); color: var(--fu-ink); }
 .go-world-grow:active { background: color-mix(in srgb, var(--fu-cream) 24%, transparent); }
 .go-world-grow[data-armed='1']:active { background: color-mix(in srgb, var(--fu-cream) 86%, transparent); }
@@ -465,11 +466,13 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
     else if (bar.hidden) { showFoot(bar); }
     teach.hidden = !explaining;
     line.textContent = state.line;
+    line.hidden = state.key === 'signin';
+    key.classList.toggle('go-world-signin', state.key === 'signin');
     line.title = state.spoken;
     key.hidden = state.key === null || busy;
     key.dataset.armed = state.key === 'confirm' ? '1' : '0';
-    if (state.key) key.textContent = busy ? ONLINE.worldGrowing : label;
-    key.setAttribute('aria-label', label);
+    if (state.key) key.textContent = busy ? ONLINE.worldGrowing : state.key === 'signin' ? state.line : label;
+    key.setAttribute('aria-label', state.key === 'signin' ? state.spoken : label);
     key.setAttribute('aria-busy', busy ? 'true' : 'false');
   };
 

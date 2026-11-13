@@ -422,11 +422,13 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
     }
     g.restore();
 
-    // The board's quiet rim, drawn over the art (never a bright seam).
-    hexAt(g, cell.x, cell.y, Math.max(1, r - 1.1 * k));
-    g.strokeStyle = o.line;
-    g.lineWidth = Math.max(1, 0.75 * k);
-    g.stroke();
+    // Only rocks retain their edge. Empty ground matches the live board without a contour.
+    if (cell.terrain === 'rock') {
+      hexAt(g, cell.x, cell.y, Math.max(1, r - 1.1 * k));
+      g.strokeStyle = o.line;
+      g.lineWidth = Math.max(1, 0.75 * k);
+      g.stroke();
+    }
 
     const stoneMotion = cell.owner !== null ? o.motion?.[cell.key] : undefined;
     if (stoneMotion) {

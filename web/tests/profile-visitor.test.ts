@@ -123,7 +123,7 @@ const fakeDocument = () => {
 };
 
 const visitor = (over: Partial<VisitorFacts> = {}): VisitorFacts => ({
-  name: 'BloomHeron #ABCD',
+  name: 'BloomHeron',
   level: 7,
   tiles: 2,
   colour: { css: 'hsl(341 42% 53%)', name: 'Rose', hex: '#b95575' },
@@ -133,7 +133,7 @@ const visitor = (over: Partial<VisitorFacts> = {}): VisitorFacts => ({
 });
 
 const own = (over: Partial<ProfileFacts> = {}): ProfileFacts => ({
-  name: 'RYK #7QK2',
+  name: 'RYK',
   country: 'PL',
   colour: { css: 'hsl(150 20% 40%)', name: 'Fern' },
   seeds: 128,
@@ -172,7 +172,7 @@ describe('one sheet, two modes: the mode is a single attribute', () => {
     const env = fakeDocument();
     const ui = installProfileUI(env.doc);
     ui.openVisitor(visitor());
-    expect(env.byId['profile-name']!.textContent).toBe('BloomHeron #ABCD');
+    expect(env.byId['profile-name']!.textContent).toBe('BloomHeron');
     // The visible form is short (owner: "level can be lvl to safe space"); the spoken label spells it.
     expect(env.byId['profile-level']!.textContent).toBe('Lvl 7');
     expect(env.byId['profile-level']!.getAttribute?.('aria-label')).toBe('Level 7');
@@ -228,7 +228,7 @@ describe('an unknown or failed read is the em dash, never an invented number', (
     expect(env.byId['profile-play-online']!.children.map((tile) => tile.children.at(-1)?.textContent))
       .toEqual([PROFILE.unknown, PROFILE.unknown, PROFILE.unknown]);
     ui.showVisitor(visitor());
-    expect(env.byId['profile-name']!.textContent).toBe('BloomHeron #ABCD');
+    expect(env.byId['profile-name']!.textContent).toBe('BloomHeron');
   });
 
   it('a failed read simply leaves the empty state (showVisitor(null) is not a zero)', () => {
@@ -246,21 +246,21 @@ describe('an unknown or failed read is the em dash, never an invented number', (
     const ui = installProfileUI(env.doc);
     ui.openVisitor(visitor());
     ui.show(own());
-    expect(env.byId['profile-name']!.textContent).toBe('BloomHeron #ABCD');
+    expect(env.byId['profile-name']!.textContent).toBe('BloomHeron');
     expect(env.sheet.dataset.mode).toBe('visitor');
     ui.openVisitor(visitor());
-    ui.showVisitor(visitor({ name: 'RYK #7QK2' }));
-    expect(env.byId['profile-name']!.textContent).toBe('RYK #7QK2');
+    ui.showVisitor(visitor({ name: 'RYK' }));
+    expect(env.byId['profile-name']!.textContent).toBe('RYK');
   });
 });
 
 describe('the wire becomes panel facts in one pure place', () => {
-  it('maps a closed server payload, tag included', () => {
+  it('maps a closed server payload without printing its account tag', () => {
     expect(visitorFacts({
       displayName: 'BloomHeron', tag: 'ABCD', level: 7, tiles: 2, connectedTiles: 1, colourId: 0,
       online: { games: 5, wins: 3, longestStreak: 2 },
     })).toEqual({
-      name: 'BloomHeron #ABCD',
+      name: 'BloomHeron',
       level: 7,
       tiles: 2,
       connectedTiles: 1,

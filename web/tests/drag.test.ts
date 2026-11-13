@@ -290,12 +290,13 @@ describe('bloom and Mega Bomb', () => {
     const mega = legalOf(st, 'MegaBomb')[0]!;
     if (mega.t !== 'MegaBomb') throw new Error('no legal MegaBomb');
     const bomb = st.hands[0].find((c) => c.id === mega.cards[0])!;
-    const onTarget = run(st, { kind: 'hand', cardId: bomb.id }, { boardKey: coordKey(mega.target) });
+    const sel = { ...EMPTY_SEL, kind:kindOf(mega) };
+    const onTarget = run(st, { kind: 'hand', cardId: bomb.id }, { boardKey: coordKey(mega.target), sel });
     expect(onTarget.mode).toBe('mega');
     expect(sameAction(onTarget.commit, mega)).toBe(true);
     expect(onTarget.led).toBe('MEGA');
 
-    const elsewhere = run(st, { kind: 'hand', cardId: bomb.id }, { boardKey: null });
+    const elsewhere = run(st, { kind: 'hand', cardId: bomb.id }, { boardKey: null, sel });
     expect(elsewhere.mode).toBe('mega');
     expect(elsewhere.commit).toBeNull();
   });
