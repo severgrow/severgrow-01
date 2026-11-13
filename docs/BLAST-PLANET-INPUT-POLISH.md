@@ -75,3 +75,8 @@ an already-seen install invitation so that unrelated overlay cannot steal the te
 No outcome is mocked and no application rule or finish-window policy is changed.
 
 Future card-skin ownership decisions are recorded separately in `CARD-SKIN-PERSPECTIVE.md`.
+
+The first WebKit run caught the test adapter using Chromium's empty touch-end list. WebKit's
+trusted input protocol requires the released point, as in the existing Territory iOS suite.
+The adapter now follows that protocol and waits for the actual two-card spend before checking
+the exact resulting board. No application behaviour or assertion is bypassed.

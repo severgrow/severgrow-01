@@ -41,7 +41,7 @@ const startDrag=async(p:Page,sel:string,to:{x:number;y:number},touch:boolean)=>{
   if(touch)await send('touchMove',[{...q,id:1}]);else await p.mouse.move(q.x,q.y);
   await p.waitForTimeout(18);
  }
- return async()=>{if(touch)await send('touchEnd',[]);else await p.mouse.up();if(session&&!ios)await session.detach();};
+ return async()=>{if(touch)await send('touchEnd',ios?[{...to,id:1}]:[]);else await p.mouse.up();if(session&&!ios)await session.detach();};
 };
 try{
  for(const width of [390,1440]){
@@ -65,7 +65,7 @@ try{
    const picked=await p.locator(`#hand [data-card="${first}"],#hand [data-card="${second}"]`).evaluateAll(es=>es.map(e=>getComputedStyle(e).getPropertyValue('--lift')));
    assert.equal(picked[0],picked[1],'both Bombs lift together');
    await tap(p,`#board .hex-cell[data-key="${boardKey}"]`,touch);
-   await p.waitForFunction(()=>!(window as any).__severgrow.busy());
+   await p.waitForFunction(ids=>{const h=(window as any).__severgrow;return !h.busy()&&ids.every(id=>!h.state().hands[0].some((c:any)=>c.id===id));},blast.cards);
    assert.deepEqual(await p.evaluate(()=>(window as any).__severgrow.state().board),apply(state,blast).board);
    console.log('PASS',width,'Bomb + Bomb selects Blast; one target tap plays it');await p.close();
   }
@@ -73,7 +73,7 @@ try{
    const p=await open();await pair(p);const to=await point(p,`#board .hex-cell[data-key="${boardKey}"]`);
    const release=await startDrag(p,'#smart-bloom-button',to,touch);
    await p.screenshot({path:`${shots}/aiming-${width}.png`});await release();
-   await p.waitForFunction(()=>!(window as any).__severgrow.busy());
+   await p.waitForFunction(ids=>{const h=(window as any).__severgrow;return !h.busy()&&ids.every(id=>!h.state().hands[0].some((c:any)=>c.id===id));},blast.cards);
    assert.deepEqual(await p.evaluate(()=>(window as any).__severgrow.state().board),apply(state,blast).board);
    await p.screenshot({path:`${shots}/played-${width}.png`});
    console.log('PASS',width,'cockpit drag lands on the exact pointer tile and spends two Bombs');await p.close();
