@@ -150,7 +150,7 @@ describe('parked-search copy (punchy standard)', () => {
     expect(ONLINE.storageNote.toLowerCase()).not.toContain('until accounts exist');
     expect(ONLINE.storageNote.toLowerCase()).toMatch(/guest/);
     expect(ONLINE.storageNote.toLowerCase()).toMatch(/sign in/);
-    expect(ONLINE.worldInviteOpen).toBe('OPEN TERRITORY');
+    expect(ONLINE.worldInviteOpen).toBe('OPEN THE PLANET'); // owner, 2026-11-13: territory -> planet
     expect(ONLINE.worldInviteLater).toBe('LATER');
     expect(ONLINE.worldInviteBody.length).toBeGreaterThan(8);
   });

@@ -208,6 +208,15 @@ export const TRAINING_TICKET_WARM_WAIT_MS = 3_000;
 export const trainingTicketWaitMs = (identityWarm: boolean): number =>
   identityWarm ? TRAINING_TICKET_WARM_WAIT_MS : TRAINING_TICKET_WAIT_MS;
 
+/** The player id of the Seeds identity stored here, or null (no network read). */
+export const seedPlayerId = (connect: SeedConnector = seedConnection): string | null => {
+  try {
+    return connect()?.identity.peek()?.playerId ?? null;
+  } catch {
+    return null;
+  }
+};
+
 /** True when a Seeds identity is already stored here (no guest mint is needed before a ticket). */
 export const seedIdentityWarm = (connect: SeedConnector = seedConnection): boolean => {
   try {
@@ -241,14 +250,14 @@ export const warmSeedIdentity = async (
  * before the hub finished mounting used to begin with no ticket at all, which meant no proof and no
  * payment for a game the player had already won.
  */
-export const requestTrainingTicket = async (botLevel: number): Promise<{ id: string; seed: number } | null> => {
+export const requestTrainingTicket = async (botLevel: number): Promise<{ id: string; seed: number; playerId: string; expiresAt: number } | null> => {
   const seeds = seedConnection();
   if (!seeds) return null;
   const status = await seeds.identity.ensure();
   if (!status.ok) return null;
   try {
     const ticket = await seeds.client.issueTrainingTicket(status.identity.token, botLevel);
-    return { id: ticket.id, seed: ticket.seed };
+    return { id: ticket.id, seed: ticket.seed, playerId: status.identity.playerId, expiresAt: ticket.expiresAt };
   } catch {
     return null;
   }

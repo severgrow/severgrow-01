@@ -80,8 +80,8 @@ export const ONLINE = Object.freeze({
   // The shared Territory: one tile per won duel, the same map for everyone. Read as "Territory"
   // everywhere (owner, 2026-10-16); the field names stay `world*` for compatibility. The screen
   // title is uppercased by CSS, so these store the mixed-case form, never TERRITORY.
-  worldMap: 'Territory',
-  worldTitle: 'Territory',
+  worldMap: 'Planet',
+  worldTitle: 'Planet',
   worldLoading: 'Reading the map',
   worldEmpty: 'No tiles yet. Win a duel to place the first one.',
   worldTaken: 'taken',
@@ -94,7 +94,7 @@ export const ONLINE = Object.freeze({
   worldHistory: 'History',
   worldNoChallenges: 'No open challenges.',
   worldNoHistory: 'No past challenges yet.',
-  worldMenu: 'Territory menu',
+  worldMenu: 'Planet menu',
   /**
    * YOUR COLOUR (owner, 2026-10-30). The swatches' names live in `src/tile-colours.ts` with the
    * colours themselves, so the picker, the map and the server can never name a colour differently.
@@ -151,13 +151,13 @@ export const ONLINE = Object.freeze({
   worldSelling: 'Selling…',
   worldSellBusy: 'This tile is being challenged. It can be sold once the challenge is over.',
   worldSellFailed: 'That tile could not be sold. The map has refreshed; nothing was taken.',
-  worldRankingTitle: 'Territory ranking',
+  worldRankingTitle: 'Planet ranking',
   worldTiles: (n: number) => `${n} ${n === 1 ? 'TILE' : 'TILES'}`,
   worldConnectedTiles: (n: number) => `${n} CONNECTED TILES`,
   worldMe: 'YOU',
   worldActivity: 'Recent tiles',
   /** the Seeds invitation card's button that opens the Territory (uppercase, like its LATER sibling) */
-  worldInviteOpen: 'OPEN TERRITORY',
+  worldInviteOpen: 'OPEN THE PLANET',
   /** the invitation card's quiet dismiss key (uppercase sibling of worldInviteOpen) */
   worldInviteLater: 'LATER',
   /** one line under the balance on the Seeds invitation card */
@@ -1048,7 +1048,7 @@ export const MENU = Object.freeze({
   /** the PLAY screen's heading */
   playTitle: 'Play',
   /** the main menu entry that opens the shared Territory */
-  world: 'Territory',
+  world: 'Planet',
   /** the quiet PLAY entry that browses the level list (LEVEL <n> starts a level outright) */
   // Removed (owner, 2026-10-16): the "Levels" entry that opened the whole chapter/level list. The
   // player is not given access to every level - MENU.level(n) starts the next one they have not
@@ -1516,7 +1516,7 @@ export const PROFILE = Object.freeze({
  */
 export const PRIVACY = Object.freeze({
   title: 'Privacy',
-  updated: 'Last updated 12 November 2026',
+  updated: 'Last updated 13 November 2026',
   intro:
     'FUTASAKU is a small independent game. We collect as little as we can, we never sell data, and there are no ads or tracking.',
   sections: Object.freeze([
@@ -1546,7 +1546,7 @@ export const PRIVACY = Object.freeze({
     Object.freeze({
       heading: 'Chat',
       lines: Object.freeze([
-        'Duel chat messages are kept with the match and deleted after 90 days. The Territory chat keeps only its newest 30 messages; older ones are deleted.',
+        'Duel chat messages are kept with the match and deleted after 90 days. The Planet chat keeps only its newest 30 messages; older ones are deleted.',
         'When you report a message, we keep a copy of it with your report so it can be reviewed. If a player is reported, we may read the messages involved.',
         'Rude words are hidden automatically before a message is stored.',
       ]),

@@ -16,6 +16,8 @@ export const ACCOUNT_BOUND_KEYS: readonly string[] = Object.freeze([
   'severgrow.campaign.save.v3',
   'severgrow.campaign.account-clears.v1',
   'severgrow.seeds.balance.v1',
+  // Ready Practice tickets (online/ticket-shelf.ts TICKET_SHELF_KEY): issued to this account.
+  'severgrow.seeds.ticket-shelf.v1',
 ]);
 
 export const clearAccountBoundProgress = (kv: KeyValue | null): void => {

@@ -9,10 +9,11 @@ import { ACCOUNT_BOUND_KEYS, clearAccountBoundProgress } from '../src/accounts/s
 import { CAMPAIGN_PROGRESS_KEY, CAMPAIGN_SAVE_KEY } from '../../src/campaign/index.js';
 import { ACCOUNT_CLEARS_KEY } from '../src/menu/account-clears.js';
 import { SEED_BALANCE_KEY } from '../src/logic/finish-window.js';
+import { TICKET_SHELF_KEY } from '../src/online/ticket-shelf.js';
 
 describe('sign-out resets the account-bound campaign place', () => {
   it('names every key that carries the account\'s place', () => {
-    expect([...ACCOUNT_BOUND_KEYS].sort()).toEqual([ACCOUNT_CLEARS_KEY, CAMPAIGN_PROGRESS_KEY, CAMPAIGN_SAVE_KEY, SEED_BALANCE_KEY].sort());
+    expect([...ACCOUNT_BOUND_KEYS].sort()).toEqual([ACCOUNT_CLEARS_KEY, CAMPAIGN_PROGRESS_KEY, CAMPAIGN_SAVE_KEY, SEED_BALANCE_KEY, TICKET_SHELF_KEY].sort());
   });
 
   it('removes them and nothing else', () => {

@@ -182,6 +182,12 @@ describe('Blitz clock', () => {
     expect(blitzTempoLine(t)).toBe('TEMPO 11.1 s left a turn · fastest 11.5 s');
   });
 
+  it('the TEMPO line is never shown on the finish card (owner, 2026-11-13)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    expect(main).not.toMatch(/blitzTempoLine\(|go-tempo/);
+  });
+
   it('the old loss-on-timeout state still exists for the online live duel (reason timeout)', () => {
     const state = newMatch(4242);
     const after = blitzTimeoutState(state);

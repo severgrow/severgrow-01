@@ -63,6 +63,25 @@ For UI changes also run the relevant browser suite (`node --import tsx web/e2e/<
 Never commit screenshots or build output. Suites write pictures to `docs/screens/` (ignored by git);
 share pictures with the owner outside the repo. Old pictures: branch `archive/docs-screens-0.84`.
 
+## Performance and reliability: protected (owner, 2026-11-13)
+
+[`docs/PERFORMANCE-RELIABILITY-2026-11.md`](docs/PERFORMANCE-RELIABILITY-2026-11.md) is binding. Read it
+before touching rendering, the planet/globe, the LED display, timers, sockets, matchmaking or Blitz
+invitations. Do not undo what it established, among them:
+
+- The globe builds no hidden legacy SVG map (0 old SVG allocations); free-tile actions read world data.
+- The settled Planet requests zero frames and uploads zero textures; it rests after 45 s without input.
+- The LED reuses its exact-pixel sprite cache: no same-size canvas resets.
+- The globe draws through the scissored visible crop; shader attribute locations are looked up once.
+- Nothing ticks while hidden or inactive: no 250 ms Blitz interval without a live clock, no socket
+  heartbeat while hidden; pagehide/pageshow pause ownership stays idempotent.
+- Sockets rejoin failed transports and ignore stale attempts; the gesture gate tracks held pointers.
+
+Any change in those areas re-runs the relevant measurement (`web/e2e/performance-lifecycle.ts`,
+`web/e2e/performance-offline-soak.ts`, `web/e2e/motion-cost.ts`, the online soak) and compares it with
+the doc's recorded numbers. A regression is fixed, never accepted silently, and never "fixed" by
+loosening the measurement. Record new measurements in that doc, not in a new one.
+
 ## Code layout (read before adding a feature)
 
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) maps the folders and the patterns to copy. In short:

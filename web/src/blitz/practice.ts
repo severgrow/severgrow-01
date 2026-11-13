@@ -220,7 +220,7 @@ export const mountBlitzPractice = (hooks: BlitzHooks): BlitzPractice | null => {
   };
 
   return {
-    label: 'Pro',
+    label: 'Blitz',
     appendTile(grid) {
       grid.append(tile());
     },

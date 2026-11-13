@@ -33,7 +33,7 @@ describe('the product menu is PLAY, TERRITORY, LOG IN, Settings', () => {
 
   it('orders the entries PLAY, TERRITORY, then the footer row: LOG IN, Settings', () => {
     expect(MENU.login).toBe('LOG IN');
-    expect(MENU.world).toBe('Territory');
+    expect(MENU.world).toBe('Planet'); // owner, 2026-11-13: "the territory" is "the planet" everywhere
     // Owner brief (2026-10-21): LOG IN and Settings left the column and became ONE footer row at
     // the bottom of the menu — LOG IN (the player's name once signed in) on the left, Settings on
     // the right. The seen/tab order is still PLAY → TERRITORY → LOG IN → Settings.
@@ -70,7 +70,7 @@ describe('the product menu is PLAY, TERRITORY, LOG IN, Settings', () => {
   });
 
   it('keeps the Territory entry, revealed only by the online build', () => {
-    expect(MENU.world).toBe('Territory');
+    expect(MENU.world).toBe('Planet'); // owner, 2026-11-13: "the territory" is "the planet" everywhere
     expect(menuSection).toMatch(/id="menu-world"[^>]*hidden/);
   });
 });
@@ -282,7 +282,7 @@ describe('the product main menu is PLAY, TERRITORY, LOG IN, Settings', () => {
     expect(menuSection).toMatch(/id="menu-settings"/);
     expect(menuSection.indexOf('id="menu-login"')).toBeGreaterThan(menuSection.indexOf('id="menu-world"'));
     expect(menuSection.indexOf('id="menu-login"')).toBeLessThan(menuSection.indexOf('id="menu-settings"'));
-    expect(MENU.world).toBe('Territory');
+    expect(MENU.world).toBe('Planet'); // owner, 2026-11-13: "the territory" is "the planet" everywhere
   });
 
   it('leaves no Continue behaviour reachable from the menu', () => {

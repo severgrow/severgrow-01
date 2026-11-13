@@ -31,3 +31,34 @@ export const parseBalance = (raw: string | null): number | null => {
   const n = Number(raw);
   return Number.isSafeInteger(n) && n >= 0 ? n : null;
 };
+
+/**
+ * ONE WINDOW, CHOSEN ONCE (owner, 2026-11-13: "make sure it's not like both the planet view and board
+ * view load up - only the correct one should show up ... if needs loading, do 1s fade in"). A loss or
+ * a draw (and level 10's teaching win) knows its window at once. Any other win waits for the balance
+ * AFTER this game's payout, then shows the one right window with a FINISH_FADE_MS fade, and never
+ * switches afterwards.
+ */
+export type FinishPlan = { kind: 'now'; view: FinishWindow } | { kind: 'wait' };
+
+export const finishWindowPlan = (m: { won: boolean; hasBoard: boolean; teach?: boolean }): FinishPlan => {
+  if (!m.won) return { kind: 'now', view: 'board' };
+  if (m.teach) return { kind: 'now', view: 'planet' };
+  return { kind: 'wait' };
+};
+
+/**
+ * The one decision once a win's balance is in: the balance AFTER this game's payout when the server
+ * answered (`payout`), else the last one this device saw (`remembered`: offline, a failed or slow
+ * settle, a game with no proof). A fresh guest with neither shows the board.
+ */
+export const decideFinishWindow = (m: { won: boolean; teach?: boolean; hasBoard: boolean; payout: number | null; remembered: number | null }): FinishWindow =>
+  finishWindowFor({ won: m.won, ...(m.teach ? { teach: true } : {}), hasBoard: m.hasBoard, balance: m.payout ?? m.remembered });
+
+/** A window that was ready within this long appears at once, with no fade (nothing had to load). */
+export const FINISH_INSTANT_MS = 150;
+
+/** The longest a win's window waits for the payout's balance before deciding from the last one known. */
+export const FINISH_DECIDE_MS = 3_500;
+/** The chosen window's arrival when it had to wait (the planet is drawn underneath the fade). */
+export const FINISH_FADE_MS = 1_000;

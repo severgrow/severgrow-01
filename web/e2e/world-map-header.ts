@@ -365,7 +365,7 @@ try {
       `ink=${m.titleInkWidth.toFixed(1)} client=${m.titleClient} slack=${(m.titleClient - m.titleInkWidth).toFixed(1)}`);
     check(`[${tag}] the title box is one line-height tall`, Math.abs((m.title?.height ?? 0) - m.titleLineHeight) <= 2,
       `h=${m.title?.height?.toFixed(1)} line=${m.titleLineHeight.toFixed(1)}`);
-    check(`[${tag}] the title reads "TERRITORY" in full`, (m.titleText ?? '').trim().toUpperCase() === 'TERRITORY', m.titleText ?? '');
+    check(`[${tag}] the title reads "PLANET" in full`, (m.titleText ?? '').trim().toUpperCase() === 'PLANET', m.titleText ?? '');
 
     // 2. The title and the wordmark share the SAME top edge (owner, 2026-10-16: "the world map top
     //    border is aligned with right top logo's top border"). The chevron is deliberately NOT in

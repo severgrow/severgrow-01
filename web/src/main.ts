@@ -50,7 +50,7 @@ import type { OutcomeLight } from './player/atmosphere.js';
 import { planetSnapshot } from './online/world-planet.js';
 import { gameHighlights } from './logic/highlights.js';
 import { harvestFigure, harvestSvg } from './logic/harvest.js';
-import { SEED_BALANCE_KEY, finishWindowFor, parseBalance } from './logic/finish-window.js';
+import { FINISH_DECIDE_MS, FINISH_FADE_MS, FINISH_INSTANT_MS, SEED_BALANCE_KEY, decideFinishWindow, finishWindowPlan, parseBalance } from './logic/finish-window.js';
 import type { FinishWindow } from './logic/finish-window.js';
 import type { HarvestFigure } from './logic/harvest.js';
 import { EMPTY_SEL, futa04OneTap, growControls, heldMoveWord, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, playNowBlast, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
@@ -95,7 +95,7 @@ import { breakdownOf, raceShare, raceWords } from './logic/race.js';
 import { ambientPlan } from './logic/ambient.js';
 import { REPLAY_BEAT_MS, REPLAY_SPEED, actorOf, involvedKeys, nudgeToward, replayDurationScale } from './logic/opponent.js';
 import { playsThrough } from './logic/play-through.js';
-import { blitzTempoLine, blitzTimeoutAction } from './logic/blitz.js';
+import { blitzTimeoutAction } from './logic/blitz.js';
 import { impactPlan } from './logic/impact.js';
 import type { ImpactKind } from './logic/impact.js';
 import { extrasOn, guardFrame } from './player/frame-guard.js';
@@ -298,7 +298,8 @@ import { accountsConfiguredInThisBuild, paintEarlyAccountKey, signedInNickname }
 import { paintBetaLine } from './feedback/beta-line.js';
 import { paintBuildTag } from './feedback/build-tag.js';
 import { queueSeedProof } from './online/seed-rewards.js';
-import { requestTrainingTicket, seedIdentityWarm, settleQueuedSeedsOnBoot, trainingTicketWaitMs, warmSeedIdentity, settleSeedProof, warmSeedServer, WARM_SEED_SERVER_AT_DECK } from './online/seed-settle.js';
+import { fillTicketShelf, takeShelfTicket } from './online/ticket-shelf.js';
+import { requestTrainingTicket, seedIdentityWarm, seedPlayerId, settleQueuedSeedsOnBoot, trainingTicketWaitMs, warmSeedIdentity, settleSeedProof, warmSeedServer, WARM_SEED_SERVER_AT_DECK } from './online/seed-settle.js';
 import { SEEDS_IDENTITY_UNVERIFIED, SEEDS_NOT_VERIFIED } from './online/seed-icon.js';
 // THE PLANET ON THE FINISH CARD (owner brief, 2026-11-11): the pane itself is built by the lobby
 // (it owns the client and the identity), and this module only paints its one-off teaching band.
@@ -1392,7 +1393,25 @@ const writeDifficultyStep = (id: DifficultyId, level: Level | null) => {
   else if (readDifficultyStep()?.id === id) store.remove(DIFFICULTY_STEP_KEY);
 };
 
+/** The level a tier's next game plays (its carry-over step, else the tier's own level). */
+const tierLevelOf = (tier: (typeof DIFFICULTIES)[number]): number =>
+  stepLevelFor(readDifficultyStep(), tier.id as DifficultyId) ?? tier.level;
+
+/** Keep one ready Training ticket per Practice tier (online/ticket-shelf.ts). Silent, never blocks. */
+function refillTicketShelf(): void {
+  if (!onlineBuildEnabled() || IS_TEST) return;
+  void fillTicketShelf(
+    store,
+    seedPlayerId(),
+    DIFFICULTIES.map((tier) => ({ tier: tier.id, tierLevel: tierLevelOf(tier) })),
+    (tierLevel) => opponentFor(tierLevel as Level, randomSeed()),
+    (botLevel) => requestTrainingTicket(botLevel),
+  ).catch(() => undefined);
+}
+
 function renderLevelGrid() {
+  // The Practice menu is open: get each tier's ticket ready before the tap.
+  refillTicketShelf();
   const grid = $('level-grid');
   grid.replaceChildren(
     ...DIFFICULTIES.map((tier) => {
@@ -2372,6 +2391,7 @@ async function startGame(
 ) {
   let generation = ++startGameGeneration;
   seedServerWarmed = false;
+  finishPayout = null;
   // One of the player's games (the guide's HOW TO PLAY label shows in the first few). A watched game,
   // a tutorial replay and a Blitz game are not the player's own learning games.
   turnGuide?.reset();
@@ -2396,9 +2416,17 @@ async function startGame(
   // identity's round trip (see TRAINING_TICKET_WAIT_MS).
   // The top of Hard (and of Blitz's ladder) rotates the rivals in, chosen by this game's seed. Decided
   // BEFORE the Seeds ticket, so the ticket names the bot this game is really played against.
-  if (!campaign && (difficulty !== null || blitzStart !== null)) level = opponentFor(level, seed);
   let ticketId: string | null = null;
-  if (difficulty && onlineBuildEnabled() && !IS_TEST) {
+  // A READY TICKET (online/ticket-shelf.ts, owner 2026-11-13: "should be way quicker and snappy"): one
+  // fetched ahead for this tier at this level starts the deal at once. It already names its bot (the
+  // Hard rotation was chosen when it was fetched).
+  const ready = difficulty && onlineBuildEnabled() && !IS_TEST ? takeShelfTicket(store, seedPlayerId(), difficulty, level) : null;
+  if (ready) {
+    level = ready.botLevel as BotLevel;
+    seed = ready.seed;
+    ticketId = ready.id;
+  } else if (!campaign && (difficulty !== null || blitzStart !== null)) level = opponentFor(level, seed);
+  if (!ready && difficulty && onlineBuildEnabled() && !IS_TEST) {
     // Read before the request starts: 8 s only for a cold guest mint, 3 s once an identity is here.
     const ticketWaitMs = trainingTicketWaitMs(seedIdentityWarm());
     const ticket = await Promise.race([
@@ -3237,6 +3265,8 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
     && ((campaignLevel && campaignLevel.number >= 11 && !tutorialReplay) || (gameDifficulty && trainingRewardTicketId) || lessonActive()?.level === FINAL_LESSON.level)) {
     seedServerWarmed = true;
     void warmSeedServer();
+    // ...and read the wallet now, so the finish window's balance is fresh before the payout lands.
+    prefetchFinishBalance();
   }
   if (p.after.phase === 'GAME_OVER' && p.after.result) {
     log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
@@ -3265,6 +3295,8 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
         const winner = p.after.result.winner;
         const outcome = winner === HUMAN ? 'win' : winner === null ? 'draw' : 'loss';
         writeDifficultyStep(gameDifficulty, stepAfterGame(gameDifficulty, ladderLevel(gameLevel), outcome));
+        // The next Practice game's ticket, ready before "Play again" or the menu.
+        refillTicketShelf();
       }
       // EXPERIMENTAL Blitz has its OWN ladder (two losses in a row -> bot 8 until a win), so it is
       // recorded separately and never through the tier carry-over above (`gameDifficulty` is null).
@@ -3700,7 +3732,7 @@ let gameDifficulty: DifficultyId | null = null;
 /** The match as the player knows it: its campaign level, or its difficulty (never the bot level). */
 function currentMatchLabel(): string {
   // EXPERIMENTAL Blitz is its own tier, outside DIFFICULTIES: it is named by the mounted feature.
-  if (blitzMatch) return blitz?.label ?? 'Pro';
+  if (blitzMatch) return blitz?.label ?? 'Blitz';
   return matchLabel({ campaign: campaignLevel?.number ?? null, difficulty: gameDifficulty, botLevel: ladderLevel(gameLevel) });
 }
 /**
@@ -8412,8 +8444,7 @@ function setGoExtrasOpen(open: boolean) {
  */
 function syncEndgameWallet(): void {
   if (endgamePlanet) endgamePlanet.refresh();
-  // A payout that lands after a WON card is up may cross a tile's price: the board becomes the planet.
-  if (finishWindow?.won && finishWindow.view === 'board') void refreshFinishWindow();
+  // The window itself is chosen once, from the payout's balance (syncFinishWindow): never switched here.
 }
 
 /** Paints the shared Seeds line empty: a mode that pays no Seeds (a duel) shows no line at all. */
@@ -8472,7 +8503,10 @@ function settleSeedsForCard(key: string): void {
   // land without pushing the score and the keys down (the jump the owner saw). The slot is empty
   // until a receipt exists — it never says "pending".
   goSeedSlot = true;
-  void settleSeedProof(key).then((report) => {
+  const settling = settleSeedProof(key);
+  // The finish window chooses itself from the balance AFTER this payout (syncFinishWindow).
+  finishPayout = settling.then((report) => (report.kind === 'settled' ? report.reward.wallet.balance : null), () => null);
+  void settling.then((report) => {
     // A newer game has started: its card is not this one's to paint.
     if (run !== goSeedsSettleRun) return;
     if (report.kind === 'settled') {
@@ -8667,58 +8701,97 @@ function closeFinishResult(instant = false): void {
  * the price). `card` counts finish cards, so a late read never repaints the wrong one.
  */
 let finishCard = 0;
-let finishWindow: { card: number; won: boolean; teach: boolean; harvest: HarvestFigure | null; view: FinishWindow } | null = null;
+let finishWindow: { card: number; won: boolean; teach: boolean; harvest: HarvestFigure | null; view: FinishWindow; decided: boolean; timer: number } | null = null;
 const rememberBalance = (balance: number | null) => { if (balance !== null) store.set(SEED_BALANCE_KEY, String(balance)); };
+/**
+ * THIS GAME'S PAYOUT, AS A BALANCE (owner, 2026-11-13). The proof is sent the instant the game ends
+ * (afterPlay, before the card is up); its answer carries the wallet after the payout. The finish
+ * window waits on this, so it is chosen once, from the real balance. Null for a game with no proof.
+ */
+let finishPayout: Promise<number | null> | null = null;
 
-function applyFinishWindow(view: FinishWindow): void {
+/** Read the wallet during the last turns (once per game), so the remembered balance is fresh. */
+function prefetchFinishBalance(): void {
+  void onlineLobbyCtl?.seedBalance?.().then(rememberBalance).catch(() => undefined);
+}
+
+/**
+ * Show THE window: the board, or the planet. `fade` is the one-second arrival of a window that had
+ * to wait for the balance (the planet is drawn underneath it); a window known at once keeps its
+ * product open beat.
+ */
+function applyFinishWindow(view: FinishWindow, fade = false): void {
   const w = finishWindow;
   if (!w) return;
   w.view = view;
+  const motion = interfaceMotionAllowed();
   const boardView = document.getElementById('go-boardview');
   if (boardView) {
-    const arriving = boardView.hidden && view === 'board';
+    const arriving = (boardView.hidden || boardView.style.visibility === 'hidden') && view === 'board';
     boardView.hidden = view !== 'board';
+    boardView.style.visibility = '';
     const board = document.getElementById('go-boardview-board');
     if (board) board.innerHTML = view === 'board' && w.harvest ? harvestSvg(w.harvest) : '';
     const title = document.getElementById('go-boardview-title');
     if (title) title.textContent = RESULT.finalBoard;
     // The planet window's own arrival (online/endgame-planet.ts bandIn: fade, 7px rise, the open beat).
     const surface = boardView.querySelector<HTMLElement>('.go-world-surface');
-    if (arriving && surface && interfaceMotionAllowed()) {
+    if (arriving && surface && motion) {
       surface.animate(
-        [{ opacity: 0, translate: '0 7px' }, { opacity: 1, translate: '0 0' }],
-        { duration: INTERFACE_MOTION.open, easing: INTERFACE_MOTION.easeOpen, fill: 'both' },
+        fade ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 0, translate: '0 7px' }, { opacity: 1, translate: '0 0' }],
+        fade ? { duration: FINISH_FADE_MS, easing: 'ease-out', fill: 'both' } : { duration: INTERFACE_MOTION.open, easing: INTERFACE_MOTION.easeOpen, fill: 'both' },
       );
     }
   }
   syncEndgamePlanet(view === 'planet', w.teach);
+  if (view === 'planet' && fade && motion) {
+    document.getElementById('go-world')?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: FINISH_FADE_MS, easing: 'ease-out', fill: 'both' });
+  }
 }
 
+/**
+ * THE FINISH CARD'S WINDOW (owner, 2026-11-12/13; logic/finish-window.ts): the planet on a win with a
+ * tile's price in the wallet, the final board otherwise, and ONE of them, chosen ONCE. A loss knows at
+ * once. A win holds the window's place (empty, so the card does not jump) until the balance after
+ * this game's payout is known (the settled proof, else a fresh wallet read, at most FINISH_DECIDE_MS),
+ * then the right window fades in over one second.
+ */
 function syncFinishWindow(show: boolean, won: boolean, teach: boolean, harvest: HarvestFigure | null): void {
   const card = ++finishCard;
+  if (finishWindow?.timer) clearTimeout(finishWindow.timer);
   if (!show) {
     finishWindow = null;
     const boardView = document.getElementById('go-boardview');
-    if (boardView) boardView.hidden = true;
+    if (boardView) { boardView.hidden = true; boardView.style.visibility = ''; }
     syncEndgamePlanet(false, false);
     return;
   }
-  finishWindow = { card, won, teach, harvest, view: 'board' };
-  applyFinishWindow(finishWindowFor({ won, teach, balance: parseBalance(store.get(SEED_BALANCE_KEY)), hasBoard: !!harvest }));
-  if (won) void refreshFinishWindow();
-}
-
-/** A fresh wallet read, then the window again (only for the card that asked, only if it changed). */
-async function refreshFinishWindow(): Promise<void> {
-  const w = finishWindow;
-  if (!w || !w.won || !onlineLobbyCtl?.seedBalance) return;
-  const card = w.card;
-  const balance = await onlineLobbyCtl.seedBalance();
-  rememberBalance(balance);
-  const now = finishWindow;
-  if (!now || now.card !== card) return;
-  const view = finishWindowFor({ won: now.won, teach: now.teach, balance, hasBoard: !!now.harvest });
-  if (view !== now.view) applyFinishWindow(view);
+  const plan = finishWindowPlan({ won, teach, hasBoard: !!harvest });
+  finishWindow = { card, won, teach, harvest, view: 'board', decided: plan.kind === 'now', timer: 0 };
+  if (plan.kind === 'now') {
+    applyFinishWindow(plan.view);
+    return;
+  }
+  // Hold the place: the board window's frame, invisible, so the card keeps its final height.
+  syncEndgamePlanet(false, false);
+  const boardView = document.getElementById('go-boardview');
+  if (boardView) { boardView.hidden = false; boardView.style.visibility = 'hidden'; }
+  const askedAt = performance.now();
+  const decide = (balance: number | null) => {
+    const w = finishWindow;
+    if (!w || w.decided) return;
+    if (w.card !== card) return;
+    w.decided = true;
+    clearTimeout(w.timer);
+    const remembered = parseBalance(store.get(SEED_BALANCE_KEY));
+    if (balance !== null) rememberBalance(balance);
+    const view = decideFinishWindow({ won, teach, hasBoard: !!harvest, payout: balance, remembered });
+    // Ready at once (the payout had already landed): no fade, no artificial delay.
+    applyFinishWindow(view, performance.now() - askedAt > FINISH_INSTANT_MS);
+  };
+  finishWindow.timer = window.setTimeout(() => decide(null), FINISH_DECIDE_MS);
+  const source = finishPayout ?? onlineLobbyCtl?.seedBalance?.() ?? Promise.resolve(null);
+  void source.then((balance) => decide(balance), () => decide(null));
 }
 
 function syncEndgamePlanet(show: boolean, teach: boolean): void {
@@ -9307,21 +9380,8 @@ function renderGameOver() {
   setReplayAvailable(!!session && session.log.length > 0 && !blitzMatch);
   $('go-share').textContent = RESULT.share;
   $('go-reason').textContent = taught ? '' : resultReason(r, HUMAN);
-  // Blitz tempo (owner's idea 3, 0.82): the time left at the end of my turns, one quiet line.
-  {
-    const tempo = blitzMatch ? blitz?.tempo() ?? null : null;
-    let line = document.getElementById('go-tempo');
-    if (tempo && !line) {
-      line = document.createElement('p');
-      line.id = 'go-tempo';
-      line.className = 'muted small num go-tempo';
-      $('go-reason').after(line);
-    }
-    if (line) {
-      line.hidden = !tempo;
-      line.textContent = tempo ? blitzTempoLine(tempo) : '';
-    }
-  }
+  // The Blitz TEMPO line was removed (owner, 2026-11-13: remove "TEMPO 19.8 s left a turn · fastest
+  // 3.9 s" from Blitz). The tempo is still measured (logic/blitz.ts) but never shown.
   if (taught) $('go-sub').hidden = true;
   // THE DOUBLE HARVEST (surprise, 2026-10-29): this match's final position, stamped as one small
   // figure. (The one-line summary that sat beside it was removed, owner 2026-10-30.)

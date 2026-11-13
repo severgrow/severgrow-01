@@ -100,7 +100,7 @@ describe('the two read-outs show the server wallet and the player’s OWN tiles'
   it('speaks with the game’s existing words: the wallet’s SEEDS and the screen’s tiles grown', () => {
     // No new noun and no new sentence lives in strings.ts (owner decision, 2026-10-20): the label
     // is composed from `MENU.world`, the wallet's own balance wording and `ONLINE.worldHeld`.
-    expect(MENU.world).toBe('Territory');
+    expect(MENU.world).toBe('Planet'); // owner, 2026-11-13: "the territory" is "the planet" everywhere
     expect(seedBalanceLabel(128)).toBe('128 SEEDS');
     expect(ONLINE.worldHeld(3, 183)).toBe('3 of 183 tiles grown');
     // The wording lives in the ONE place the Territory screen reads it from.

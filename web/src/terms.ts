@@ -11,7 +11,7 @@ import { SEEDS_WORD } from './online/seed-icon.js';
  */
 export const TERMS = Object.freeze({
   title: 'Terms of use',
-  updated: 'Last updated 12 November 2026',
+  updated: 'Last updated 13 November 2026',
   intro:
     'FUTASAKU is a free game made by one person. By playing it you agree to these few rules. They are here to keep the game fair and friendly.',
   sections: Object.freeze([
@@ -54,9 +54,9 @@ export const TERMS = Object.freeze({
       ]),
     }),
     Object.freeze({
-      heading: `${SEEDS_WORD} and territory`,
+      heading: `${SEEDS_WORD} and the planet`,
       lines: Object.freeze([
-        `${SEEDS_WORD} and territory tiles are part of the game and have no money value: they cannot be bought, sold, traded for money or paid out.`,
+        `${SEEDS_WORD} and planet tiles are part of the game and have no money value: they cannot be bought, sold, traded for money or paid out.`,
         `${SEEDS_WORD} are only paid for games our server can check. We may correct a balance or a tile that came from a bug, an error or cheating.`,
         'The game is still growing: rewards, prices, levels and the map may change.',
       ]),

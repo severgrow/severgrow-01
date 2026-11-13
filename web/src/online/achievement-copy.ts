@@ -51,7 +51,7 @@ export const ACHIEVEMENT_COPY: Readonly<Record<AchievementId, { title: string; d
 
 /** The five headings that keep 35 rows readable. */
 export const ACHIEVEMENT_GROUP_TITLES: Readonly<Record<AchievementGroup, string>> = Object.freeze({
-  territory: 'Territory',
+  territory: 'Planet',
   duels: 'Duels',
   craft: 'Craft',
   company: 'Company',
