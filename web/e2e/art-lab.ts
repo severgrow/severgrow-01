@@ -91,7 +91,7 @@ try {
   const foliage = Buffer.from(await page.evaluate(() => {
     const canvas = document.createElement('canvas'); canvas.width = canvas.height = 512;
     const g = canvas.getContext('2d')!;
-    const pt = Array.from({ length: 6 }, (_, i) => {
+    const pt: [number, number][] = Array.from({ length: 6 }, (_, i): [number, number] => {
       const a = (-90 + 60 * i) * Math.PI / 180;
       return [256 + 225 * Math.cos(a), 256 + 225 * Math.sin(a)];
     });
