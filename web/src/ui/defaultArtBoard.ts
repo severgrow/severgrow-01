@@ -384,7 +384,7 @@ export class DefaultArtBoardView extends BoardView {
     // covers — a rim with a bite out of it wherever a bonus hex touches a home. The home's own
     // picture already stands above this layer (`l-homes` is drawn after `l-tiles`), so the canopy
     // covers the rim by itself, exactly as it covers every other tile's art.
-    if (this.richKeys.has(key)) drawGoldFrame(group, key, x, y, true);
+    if (this.richKeys.has(key)) drawGoldFrame(group, this.goldLooks, key, x, y, true);
     drawSeedStone(group, key, x, y, tile.strength, owner);
     return group;
   }

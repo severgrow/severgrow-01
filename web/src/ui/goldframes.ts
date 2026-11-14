@@ -1,7 +1,9 @@
 // A gold rim for bonus terrain: the Forest & Ash skin's two supplied frames (owner, 2026-11-13),
-// both in one transparent atlas. A tile key picks its frame for the whole game.
-// The glow is the board's own (`.gold-frame` drop-shadow in style.css); the art carries none.
-import { FA_GOLD_ATLAS, FA_GOLD_ATLAS_SIZE, FA_GOLD_BOXES, faGoldVariant } from './forestAsh.js';
+// both in one transparent atlas. Which design a bonus hex wears is decided per BOARD, not per key
+// (`faGoldVariants`, ui/forestAsh.ts), so neighbours never repeat a design when the board allows.
+// Every painter (the live board, the replay canvas and the poster) hands the same map in; the glow
+// is the board's own (`.gold-frame` drop-shadow in style.css); the art carries none.
+import { FA_GOLD_ATLAS, FA_GOLD_ATLAS_SIZE, FA_GOLD_BOXES } from './forestAsh.js';
 import { cellScale, el } from './geom.js';
 import { goldFrameSize } from './goldframe-geometry.js';
 import { getOrient } from '../logic/orient.js';
@@ -11,12 +13,34 @@ export { GOLD_FRAME_SCALE, goldFrameSize } from './goldframe-geometry.js';
 /** The atlas and the exact crop one bonus hex's frame uses, shared with the replay poster. The crop
  *  is the hex's own bounding box in the atlas: the frame's outer edge lies on the hex. */
 export const GOLD_FRAME_ATLAS = FA_GOLD_ATLAS;
-export const goldFrameCrop = (key: string, variant = faGoldVariant(key)) => {
+/** How many frame looks the atlas holds. */
+export const GOLD_FRAME_VARIANTS = FA_GOLD_BOXES.length;
+
+/** One design's box in the atlas, plus the design's own number. */
+export type GoldFrameLook = { variant: number; x: number; y: number; w: number; h: number };
+
+/**
+ * The atlas box of one DESIGN. For a caller that has no board to look at — the Art Lab exports both
+ * designs as palette files. A board must go through `goldFrameCrop` instead.
+ */
+export const goldFrameBox = (variant: number): GoldFrameLook => {
   const [x, y, w, h] = FA_GOLD_BOXES[variant]!;
   return { variant, x, y, w, h };
 };
-/** How many frame looks the atlas holds. */
-export const GOLD_FRAME_VARIANTS = FA_GOLD_BOXES.length;
+
+/**
+ * The crop one bonus hex's frame uses, from its board's assignment (`faGoldVariants`).
+ *
+ * The map is REQUIRED and has no default on purpose: a board-aware caller cannot fall back to a
+ * key-only design by accident (that fallback is exactly how the live board, the replay and the
+ * poster would drift apart). A key that is not on the board's gold list is a wiring bug, so it says
+ * so instead of quietly inventing a design. `goldFrameBox` is the explicit no-board path.
+ */
+export const goldFrameCrop = (looks: ReadonlyMap<string, number>, key: string): GoldFrameLook => {
+  const variant = looks.get(key);
+  if (variant === undefined) throw new Error(`gold-frame: ${key} is not on this board's gold list`);
+  return goldFrameBox(variant);
+};
 
 /**
  * The atlas (one file for every frame) failed to load on this device. The art loader reports it
@@ -30,8 +54,15 @@ export const noteGoldFrameArtFailure = (url: string): void => {
   if (url === FA_GOLD_ATLAS) atlasMissing = true;
 };
 
-export function drawGoldFrame(parent: SVGElement, key: string, x: number, y: number, occupied: boolean) {
-  const crop = goldFrameCrop(key);
+export function drawGoldFrame(
+  parent: SVGElement,
+  looks: ReadonlyMap<string, number>,
+  key: string,
+  x: number,
+  y: number,
+  occupied: boolean,
+) {
+  const crop = goldFrameCrop(looks, key);
   const pad = 6;
   // THE FRAME IS THE CELL'S HEX, AT THE CELL'S OWN SCALE: `cellScale(key)` (see goldframe-geometry)
   // keeps the rim and the hex one shape wherever a bent board draws the hex smaller than S, and the

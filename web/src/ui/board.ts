@@ -30,6 +30,7 @@ import { drawLandmark, setLandmarkState } from './landmarks.js';
 import { materialsOf } from '../logic/materials.js';
 import { drawSeedStone } from './seedstone.js';
 import { drawGoldFrame } from './goldframes.js';
+import { faGoldVariants } from './forestAsh.js';
 import { hexAtPoint } from '../logic/draw.js';
 import { EASE, MOTION } from '../logic/motion.js';
 
@@ -142,6 +143,13 @@ export class BoardView {
   protected keys: string[] = [];
   /** Bonus terrain stays in engine state; this set only controls its visual crystals. */
   protected richKeys = new Set<string>();
+  /**
+   * Which of the atlas's two gold frame designs each bonus hex wears, for THIS board. Built once per
+   * setup from the board's own gold keys (`faGoldVariants`), never from a key alone, and not reset by
+   * a render: the same board always paints the same frames. The replay canvas builds the same map
+   * from the same keys, so a replay cannot show a different design.
+   */
+  protected goldLooks: ReadonlyMap<string, number> = new Map();
   protected layers!: Record<'base' | 'scars' | 'veins' | 'homes' | 'tiles' | 'glow' | 'amb' | 'contour' | 'rich' | 'marks' | 'dim' | 'over' | 'draw' | 'fx', SVGGElement>;
   /** Polish pass 3: drawing mode (lines and clumps drawn with a finger or the mouse). */
   private drawing = false;
@@ -308,6 +316,10 @@ export class BoardView {
     // THE BOARD AS A SMALL PLANET (0.75): the live game's board bends on the Territory globe's curve.
     setBoardBulge(FEATURES.space ? this.keys : null);
     this.richKeys = new Set(this.keys.filter(key => terrain[key] === 'rich'));
+    // The board's own gold keys decide the two frame designs (neighbours never repeat one). Built
+    // with the board, so every render of this board shows the same frames — and the replay's canvas
+    // painter builds the identical map from the identical keys.
+    this.goldLooks = faGoldVariants(this.richKeys);
     // Step 3: just the tiles, a thin margin and headroom for the homes, in the board's orientation
     const u = boardUnits(config.boardRadius, getOrient());
     svg.setAttribute('viewBox', `${u.x0.toFixed(1)} ${u.y0.toFixed(1)} ${u.w.toFixed(1)} ${u.h.toFixed(1)}`);
@@ -623,7 +635,7 @@ export class BoardView {
         this.richSignature=gold;rich.replaceChildren();
         for (const key of this.richKeys) {
           const { x, y } = centerOf(key);
-          drawGoldFrame(rich, key, x, y, !!board[key]);
+          drawGoldFrame(rich, this.goldLooks, key, x, y, !!board[key]);
         }
       }
     }

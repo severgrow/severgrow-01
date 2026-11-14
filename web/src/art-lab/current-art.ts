@@ -13,7 +13,7 @@ import bomb from '../assets/cards/bomb.webp?url';
 import back from '../assets/cards/back.webp?url';
 import backFrame from '../assets/cards/back-frame.webp?url';
 import { DEFAULT_ART_SPRITES } from '../ui/defaultArtSprites.js';
-import { GOLD_FRAME_ATLAS as goldAtlas, GOLD_FRAME_VARIANTS, goldFrameCrop } from '../ui/goldframes.js';
+import { GOLD_FRAME_ATLAS as goldAtlas, GOLD_FRAME_VARIANTS, goldFrameBox } from '../ui/goldframes.js';
 import { SUIT_SVG } from '../ui/icons.js';
 import { decode, render } from './convert.js';
 import type { Decoded } from './convert.js';
@@ -54,9 +54,11 @@ export const currentArt = async (progress: (f: number) => void = () => {}): Prom
     jobs.push([id, async () => fileFrom(slotById(id)!, await decode(await fetchBlob(url)), name, settings)]);
   add('ground', ground, 'empty_ground_01.webp');
   FA_ROCKS.forEach((r, i) => add('rock', r.url, `rock_0${i + 1}.webp`));
-  // bonus hexes are a gold frame today: its looks, cropped from the game's atlas
+  // bonus hexes are a gold frame today: BOTH designs, cropped from the game's atlas. The lab has no
+  // board to assign designs to (a board picks one design per gold hex, ui/forestAsh.ts
+  // `faGoldVariants`), so it asks for the raw atlas boxes by design number instead.
   for (let v = 0; v < GOLD_FRAME_VARIANTS; v++) jobs.push(['gold', async () => {
-    const c = goldFrameCrop('', v);
+    const c = goldFrameBox(v);
     const side = Math.max(c.w, c.h);
     return fileFrom(slotById('gold')!, await crop(goldAtlas, c.x - (side - c.w) / 2, c.y - (side - c.h) / 2, side, side), `gold_frame_0${v + 1}.webp`);
   }]);

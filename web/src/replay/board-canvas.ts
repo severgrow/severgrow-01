@@ -25,7 +25,7 @@ import { getOrient, toScreen } from '../logic/orient.js';
 import { centerOf, S } from '../ui/geom.js';
 import { GOLD_FRAME_ATLAS, goldFrameCrop } from '../ui/goldframes.js';
 import { goldFrameSize } from '../ui/goldframe-geometry.js';
-import { faBaseColour, faRockSprite, faTileSprite, faVariants } from '../ui/forestAsh.js';
+import { faBaseColour, faGoldVariants, faRockSprite, faTileSprite, faVariants } from '../ui/forestAsh.js';
 import type { FaSprite, FaVariants } from '../ui/forestAsh.js';
 import { SEED_STONE_ATLAS, seedStoneCrop } from '../ui/seedstone.js';
 import type { ReplayModel } from './timeline.js';
@@ -297,6 +297,20 @@ export type GoldFramePlacement = {
 };
 
 /**
+ * Which gold frame design each bonus hex of THIS layout wears: the live board's own assignment
+ * (`faGoldVariants`), built from the layout's own gold keys. The poster and the video call this, so
+ * a shared picture shows exactly the frames the game showed. Pure and cached per board shape.
+ */
+let goldLooksKey = '';
+let goldLooksMemo: Map<string, number> = new Map();
+export const goldVariantsOf = (L: BoardLayout): ReadonlyMap<string, number> => {
+  const gold = L.cells.filter((c) => c.terrain === 'rich').map((c) => c.key);
+  const key = gold.join(' ');
+  if (key !== goldLooksKey) { goldLooksKey = key; goldLooksMemo = faGoldVariants(gold); }
+  return goldLooksMemo;
+};
+
+/**
  * Where the bonus hexes' metal frames go: one per rich cell, with the same size, crop and turn as
  * `ui/goldframes.ts` draws on the live board. Pure, so a test can hold it to the board's geometry.
  */
@@ -304,10 +318,11 @@ export const goldFramePlacements = (L: BoardLayout): GoldFramePlacement[] => {
   const k = L.hex / S;
   const size = goldFrameSize();
   const rotate = getOrient() === 'pointy' ? (-30 * Math.PI) / 180 : 0;
+  const looks = goldVariantsOf(L);
   return L.cells
     .filter((cell) => cell.terrain === 'rich')
     .map((cell) => {
-      const crop = goldFrameCrop(cell.key);
+      const crop = goldFrameCrop(looks, cell.key);
       return {
         key: cell.key,
         x: cell.x,

@@ -176,8 +176,31 @@ export const faTileSprite = (v: FaVariants, key: string, owner: 0 | 1, root: boo
   return root ? t.home : t.tiles[v.tile.get(key) ?? 0]!;
 };
 export const faRockSprite = (v: FaVariants, key: string): FaSprite => FA_ROCKS[v.rock.get(key) ?? 0]!;
-/** Which gold frame a bonus hex wears (each hex keeps one for the whole game). */
-export const faGoldVariant = (key: string): number => Math.floor(hash(`${key}:gold-frame`) * FA_GOLD_BOXES.length);
+
+/**
+ * THE TWO GOLD FRAMES, ONE PER BOARD (owner, 2026-11-14: "make sure we use both gold tile frames -
+ * both design randonly assign, when possible not 2 the same next to each other"). The atlas holds two
+ * designs; the same neighbour-aware pass the grounds and rocks use (`assignVariants`) picks one per
+ * bonus hex from the board's OWN gold keys, in the board's own cell order.
+ *
+ * It is a BOARD function, never a key function: a design picked from one key alone would ignore the
+ * hexes around it, and the live board, the replay canvas and the poster would then disagree about
+ * the same hex. All three build this map from the same list (`faGoldVariants`).
+ *
+ * Two touching gold hexes always differ (each takes the first design no already-placed neighbour
+ * wears). Only a triangle of three mutually touching gold hexes can be forced to repeat — two
+ * designs cannot colour a triangle — and then the third takes its own first choice and one clash
+ * remains, unavoidably. Because a clash is impossible without touching, the one assignment that can
+ * come out all one design is a board whose gold hexes never touch; there the second hex is moved to
+ * the other design, so both frames are used wherever the board has two gold hexes at all.
+ */
+export const faGoldVariants = (keys: Iterable<string>): Map<string, number> => {
+  const out = assignVariants(keys, 'fa-gold-frame', FA_GOLD_BOXES.length);
+  const designs = [...out.values()];
+  if (designs.length > 1 && designs.every((v) => v === designs[0]))
+    out.set([...out.keys()][1]!, (designs[0]! + 1) % FA_GOLD_BOXES.length);
+  return out;
+};
 
 /**
  * The screen offset (in hex radii) from a cell's centre to the neighbour in each direction. The
