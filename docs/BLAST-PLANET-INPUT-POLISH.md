@@ -28,6 +28,9 @@ Branch: `fix/blast-input-planet-login`.
 - The turn rim gains a static smoked-metal bezel, a dark gasket, a recessed lamp channel and four
   shallow side etch marks. It uses the existing projected outline, amber light and immediate turn
   publication. No particles, timer, permanent animation loop, additional blur or dependency.
+  **Reverted 2026-11-14** (owner: the bare rim "looked like real hardware lowkey and elegant and
+  very 2027"). The bezel layer is gone; the rim is the 0.75 slab/limb, soft turn glow and the
+  1.15px amber hairline again. See `web/tests/turn-rim.test.ts` for the guard.
 
 ## Verification
 
