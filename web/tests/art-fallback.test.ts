@@ -85,4 +85,17 @@ describe('board art that fails to load', () => {
     expect(mod.artUnavailable('/assets/never-requested.webp')).toBe(false);
     expect(mod.artUnavailable(undefined)).toBe(false);
   });
+
+  // The painted board background used to be the one picture the board drew without asking for it
+  // (FA_ALL_URLS never held `bg-*`), so `artUnavailable(bg)` could never be true and a 404 painted a
+  // broken-image tile on all 37 cells. It is requested now, like every other picture.
+  it('requests the board background it paints, so a failed one is dropped too', async () => {
+    const mod = await importModule(() => true);
+    const ash = await import('../src/ui/forestAsh.js');
+    const bg = ash.faBackgroundUrl();
+    expect(bg).toBeTruthy();
+    expect(record.asked).toContain(bg);
+    expect(mod.artUnavailable(bg ?? undefined)).toBe(true);
+    expect(record.removed).toContain(bg);
+  });
 });

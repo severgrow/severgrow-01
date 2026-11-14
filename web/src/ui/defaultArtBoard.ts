@@ -24,10 +24,11 @@ import { drawLandmark } from './landmarks.js';
 import { getOrient } from '../logic/orient.js';
 import { materialsOf } from '../logic/materials.js';
 import { drawSeedStone } from './seedstone.js';
-import { drawGoldFrame } from './goldframes.js';
+import { drawGoldFrame, noteGoldFrameArtFailure } from './goldframes.js';
 import { DEFAULT_ART_SPRITES } from './defaultArtSprites.js';
-import { FA_ALL_URLS, FA_ROCKS, faBackgroundUrl, faBaseColour, faRockSprite, faTileSprite, faVariants, neighbourToward } from './forestAsh.js';
+import { FA_ALL_URLS, FA_ROCKS, faBackgroundUrl, faBaseColour, faRockSprite, faSetUrls, faSides, faTileSprite, faVariants, neighbourToward } from './forestAsh.js';
 import type { FaSprite, FaVariants } from './forestAsh.js';
+import type { TerritoryId } from './forestAsh.js';
 // The replay's canvas pictures paint the same faces; they read this list from the module the board
 // already loaded, so neither the poster nor the video pulls a second copy of the sprite URLs.
 export { DEFAULT_ART_SPRITES };
@@ -70,6 +71,9 @@ const dropArt = (url: string): void => {
 
 /** One picture failed: remember it, and remove it if a cell already drew it. */
 const noteArtFailure = (url: string): void => {
+  // The gold atlas draws through its own module (ui/goldframes.ts), so it is told here as well:
+  // one failure signal, one place it is raised, no second registry.
+  noteGoldFrameArtFailure(url);
   if (missingArt.has(url)) return;
   missingArt.add(url);
   dropArt(url);
@@ -78,17 +82,43 @@ const noteArtFailure = (url: string): void => {
 // The small sprites start downloading while the menu is visible. Once decoded, every repeat of a
 // variant shares the browser's image cache (one decode per file, however many tiles use it).
 const artDecodes: Promise<unknown>[] = [];
+
+/** The files this board has already asked the browser for (one request per picture). */
+const requestedArt = new Set<string>();
+
+/**
+ * Ask for one picture, and remember a failure for as long as the page lives: the same `Image` +
+ * `error` path as the sprites below, so `artUnavailable()` is truthful for EVERY picture the board
+ * can draw — including the selected board background and a territory set chosen on /test/.
+ *
+ * Nothing is requested that this board will not draw: the live root draws Forest against Ash on one
+ * background, so the other sets are only fetched when a side really wears them.
+ */
+const requestArt = (url: string | null | undefined): void => {
+  if (!url || requestedArt.has(url) || typeof Image === 'undefined') return;
+  requestedArt.add(url);
+  const img = new Image();
+  img.decoding = 'async';
+  // The `error` event is the failure signal (a rejected `decode()` alone is not: it can reject
+  // for an intact file too, and dropping good art would be worse than the placeholder).
+  img.addEventListener('error', () => noteArtFailure(url));
+  img.src = url;
+  artDecodes.push(img.decode().catch(() => undefined));
+};
+
 if (typeof Image !== 'undefined') {
-  for (const url of [...FA_ALL_URLS, groundUrl]) {
-    const img = new Image();
-    img.decoding = 'async';
-    // The `error` event is the failure signal (a rejected `decode()` alone is not: it can reject
-    // for an intact file too, and dropping good art would be worse than the placeholder).
-    img.addEventListener('error', () => noteArtFailure(url));
-    img.src = url;
-    artDecodes.push(img.decode().catch(() => undefined));
-  }
+  // The look the first board draws: both default sides, the rocks, the gold frames, the empty
+  // ground and the background this browser has chosen.
+  for (const url of [...FA_ALL_URLS, groundUrl, faBackgroundUrl()]) requestArt(url);
 }
+
+/**
+ * A territory set about to be drawn (Water/Toxic on /test/): fetched once, lazily, so a failure is
+ * remembered and the cell falls back to its flat colour instead of a placeholder.
+ */
+const requestSet = (id: TerritoryId): void => {
+  for (const url of faSetUrls(id)) requestArt(url);
+};
 
 /**
  * Resolves when every picture the first board composes is decoded (or has failed): the ground,
@@ -149,6 +179,8 @@ export class DefaultArtBoardView extends BoardView {
 
   /** Rows top to bottom (then left to right): a lower tile's grass lies over the tile above. */
   protected override orderKeys(keys: string[]) {
+    // Fetch the sets this board is about to draw (Water/Toxic only when /test/ picked them).
+    for (const side of faSides()) requestSet(side);
     this.fa = faVariants(keys);
     this.rockKeys.clear();
     this.rockLayer = null;
@@ -173,6 +205,9 @@ export class DefaultArtBoardView extends BoardView {
     const defs = this.svg.querySelector('defs')!;
     const id = this.id('default-ground');
     const bg = faBackgroundUrl();
+    // The background the board paints is a picture like any other: ask for it (once) so a file that
+    // cannot load is remembered and the cell keeps its flat look instead of a broken-image tile.
+    requestArt(bg);
     if (bg && !artUnavailable(bg)) this.paintedGround(g, key, bg);
     // A failed ground picture is dropped: the cell keeps the flat look and no placeholder is drawn.
     else if (!artUnavailable(groundUrl)) {

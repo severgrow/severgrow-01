@@ -104,6 +104,9 @@ export const TERRITORIES: Record<TerritoryId, { tiles: readonly FaSprite[]; home
   toxic: set('toxic', [toxic1, toxic2, toxic3, toxic4, toxic5, toxic6, toxic7, toxic8, toxic9], 'home-reactor', reactor),
 };
 
+/** Every picture one territory set draws: the nine grounds and its home. */
+export const faSetUrls = (id: TerritoryId): readonly string[] => [...TERRITORIES[id].tiles.map((s) => s.url), TERRITORIES[id].home.url];
+
 /** The colour under each set's art (it shows only at a sprite's softened corners). */
 export const TERRITORY_BASE_COLOUR: Record<TerritoryId, string> = { forest: '#315321', ash: '#302c2c', water: '#173a52', toxic: '#2b2a1c' };
 export const faBaseColour = (owner: 0 | 1) => TERRITORY_BASE_COLOUR[sides[owner]];

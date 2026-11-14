@@ -15,6 +15,18 @@ export const goldFrameCrop = (key: string, variant = faGoldVariant(key)) => {
 /** How many frame looks the atlas holds. */
 export const GOLD_FRAME_VARIANTS = FA_GOLD_BOXES.length;
 
+/**
+ * The atlas (one file for every frame) failed to load on this device. The art loader reports it
+ * through the same `error` path every other picture uses; the frame then falls back to no frame at
+ * all — a bonus hex still has its stone and its "2" — because an `<image>` whose file is gone is
+ * exactly what the browser paints its own "broken image" tile over.
+ */
+let atlasMissing = false;
+/** Report a failed picture; it is the gold-frame atlas this module draws. */
+export const noteGoldFrameArtFailure = (url: string): void => {
+  if (url === FA_GOLD_ATLAS) atlasMissing = true;
+};
+
 export function drawGoldFrame(parent: SVGElement, key: string, x: number, y: number, occupied: boolean) {
   const crop = goldFrameCrop(key);
   const pad = 6;
@@ -27,6 +39,8 @@ export function drawGoldFrame(parent: SVGElement, key: string, x: number, y: num
     'aria-hidden': 'true',
     ...(getOrient() === 'pointy' ? { transform: `rotate(-30 ${x} ${y})` } : {}),
   }, parent);
+  // A picture that failed to load is never drawn: the browser would paint its own placeholder.
+  if (atlasMissing) return group;
   const viewport = el('svg', {
     x: x - width / 2, y: y - height / 2, width, height,
     viewBox: `${crop.x - pad} ${crop.y - pad} ${crop.w + pad * 2} ${crop.h + pad * 2}`,
