@@ -7280,7 +7280,10 @@ html.align-overlay::before {
 .dock .hand-row > #hand {
   grid-column: 3;
   height: 100%;
-  padding: 0;
+  padding: 4px 0 0;
+  /* The outer card rotates past its unrotated box on short phones. Move the whole fan,
+     including hit targets, above the safe bottom edge without changing cockpit geometry. */
+  translate: 0 -4px;
   box-sizing: border-box;
   justify-content: center;
   min-width: 0;
