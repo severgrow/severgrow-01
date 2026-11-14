@@ -42,7 +42,9 @@ export const INFORMATION_CSS = `
    Bloom looked exactly like any playable card. An id beats any number of classes, and the Grow
    edge light excludes this class explicitly. */
 html.futa04-information #hand .card.futa04-bloom-pick {
-  border-color: #8fd3c9;
+  /* No border line (owner, 2026-11-14: "never do the contour frame when selected"): the aqua glow
+     alone marks the pick, and it wraps the printed card (player/cards.ts). */
+  border-color: transparent;
   box-shadow: 0 0 12px rgba(143, 211, 201, 0.38), inset 0 0 8px rgba(143, 211, 201, 0.10);
 }
 .futa04-information .dock .hand.waiting .card {
