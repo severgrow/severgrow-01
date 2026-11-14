@@ -11,7 +11,7 @@ export const SKIN_SWITCH = IS_TEST_ROUTE
   || (typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname));
 
 export type SkinChoice = { mine: TerritoryId; theirs: TerritoryId; background: BackgroundId };
-export const DEFAULT_SKIN: SkinChoice = { mine: 'forest', theirs: 'ash', background: 'cinder' };
+export const DEFAULT_SKIN: SkinChoice = { mine: 'forest', theirs: 'ash', background: 'slate' };
 const KEY = 'severgrow.board-skin.v1';
 
 const valid = (c: Partial<SkinChoice> | null): SkinChoice => ({

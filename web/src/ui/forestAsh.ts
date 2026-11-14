@@ -118,15 +118,15 @@ export const setFaSides = (mine: TerritoryId, theirs: TerritoryId) => { sides = 
 
 /**
  * BOARD BACKGROUNDS (owner, 2026-11-14): painted boards whose hexes sit on the cells. 'classic' is
- * the ground the board had before (a tiled texture). Cinder is the quiet neutral default;
- * the painted image is only a faint 10% layer beneath the tile artwork.
+ * the ground the board had before (a tiled texture). Slate is the quiet default the owner chose
+ * (there is no grey source picture); ui/defaultArtBoard.ts shows it at 85% opacity and 40% colour.
  */
 export type BackgroundId = 'classic' | (typeof BACKGROUND_NAMES)[number];
 const BG_URLS: Record<(typeof BACKGROUND_NAMES)[number], string> = { cocoa: bg_cocoa, lichen: bg_lichen, cinder: bg_cinder, clay: bg_clay, slate: bg_slate };
 export const BACKGROUNDS: readonly { id: BackgroundId; url: string | null }[] = [
   { id: 'classic', url: null }, ...BACKGROUND_NAMES.map((id) => ({ id, url: BG_URLS[id] })),
 ];
-let background: BackgroundId = 'cinder';
+let background: BackgroundId = 'slate';
 export const faBackground = () => background;
 export const setFaBackground = (id: BackgroundId) => { background = id; };
 export const faBackgroundUrl = (): string | null => BACKGROUNDS.find((b) => b.id === background)?.url ?? null;

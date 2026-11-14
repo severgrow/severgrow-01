@@ -100,6 +100,25 @@ export const boardArtReady: Promise<void> = Promise.all(artDecodes).then(() => u
 const f = (n: number) => n.toFixed(2);
 const ROCK_ART_SCALE = 0.95;
 
+/**
+ * THE PAINTED BOARD'S TWO NUMBERS (owner, 2026-11-14: "slate, 85%, colour at 40%").
+ *
+ * The default ground is a painted `slate` board (ui/forestAsh.ts). These are its only knobs, and
+ * they apply to that picture alone — never to tile art, gold frames or the numbered stones.
+ *
+ *   FA_BACKGROUND_OPACITY     how much of the picture covers the cell's own flat ground colour.
+ *   FA_BACKGROUND_INTENSITY   the picture's colour strength: 0.4 keeps 40% of its original chroma,
+ *                             so slate reads as a quiet ground and the strength numbers and gold
+ *                             badges stay the thing you look at.
+ *
+ * The strength is one `feColorMatrix type="saturate"` on the painted `<image>`. A colour matrix is a
+ * per-pixel multiply, not a blur: it softens nothing, and it never re-rasterises the board's
+ * moving/scaling parent (see the feathering note in ui/board.ts). It runs in sRGB, so the picture's
+ * own luminance is what the chroma is folded into.
+ */
+export const FA_BACKGROUND_OPACITY = 0.85;
+export const FA_BACKGROUND_INTENSITY = 0.4;
+
 
 /** How much the bent board shrinks a cell here (1 on a flat board): its mean corner distance / S. */
 const cellScale = (key: string) => {
@@ -228,10 +247,18 @@ export class DefaultArtBoardView extends BoardView {
     const clipId = this.id(`fa-bg-${key.replace(',', '_')}`);
     const defs = this.svg.querySelector('defs')!;
     if (!defs.querySelector(`#${clipId}`)) el('path', { d: hexPath(key, S * 1.015, 'flat') }, el('clipPath', { id: clipId, clipPathUnits: 'userSpaceOnUse' }, defs));
+    // One colour matrix, defined once and shared by every painted cell (see the constants above).
+    const filterId = this.id('fa-bg-intensity');
+    if (!defs.querySelector(`#${filterId}`)) {
+      const filter = el('filter', { id: filterId, 'color-interpolation-filters': 'sRGB' }, defs);
+      el('feColorMatrix', { type: 'saturate', values: String(FA_BACKGROUND_INTENSITY) }, filter);
+    }
     el('image', {
       href: url, x: f(x - k * (fx + W / 2)), y: f(y - k * (fy + H / 2)), width: f(k * W), height: f(k * H),
-      // The selected board image is a quiet 22% layer inside the hexes; tile art stays opaque.
-      preserveAspectRatio: 'none', 'clip-path': `url(#${clipId})`, opacity: 0.22, class: 'default-ground-art fa-painted-ground',
+      // The painted board fills the hexes; the colour matrix above keeps it quiet, and the filter
+      // touches this picture only (tile art, gold frames and stones are separate elements).
+      preserveAspectRatio: 'none', 'clip-path': `url(#${clipId})`, opacity: FA_BACKGROUND_OPACITY,
+      filter: `url(#${filterId})`, class: 'default-ground-art fa-painted-ground',
     }, g);
   }
 
