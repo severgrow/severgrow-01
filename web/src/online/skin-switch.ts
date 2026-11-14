@@ -4,7 +4,7 @@
 // Static DOM, no timers or subscriptions; built once, re-marked on tap.
 import { BACKGROUNDS, TERRITORIES, TERRITORY_IDS } from '../ui/forestAsh.js';
 import type { BackgroundId, TerritoryId } from '../ui/forestAsh.js';
-import { DEFAULT_SKIN, SKIN_SWITCH, chooseSkin, skinChoice } from '../ui/skinChoice.js';
+import { DEFAULT_SKIN, SKIN_SWITCH, chooseSkin, previewSkin, skinChoice } from '../ui/skinChoice.js';
 import type { SkinChoice } from '../ui/skinChoice.js';
 import type { DuelClient } from '../../../server/src/client.js';
 
@@ -20,6 +20,8 @@ const CSS = `
 #world-skin-switch .world-colour-swatch.skin-on { background: #f2c87918; box-shadow: inset 0 0 0 1px #f2c87959; }
 #world-skin-switch .world-colour-swatch.skin-on .world-colour-name { color: #f6ecd2; }
 #world-skin-switch .world-colour-swatch.skin-on .world-colour-chip { box-shadow: 0 0 0 2px #f6ecd2; }
+#world-skin-switch .world-skin-note { margin: 0; font-size: 11px; line-height: 1.35; color: #e8ddc5a8; }
+#world-skin-switch .world-skin-note[hidden] { display: none; }
 `;
 
 let account: { client: DuelClient; token: string; refresh: () => void } | null = null;
@@ -32,19 +34,28 @@ export async function connectSkinSwitch(client: DuelClient, token: string, refre
   if (account?.token === token) { account.refresh = refresh; return; }
   const current = account = { client, token, refresh };
   saving = false;
-  // A new account must never inherit the previous account's local preview while its own
-  // public choice is loading. An older server simply leaves this safe default in place.
-  chooseSkin({ mine: DEFAULT_SKIN.mine });
+  // A new account must never inherit the previous account's local preview while its own public
+  // choice is loading. That default is only PREVIEWED for this visit: writing it to storage (as an
+  // earlier build did) meant a read that failed or answered null left the stored choice at Forest,
+  // overwriting what this browser had — every visit, for good.
+  const before = skinChoice();
+  previewSkin({ mine: DEFAULT_SKIN.mine });
   markChoice?.();
   try {
     const saved = await client.worldSkin(token);
     if (account !== current) return;
+    // The server's own answer is the truth, and storing it is what keeps the next visit fast.
     if (saved && TERRITORY_IDS.includes(saved)) chooseSkin({ mine: saved });
-    else chooseSkin({ mine: DEFAULT_SKIN.mine });
+    else chooseSkin({ mine: before.mine });
     markChoice?.();
     // The initial world read already carries the public skin on each claim. Re-fetching here
     // duplicates wallet/world requests on entry; a deliberate POST below still refreshes it.
-  } catch { /* An older server has no skin route; the local preview stays usable. */ }
+  } catch {
+    if (account !== current) return;
+    // No answer (an older server, a dropped connection): put back what this browser already had.
+    chooseSkin({ mine: before.mine });
+    markChoice?.();
+  }
 }
 
 export function disconnectSkinSwitch(): void { account = null; saving = false; }
@@ -57,6 +68,11 @@ export function mountSkinSwitch(pane: HTMLElement | null): void {
   const box = document.createElement('section');
   box.id = 'world-skin-switch';
   box.setAttribute('aria-label', 'Board skin (test)');
+  // A save the server refused says so, quietly, in the pane (role=status: announced, not shouted).
+  const note = document.createElement('p');
+  note.className = 'world-skin-note';
+  note.setAttribute('role', 'status');
+  note.hidden = true;
   const rows: [string, keyof SkinChoice, { id: TerritoryId | BackgroundId; thumb: string | null }[]][] = [
     ['Your tiles (test)', 'mine', TERRITORY_IDS.map((id) => ({ id, thumb: TERRITORIES[id].tiles[0]!.url }))],
     ['Their tiles (test)', 'theirs', TERRITORY_IDS.map((id) => ({ id, thumb: TERRITORIES[id].tiles[0]!.url }))],
@@ -98,6 +114,7 @@ export function mountSkinSwitch(pane: HTMLElement | null): void {
       b.append(chip, name);
       b.addEventListener('click', () => {
         if (field === 'mine' && saving) return;
+        note.hidden = true;
         const previous = skinChoice();
         chooseSkin({ [field]: o.id }); mark();
         if (field !== 'mine' || !account) return;
@@ -109,13 +126,18 @@ export function mountSkinSwitch(pane: HTMLElement | null): void {
           chooseSkin({ mine: saved }); mark(); owner.refresh();
         }).catch(() => {
           if (account !== owner) return;
+          // The server did not take it. Put the switch back on what is actually stored, and say so:
+          // a chip that silently snaps back reads as "nothing happened".
           chooseSkin({ mine: previous.mine }); mark();
+          note.textContent = `Not saved — the board stays ${NAMES[previous.mine]}.`;
+          note.hidden = false;
         }).finally(() => { if (account === owner) saving = false; });
       });
       grid.appendChild(b);
     }
     box.append(title, grid);
   }
+  box.appendChild(note);
   pane.appendChild(box);
   mark();
 }

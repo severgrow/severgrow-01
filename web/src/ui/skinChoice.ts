@@ -36,3 +36,13 @@ export const chooseSkin = (next: Partial<SkinChoice>): SkinChoice => {
   try { browserStorage()?.set(KEY, JSON.stringify(current)); } catch { /* private mode: this visit only */ }
   return current;
 };
+/**
+ * Show a choice for this visit WITHOUT storing it: the /test/ switch previews a different account's
+ * safe default while that account's own public choice loads, and a preview must never overwrite what
+ * this browser has stored (a failed read would otherwise leave the default behind for good).
+ */
+export const previewSkin = (next: Partial<SkinChoice>): SkinChoice => {
+  current = valid({ ...current, ...next });
+  apply();
+  return current;
+};
