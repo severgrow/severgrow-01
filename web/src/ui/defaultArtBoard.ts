@@ -322,13 +322,18 @@ export class DefaultArtBoardView extends BoardView {
     // tree/smoke overhangs, which must remain physically in front of the board light.
     const planetSkin = this.svg.querySelector<SVGGElement>('.l-planet-skin');
     if (planetSkin) this.svg.insertBefore(planetSkin, this.layers.contour);
-    // THE TURN RING SITS UNDER THE SPILLS (owner, 2026-11-14: "make the spill tiles go over it").
-    // The skin is a ground treatment and stays above the tiles; the turn rim is an indicator, so it
-    // moves out of the skin to just beneath the tile layer. Grass, canopy and smoke overhangs now
-    // paint over it wherever they reach, while it stays visible along every uncovered edge. Its
-    // path and stroke are unchanged: this is layering only.
+    // THE BOARD'S EDGE READS ABOVE THE LAND (owner, 2026-11-14: "the outer rim should be above the
+    // grass and ash tiles"). It sat under `l-tiles` while the board carried its heavy smoked-metal
+    // bezel; that bezel is gone and the rim is one thin amber hairline, so the same order let grass
+    // and ash paint the board's silhouette into land shapes and the board lost its edge exactly
+    // where the land met it. The rim now sits just under the homes: above every tile picture (and
+    // the rocks, the territory contour and the planet skin, which are all ground treatments), and
+    // still under the tree canopy and the volcano smoke (owner: "the frame around board when it's my
+    // turn shouldn't cover the smoke / tree"). `l-fa-front`, which redraws a lower tile's fringe over
+    // a home, is placed after the homes and therefore stays above the rim too. Path, stroke, colour
+    // and blur are untouched: this is layering only.
     const turnRim = this.svg.querySelector<SVGGElement>('.planet-turn-rim');
-    if (turnRim) this.svg.insertBefore(turnRim, this.layers.tiles);
+    if (turnRim) this.svg.insertBefore(turnRim, this.layers.homes);
     // THE ONE EXCEPTION (owner, 2026-11-14: "the tile below the home tile still covers the home
     // tile with its top fringe"): a tile below a home lays its grass fringe over the home's lower
     // edge. Its picture is drawn again just above the homes, clipped to the home's hex, so only the

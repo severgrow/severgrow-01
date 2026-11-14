@@ -101,4 +101,17 @@ describe('board and dock layering, 0.86 fixes', () => {
     // few stray ticks on a 4px edge, so it is gone.
     expect(rule(css, '.pile-stack::after {')).not.toContain('repeating-linear-gradient');
   });
+
+  it('paints the turn rim above the tile art and under the homes', () => {
+    // Owner, 2026-11-14: "the outer rim should be above the grass and ash tiles". It used to sit
+    // under `l-tiles`, which let grass and ash paint the board's silhouette and the rim vanished
+    // wherever land reached the edge. That order belonged to the removed 4.4px metal bezel; the rim
+    // is now a single hairline, so it belongs to the board's edge. It must still stay under the
+    // homes (owner: "the frame around board when it's my turn shouldn't cover the smoke / tree") and
+    // under `l-fa-front`, which is placed after `l-homes`.
+    const board = read('ui/defaultArtBoard.ts');
+    expect(board).toContain('insertBefore(turnRim, this.layers.homes)');
+    expect(board).not.toContain('insertBefore(turnRim, this.layers.tiles)');
+    expect(board).toContain('this.layers.homes.after(this.frontLayer)');
+  });
 });
