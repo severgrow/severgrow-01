@@ -7280,7 +7280,7 @@ html.align-overlay::before {
 .dock .hand-row > #hand {
   grid-column: 3;
   height: 100%;
-  padding: 4px 0 0;
+  padding: 0;
   box-sizing: border-box;
   justify-content: center;
   min-width: 0;

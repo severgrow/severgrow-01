@@ -12,6 +12,18 @@ const server = served?.server ?? null;
 const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'] });
 let checks = 0;
 
+const wholeCardsVisible = async (page: Page, name: string, phase: string) => {
+  const cards = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#hand .card, #deck .pile-card, #discard .pile-top.card')].map(el => {
+    const r = el.getBoundingClientRect();
+    return { id: el.closest('#deck,#discard')?.id ?? `hand-${el.dataset.card}`, left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+  }));
+  for (const card of cards) {
+    assert(card.left >= -0.5 && card.right <= page.viewportSize()!.width + 0.5 && card.top >= -0.5 && card.bottom <= page.viewportSize()!.height + 0.5,
+      `${name}: ${phase} ${card.id} full card stays on screen ${JSON.stringify(card)}`);
+    checks++;
+  }
+};
+
 type Position = { step: string; groupX: number; groupY: number; shift: string; deckX: number; discardX: number; deckCountX: number; discardCountX: number; order: string };
 const position = (page: Page): Promise<Position> => page.evaluate(() => {
   const group = document.querySelector<HTMLElement>('#futa04-box > .piles')!;
@@ -63,7 +75,7 @@ async function sortWithoutPileTravel(page: Page, name: string, phase: 'draw' | '
 }
 
 try {
-  for (const [width, height, side] of [[360, 640, 'right'], [390, 844, 'right'], [430, 932, 'right'], [390, 844, 'left'], [1280, 800, 'right']] as const) {
+  for (const [width, height, side] of [[320, 568, 'right'], [360, 640, 'right'], [390, 844, 'right'], [430, 932, 'right'], [390, 844, 'left'], [1280, 800, 'right']] as const) {
     const name = `${width}x${height} ${side}`;
     const mobile = width < 600;
     const page = await browser.newPage({ viewport: { width, height }, isMobile: mobile, hasTouch: mobile });
@@ -77,11 +89,13 @@ try {
     await page.waitForSelector('#hand .card');
     await page.waitForFunction(() => (window as any).__severgrow && !(window as any).__severgrow.busy());
     await page.waitForTimeout(1100); // let the intended Draw entrance settle before measuring
+    await wholeCardsVisible(page, name, 'draw');
     await sortWithoutPileTravel(page, name, 'draw');
     const draw = await position(page);
     await page.locator('#deck').click({ force: true });
     await page.waitForFunction(() => (window as any).__severgrow.state().phase === 'ACT' && !(window as any).__severgrow.busy());
     await page.waitForTimeout(450);
+    await wholeCardsVisible(page, name, 'grow');
     const grow = await position(page);
     if (side === 'right') { assert.notEqual(draw.shift, grow.shift, `${name}: intended Draw shift must return for Grow`); checks++; }
     await sortWithoutPileTravel(page, name, 'grow');

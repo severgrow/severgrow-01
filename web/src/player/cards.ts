@@ -145,12 +145,12 @@ export const CARDS_CSS = `
 :is(${READY_FACES})::after { display:none; }
 /* THE GLOW WRAPS THE CARD (owner, 2026-11-14: "its glow should wrap the card perfectly" and "never do
    the contour frame when selected"). With its art in, a card IS its art: the art covers the whole box
-   (border included), the box has no fill of its own and the art's own corner (15 of 256 x 356 px), so
+   the box has no border or fill of its own and the art's own corner (15 of 256 x 356 px), so
    every glow and shadow on the card follows the printed edge. No border colour when playable or
    selected: the lift and the glow say it. */
-:is(${READY_FACES}):has(>.futa04-card-art) { border-color:transparent; background:transparent; border-radius:5.9% / 4.2%; }
+:is(${READY_FACES}):has(>.futa04-card-art) { border:0; background:transparent; border-radius:5.9% / 4.2%; }
 :is(${READY_FACES}):has(>.futa04-card-art):is(.playable,.lifted) { border-color:transparent; }
-:is(${READY_FACES}) > .futa04-card-art { inset:-1px; border-radius:5.9% / 4.2%; }
+:is(${READY_FACES}) > .futa04-card-art { inset:0; border-radius:5.9% / 4.2%; }
 .futa04-cards .futa04-mini-card .futa04-card-art { display:none; }
 /* The separately supplied tree-logo back is the only face-down artwork. */
 .futa04-cards .card.back,

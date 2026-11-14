@@ -121,6 +121,12 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
   const discard = legalActions(viewFor(before,0)).find(a=>a.t==='Discard'); assert(discard?.t==='Discard');
   const throwCard = page.locator(`#hand [data-card="${discard.card}"]`);
   await clickVisibleCard(page, discard.card);
+  const throwCards = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#hand .card, #discard .pile-top.card')].map(el => {
+    const r = el.getBoundingClientRect();
+    return { name: el.closest('#discard') ? 'discard' : `hand ${el.dataset.card}`, left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+  }));
+  check(throwCards.every(r => r.left >= -0.5 && r.right <= w! + 0.5 && r.top >= -0.5 && r.bottom <= h! + 0.5),
+    `${w}: every hand card and the enlarged Throw card remains fully on screen (${JSON.stringify(throwCards)})`);
   check(JSON.stringify(await state(page)) === JSON.stringify(before), `${w}: selecting Throw leaves engine state unchanged`);
   check(await throwCard.evaluate(el => el.classList.contains('futa04-throw-picked') && getComputedStyle(el).filter === 'grayscale(1)'), `${w}: Throw selection is enlarged and colorless`);
   check(await throwCard.evaluate(el => {

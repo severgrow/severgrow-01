@@ -98,6 +98,7 @@ if (typeof Image !== 'undefined') {
 export const boardArtReady: Promise<void> = Promise.all(artDecodes).then(() => undefined);
 
 const f = (n: number) => n.toFixed(2);
+const ROCK_ART_SCALE = 0.95;
 
 
 /** How much the bent board shrinks a cell here (1 on a flat board): its mean corner distance / S. */
@@ -192,7 +193,7 @@ export class DefaultArtBoardView extends BoardView {
         this.svg.insertBefore(this.rockLayer, this.layers.glow);
       }
       const { x, y } = centerOf(key);
-      this.art(this.rockLayer, faRockSprite(this.fa, key), x, y, cellScale(key), 'default-rock-art');
+      this.art(this.rockLayer, faRockSprite(this.fa, key), x, y, cellScale(key) * ROCK_ART_SCALE, 'default-rock-art');
     }
   }
 
@@ -229,8 +230,8 @@ export class DefaultArtBoardView extends BoardView {
     if (!defs.querySelector(`#${clipId}`)) el('path', { d: hexPath(key, S * 1.015, 'flat') }, el('clipPath', { id: clipId, clipPathUnits: 'userSpaceOnUse' }, defs));
     el('image', {
       href: url, x: f(x - k * (fx + W / 2)), y: f(y - k * (fy + H / 2)), width: f(k * W), height: f(k * H),
-      // The selected board image is a quiet 10% layer over the dark base; tile art stays opaque.
-      preserveAspectRatio: 'none', 'clip-path': `url(#${clipId})`, opacity: 0.1, class: 'default-ground-art fa-painted-ground',
+      // The selected board image is a quiet 22% layer inside the hexes; tile art stays opaque.
+      preserveAspectRatio: 'none', 'clip-path': `url(#${clipId})`, opacity: 0.22, class: 'default-ground-art fa-painted-ground',
     }, g);
   }
 
@@ -255,6 +256,12 @@ export class DefaultArtBoardView extends BoardView {
     this.svg.insertBefore(this.layers.rich, this.layers.tiles);
     // The territory's outline runs under the homes: the canopy and the smoke cover it.
     this.svg.insertBefore(this.layers.contour, this.layers.homes);
+    // Keep the fine network line beneath every visible art fringe, including grass and rocks.
+    // The existing spill mask cuts only those overhang shapes, so the line inside the hex stays.
+    this.layers.contour.setAttribute('mask', this.url('fa-spill'));
+    // Rock silhouettes are opaque physical pieces. Put them in front of the fine line too,
+    // while leaving both home artworks above the rocks.
+    if (this.rockLayer) this.svg.insertBefore(this.rockLayer, this.layers.homes);
     // The board rim is a ground treatment. Keep it beneath the connected contour and the
     // tree/smoke overhangs, which must remain physically in front of the board light.
     const planetSkin = this.svg.querySelector<SVGGElement>('.l-planet-skin');
@@ -308,8 +315,9 @@ export class DefaultArtBoardView extends BoardView {
     // The territory colour under the art fills its softened corners; the art itself is unclipped.
     el('path', { d: hexPath(key, S, 'flat'), fill: faBaseColour(owner), class: 'fa-tile-base' }, group);
     this.art(group, faTileSprite(this.fa, key, owner, false), x, y, cellScale(key), 'default-art-sprite');
-    // A gold tile keeps its frame over its own art (and under the stone).
-    if (this.richKeys.has(key)) drawGoldFrame(group, key, x, y, true);
+    // A gold tile keeps its frame over its own art (and under the stone), but grass,
+    // rock and home overhangs from neighbouring cells sit physically in front of it.
+    if (this.richKeys.has(key)) drawGoldFrame(group, key, x, y, true).setAttribute('mask', this.url('fa-spill'));
     drawSeedStone(group, key, x, y, tile.strength, owner);
     return group;
   }
