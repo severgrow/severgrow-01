@@ -107,12 +107,16 @@ html.futa04-information #hand .card.futa04-bloom-pick {
 .futa04-information .pile-label { display: none; }
 .futa04-information #deck.coach-glow { box-shadow: none; }
 .futa04-information #discard.futa04-bloom-draw .pile-top { border-color: transparent; }
+/* Picked for the Throw: 1.2x, not the old 1.31x. With the bigger 72pt phone card the end of the
+   fan at 1.31x pushed its rotated corner ~4px off the screen edge (futa04-critical measures every
+   hand card's box inside the viewport). 1.2x still lifts the picked card well above the 62pt card
+   it used to be (86 vs 81 px) and keeps the complete silhouette on screen. */
 .futa04-information #hand .card.futa04-throw-picked {
   filter: grayscale(1) !important; border-color: transparent; box-shadow: none !important;
-  transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 18px)) scale(1.31);
+  transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 18px)) scale(1.2);
 }
 .futa04-information[data-thumb] #hand .card.futa04-throw-picked {
-  transform: translate(var(--lx, 0px), var(--ly, 0px)) rotate(var(--rot, 0deg)) scale(1.31);
+  transform: translate(var(--lx, 0px), var(--ly, 0px)) rotate(var(--rot, 0deg)) scale(1.2);
 }
 .futa04-information #futa04-information-subline {
   min-width: 0;

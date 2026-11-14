@@ -118,7 +118,7 @@ const boxes = (p: Page): Promise<Boxes> =>
       const r = el.getBoundingClientRect();
       return { x: +r.x.toFixed(2), y: +r.y.toFixed(2), w: +r.width.toFixed(2), h: +r.height.toFixed(2) };
     };
-    // The picked card is lifted IN FRONT of the console on purpose (z-index 100, 18px up, 1.31x),
+    // The picked card is lifted IN FRONT of the console on purpose (z-index 100, 18px up, 1.2x),
     // so it is measured separately; the constraint is that the pile never covers the RESTING hand.
     const cards = [...document.querySelectorAll<HTMLElement>('#hand .card:not(.futa04-throw-picked)')].map((el) => {
       const r = el.getBoundingClientRect();
