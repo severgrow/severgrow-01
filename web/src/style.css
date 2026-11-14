@@ -248,36 +248,42 @@ html.space-first:not(.space-lit) #texture {
   display: none;
 }
 
-/* THE ROOM'S LIGHT (owner, 2026-11-14: "the plain black background behind the board is a bit too
-   dark, make it have some big light going on slowly never leak into the board --- all screen sizes
-   -- has to be integrated with background color actions during big actions in game"). ONE big soft
-   pool, drifting very slowly, as a background layer of its own (element built by
-   ui/ambient-light.ts, mounted from player/atmosphere.ts).
+/* THE ROOM'S ANSWER TO A BIG ACTION — and nothing else.
+
+   HISTORY, because this rule is the opposite of the one it replaces. On 2026-11-14 the owner first
+   asked for one slow light behind the board ("make it have some big light going on slowly never
+   leak into the board"), which shipped as a standing pool of its own. Six
+   hours later, looking at the same build, he reversed it: "i liked the background of the old more,
+   the black with stars + blurred flying lights. bring it back the same one." The old page backdrop
+   is the star field and its drifting lights (`#texture` + `#space-backdrop` + `#spores` in
+   player/space-backdrop.ts), and a full-screen pool can only cover it: measured at 390x844, hiding
+   the pool restores the live site's own corner pixels to the last decimal. So THE STANDING POOL IS
+   GONE — the page paints itself exactly as the live build does — and what is kept is the part he
+   asked for and has not withdrawn: the background answers a big action.
+
+   So this layer paints NOTHING at rest: the only child is the one-shot pulse, which starts at
+   opacity 0 and is animated (opacity alone) for one beat by ui/ambient-light.ts. No drift, no
+   keyframes, no `will-change`, nothing on the compositor while the player is thinking.
 
    WHERE IT SITS: z-index 0, directly before #spores, so it is above #texture (the page colour) and
-   above the in-game black backdrop, and below #game and #menu (both z-index 1). Its children are
-   fixed and `pointer-events: none`, so the layer can never touch layout or take a tap.
+   above the in-game black backdrop, and below #game and #menu (both z-index 1). It is
+   `pointer-events: none`, so the layer can never take a tap.
 
    IT CANNOT LIGHT THE BOARD, and that is a property of the paint, not a promise: every cell paints
    an OPAQUE hex (`fill: var(--c-hexFill)`) and every tile paints opaque bodies over that, so the
    board's own pixels are painted OVER this layer — the light is never composited through them.
-   (Pinned by web/tests/ambient-light.test.ts; measured with a hidden-vs-visible pixel diff.)
+   (Pinned by web/tests/ambient-light.test.ts.)
 
-   PAINT, NOT FILTER — the lesson already written above for the motes: the pool is ONE radial
-   gradient, rasterised once, and the drift is `transform` only, so the compositor moves a finished
-   layer. No `filter: blur()`, no animated `box-shadow`, nothing read from layout per frame. The
-   gradient uses `--c-bg` as its last stop rather than alpha-to-transparent, so the ramp ends on the
-   room's own colour with no seam where the layer's box ends.
-
-   96 s, three soft turning points, a couple of per cent of the screen: long enough that a player
-   never sees it turn round, small enough that it reads as light and not as motion. */
+   PAINT, NOT FILTER — the lesson already written above for the motes: the pulse is ONE radial
+   gradient, rasterised once when its tint is written, then only its opacity moves. No
+   `filter: blur()`, no animated `box-shadow`, nothing read from layout per frame. */
 #futa04-ambient-light {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
-  /* Where the brightest part of the pool sits, as a share of the light's own (larger) box. The
+  /* Where the pulse's brightest part sits, as a share of the layer's own (larger) box. The
      percentages below are converted back to viewport shares in the comment beside them, because
      the box is inset -16%: viewport = -16 + share x 132.
        portrait / stacked cockpit   50% 38%  ->  50% / 34%  (the board's own centre is 50% / 31-38%)
@@ -299,39 +305,16 @@ html[data-layout='side'][data-quad='1'] #futa04-ambient-light {
 html.futasaku-product #futa04-ambient-light {
   display: block;
 }
-/* Bigger than the screen on every side, so a drift of a few per cent can never show an edge. */
+/* Bigger than the screen on every side, so the pulse can never show a hard edge at the glass. */
 #futa04-ambient-light > i {
   position: absolute;
   inset: -16%;
   display: block;
   pointer-events: none;
 }
-/* The pool: centred behind the board (see --al-x/--al-y above), one gradient, no filters. */
-#futa04-ambient-light .al-base {
-  background: radial-gradient(
-    ellipse 56% 44% at var(--al-x) var(--al-y),
-    color-mix(in srgb, var(--c-text) 8%, var(--c-bg)) 0%,
-    color-mix(in srgb, var(--c-you) 4%, var(--c-bg)) 44%,
-    var(--c-bg) 100%
-  );
-  animation: ambient-drift 96s ease-in-out infinite;
-  will-change: transform;
-}
-@keyframes ambient-drift {
-  0%,
-  100% {
-    transform: translate3d(-2.4%, 1.8%, 0);
-  }
-  34% {
-    transform: translate3d(2%, -1.4%, 0);
-  }
-  67% {
-    transform: translate3d(-0.6%, 2.4%, 0);
-  }
-}
-/* The big-action answer: the same pool in the action's own tone (ui/ambient-light.ts writes
-   `--ambient-tint` from LIGHT_TONES, then animates ONLY this element's opacity). It starts at 0, so
-   with nothing playing it paints nothing at all — one transparent layer, no per-frame cost. */
+/* The big-action answer, in the action's own tone (ui/ambient-light.ts writes `--ambient-tint` from
+   LIGHT_TONES, then animates ONLY this element's opacity). It starts at 0, so with nothing playing
+   it paints nothing at all — the page's own backdrop shows through untouched, no per-frame cost. */
 #futa04-ambient-light .al-pulse {
   opacity: 0;
   background:
@@ -346,25 +329,12 @@ html.futasaku-product #futa04-ambient-light {
       transparent 70%
     );
 }
-/* A move is playing: the pool holds where it is, exactly like the stars (two full-screen layers
-   sliding during a move cost the move frames on a slow phone). The big-action pulse is a JS
-   animation, so it is NOT held — it is the answer to that move. */
-html.futa04-move-active #futa04-ambient-light .al-base {
-  animation-play-state: paused;
-}
-/* Reduce motion: no drift and no pulse. The light is still THERE as a still wash. */
-.reduce-motion #futa04-ambient-light .al-base {
-  animation: none;
-  transform: none;
-}
+/* Reduce motion: no pulse at all (it is a full-screen colour wash, the one thing that must never
+   move for someone who asked for no motion). */
 .reduce-motion #futa04-ambient-light .al-pulse {
   display: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  #futa04-ambient-light .al-base {
-    animation: none;
-    transform: none;
-  }
   #futa04-ambient-light .al-pulse {
     display: none;
   }
@@ -2227,9 +2197,10 @@ html.futasaku-product .install-prompt-scrim {
    cannot reach those.
    PSEUDO-ELEMENTS COUNT TOO: the full-screen warm pass is `#game::before`, and a `*` selector never
    matches it. Left running, it kept the finish card's blur recompositing every frame — measured at
-   90% of a GPU core with the planet already asleep. The room's light
-   (`#futa04-ambient-light`, ui/ambient-light.ts) is in the list for the same reason: one slow
-   drifting layer behind the glass would be recomposited by the blur every frame. */
+   90% of a GPU core with the planet already asleep. `#futa04-ambient-light` stays in the list even
+   though it no longer has a standing pool: its big-action pulse is one beat of opacity on a
+   full-screen layer, and a full-screen layer behind the glass is exactly what a backdrop blur
+   recomposites. (The room's standing light was removed on the owner's word; see its rule above.) */
 html.backdrop-held :is(#game, #menu, #texture)::before,
 html.backdrop-held :is(#game, #menu, #texture)::after,
 html.backdrop-held :is(#game, #menu, #texture, #spores, #futa04-ambient-light) *,

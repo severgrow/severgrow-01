@@ -1,9 +1,10 @@
 // A gold rim for bonus terrain: the Forest & Ash skin's two supplied frames (owner, 2026-11-13),
-// both in one transparent atlas. Which LOOK a bonus hex wears — design, 60-degree turn, mirror — is
-// decided per BOARD (`faGoldLooks`, ui/forestAsh.ts), so neighbours never repeat one when the board
-// allows, and both frames are used. Every painter (the live board, the replay canvas and the poster)
-// hands the same map in; the glow is the board's own (`.gold-frame` drop-shadow in style.css) and the
-// art carries none.
+// both in one transparent atlas. WHICH bonus hexes wear one is `goldFrameKeys` below — the board's
+// outer ring only. Which LOOK a bonus hex wears — design, 60-degree turn, mirror — is decided per
+// BOARD (`faGoldLooks`, ui/forestAsh.ts), so neighbours never repeat one when the board allows, and
+// both frames are used. Every painter (the live board, the replay canvas and the poster) hands the
+// same map in; the glow is the board's own (`.gold-frame` drop-shadow in style.css) and the art
+// carries none.
 import { FA_GOLD_ATLAS, FA_GOLD_ATLAS_SIZE, FA_GOLD_BOXES, goldLookId } from './forestAsh.js';
 import type { GoldLook } from './forestAsh.js';
 import { cellScale, el } from './geom.js';
@@ -48,6 +49,40 @@ export const goldFrameCrop = (looks: ReadonlyMap<string, GoldLook>, key: string)
 
 /** Rounded to six places: enough for a transform, short enough to keep the DOM readable. */
 const n = (v: number) => Math.round(v * 1e6) / 1e6;
+
+/**
+ * How far a hex is from the board's centre, in rings (the cube distance; the outer ring of a
+ * radius-3 board is 3). Pure and total: any axial key has a ring.
+ */
+export const ringOf = (key: string): number => {
+  const [q, r] = key.split(',').map(Number) as [number, number];
+  return (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
+};
+
+/**
+ * WHICH HEXES MAY WEAR A GOLD FRAME: the board's OUTER RING, and nothing else.
+ *
+ * Owner, 2026-11-14: "the bug with gold tile in middle - should never happen". A bonus ("rich")
+ * hex is engine terrain and can be anywhere the point-symmetric roll puts it — the centre is
+ * ALWAYS one of them (spec 4.4), and two mirrored pairs follow it. Painting a frame on all of them
+ * put metal in the middle of the board, which is what he saw. The frame is a rim: a rim reads as
+ * the board's edge, so it belongs there, on the outermost ring only.
+ *
+ * This is the ONE resolver for that decision, and every painter calls it with the board's own
+ * cells and its own bonus keys: the live board (`ui/board.ts`), the replay canvas and the poster
+ * (`replay/board-canvas.ts`). Interior bonus hexes keep their terrain (they still score 2) but
+ * wear no metal, so no painter can put a frame there.
+ *
+ * `outermost` is read from the BOARD, not assumed: the product board is radius 3, but the Lab's
+ * shapes and any future board stay correct without this module knowing their radius.
+ */
+export const goldFrameKeys = (boardKeys: Iterable<string>, bonusKeys: Iterable<string>): string[] => {
+  const all = [...boardKeys];
+  if (all.length === 0) return [];
+  let outermost = 0;
+  for (const key of all) outermost = Math.max(outermost, ringOf(key));
+  return [...bonusKeys].filter((key) => ringOf(key) === outermost);
+};
 
 /**
  * The look as one SVG transform about the hex centre, or '' when it is the plain upright frame.

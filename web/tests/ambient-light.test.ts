@@ -1,12 +1,22 @@
-// THE ROOM'S LIGHT (owner, 2026-11-14): one big, very slow pool behind everything, and the
-// background's answer to a big action. Two things must never drift in a future edit:
+// THE ROOM'S ANSWER TO A BIG ACTION — and NOT a standing light.
 //
-//   1. IT MUST NEVER LIGHT THE BOARD. The guarantee is structural: the layer sits at z-index 0 and
+// The history is why this file reads the way it does, and it reversed inside one day. On the
+// morning of 2026-11-14 the owner asked for one slow pool of light behind the board; that shipped
+// as `#futa04-ambient-light .al-base`. That evening, looking at the same build: "i liked the
+// background of the old more, the black with stars + blurred flying lights. bring it back the same
+// one." The old backdrop is the page's own star field and its drifting lights, and a full-screen
+// pool can only cover it — so the pool is gone and only the action answer is left.
+//
+// These pin both halves, so a future edit cannot quietly undo either:
+//
+//   1. NOTHING PAINTS AT REST. There is no standing wash: no `.al-base` rule, no drift keyframes,
+//      and the layer's only child starts at opacity 0. A pool brought back would cover the page's
+//      backdrop again — measured at 390x844, hiding it restores the live site's own corner pixels.
+//   2. IT MUST NEVER LIGHT THE BOARD. The guarantee is structural: the layer sits at z-index 0 and
 //      every board cell paints an OPAQUE hex over it. If someone lifts the layer above the screens,
-//      or gives the cells a transparent fill, the light would start washing the tiles. Both halves
-//      of that are pinned below, plus the live pixel diff in the e2e measurement.
-//   2. IT MUST NEVER COST FRAMES. Paint, not filter: one radial gradient, moved by transform only.
-//      The `#spores` comment in style.css records why a `filter: blur()` on a moving layer is the
+//      or gives the cells a transparent fill, the light would start washing the tiles.
+//   3. IT MUST NEVER COST FRAMES. Paint, not filter: one radial gradient, then opacity only. The
+//      `#spores` comment in style.css records why a `filter: blur()` on a moving layer is the
 //      expensive answer (80 ms of GPU paint against 33 ms), and this is the same rule.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -73,13 +83,35 @@ describe('the room light answers a big action in the action\'s own colour', () =
   });
 });
 
+describe('a standing light is NOT painted: the page keeps its own backdrop', () => {
+  it('has no pool layer and no drift — the old black, stars and their lights are untouched', () => {
+    // The whole point of the owner's change: at rest this layer must paint nothing. No base
+    // element in CSS, no drift keyframes, and the layer itself carries no animation.
+    expect(css).not.toContain('.al-base');
+    expect(css).not.toContain('ambient-drift');
+    expect(rule(`#${AMBIENT_LIGHT_ID}`)).not.toMatch(/animation/);
+    // The one child it does have starts invisible, so an idle screen is the page's own paint.
+    expect(rule(`#${AMBIENT_LIGHT_ID} .al-pulse`)).toMatch(/opacity:\s*0/);
+    // And the drift must not come back under another name: nothing in this layer's rules may
+    // animate for more than a beat, and nothing may animate on a timer.
+    for (const m of css.matchAll(new RegExp(`#${AMBIENT_LIGHT_ID}[^{]*\\{([^}]*)\\}`, 'g'))) {
+      expect(m[1]!).not.toMatch(/animation:[^;]*infinite/);
+    }
+  });
+
+  it('is built by the atmosphere into the background stack, before the motes', () => {
+    expect(atmosphere).toContain('mountAmbientLight()');
+    const src = read('../src/ui/ambient-light.ts');
+    // Only the pulse is built — the standing pool element is gone from the module too.
+    expect(src).not.toContain("'al-base'");
+  });
+});
+
 describe('the room light cannot reach the board', () => {
   it('sits at the bottom of the stack, under every screen', () => {
     expect(rule(`#${AMBIENT_LIGHT_ID}`)).toMatch(/z-index:\s*0/);
     expect(rule(`#${AMBIENT_LIGHT_ID}`)).toMatch(/pointer-events:\s*none/);
     expect(rule('.screen')).toMatch(/z-index:\s*1/);
-    // Mounted into the background stack, before the motes: above #texture, below the game.
-    expect(atmosphere).toContain('mountAmbientLight()');
   });
 
   it('is painted over by opaque cells: the board fill never lets it through', () => {
@@ -92,25 +124,27 @@ describe('the room light cannot reach the board', () => {
 });
 
 describe('the room light is paint, not filter, and respects the render gate', () => {
-  it('is one radial gradient moved by transform only', () => {
-    const base = rule(`#${AMBIENT_LIGHT_ID} .al-base`);
-    expect(base).toMatch(/background:\s*radial-gradient\(/);
-    expect(base).toContain('animation: ambient-drift');
-    expect(base).toContain('will-change: transform');
-    expect(base).not.toMatch(/filter:/);
-    expect(base).not.toContain('blur(');
-    const drift = css.slice(css.indexOf('@keyframes ambient-drift'), css.indexOf('@keyframes ambient-drift') + 400);
-    expect(drift).toMatch(/transform:\s*translate3d/);
-    // Nothing on the moving layer may animate a paint property.
-    expect(drift).not.toMatch(/(box-shadow|filter|background|opacity|border-radius)\s*:/);
+  it('is one radial gradient that only ever moves in opacity', () => {
+    const pulse = rule(`#${AMBIENT_LIGHT_ID} .al-pulse`);
+    expect(pulse).toMatch(/background:/);
+    expect(pulse).toMatch(/radial-gradient\(/);
+    expect(pulse).not.toMatch(/filter:/);
+    expect(pulse).not.toContain('blur(');
+    expect(pulse).not.toMatch(/animation/);
+    // The animation is JS (`element.animate`) and touches opacity alone — never a paint property.
+    const src = read('../src/ui/ambient-light.ts');
+    const beat = src.slice(src.indexOf('el.animate('), src.indexOf('], { duration: plan.ms'));
+    expect(beat).toContain('opacity');
+    expect(beat).not.toMatch(/(box-shadow|filter|background|transform|border-radius)/);
   });
 
-  it('derives the pool from the palette tokens, never a hardcoded colour', () => {
-    const base = rule(`#${AMBIENT_LIGHT_ID} .al-base`);
-    expect(base).toContain('var(--c-text)');
-    expect(base).toContain('var(--c-you)');
-    expect(base).toContain('var(--c-bg)');
-    expect(base).toContain('color-mix(');
+  it('derives the pulse from the palette tokens, never a hardcoded colour', () => {
+    const pulse = rule(`#${AMBIENT_LIGHT_ID} .al-pulse`);
+    expect(pulse).toContain('var(--ambient-tint');
+    expect(pulse).toContain('var(--c-text)');
+    expect(pulse).toContain('color-mix(');
+    // The position of the brightest part is the board's own centre, per layout.
+    expect(rule(`#${AMBIENT_LIGHT_ID}`)).toContain('--al-x:');
   });
 
   it('stops under a veil, exactly like the motes', () => {
@@ -119,13 +153,8 @@ describe('the room light is paint, not filter, and respects the render gate', ()
     expect(gate).toContain('#spores');
   });
 
-  it('is still a still wash with Reduce motion (no drift, no pulse)', () => {
-    expect(css).toMatch(new RegExp(`\\.reduce-motion #${AMBIENT_LIGHT_ID} \\.al-base \\{[^}]*animation:\\s*none`));
+  it('plays no pulse at all with Reduce motion', () => {
     expect(css).toMatch(new RegExp(`\\.reduce-motion #${AMBIENT_LIGHT_ID} \\.al-pulse \\{[^}]*display:\\s*none`));
-    expect(css).toMatch(new RegExp(`@media \\(prefers-reduced-motion: reduce\\)[^@]*#${AMBIENT_LIGHT_ID} \\.al-base`));
-  });
-
-  it('keeps the pulse layer dark until an action needs it', () => {
-    expect(rule(`#${AMBIENT_LIGHT_ID} .al-pulse`)).toMatch(/opacity:\s*0/);
+    expect(css).toMatch(new RegExp(`@media \\(prefers-reduced-motion: reduce\\)[^@]*#${AMBIENT_LIGHT_ID} \\.al-pulse`));
   });
 });

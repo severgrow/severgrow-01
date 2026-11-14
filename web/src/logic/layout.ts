@@ -65,6 +65,15 @@ export type Thumb = {
   tips: Box;
   /** the band the fan lives in (dock px) */
   band: Box;
+  /** THE SPARE AIR the dock took above its control row, dock px (0 when it took none).
+   *
+   *  `thumbDock` grants spare height to the two gaps around the control row so a map held back by
+   *  the width does not leave one huge void. That is the same air the owner asked for when he said
+   *  the bigger cards must not lift the map ("we put the board a bit lower in old - bring that back
+   *  too", 2026-11-14): the map's window runs on under it (`--cam-under` in player/player-css.ts,
+   *  published from this number), so growing the cards moves the dock's own parts down instead of
+   *  pushing the map up. 0 on the phones whose dock already fits. */
+  air: number;
 };
 /** Thumb layout v3: the card slice (wanted, most), the picked card's lift, the pile column, the
  *  shared side margin (board, piles, fan, tools), icon buttons, the fan's end tilt (deg) and
@@ -162,6 +171,7 @@ const thumbDock = (W: number, usable: number, maxHand: number, side: 'right' | '
       sort,
       tips,
       band,
+      air: extra,
     };
     if (side === 'left') t = mirrorThumb(t, W);
     return { t, h };

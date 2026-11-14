@@ -1,15 +1,17 @@
-// THE ROOM'S LIGHT: one big, very slow pool behind everything the game draws, and the background's
-// answer to a big action.
+// THE ROOM'S ANSWER TO A BIG ACTION. The background's response to a Cut, a Blast or a Bomb: one
+// short beat of the action's own colour over the page.
 //
-// Owner, 2026-11-14: "the plain black background behind the board is a bit too dark, make it have
-// some big light going on slowly never leak into the board --- all screen sizes -- has to be
-// integrated with background color actions during big actions in game". Asked to pick a character:
-// ONE big soft light, very slow drift; and on the action link "all of it": it pulses with big
-// actions AND takes the action's colour briefly.
+// HISTORY (keep this, it is why there is no standing light here): on 2026-11-14 the owner first
+// asked for a slow pool of light behind the board, which shipped in the morning. In the evening he
+// reversed it — "i liked the background of the old more, the black with stars + blurred flying
+// lights. bring it back the same one" — so the standing pool was removed (web/src/style.css) and
+// the page paints exactly what the live build paints. What is kept is the other half of his
+// request, which he has not withdrawn: "has to be integrated with background color actions during
+// big actions in game".
 //
-// The layer itself (element, gradient, drift keyframes, the veil gate, Reduce motion) is CSS in
-// `web/src/style.css`, next to #texture and #spores: it is part of the page's background stack, not
-// a screen. This module owns the three things CSS cannot do:
+// The layer itself (element, gradient, the veil gate, Reduce motion) is CSS in `web/src/style.css`,
+// next to #texture and #spores: it is part of the page's background stack, not a screen. This module
+// owns the three things CSS cannot do:
 //   - building the element at boot (so a channel that is not the product never builds it),
 //   - the one-shot pulse, driven by ONE `element.animate()` on opacity (never a frame loop),
 //   - the action -> tone contract below.
@@ -112,11 +114,11 @@ export function mountAmbientLight(): HTMLElement | null {
   const root = document.createElement('div');
   root.id = AMBIENT_LIGHT_ID;
   root.setAttribute('aria-hidden', 'true');
-  const base = document.createElement('i');
-  base.className = 'al-base';
+  // ONLY the pulse: with nothing playing the layer paints no pixel at all, so the page's own
+  // backdrop (black, its stars and their drifting lights) is exactly what the live build shows.
   const pulse = document.createElement('i');
   pulse.className = 'al-pulse';
-  root.append(base, pulse);
+  root.append(pulse);
   const spores = document.getElementById('spores');
   if (spores?.parentElement) spores.before(root);
   else {
@@ -130,9 +132,9 @@ export function mountAmbientLight(): HTMLElement | null {
 }
 
 /**
- * The background answers a big action: the pool brightens in the action's own colour for one short
- * beat, then settles. ONE style write (the tint) and ONE opacity animation — no frame loop, no
- * layout read, and nothing that survives the animation. Returns whether it played.
+ * The background answers a big action: one short beat of the action's own colour over the page,
+ * then it settles back to nothing. ONE style write (the tint) and ONE opacity animation — no frame
+ * loop, no layout read, and nothing that survives the animation. Returns whether it played.
  *
  * The caller passes the impact's own strength and the game's speed factor, so the background moves
  * with the board instead of beside it.
@@ -140,7 +142,8 @@ export function mountAmbientLight(): HTMLElement | null {
 export function pulseAmbientLight(action: AmbientAction, o: AmbientPulseOptions = {}): boolean {
   if (typeof document === 'undefined') return false;
   // Reduce motion is a hard no, whatever the caller says (the same belt-and-braces the outcome
-  // light uses): the pool stays a still wash.
+  // light uses): a full-screen colour wash is the one thing that must never move for a player who
+  // asked for no motion.
   if (document.documentElement.classList.contains('reduce-motion')
     || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches)) return false;
   const plan = ambientPulsePlan(action, o);

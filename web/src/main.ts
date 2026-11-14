@@ -7183,6 +7183,15 @@ function applyLayout() {
   root.setProperty('--hud-h', px(FEATURES.slimHeader ? SLIM_HUD : HEIGHTS.hud));
   root.setProperty('--race-h', px(FEATURES.slimHeader ? 0 : HEIGHTS.race));
   root.setProperty('--dock-h', px(l.dock.h));
+  // THE BOARD'S VERTICAL PLACE ON A PHONE (owner, 2026-11-14: "we put the board a bit lower in old
+  // - bring that back too"). The camera frames the map in `--cam-under` less than the wrap's
+  // height, and it READS that number with parseFloat — so it must be a resolved px value, never a
+  // calc(). The map keeps the dock's spare air above its control row (`Thumb.air`): that air is
+  // empty, so using it lets bigger cards grow the fan downwards instead of lifting the whole map up
+  // the screen. Without `air` at all, the map sits exactly where it did before the cards grew.
+  const mapWrap = $('board-wrap');
+  if (thumbLayout) mapWrap.style.setProperty('--cam-under', px(Math.max(0, l.dock.h - thumbLayout.air)));
+  else mapWrap.style.removeProperty('--cam-under');
   root.setProperty('--dock-w', px(l.dock.w));
   root.setProperty('--board-margin', `${BOARD_MARGIN}px`);
   for (const [k, v] of Object.entries(l.rows)) root.setProperty(`--row-${k}`, px(v));

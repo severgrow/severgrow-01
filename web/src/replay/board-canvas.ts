@@ -23,7 +23,7 @@ import { allCoords, allNeighbors, coordKey, mirror, parseKey } from '../../../sr
 import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
 import { getOrient, toScreen } from '../logic/orient.js';
 import { centerOf, S } from '../ui/geom.js';
-import { GOLD_FRAME_ATLAS, goldFrameCrop } from '../ui/goldframes.js';
+import { GOLD_FRAME_ATLAS, goldFrameCrop, goldFrameKeys } from '../ui/goldframes.js';
 import { goldFrameSize } from '../ui/goldframe-geometry.js';
 import { faBaseColour, faGoldLooks, goldLookId, faRockSprite, faTileSprite, faVariants } from '../ui/forestAsh.js';
 import type { FaSprite, FaVariants, GoldLook } from '../ui/forestAsh.js';
@@ -303,31 +303,40 @@ export type GoldFramePlacement = {
 };
 
 /**
- * Which gold frame LOOK each bonus hex of THIS layout wears: the live board's own assignment
- * (`faGoldLooks`), built from the layout's own gold keys. The poster and the video call this, so a
+ * The layout's bonus hexes that may wear a frame: the OUTER RING only (`goldFrameKeys`,
+ * ui/goldframes.ts — owner, 2026-11-14: "the bug with gold tile in middle - should never happen").
+ * The live board asks the same resolver with its own cells, so a replay and the game agree.
+ */
+export const goldFrameCells = (L: BoardLayout): typeof L.cells =>
+  goldFrameKeys(L.cells.map((c) => c.key), L.cells.filter((c) => c.terrain === 'rich').map((c) => c.key))
+    .map((key) => L.cells.find((c) => c.key === key)!);
+
+/**
+ * Which gold frame LOOK each framed hex of THIS layout wears: the live board's own assignment
+ * (`faGoldLooks`), built from the layout's own framed keys. The poster and the video call this, so a
  * shared picture shows exactly the frames the game showed. Pure and cached per board shape.
  */
 let goldLooksKey = '';
 let goldLooksMemo: Map<string, GoldLook> = new Map();
 export const goldVariantsOf = (L: BoardLayout): ReadonlyMap<string, GoldLook> => {
-  const gold = L.cells.filter((c) => c.terrain === 'rich').map((c) => c.key);
+  const gold = goldFrameCells(L).map((c) => c.key);
   const key = gold.join(' ');
   if (key !== goldLooksKey) { goldLooksKey = key; goldLooksMemo = faGoldLooks(gold); }
   return goldLooksMemo;
 };
 
 /**
- * Where the bonus hexes' metal frames go: one per rich cell, with the same size, crop and turn as
- * `ui/goldframes.ts` draws on the live board. Pure, so a test can hold it to the board's geometry.
- * The look only turns or mirrors the same hex-shaped box, so this placement never depends on it.
+ * Where the metal frames go: one per FRAMED cell (an outer-ring bonus hex), with the same size,
+ * crop and turn as `ui/goldframes.ts` draws on the live board. Pure, so a test can hold it to the
+ * board's geometry. The look only turns or mirrors the same hex-shaped box, so this placement never
+ * depends on it.
  */
 export const goldFramePlacements = (L: BoardLayout): GoldFramePlacement[] => {
   const k = L.hex / S;
   const size = goldFrameSize();
   const rotate = getOrient() === 'pointy' ? (-30 * Math.PI) / 180 : 0;
   const looks = goldVariantsOf(L);
-  return L.cells
-    .filter((cell) => cell.terrain === 'rich')
+  return goldFrameCells(L)
     .map((cell) => {
       const crop = goldFrameCrop(looks, cell.key);
       return {

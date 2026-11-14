@@ -1,7 +1,11 @@
 // THE SHARE IMAGE AND VIDEO CARRY THE BONUS HEXES' GOLD FRAMES (owner, 2026-10-26). The replay screen
-// draws a metal frame on every bonus ("rich") hex — the only thing that marks one in Futasaku — but
+// draws a metal frame on the bonus ("rich") hexes — the only thing that marks one in Futasaku — but
 // the canvas painter behind the poster and the video drew none, so a shared picture showed a
 // different board from the game. These pin the canvas frames to the live board's own geometry.
+//
+// Since 2026-11-14 a frame is a RIM, so only the OUTER RING wears one ("the bug with gold tile in
+// middle - should never happen"); interior bonus hexes keep their terrain and lose the metal. Both
+// painters ask the same resolver (`goldFrameKeys`, ui/goldframes.ts), which is what these pin.
 import { describe, expect, it } from 'vitest';
 import { CURRENT_RULES_VERSION, rulesConfig } from '../../src/engine/versions.js';
 import { boardCoords, coordKey } from '../../src/engine/index.js';
@@ -10,6 +14,7 @@ import { S } from '../src/ui/geom.js';
 import { faGoldLooks, goldLookId } from '../src/ui/forestAsh.js';
 import { goldFrameSize } from '../src/ui/goldframe-geometry.js';
 import { goldFrameCrop } from '../src/ui/goldframes.js';
+import { goldFrameKeys } from '../src/ui/goldframes.js';
 import { goldFramePlacements, GOLD_FRAME_PAD, goldVariantsOf, loadBoardArtUrls, screenCoordsOf } from '../src/replay/board-canvas.js';
 import type { BoardLayout } from '../src/replay/board-canvas.js';
 import { buildReplay } from '../src/replay/timeline.js';
@@ -29,12 +34,22 @@ describe('the canvas board\'s gold frames', () => {
   });
   const layout: BoardLayout = posterLayout(posterFor(model)).board;
   const rich = layout.cells.filter((c) => c.terrain === 'rich');
+  /** The cells the live board draws a frame on: the bonus hexes on the board's OUTER ring. */
+  const framed = goldFrameKeys(layout.cells.map((c) => c.key), rich.map((c) => c.key));
 
-  it('places one frame on every bonus hex, and on nothing else', () => {
+  it('places one frame on every OUTER-RING bonus hex, and on nothing else', () => {
     expect(screenCoordsOf(model).length).toBe(layout.cells.length);
     expect(rich.length).toBeGreaterThan(0);
+    expect(framed.length).toBeGreaterThan(0);
     const frames = goldFramePlacements(layout);
-    expect(frames.map((f) => f.key).sort()).toEqual(rich.map((c) => c.key).sort());
+    expect(frames.map((f) => f.key).sort()).toEqual([...framed].sort());
+    // And the point of the rule: no interior hex is ever among them (the centre is bonus terrain
+    // on every board and must never wear metal).
+    const frameset = new Set(framed);
+    for (const cell of rich) {
+      const ring = (() => { const [q, r] = cell.key.split(',').map(Number) as [number, number]; return (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2; })();
+      if (ring < 3) expect(frameset.has(cell.key), cell.key).toBe(false);
+    }
   });
 
   it('is the live board\'s frame: same size around the hex, same atlas crop for that hex', () => {
@@ -66,11 +81,13 @@ describe('the canvas board\'s gold frames', () => {
   });
 
   it('wears the same look as the live board, key for key, and turns it the same way', () => {
-    // The live board builds `faGoldLooks` from `boardCoords(config)` filtered to the rich cells
-    // (ui/board.ts `setup`); the poster builds `goldVariantsOf` from the layout's own cells. If these
-    // ever disagree, a replay would show a different frame from the game it replays.
+    // The live board builds `faGoldLooks` from `boardCoords(config)` filtered to the framed cells —
+    // the bonus hexes on the outer ring (ui/board.ts `setup`); the poster builds `goldVariantsOf`
+    // from the layout's own cells. If these ever disagree, a replay would show a different frame
+    // from the game it replays.
     const liveBoard = newMatch(SEED);
-    const liveKeys = boardCoords(liveBoard.config).map(coordKey).filter((k) => liveBoard.terrain[k] === 'rich');
+    const liveBoardKeys = boardCoords(liveBoard.config).map(coordKey);
+    const liveKeys = goldFrameKeys(liveBoardKeys, liveBoardKeys.filter((k) => liveBoard.terrain[k] === 'rich'));
     const live = faGoldLooks(liveKeys);
     const replay = goldVariantsOf(layout);
     expect(replay.size).toBe(live.size);

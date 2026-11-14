@@ -29,7 +29,7 @@ import { materialFor } from '../logic/materials.js';
 import { drawLandmark, setLandmarkState } from './landmarks.js';
 import { materialsOf } from '../logic/materials.js';
 import { drawSeedStone } from './seedstone.js';
-import { drawGoldFrame } from './goldframes.js';
+import { drawGoldFrame, goldFrameKeys } from './goldframes.js';
 import { faGoldLooks } from './forestAsh.js';
 import type { GoldLook } from './forestAsh.js';
 import { hexAtPoint } from '../logic/draw.js';
@@ -145,10 +145,17 @@ export class BoardView {
   /** Bonus terrain stays in engine state; this set only controls its visual crystals. */
   protected richKeys = new Set<string>();
   /**
-   * Which gold frame LOOK (design, 60-degree turn, mirror) each bonus hex wears, for THIS board.
-   * Built once per setup from the board's own gold keys (`faGoldLooks`), never from a key alone, and
-   * not reset by a render: the same board always paints the same frames. The replay canvas builds
-   * the same map from the same keys, so a replay cannot show a different look.
+   * THE HEXES THAT MAY WEAR A GOLD FRAME: the board's outer ring only (`goldFrameKeys`,
+   * ui/goldframes.ts). Owner, 2026-11-14: "the bug with gold tile in middle - should never happen".
+   * `richKeys` is the engine terrain (the centre is always rich — spec 4.4) and stays the source
+   * for everything else; this set is the frame's own, and it can never contain an interior hex.
+   */
+  protected frameKeys = new Set<string>();
+  /**
+   * Which gold frame LOOK (design, 60-degree turn, mirror) each framed hex wears, for THIS board.
+   * Built once per setup from the board's own framed keys (`faGoldLooks`), never from a key alone,
+   * and not reset by a render: the same board always paints the same frames. The replay canvas
+   * builds the same map from the same keys, so a replay cannot show a different look.
    */
   protected goldLooks: ReadonlyMap<string, GoldLook> = new Map();
   protected layers!: Record<'base' | 'scars' | 'veins' | 'homes' | 'tiles' | 'glow' | 'amb' | 'contour' | 'rich' | 'marks' | 'dim' | 'over' | 'draw' | 'fx', SVGGElement>;
@@ -317,10 +324,13 @@ export class BoardView {
     // THE BOARD AS A SMALL PLANET (0.75): the live game's board bends on the Territory globe's curve.
     setBoardBulge(FEATURES.space ? this.keys : null);
     this.richKeys = new Set(this.keys.filter(key => terrain[key] === 'rich'));
-    // The board's own gold keys decide the frame looks (design, turn, mirror; neighbours never
+    // A frame is a rim, so only the outer ring wears one — an interior bonus hex keeps its terrain
+    // and scores its 2, but never gets metal in the middle of the board (`goldFrameKeys`).
+    this.frameKeys = new Set(goldFrameKeys(this.keys, this.richKeys));
+    // The board's own framed keys decide the frame looks (design, turn, mirror; neighbours never
     // repeat one). Built with the board, so every render of this board shows the same frames — and
     // the replay's canvas painter builds the identical map from the identical keys.
-    this.goldLooks = faGoldLooks(this.richKeys);
+    this.goldLooks = faGoldLooks(this.frameKeys);
     // Step 3: just the tiles, a thin margin and headroom for the homes, in the board's orientation
     const u = boardUnits(config.boardRadius, getOrient());
     svg.setAttribute('viewBox', `${u.x0.toFixed(1)} ${u.y0.toFixed(1)} ${u.w.toFixed(1)} ${u.h.toFixed(1)}`);
@@ -631,10 +641,10 @@ export class BoardView {
       if(contour!==this.contourSignature || this.layers.contour.querySelector('.grow-in')){
         this.contourSignature=contour;this.drawTerritoryContour(board);
       }
-      const gold=[...this.richKeys].map(key=>Number(!!board[key])).join('');
+      const gold=[...this.frameKeys].map(key=>Number(!!board[key])).join('');
       if(gold!==this.richSignature || !rich.childElementCount){
         this.richSignature=gold;rich.replaceChildren();
-        for (const key of this.richKeys) {
+        for (const key of this.frameKeys) {
           const { x, y } = centerOf(key);
           drawGoldFrame(rich, this.goldLooks, key, x, y, !!board[key]);
         }

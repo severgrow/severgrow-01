@@ -521,6 +521,16 @@ html[data-thumb] .dock .pile-label {
 
 /* ---- the map runs on under the cards (phones): faded, the focus decides how much ---- */
 html[data-thumb] .board-wrap {
+  /* WHERE THE MAP'S WINDOW ENDS (owner, 2026-11-14: "we put the board a bit lower in old - bring
+     that back too"). The camera frames the board in --cam-under less than the wrap's height, so
+     this one number IS the board's vertical position on a phone. It stops at the dock's top, plus
+     THE MAP'S OWN AIR: the spare height the dock's gaps took above its control row is empty, so the
+     map may use it — a bigger card then grows the fan down instead of pushing the whole map up the
+     screen, which is what the live build did before the cards were enlarged. main.ts publishes that
+     as --cam-under itself, a RESOLVED px value on this element (the dock's height minus that air). It
+     must stay a plain px value: camera.ts reads the property with parseFloat, so a calc() token
+     would parse as NaN and drop the board to the bottom of the screen.
+     Measured against the live site at 320x568, 360x640, 390x844 and 430x932: within 1 px. */
   --cam-under: var(--dock-h, 0px);
   margin-bottom: calc(-1 * var(--dock-h, 0px));
 }

@@ -3,7 +3,7 @@
 // gap around the board is over 16pt, and the corner tools never cover a tile.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { allCoords, coordKey } from '../../src/engine/index.js';
-import { BOARD_MARGIN, CENTRE_MIN, HAND_EDGE, HEIGHTS, SIDE_GAP, MAX_GAP, MAX_HAND, MIN_SLICE, SORT_W, TOOL, boardUnits, computeLayout, overlaps, setSlimHud } from '../src/logic/layout.js';
+import { BOARD_MARGIN, CENTRE_MIN, HAND_EDGE, HEIGHTS, SIDE_GAP, MAX_GAP, MAX_HAND, MIN_SLICE, SORT_W, THUMB, TOOL, boardUnits, computeLayout, overlaps, setSlimHud } from '../src/logic/layout.js';
 import type { Box, Layout, Viewport } from '../src/logic/layout.js';
 import { setOrient } from '../src/logic/orient.js';
 import { cornerPts } from '../src/ui/geom.js';
@@ -205,6 +205,38 @@ describe('thumb layout: cards are at least the 44pt touch minimum', () => {
     expect(t.card.w).toBeGreaterThanOrEqual(70);
     expect(t.card.h).toBeGreaterThanOrEqual(99);
     expect(t.card.w + (MAX_HAND - 1) * t.slice).toBeLessThanOrEqual(390);
+  });
+
+  it('a bigger card never lifts the map (owner, 2026-11-14: "we put the board a bit lower")', () => {
+    // THE MAP'S WINDOW is what places the board on a phone (player/player-css.ts: the camera frames
+    // the board in `--cam-under`, and main.ts publishes it from `dock.h - thumb.air`). Growing the
+    // cards once pushed the whole map up the screen; `air` (the dock's spare height above its
+    // control row) is what the map reclaims, so the window must NOT change with the card size.
+    // Measured the same way the browser suites do: the smallest card ladder against the product's.
+    const cap = THUMB.cap;
+    const windowOf = (w: number, h: number, at: number) => {
+      const before = THUMB.cap;
+      (THUMB as { cap: number }).cap = at;
+      try {
+        const l = computeLayout({ w, h }, 3, MAX_HAND, 'right');
+        const t = l.thumb!;
+        return { window: l.dock.h - t.air, card: t.card.w, air: t.air };
+      } finally {
+        (THUMB as { cap: number }).cap = before;
+      }
+    };
+    for (const [w, h] of [[320, 568], [360, 640], [390, 844], [430, 932]] as const) {
+      const small = windowOf(w, h, 0.4);
+      const big = windowOf(w, h, cap);
+      // The cards really did grow (the test would be empty on a phone where the ladder is capped).
+      expect(big.card, `${w}x${h} card`).toBeGreaterThanOrEqual(small.card);
+      // ...and the map's window never shrank: with smaller cards it may be larger (there is more
+      // room), but a bigger card may never take the map's place.
+      expect(big.window, `${w}x${h} window`).toBeGreaterThanOrEqual(small.window - 1);
+      expect(big.air).toBeGreaterThanOrEqual(0);
+    }
+    // On a tall phone the dock granted itself spare air, so the map gets a real share of it back.
+    expect(windowOf(390, 844, cap).air).toBeGreaterThan(0);
   });
 });
 
