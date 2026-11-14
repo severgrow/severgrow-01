@@ -1788,6 +1788,12 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   position: relative;
   width: 52px;
   height: 72px;
+  /* THE SLABS BELONG TO THE CARD BOX, NOT TO THE WHOLE PAGE. The two slab pseudo-elements are
+     pushed behind the stack with `z-index:-1` (see .pile-stack::before below); a negative layer is
+     positioned in the nearest STACKING CONTEXT, so without this the slabs would escape past the
+     dock and could sit behind an opaque ancestor's fill. Isolating the card box keeps them between
+     its (transparent) background and the stack's face — exactly the two edges of a pile. */
+  isolation: isolate;
 }
 .pile-label {
   font-size: 0.72rem;
@@ -1825,6 +1831,14 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   inset: auto;
   width: 100%;
   height: 100%;
+  /* ONE BACK, TWO EDGES (owner, 2026-11-14: "the back of the cards - draw pile is broken - no
+     skin"). `.pile-stack` wears the card-back art (player/cards.ts), and these two slabs are the
+     thickness behind it: the +2px and +4px offsets peek out as hairline card edges. They used to
+     paint OPAQUE `--c-surface` slabs ON TOP of the stack, which is why the pile read as plain grey
+     slabs with a diagonal hatch and no skin at all — a pseudo-element always paints above its own
+     element's background. `z-index:-1` moves them behind the stack's fill but in front of the
+     isolated card box, so the back art is the visible face and only the offsets show. */
+  z-index: -1;
 }
 .pile-stack::before {
   left: 2px;
@@ -1833,7 +1847,10 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
 .pile-stack::after {
   left: 4px;
   top: 4px;
-  background-image: repeating-linear-gradient(45deg, transparent 0 5px, color-mix(in srgb, var(--c-line) 70%, transparent) 5px 6px);
+  /* The 45° hatch that used to fake a pattern on a blank slab is gone: with the real back in
+     front, the only visible part of this layer is a 4px crescent along the right and bottom edge,
+     where a 5px/6px diagonal repeat renders as a couple of stray ticks that look like a printing
+     fault rather than thickness. The plain surface plus its 1px hairline reads as a card edge. */
 }
 .pile-count {
   position: absolute;
