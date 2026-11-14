@@ -6,10 +6,10 @@
 // seed stones and the rim, and `poster.ts` / `frames.ts` only put text around it.
 //
 // It is a canvas port of `ui/defaultArtBoard.ts`, the board the match itself paints: the same
-// ground picture at 360 board units, the same 80/76-unit tile faces keyed by the same `hash`, the
-// same 68-unit homes, the same 54-unit rocks at -30 degrees, the same carved strength stones and
-// the same quiet rim (rgba(178,174,163,.18) at 0.75 units). A video that showed a different board
-// than the game would be worse than no video.
+// ground picture at 360 board units, the same Forest & Ash sprites placed by `ui/forestAsh.ts` (same
+// variants, same overhang, same drawing order: tiles row by row, then rocks, then homes), the same
+// gold frames, carved strength stones and quiet rim. A video that showed a different board than
+// the game would be worse than no video.
 //
 // The artwork is the game's own, handed over as URLs by the module the board already loaded: every
 // picture is already decoded by the time a match ends, so this is a cache hit, never a download.
@@ -19,11 +19,13 @@ import { WORDMARK_URL } from '../player/branding.js';
 import { ledFrameUrl } from './led-plate.js';
 import { BOMB_ART_URL } from './strike.js';
 import { warmReplayUI } from './typography.js';
-import { allCoords, coordKey, mirror, parseKey } from '../../../src/engine/index.js';
+import { allCoords, allNeighbors, coordKey, mirror, parseKey } from '../../../src/engine/index.js';
 import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
 import { getOrient, toScreen } from '../logic/orient.js';
-import { centerOf, hash, S, SQ3 } from '../ui/geom.js';
+import { centerOf, S, SQ3 } from '../ui/geom.js';
 import { GOLD_FRAME_ATLAS, goldFrameCrop } from '../ui/goldframes.js';
+import { faBaseColour, faRockSprite, faTileSprite, faVariants } from '../ui/forestAsh.js';
+import type { FaSprite, FaVariants } from '../ui/forestAsh.js';
 import { SEED_STONE_ATLAS, seedStoneCrop } from '../ui/seedstone.js';
 import type { ReplayModel } from './timeline.js';
 
@@ -68,12 +70,8 @@ export type BoardArt = {
   gold?: string;
 };
 
-/** The territory colours `DefaultArtBoardView` fills under its sprites. */
-export const TERRITORY_BASE: readonly [string, string] = ['#315321', '#302c2c'];
 /** The board's quiet rim, drawn over the art (never a bright seam). */
 export const CELL_RIM = 'rgba(178,174,163,0.18)';
-/** The rock clusters' own drop shadow, under the picture. */
-export const ROCK_SHADOW = 'rgba(0,0,0,.17)';
 /** The carved counter's shadow (the board's `--seed-stone-shadow` fallback). */
 export const STONE_SHADOW = 'rgba(0,0,0,.4)';
 
@@ -160,14 +158,6 @@ export const boardArtSource = (): BoardArt | null => source;
 
 const picture = (url: string | undefined): HTMLImageElement | null => (url ? decoded.get(url) ?? null : null);
 
-/** The sprite's own rotation, shared with `DefaultArtBoardView` (its visual base at the bottom). */
-const artAngle = () => {
-  const axis = toScreen(1, 0);
-  return ((Math.atan2(axis.y, axis.x) * 180) / Math.PI + 120) * (Math.PI / 180);
-};
-
-/** The square each board sprite occupies, in board units (radius = S). Same table as the board. */
-const artSize = (index: number) => (index >= 18 ? 68 : index < 9 ? 80 : 76);
 
 export type BoardData = {
   /** The position's tiles, by screen key. */
@@ -358,12 +348,24 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
     // One ground tile is 360 board units on the live board; keep that scale here.
     pattern?.setTransform?.(new DOMMatrix().scale(k, k));
   }
-  const angle = artAngle();
   const atlas = picture(SEED_STONE_ATLAS);
-  const rocks = source?.rocks ?? [];
+  const fa = variantsFor(L);
+  // Rows top to bottom, as the live board draws them: a lower tile's spill lies over the one above.
+  const rows = [...L.cells].sort((a, b) => a.y - b.y || a.x - b.x);
+  const byKey = new Map(L.cells.map((c) => [c.key, c] as const));
+  // Repainting a few cells (a video frame): only inside their hexes, but with every neighbour's
+  // art drawn again there, so a canopy or grass tip reaching into them is not lost.
+  const near = o.only ? new Set([...o.only].flatMap((key) => [key, ...allNeighbors(parseKey(key)).map(coordKey)])) : null;
+  g.save();
+  if (o.only) {
+    g.beginPath();
+    for (const key of o.only) { const c = byKey.get(key); if (c) hexPath(g, c.x, c.y, L.hex); }
+    g.clip();
+  }
 
-  for (const cell of L.cells) {
-    if (o.only && !o.only.has(cell.key)) continue;
+  // 1. The ground of every cell, with the territory colour under a tile, and the quiet rim.
+  for (const cell of rows) {
+    if (near && !near.has(cell.key)) continue;
     const r = L.hex;
     g.save();
     hexAt(g, cell.x, cell.y, r);
@@ -371,57 +373,12 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
     if (pattern) {
       g.fillStyle = pattern;
       g.fillRect(cell.x - r, cell.y - r, r * 2, r * 2);
-    }
-    const moving = cell.owner !== null ? o.motion?.[cell.key] : undefined;
-    if (moving) {
-      // A tile arriving (or leaving) grows from, or shrinks to, its own centre over the bare ground.
-      g.globalAlpha = Math.max(0, Math.min(1, moving.alpha));
-      g.translate(cell.x, cell.y);
-      g.scale(moving.scale, moving.scale);
-      g.translate(-cell.x, -cell.y);
-    }
-    if (cell.owner !== null) {
-      // The territory colour only shows through the art's own edges, exactly as on the board.
-      g.fillStyle = TERRITORY_BASE[cell.owner];
-      g.fillRect(cell.x - r, cell.y - r, r * 2, r * 2);
-      const index = cell.root
-        ? cell.owner === 0
-          ? 18
-          : 19
-        : cell.owner * 9 + Math.floor(hash(`${cell.key}:default-tile`) * 9);
-      const sprite = picture(source?.sprites[index]);
-      if (sprite) {
-        const side = artSize(index) * k;
-        g.translate(cell.x, cell.y);
-        g.rotate(angle);
-        g.drawImage(sprite, -side / 2, -side / 2, side, side);
-      }
-    } else if (!pattern) {
+    } else {
       // No ground picture: the board's own empty-cell tints, from the poster's palette.
-      g.fillStyle =
-        cell.terrain === 'rich'
-          ? 'rgba(233, 216, 173, .12)'
-          : cell.terrain === 'rock'
-            ? 'rgba(242, 237, 228, .045)'
-            : 'rgba(242, 237, 228, .035)';
+      g.fillStyle = cell.terrain === 'rich' ? 'rgba(233, 216, 173, .12)' : cell.terrain === 'rock' ? 'rgba(242, 237, 228, .045)' : 'rgba(242, 237, 228, .035)';
       g.fillRect(cell.x - r, cell.y - r, r * 2, r * 2);
-    }
-    if (cell.terrain === 'rock' && rocks.length) {
-      const rock = picture(rocks[Math.floor(hash(`${cell.key}:v3-rock`) * rocks.length)]);
-      if (rock) {
-        // The board's own soft footprint under the cluster, then the cluster at -30 degrees.
-        g.beginPath();
-        g.ellipse(cell.x, cell.y + 7 * k, 22 * k, 13 * k, 0, 0, Math.PI * 2);
-        g.fillStyle = ROCK_SHADOW;
-        g.fill();
-        const side = 54 * k;
-        g.translate(cell.x, cell.y);
-        g.rotate((-30 * Math.PI) / 180);
-        g.drawImage(rock, -side / 2, -side / 2, side, side);
-      }
     }
     g.restore();
-
     // Only rocks retain their edge. Empty ground matches the live board without a contour.
     if (cell.terrain === 'rock') {
       hexAt(g, cell.x, cell.y, Math.max(1, r - 1.1 * k));
@@ -429,16 +386,54 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
       g.lineWidth = Math.max(1, 0.75 * k);
       g.stroke();
     }
+  }
 
-    const stoneMotion = cell.owner !== null ? o.motion?.[cell.key] : undefined;
-    if (stoneMotion) {
-      g.save();
-      g.globalAlpha = Math.max(0, Math.min(1, stoneMotion.alpha));
-      g.translate(cell.x, cell.y);
-      g.scale(stoneMotion.scale, stoneMotion.scale);
-      g.translate(-cell.x, -cell.y);
-    }
-    if (cell.owner !== null && !cell.root && cell.strength > 0) {
+  // 2. Empty gold frames lie on the ground, under any art that spills over them.
+  const gold = picture(source?.gold ?? GOLD_FRAME_ATLAS);
+  const frames = new Map(goldFramePlacements(L).map((f) => [f.key, f] as const));
+  const frame = (key: string) => {
+    const f = frames.get(key);
+    if (!gold || !f) return;
+    g.save();
+    g.translate(f.x, f.y);
+    if (f.rotate) g.rotate(f.rotate);
+    g.globalAlpha = f.occupied ? 0.92 : 1;
+    g.shadowColor = f.occupied ? GOLD_GLOW.occupied : GOLD_GLOW.empty;
+    g.shadowBlur = (f.occupied ? 1.6 : 2.1) * 2 * k;
+    g.drawImage(gold, f.crop.x, f.crop.y, f.crop.w, f.crop.h, -f.w / 2, -f.h / 2, f.w, f.h);
+    g.restore();
+  };
+  for (const cell of rows) if ((!near || near.has(cell.key)) && cell.owner === null) frame(cell.key);
+
+  // One upright sprite on a cell, overhang and all; a missing picture leaves the colour beneath.
+  const sprite = (cell: BoardCell, s: FaSprite) => {
+    const img = picture(s.url);
+    if (img) g.drawImage(img, cell.x + s.x * k, cell.y + s.y * k, s.w * k, s.h * k);
+  };
+  const moving = (cell: BoardCell) => {
+    const m = cell.owner !== null ? o.motion?.[cell.key] : undefined;
+    if (!m) return false;
+    // A tile arriving (or leaving) grows from, or shrinks to, its own centre over the bare ground.
+    g.save();
+    g.globalAlpha = Math.max(0, Math.min(1, m.alpha));
+    g.translate(cell.x, cell.y);
+    g.scale(m.scale, m.scale);
+    g.translate(-cell.x, -cell.y);
+    return true;
+  };
+
+  // 3. Forest and Ash tiles, row by row, each with its gold frame (if any) and its stone.
+  for (const cell of rows) {
+    if ((near && !near.has(cell.key)) || cell.owner === null || cell.root) continue;
+    const m = moving(cell);
+    g.save();
+    hexAt(g, cell.x, cell.y, L.hex);
+    g.fillStyle = faBaseColour(cell.owner);
+    g.fill();
+    g.restore();
+    sprite(cell, faTileSprite(fa, cell.key, cell.owner, false));
+    frame(cell.key);
+    if (cell.strength > 0) {
       if (atlas) {
         // The same carved counter the board places, cropped from the same atlas, at the board's
         // own 0.66 scale and with its own soft shadow.
@@ -449,17 +444,7 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
         g.fill();
         const crop = seedStoneCrop(cell.owner, cell.strength);
         const stone = 21 * q;
-        g.drawImage(
-          atlas,
-          crop.x,
-          crop.y,
-          crop.size,
-          crop.size,
-          cell.x - stone / 2,
-          cell.y - stone / 2,
-          stone,
-          stone,
-        );
+        g.drawImage(atlas, crop.x, crop.y, crop.size, crop.size, cell.x - stone / 2, cell.y - stone / 2, stone, stone);
       } else {
         g.font = `700 ${Math.round(L.hex * 0.48)}px ${o.font}`;
         g.fillStyle = 'rgba(7, 9, 8, .84)';
@@ -468,31 +453,47 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
         g.fillText(String(cell.strength), cell.x, cell.y + 1);
       }
     }
-    if (cell.owner !== null && cell.root) {
-      // A ring, never a disc over the home: the root stays identifiable on the picture.
-      g.beginPath();
-      g.arc(cell.x, cell.y, L.hex * 0.27, 0, Math.PI * 2);
-      g.strokeStyle = 'rgba(240, 233, 220, .72)';
-      g.lineWidth = Math.max(2, L.hex * 0.045);
-      g.stroke();
-    }
-    if (stoneMotion) g.restore();
+    if (m) g.restore();
   }
 
-  // The bonus hexes' metal frames, over the tiles, with the live board's warm glow. They are a rim
-  // around the hex's edge, so they never cover a stone or a home.
-  const gold = picture(source?.gold ?? GOLD_FRAME_ATLAS);
-  if (gold) {
-    for (const f of goldFramePlacements(L)) {
-      if (o.only && !o.only.has(f.key)) continue;
-      g.save();
-      g.translate(f.x, f.y);
-      if (f.rotate) g.rotate(f.rotate);
-      g.globalAlpha = f.occupied ? 0.92 : 1;
-      g.shadowColor = f.occupied ? GOLD_GLOW.occupied : GOLD_GLOW.empty;
-      g.shadowBlur = (f.occupied ? 1.6 : 2.1) * 2 * k;
-      g.drawImage(gold, f.crop.x, f.crop.y, f.crop.w, f.crop.h, -f.w / 2, -f.h / 2, f.w, f.h);
-      g.restore();
-    }
+  // 4. Rocks cover everything but a home (owner, 2026-11-14).
+  for (const cell of rows) if ((!near || near.has(cell.key)) && cell.terrain === 'rock') sprite(cell, faRockSprite(fa, cell.key));
+
+  // 5. The homes cover everything: the tree's canopy and the volcano's smoke reach over their
+  //    neighbours. A ring, never a disc over the home: the root stays identifiable on the picture.
+  for (const cell of rows) {
+    if ((near && !near.has(cell.key)) || cell.owner === null || !cell.root) continue;
+    g.save();
+    hexAt(g, cell.x, cell.y, L.hex);
+    g.fillStyle = faBaseColour(cell.owner);
+    g.fill();
+    g.restore();
+    sprite(cell, faTileSprite(fa, cell.key, cell.owner, true));
+    g.beginPath();
+    g.arc(cell.x, cell.y, L.hex * 0.27, 0, Math.PI * 2);
+    g.strokeStyle = 'rgba(240, 233, 220, .72)';
+    g.lineWidth = Math.max(2, L.hex * 0.045);
+    g.stroke();
   }
+  g.restore();
+};
+
+/** A hex's outline added to the current path (no beginPath): several cells make one clip. */
+const hexPath = (g: CanvasRenderingContext2D, x: number, y: number, r: number) => {
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI / 180) * (60 * i - 30);
+    const p = toScreen(r * Math.cos(a), r * Math.sin(a));
+    if (i === 0) g.moveTo(x + p.x, y + p.y);
+    else g.lineTo(x + p.x, y + p.y);
+  }
+  g.closePath();
+};
+
+/** The variants for a layout's cells: the live board's own (ui/forestAsh.ts), cached per board. */
+let variantsKey = '';
+let variantsMemo: FaVariants | null = null;
+const variantsFor = (L: BoardLayout): FaVariants => {
+  const key = L.cells.map((c) => c.key).join(' ');
+  if (key !== variantsKey || !variantsMemo) { variantsKey = key; variantsMemo = faVariants(L.cells.map((c) => c.key)); }
+  return variantsMemo;
 };

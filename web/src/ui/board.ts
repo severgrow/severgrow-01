@@ -264,7 +264,7 @@ export class BoardView {
       const kept = this.ghostPool.get(sig);
       if (kept) { kept.classList.toggle('blocked', !!g.blocked); continue; }
       const gg = el('g', { class: `ghost draw-ghost arrive${t.ok ? '' : ' cant'}${g.blocked ? ' blocked' : ''}`, 'data-key': t.key }, layer);
-      el('path', { d: hexPath(t.key, IS_FUTA04 ? S - 3 : S * tileScale(t.strength, maxRank), shape), class: 'ghost-tile' }, gg);
+      this.hl(el('path', { d: hexPath(t.key, IS_FUTA04 ? S - 3 : S * tileScale(t.strength, maxRank), shape), class: 'ghost-tile' }, gg), t.key);
       const { x, y } = centerOf(t.key);
       if (IS_FUTA04) drawSeedStone(gg, t.key, x, y, t.strength, 0);
       else el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(t.strength);
@@ -273,12 +273,12 @@ export class BoardView {
     for (const k of g.unavailable ?? []) {
       const sig = `u:${k}`;
       live.add(sig);
-      if (!this.ghostPool.has(sig)) this.ghostPool.set(sig, el('path', { d: hexPath(k, S * 0.9, shape), class: 'draw-unavailable', 'data-key': k }, layer));
+      if (!this.ghostPool.has(sig)) this.ghostPool.set(sig, this.hl(el('path', { d: hexPath(k, S * 0.9, shape), class: 'draw-unavailable', 'data-key': k }, layer), k));
     }
     if (g.cursor) {
       const sig = `c:${g.cursor}`;
       live.add(sig);
-      if (!this.ghostPool.has(sig)) this.ghostPool.set(sig, el('path', { d: hexPath(g.cursor, S - 1.5, shape), class: 'draw-cursor' }, layer));
+      if (!this.ghostPool.has(sig)) this.ghostPool.set(sig, this.hl(el('path', { d: hexPath(g.cursor, S - 1.5, shape), class: 'draw-cursor' }, layer), g.cursor));
     }
     for (const [sig, node] of this.ghostPool) if (!live.has(sig)) { node.remove(); this.ghostPool.delete(sig); }
   }
@@ -305,7 +305,7 @@ export class BoardView {
     const svg = this.svg;
     svg.replaceChildren();
     const coords = boardCoords(config);
-    this.keys = coords.map(coordKey);
+    this.keys = this.orderKeys(coords.map(coordKey));
     // THE BOARD AS A SMALL PLANET (0.75): the live game's board bends on the Territory globe's curve.
     setBoardBulge(FEATURES.space ? this.keys : null);
     this.richKeys = new Set(this.keys.filter(key => terrain[key] === 'rich'));
@@ -503,6 +503,14 @@ export class BoardView {
   }
   /** Called at the end of setup (the layers and homes exist). */
   protected afterSetup(_terrain: Record<string, Terrain>) {}
+  /** The order cells and tiles are drawn in (later ones paint over earlier ones). */
+  protected orderKeys(keys: string[]): string[] { return keys; }
+  /**
+   * Every hex-shaped highlight (legal targets, wells, selection, dims, previews, drawing ghosts)
+   * passes through here once, when it is created, with the cell it marks. A skin whose art spills
+   * over neighbouring cells uses it to cut the highlight around that art; the default draws as is.
+   */
+  protected hl<T extends SVGElement>(node: T, _key: string): T { return node; }
 
   /** Step 4: the two home landmarks (index = player), for their states and reactions. */
   homeEls: SVGGElement[] = [];
@@ -720,16 +728,16 @@ export class BoardView {
     // Drawn under the real targets, so a picked card's highlight always wins.
     for (const key of o.available ?? []) {
       if (o.targets?.has(key) || key === o.selectedHex || board[key]) continue;
-      el('path', {
+      this.hl(el('path', {
         d: hexPath(key, S - 6, IS_FUTA04 ? 'flat' : st.tileShape),
         class: 'available',
         'aria-hidden': 'true',
-      }, over);
+      }, over), key);
     }
     if (o.targets) {
       for (const key of this.keys) {
         if (o.targets.has(key) || key === o.selectedHex) continue;
-        el('path', { d: hexPath(key, S - 1.2, IS_FUTA04 ? 'flat' : st.tileShape), class: 'dim' }, over);
+        this.hl(el('path', { d: hexPath(key, S - 1.2, IS_FUTA04 ? 'flat' : st.tileShape), class: 'dim' }, over), key);
       }
       // The invitation rolls out from the mover's own home: the nearer home to the legal tiles.
       const targets = o.targets;
@@ -745,26 +753,26 @@ export class BoardView {
       for (const key of o.targets) {
         const kind = o.targetKinds?.[key] ?? 'grow';
         // A legal empty socket gets a recessed inner edge beneath the existing target hitbox.
-        if (IS_FUTA04) el('path', { d: hexPath(key, S - 5, 'flat'), class: `receptive-well kind-${kind}`, 'aria-hidden': 'true' }, over);
+        if (IS_FUTA04) this.hl(el('path', { d: hexPath(key, S - 5, 'flat'), class: `receptive-well kind-${kind}`, 'aria-hidden': 'true' }, over), key);
         // ...and a soft light that breathes in it, a step later the further it is from home:
         // "tap here", said quietly. Light only — no scale, so the board's proportions never move.
-        if (IS_FUTA04) el('path', {
+        if (IS_FUTA04) this.hl(el('path', {
           d: hexPath(key, S - 3, 'flat'), class: `target-invite kind-${kind}`, 'aria-hidden': 'true',
           style: `animation-delay:${(220 + Math.max(0, hexDistance(parseKey(key), from) - 1) * 160 - since).toFixed(0)}ms`,
-        }, over);
-        el('path', { d: hexPath(key, S - 3, IS_FUTA04 ? 'flat' : st.tileShape), class: `target kind-${kind}${o.coachHexes.includes(key) ? ' coached' : ''}`, 'data-key': key, 'data-kind': kind }, over);
+        }, over), key);
+        this.hl(el('path', { d: hexPath(key, S - 3, IS_FUTA04 ? 'flat' : st.tileShape), class: `target kind-${kind}${o.coachHexes.includes(key) ? ' coached' : ''}`, 'data-key': key, 'data-kind': kind }, over), key);
         // a shape, not only a colour: + strengthens my tile, ⇆ replaces a bot tile
         // (a Fruit card's targets keep a calm ring, no badge)
         if (!IS_FUTA04 && kind !== 'grow' && kind !== 'fruit') this.markBadge(over, key, kind === 'strengthen' ? '+' : '⇆', kind);
       }
     }
     for (const key of o.cutKeys) {
-      if (IS_FUTA04) el('path', { d: hexPath(key, S - 5, 'flat'), class: 'receptive-well kind-replace' }, over);
-      el('path', { d: hexPath(key, IS_FUTA04 ? S - 3 : S * .7, IS_FUTA04 ? 'flat' : st.tileShape), class: 'will-cut' }, over);
+      if (IS_FUTA04) this.hl(el('path', { d: hexPath(key, S - 5, 'flat'), class: 'receptive-well kind-replace' }, over), key);
+      this.hl(el('path', { d: hexPath(key, IS_FUTA04 ? S - 3 : S * .7, IS_FUTA04 ? 'flat' : st.tileShape), class: 'will-cut' }, over), key);
     }
     for (const key of o.blastKeys ?? []) {
-      if (IS_FUTA04) el('path', { d: hexPath(key, S - 5, 'flat'), class: 'receptive-well kind-replace' }, over);
-      el('path', { d: hexPath(key, S - 3, 'flat'), class: 'blast-affected', 'data-key': key }, over);
+      if (IS_FUTA04) this.hl(el('path', { d: hexPath(key, S - 5, 'flat'), class: 'receptive-well kind-replace' }, over), key);
+      this.hl(el('path', { d: hexPath(key, S - 3, 'flat'), class: 'blast-affected', 'data-key': key }, over), key);
     }
     // overhaul item 10: the veins the move would grow, drawn on before the tiles
     for (const [a, b] of IS_FUTA04 ? [] : (o.ghostLinks ?? [])) {
@@ -776,8 +784,8 @@ export class BoardView {
     for (const g of o.ghosts) {
       const gg = el('g', { class: `ghost${g.replaces ? ' replaces' : ''}` }, over);
       const previewKind = o.selectedKind === 'strengthen' || o.selectedKind === 'bloom' ? o.selectedKind : g.replaces ? 'replace' : 'grow';
-      if (IS_FUTA04) el('path', { d: hexPath(g.key, S - 5, 'flat'), class: `receptive-well kind-${previewKind}` }, gg);
-      el('path', { d: hexPath(g.key, IS_FUTA04 ? S - 3 : S * tileScale(g.strength, maxRank), IS_FUTA04 ? 'flat' : st.tileShape), class: `ghost-tile kind-${previewKind}` }, gg);
+      if (IS_FUTA04) this.hl(el('path', { d: hexPath(g.key, S - 5, 'flat'), class: `receptive-well kind-${previewKind}` }, gg), g.key);
+      this.hl(el('path', { d: hexPath(g.key, IS_FUTA04 ? S - 3 : S * tileScale(g.strength, maxRank), IS_FUTA04 ? 'flat' : st.tileShape), class: `ghost-tile kind-${previewKind}` }, gg), g.key);
       const { x, y } = centerOf(g.key);
       if (IS_FUTA04) drawSeedStone(gg, g.key, x, y, g.strength, 0);
       else el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(g.strength);
@@ -792,8 +800,8 @@ export class BoardView {
     }
     if (o.selectedHex) {
       const selectedKind = o.selectedKind ?? o.targetKinds?.[o.selectedHex] ?? 'grow';
-      if (IS_FUTA04 && !o.targets?.has(o.selectedHex)) el('path', { d: hexPath(o.selectedHex, S - 5, 'flat'), class: `receptive-well kind-${selectedKind}` }, over);
-      el('path', { d: hexPath(o.selectedHex, IS_FUTA04 ? S - 3 : S - 2, IS_FUTA04 ? 'flat' : st.tileShape), class: `selected kind-${selectedKind}${IS_FUTA04 && o.targets?.has(o.selectedHex) && !board[o.selectedHex] ? ' receptive-active' : ''}${o.blastTarget===o.selectedHex ? ' blast-selected' : ''}` }, over);
+      if (IS_FUTA04 && !o.targets?.has(o.selectedHex)) this.hl(el('path', { d: hexPath(o.selectedHex, S - 5, 'flat'), class: `receptive-well kind-${selectedKind}` }, over), o.selectedHex);
+      this.hl(el('path', { d: hexPath(o.selectedHex, IS_FUTA04 ? S - 3 : S - 2, IS_FUTA04 ? 'flat' : st.tileShape), class: `selected kind-${selectedKind}${IS_FUTA04 && o.targets?.has(o.selectedHex) && !board[o.selectedHex] ? ' receptive-active' : ''}${o.blastTarget===o.selectedHex ? ' blast-selected' : ''}` }, over), o.selectedHex);
     }
     // overhaul item 10: "−N" on my tile the move leaves weakest, and on the opponent tiles it cuts
     if (o.atRisk) this.badge(over, o.atRisk.key, `−${o.atRisk.loss}`, 'weak at-risk');
@@ -801,7 +809,7 @@ export class BoardView {
     for (const w of o.weak) this.badge(over, w.key, `−${w.loss}`, 'weak');
     if (o.pulse && !o.weak.some((w) => w.key === o.pulse!.key)) this.badge(over, o.pulse.key, `−${o.pulse.loss}`, 'weak pulse');
     for (const w of o.opps) this.badge(over, w.key, `−${w.loss}`, 'opp');
-    if (o.focusKey) el('path', { d: hexPath(o.focusKey, S - 1, this.shape()), class: 'focus' }, over);
+    if (o.focusKey) this.hl(el('path', { d: hexPath(o.focusKey, S - 1, this.shape()), class: 'focus' }, over), o.focusKey);
     // UX pass: what the opponent changed last turn: a small spark at the top of each hex
     for (const key of IS_FUTA04 ? [] : (o.fresh ?? [])) {
       if (!board[key]) continue;

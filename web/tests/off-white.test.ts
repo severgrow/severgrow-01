@@ -14,6 +14,8 @@ const files = (dir: string): string[] => readdirSync(dir).flatMap((n) => {
 /** Masks: white there means "fully shown", not a colour the player sees. */
 const MASKS: Array<[string, RegExp]> = [
   ['player/atmosphere.ts', /m\.fillStyle = m\.strokeStyle = '#fff'/],
+  // the home outline mask (Forest & Ash): white = the highlight shows, black = cut around the art
+  ['ui/defaultArtBoard.ts', /el\('rect', \{ \.\.\.box, fill: '#fff' \}, mask\)/],
   ['player/glass-surface.ts', /<rect x="0" y="0" width="100%" height="100%" fill="white"\/>/],
   // the replay film's colour-burn grade: a computed level (`white` is a variable), not a colour
   ['replay/poster.ts', /rgb\(\$\{white\} \$\{white\} \$\{white\}\)/],

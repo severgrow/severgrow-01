@@ -4,12 +4,7 @@
 // What today's board has no art for (props, links art, overlays, motes, scars) starts empty: the
 // skin falls back to its colours, and the checklist says "placeholder".
 import ground from '../assets/board/empty_ground_01.webp?url';
-import rock1 from '../assets/board/rock_hex_01.webp?url';
-import rock2 from '../assets/board/rock_hex_02.webp?url';
-import rock3 from '../assets/board/rock_hex_03.webp?url';
-import rock4 from '../assets/board/rock_hex_04.webp?url';
-import rock5 from '../assets/board/rock_hex_05.webp?url';
-import goldAtlas from '../assets/futasaku-gold-frames.webp?url';
+import { FA_ROCKS } from '../ui/forestAsh.js';
 import moss from '../assets/cards/moss.webp?url';
 import ash from '../assets/cards/ash.webp?url';
 import dew from '../assets/cards/dew.webp?url';
@@ -18,7 +13,7 @@ import bomb from '../assets/cards/bomb.webp?url';
 import back from '../assets/cards/back.webp?url';
 import backFrame from '../assets/cards/back-frame.webp?url';
 import { DEFAULT_ART_SPRITES } from '../ui/defaultArtSprites.js';
-import { goldFrameCrop } from '../ui/goldframes.js';
+import { GOLD_FRAME_ATLAS as goldAtlas, GOLD_FRAME_VARIANTS, goldFrameCrop } from '../ui/goldframes.js';
 import { SUIT_SVG } from '../ui/icons.js';
 import { decode, render } from './convert.js';
 import type { Decoded } from './convert.js';
@@ -58,9 +53,9 @@ export const currentArt = async (progress: (f: number) => void = () => {}): Prom
   const add = (id: string, url: string, name: string, settings?: Record<string, string | number | boolean>) =>
     jobs.push([id, async () => fileFrom(slotById(id)!, await decode(await fetchBlob(url)), name, settings)]);
   add('ground', ground, 'empty_ground_01.webp');
-  [rock1, rock2, rock3, rock4, rock5].forEach((u, i) => add('rock', u, `rock_hex_0${i + 1}.webp`));
-  // bonus hexes are a metal frame today: its three looks, cropped from the game's atlas
-  for (let v = 0; v < 3; v++) jobs.push(['gold', async () => {
+  FA_ROCKS.forEach((r, i) => add('rock', r.url, `rock_0${i + 1}.webp`));
+  // bonus hexes are a gold frame today: its looks, cropped from the game's atlas
+  for (let v = 0; v < GOLD_FRAME_VARIANTS; v++) jobs.push(['gold', async () => {
     const c = goldFrameCrop('', v);
     const side = Math.max(c.w, c.h);
     return fileFrom(slotById('gold')!, await crop(goldAtlas, c.x - (side - c.w) / 2, c.y - (side - c.h) / 2, side, side), `gold_frame_0${v + 1}.webp`);
