@@ -198,6 +198,14 @@ describe('thumb layout: cards are at least the 44pt touch minimum', () => {
     // one thing the change promises everywhere: no phone ships a card under 44pt.
     expect(computeLayout({ w: 360, h: 640 }, 3, MAX_HAND, 'right').thumb!.card.w).toBeGreaterThanOrEqual(44);
   });
+  it('390x844 grew past the old 62pt phone ceiling (owner, 2026-11-14: bigger cards)', () => {
+    // Before this change the biggest phone card was 62 x 88 on every tall phone; the dock cap and
+    // the size ladder now reach 72 x 102. The browser suite proves it still fits the screen.
+    const t = computeLayout({ w: 390, h: 844 }, 3, MAX_HAND, 'right').thumb!;
+    expect(t.card.w).toBeGreaterThanOrEqual(70);
+    expect(t.card.h).toBeGreaterThanOrEqual(99);
+    expect(t.card.w + (MAX_HAND - 1) * t.slice).toBeLessThanOrEqual(390);
+  });
 });
 
 // v0.8.1: on desktop (side layout) the dock had spare height but its rows touched: the piles sat
