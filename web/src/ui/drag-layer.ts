@@ -3,6 +3,7 @@
 // the short haptic tick. It never decides legality: `logic/drag.ts` reads the engine's legal
 // actions and this file only plays the exact action it returns. Taps, buttons and the
 // existing board painting are untouched.
+import { liftAfterCancel } from './lift-after-cancel.js';
 import type { Action, View } from '../../../src/engine/index.js';
 import type { Sel } from '../logic/interaction.js';
 import { kindCards } from '../logic/interaction.js';
@@ -475,21 +476,33 @@ export function mountDragLayer(hooks: DragLayerHooks) {
     active.time = event.timeStamp || performance.now();
     updateTargets(active);
   };
+  // WebKit can end a drag as pointercancel then pointerup at the same point (ui/lift-after-cancel.ts):
+  // a cancel on a drag in motion waits one beat for its release before it gives the card back.
+  const lift = liftAfterCancel();
   const onUp = (event: PointerEvent) => {
     if (!active || event.pointerId !== active.pointerId) return;
+    if (lift.release(() => finish(true))) return;
     finish(true);
   };
   const onCancel = (event: PointerEvent) => {
     if (!active || event.pointerId !== active.pointerId) return;
-    finish(false);
+    if (!active.started) { finish(false); return; }
+    const drag = active;
+    lift.cancel(() => { if (active === drag) finish(false); });
+  };
+  // The same lift can reach us only as a touchend (no pointerup after the cancel).
+  const onTouchEnd = () => {
+    if (active && lift.pending()) lift.release(() => finish(true));
   };
   const abort = () => {
+    lift.reset();
     if (active) finish(false);
   };
 
   document.addEventListener('pointermove', onMove, true);
   document.addEventListener('pointerup', onUp, true);
   document.addEventListener('pointercancel', onCancel, true);
+  document.addEventListener('touchend', onTouchEnd, true);
   // A drag must never stick: leaving the page (alt-tab, a call) cancels it cleanly.
   window.addEventListener('blur', abort);
   document.addEventListener('keydown', event => {
