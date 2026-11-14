@@ -19,7 +19,7 @@
 import { allCoords, allNeighbors, coordKey, hexDistance, parseKey } from '../../../src/engine/index.js';
 import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
 import { BoardView } from './board.js';
-import { S, SQ3, centerOf, cornerPts, el, flatCentreOf, hash, hexPath, latticeCentre } from './geom.js';
+import { S, SQ3, cellScale, centerOf, el, flatCentreOf, hash, hexPath, latticeCentre } from './geom.js';
 import { drawLandmark } from './landmarks.js';
 import { getOrient } from '../logic/orient.js';
 import { materialsOf } from '../logic/materials.js';
@@ -128,15 +128,19 @@ const requestSet = (id: TerritoryId): void => {
 export const boardArtReady: Promise<void> = Promise.all(artDecodes).then(() => undefined);
 
 const f = (n: number) => n.toFixed(2);
-const ROCK_ART_SCALE = 0.95;
-
-
-/** How much the bent board shrinks a cell here (1 on a flat board): its mean corner distance / S. */
-const cellScale = (key: string) => {
-  const { x, y } = centerOf(key);
-  const pts = cornerPts(key, S);
-  return pts.reduce((sum, [px, py]) => sum + Math.hypot(px - x, py - y), 0) / pts.length / S;
-};
+/**
+ * How much of the hex a rock's own picture may use.
+ *
+ * A rock is cut with its bumps reaching past its hex: its pictures are ~62 x 59 board units where a
+ * hex is 60 x 51.96. Drawn at the cell's own scale (0.95 before this) a rock therefore hung over the
+ * cells above and below it — a grass-coloured lump sitting on a neighbour's number stone, and a hard
+ * edge across a neighbour's gold rim (owner, 2026-11-14: "there is random thing above the 9 stone on
+ * grass tile"). 0.88 is the largest uniform scale that puts the tallest rock picture inside the hex
+ * box (51.96 / 59.06 = 0.88): the cluster still reads as one piece lying on its own tile, with the
+ * slight overhang a physical object has, and never reaches a neighbour. The gold rim's box is the
+ * same hex (`S * 2.02`), so the two cannot drift apart.
+ */
+const ROCK_ART_SCALE = 0.88;
 
 /** A traced spill outline moved onto a cell: scaled about the hex centre, then placed. */
 const placePath = (d: string, x: number, y: number, k: number) =>
@@ -364,9 +368,13 @@ export class DefaultArtBoardView extends BoardView {
     // The territory colour under the art fills its softened corners; the art itself is unclipped.
     el('path', { d: hexPath(key, S, 'flat'), fill: faBaseColour(owner), class: 'fa-tile-base' }, group);
     this.art(group, faTileSprite(this.fa, key, owner, false), x, y, cellScale(key), 'default-art-sprite');
-    // A gold tile keeps its frame over its own art (and under the stone), but grass,
-    // rock and home overhangs from neighbouring cells sit physically in front of it.
-    if (this.richKeys.has(key)) drawGoldFrame(group, key, x, y, true).setAttribute('mask', this.url('fa-spill'));
+    // A gold tile keeps its frame over its own art (and under the stone). NO `fa-spill` MASK (owner,
+    // 2026-11-14: "gold frames look like open arcs"): the traced spill outline is deliberately a
+    // little OUTSIDE the tree and the smoke, so masking with it deleted a band of the rim that no art
+    // covers — a rim with a bite out of it wherever a bonus hex touches a home. The home's own
+    // picture already stands above this layer (`l-homes` is drawn after `l-tiles`), so the canopy
+    // covers the rim by itself, exactly as it covers every other tile's art.
+    if (this.richKeys.has(key)) drawGoldFrame(group, key, x, y, true);
     drawSeedStone(group, key, x, y, tile.strength, owner);
     return group;
   }

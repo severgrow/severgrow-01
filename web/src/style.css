@@ -5240,7 +5240,15 @@ svg.board .fx-mote {
   box-sizing: border-box;
 }
 .dock .hand-row > .hand .card {
-  margin-left: calc(var(--slice, 40px) - var(--cw));
+  /* THE FAN NEVER LEAVES THE HAND'S OWN SLOT (owner, 2026-11-14: "cards still look trimmed ... the
+     rightmost card seems clipped at the right side"). The slice the layout hands down is measured
+     from the whole SCREEN width, but this row spends 4px + 28px on each side on the Undo and Sort
+     slots, so a full hand was ~28px wider than the box it sits in: the outer cards ran out under
+     those buttons (which sit above them) and the last card's rotated corner ran out of the screen —
+     which is exactly what "trimmed" looks like. The base `.hand .card` rule always clamped the
+     overlap to its container; the dock's own rule had dropped that clamp. Restored here, with the
+     fan's own corner overhang (a card half-height times sin(tilt) ~ 6px a side) kept clear. */
+  margin-left: min(calc(var(--slice, 40px) - var(--cw)), calc((100% - 14px - var(--n) * var(--cw)) / max(var(--n) - 1, 1)));
 }
 .dock .hand-row > .hand .card:first-child {
   margin-left: 0;

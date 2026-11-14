@@ -121,11 +121,14 @@ export const CARDS_CSS = `
   opacity:0; transition:opacity .28s ease;
 }
 .futa04-cards .card :is(.c-num,.c-suit) { transition:opacity .22s ease; }
-.futa04-cards .dock .pile-top.card { border-radius:5.9% / 4.2%; }
-.futa04-cards .dock :is(#deck,#discard) .pile-card,
-.futa04-cards .dock #deck .pile-stack,
-.futa04-cards .dock #deck .pile-stack::before,
-.futa04-cards .dock #deck .pile-stack::after {
+/* THE PILE IS A STACK OF CARDS, SO EVERY LAYER WEARS THE CARD'S OWN CORNER (owner, 2026-11-14:
+   "on draw pile the corners look wrong"; open request 3 in docs/HANDOFF-0.86.md: "draw pile,
+   discard and opponent piles must draw the exact new card shape (radius, no extra frames),
+   including stacked layers"). One token, used by the card, both slab pseudo-elements and the top
+   card, on BOTH piles: before this the discard's slabs kept the old --radius * 0.6 (9.6px on a
+   50px card, a third of the card's width) while the deck's used the card's percentage, so the two
+   piles disagreed with each other and with the card between them. */
+.futa04-cards .dock :is(#deck,#discard) :is(.pile-card,.pile-stack,.pile-stack::before,.pile-stack::after,.pile-top.card) {
   border-radius:5.9% / 4.2%;
 }
 .futa04-cards .dock #deck[data-count='last'] .pile-stack { border-radius:5.9% / 4.2%; }
@@ -152,11 +155,12 @@ export const CARDS_CSS = `
 :is(${READY_FACES}):has(>.futa04-card-art):is(.playable,.lifted) { border-color:transparent; }
 :is(${READY_FACES}) > .futa04-card-art { inset:0; border-radius:5.9% / 4.2%; }
 .futa04-cards .futa04-mini-card .futa04-card-art { display:none; }
-/* The separately supplied tree-logo back is the only face-down artwork. */
+/* The separately supplied tree-logo back is the only face-down artwork. Only the deck's TOP card
+   wears it: the two slabs behind are plain card silhouettes with the card's own hairline, because a
+   back printed into every slab put a second and third printed border inside the pile — the "extra
+   frames" open request 3 in docs/HANDOFF-0.86.md asks to be gone. */
 .futa04-cards .card.back,
-.futa04-cards #deck .pile-stack,
-.futa04-cards #deck .pile-stack::before,
-.futa04-cards #deck .pile-stack::after {
+.futa04-cards #deck .pile-stack {
   background-image:url('${backArt}'); background-size:100% 100%; background-position:center;
   border-color:transparent;
 }
