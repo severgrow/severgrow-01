@@ -1,4 +1,5 @@
 import { CHALLENGE_STAMP_GLSL, stampCoordinates } from './challenge-stamp.js';
+import { tileFace } from './tile-face.js';
 import type { V3 } from './geometry.js';
 // THE PLANET IN SPACE. Two passes, no textures, no post-processing, no dependency:
 //   1. SPACE: one full-screen triangle draws the sky, a slowly sliding star field (two parallax
@@ -49,11 +50,13 @@ export const projection = (view: { width: number; height: number }, frame: Frame
 // The SPACE pass is shared with the space backdrop (space.ts): one shader for the whole game.
 
 const GROUND_VERTEX = `
-attribute vec4 aPosition; attribute vec4 aLook; attribute vec2 aStamp;
+attribute vec4 aPosition; attribute vec4 aLook; attribute vec2 aStamp; attribute vec2 aTile;
 uniform vec4 uRotation; uniform float uAspect; uniform float uFocal; uniform vec2 uShift;
 varying vec2 vStamp; varying vec3 vNormal; varying vec3 vColour; varying float vEdge; varying float vFlags; varying float vSeed; varying vec3 vLocal;
+varying vec2 vTile;
 void main(){
   vStamp = aStamp;
+  vTile = aTile * 1.27;
   vec3 q = aPosition.xyz;
   vLocal = q;
   vec3 t = 2.0 * cross(uRotation.xyz, q);
@@ -67,6 +70,7 @@ const groundFragment = (derivatives: boolean) => `
 ${derivatives ? '#extension GL_OES_standard_derivatives : enable' : ''}
 precision highp float;
 varying vec2 vStamp; varying vec3 vNormal; varying vec3 vColour; varying float vEdge; varying float vFlags; varying float vSeed; varying vec3 vLocal;
+varying vec2 vTile; uniform sampler2D uTiles; uniform float uTilesOn;
 uniform float uPulse; uniform float uPixel;
 float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 // Value noise fixed to the planet (not the screen), so the grain turns with the ground.
@@ -95,6 +99,17 @@ void main(){
   // the curve, and the night side fades through a broad dusk instead of a hard line.
   float day = smoothstep(-.32, 1.0, ndl);
   vec3 c = vColour;
+  // YOUR LAND WEARS YOUR TILES (owner, 2026-11-14: "use the 9 plain tiles on the planet as well"):
+  // one of your set's nine plain tiles per tile, flat side up in its own frame (sphere/tile-face.ts),
+  // under the same matte, grain, chamfer and light as every other tile. The branch is uniform
+  // (off: no texture is read at all).
+  if (uTilesOn > .5) {
+    float pick = floor(fract(vSeed * 9.731) * 9.0);
+    vec2 cell = vec2(mod(pick, 3.0), floor(pick / 3.0));
+    vec2 uv = clamp(vTile * .5 + .5, .006, .994);
+    vec4 t = texture2D(uTiles, (cell + vec2(uv.x, 1.0 - uv.y)) * ${(160 / 512).toFixed(4)});
+    c = mix(c, t.rgb, t.a * step(3.5, kind) * step(kind, 4.5));
+  }
   // THE TILE'S MATERIAL (owner, 2026-11-04: the tiles "stand out as too baloony or plasticky ...
   // make them look more organic more real but cool and cheap"). A tile is a FLAT slab, not a
   // cushion: its top is lit evenly and only a narrow chamfer at the very edge turns toward or away
@@ -195,6 +210,10 @@ export class PlanetRenderer {
   private triangle: WebGLBuffer;
   private positions: WebGLBuffer;
   private stamps: WebGLBuffer;
+  private tileFrames: WebGLBuffer;
+  /** Each tile's own turn (sphere/tile-face.ts): the view levels the tile at its centre with it. */
+  private turn: Float32Array;
+  private tileTexture: WebGLTexture | null = null;
   private looks: WebGLBuffer;
   private look: Uint8Array<ArrayBuffer>;
   private vertexCount: number;
@@ -205,7 +224,7 @@ export class PlanetRenderer {
   private selected: number | null = null;
   private kin: number[] = [];
   private u: Record<string, WebGLUniformLocation | null> = {};
-  private attributes: {position: number; look: number; stamp: number} | null = null;
+  private attributes: {position: number; look: number; stamp: number; tile: number} | null = null;
   private pixel = 1;
   private cssWidth = 1;
   private cssHeight = 1;
@@ -219,7 +238,7 @@ export class PlanetRenderer {
     this.gl = gl;
     this.derivatives = !!gl.getExtension('OES_standard_derivatives');
     this.ground = this.program(GROUND_VERTEX, opts.textures ? texturedFragment(this.derivatives) : groundFragment(this.derivatives));
-    for (const name of ['uRotation', 'uAspect', 'uFocal', 'uShift', 'uPulse', 'uPixel', ...(opts.textures ? ['uAtlas', 'uStrA', 'uStrB', 'uRepeat'] : [])]) this.u[name] = gl.getUniformLocation(this.ground, name);
+    for (const name of ['uRotation', 'uAspect', 'uFocal', 'uShift', 'uPulse', 'uPixel', 'uTiles', 'uTilesOn', ...(opts.textures ? ['uAtlas', 'uStrA', 'uStrB', 'uRepeat'] : [])]) this.u[name] = gl.getUniformLocation(this.ground, name);
     this.triangle = this.buffer(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]));
     this.space = spacePass(gl, (v, f) => this.program(v, f), this.triangle);
     // Fans: centre, corner i, corner i+1 for every side of every tile. A cell's `w` packs its seed
@@ -232,14 +251,22 @@ export class PlanetRenderer {
     this.vertexCount = vertices;
     const position = new Float32Array(vertices * 4);
     const stamps = new Int8Array(vertices * 2);
+    // Each tile's own levelled frame (sphere/tile-face.ts), stored x100 so a corner just past the
+    // unit circle still fits a byte; the shader scales it back (x1.27).
+    const tiles = new Int8Array(vertices * 2);
+    this.turn = new Float32Array(cells.length);
+    let to = 0;
     let so = 0;
     let o = 0;
     for (const c of cells) {
       const uv = stampCoordinates(c.centre, c.corners.map(i => sphere.corners[i]!),north);
+      const face = tileFace(c.centre, c.corners.map(i => sphere.corners[i]!), north);
+      this.turn[c.index] = face.angle;
       const seed = Math.floor((Math.sin(c.index * 12.9898) * 43758.5453 % 1 + 1) % 1 * 4095);
       for (let i = 0; i < c.corners.length; i++) {
         const a = sphere.corners[c.corners[i]!]!, b = sphere.corners[c.corners[(i + 1) % c.corners.length]!]!;
         for (const p of [[0,0],uv[i]!,uv[(i+1)%uv.length]!]) { stamps[so++] = Math.round(p[0]! * 127); stamps[so++] = Math.round(p[1]! * 127); }
+        for (const p of [[0,0],face.coords[i]!,face.coords[(i+1)%face.coords.length]!]) { tiles[to++] = Math.round(p[0]! * 100); tiles[to++] = Math.round(p[1]! * 100); }
         position.set([c.centre[0], c.centre[1], c.centre[2], seed], o); o += 4;
         position.set([a[0], a[1], a[2], seed + .999], o); o += 4;
         position.set([b[0], b[1], b[2], seed + .999], o); o += 4;
@@ -247,10 +274,11 @@ export class PlanetRenderer {
     }
     this.positions = this.buffer(gl.ARRAY_BUFFER, position);
     this.stamps = this.buffer(gl.ARRAY_BUFFER, stamps);
+    this.tileFrames = this.buffer(gl.ARRAY_BUFFER, tiles);
     this.look = new Uint8Array(vertices * 4);
     this.flags = new Uint8Array(cells.length);
     this.looks = this.buffer(gl.ARRAY_BUFFER, this.look, gl.DYNAMIC_DRAW);
-    this.bytes = position.byteLength + stamps.byteLength + this.look.byteLength + 24;
+    this.bytes = position.byteLength + stamps.byteLength + tiles.byteLength + this.look.byteLength + 24;
     gl.disable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
@@ -277,6 +305,28 @@ export class PlanetRenderer {
     this.strengths = [...strengths];
     this.repeat = repeat;
   }
+  /**
+   * Your set's nine plain tiles (a 3x3 atlas, ui/forestAsh.ts), or null for plain colour. Uploaded
+   * once when given (mount, or a new choice), mipmapped: never while the planet is at rest.
+   */
+  setTiles(atlas: TexImageSource | null) {
+    const gl = this.gl;
+    if (!atlas) { if (this.tileTexture) gl.deleteTexture(this.tileTexture); this.tileTexture = null; return; }
+    this.tileTexture ??= gl.createTexture();
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.tileTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, atlas);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.activeTexture(gl.TEXTURE0);
+  }
+  /** Whether your land is wearing tile pictures (for tests). */
+  get hasTiles(): boolean { return !!this.tileTexture; }
+  /** A tile's own turn (radians, counter-clockwise from flat-top-north). */
+  tileTurn(cell: number): number { return this.turn[cell] ?? 0; }
   /** Repaint every tile's look from fresh Territory data (only when the data actually changed). */
   setGround(ground: Ground, selected: number | null, kin: readonly number[]) {
     const cells = this.sphere.cells;
@@ -360,13 +410,26 @@ export class PlanetRenderer {
       gl.uniform3f(this.u.uStrB!, st[3]!, st[4]!, st[5]!);
       gl.uniform1f(this.u.uRepeat!, this.repeat);
     }
+    gl.uniform1f(this.u.uTilesOn!, this.tileTexture ? 1 : 0);
+    if (this.tileTexture) {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, this.tileTexture);
+      gl.uniform1i(this.u.uTiles!, 1);
+      gl.activeTexture(gl.TEXTURE0);
+    }
     // Without derivatives, one pixel of the side ramp is estimated from the tile's size on screen.
     gl.uniform1f(this.u.uPixel!, 1 / Math.max(4, at.radius * this.pixel * (Math.PI / 5) / this.sphere.frequency));
     // Resolve once, at the original first-draw point. Moving synchronous GL queries into
     // construction changes cold-start ordering before the first frame can be announced.
-    const {position, look, stamp} = this.attributes ??= {
+    const {position, look, stamp, tile} = this.attributes ??= {
       position:gl.getAttribLocation(this.ground,'aPosition'),look:gl.getAttribLocation(this.ground,'aLook'),stamp:gl.getAttribLocation(this.ground,'aStamp'),
+      tile:gl.getAttribLocation(this.ground,'aTile'),
     };
+    if (tile >= 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.tileFrames);
+      gl.enableVertexAttribArray(tile);
+      gl.vertexAttribPointer(tile, 2, gl.BYTE, true, 0, 0);
+    }
     gl.bindBuffer(gl.ARRAY_BUFFER, this.stamps);
     gl.enableVertexAttribArray(stamp);
     gl.vertexAttribPointer(stamp, 2, gl.BYTE, true, 0, 0);
@@ -380,6 +443,7 @@ export class PlanetRenderer {
     gl.disableVertexAttribArray(position);
     gl.disableVertexAttribArray(look);
     gl.disableVertexAttribArray(stamp);
+    if (tile >= 0) gl.disableVertexAttribArray(tile);
     if (clipped) gl.disable(gl.SCISSOR_TEST);
   }
   dispose(release = false) {
@@ -387,6 +451,7 @@ export class PlanetRenderer {
     this.disposed = true;
     for (const b of this.buffers) this.gl.deleteBuffer(b);
     if (this.atlas) this.gl.deleteTexture(this.atlas);
+    if (this.tileTexture) this.gl.deleteTexture(this.tileTexture);
     this.gl.deleteProgram(this.space.program);
     this.gl.deleteProgram(this.ground);
     if (release) this.gl.getExtension('WEBGL_lose_context')?.loseContext();

@@ -185,7 +185,9 @@ try{
   // Coast may run while the top of the planet is visible; wait for it to settle.
   await p.waitForTimeout(650);await settled(p);
   const after=await p.evaluate(()=>(window as any).__severgrow.planet());
-  if(Math.hypot(after.north[0],after.north[1])>.15){assert(Math.abs(after.north[0])<.0001&&after.north[1]>0,'north rests upright');}
+  // Flat side up (owner, 2026-11-14) replaces exact north-up: the centre tile rests level, north
+  // still upward and within 30 degrees.
+  if(Math.hypot(after.north[0],after.north[1])>.15){assert(after.centreTilt===null||Math.abs(after.centreTilt)<.01,'the centre tile rests flat side up');assert(after.north[1]>0&&Math.abs(after.roll)<=Math.PI/6+.05,'north stays upward, within 30 degrees (a geodesic hex may need a degree or two more)');}
   void before;
   await p.waitForTimeout(400);
   const held=await p.evaluate(()=>(window as any).__severgrow.planet());
@@ -197,7 +199,16 @@ try{
   const zoomed=await p.evaluate(()=>(window as any).__severgrow.planet().q) as Quat;
   await p.mouse.up();await p.waitForTimeout(140);
   const zoomedEnd=await p.evaluate(()=>(window as any).__severgrow.planet().q) as Quat;
-  assert(zoomed.every((v,i)=>Math.abs(v-zoomedEnd[i]!)<.002),'zoomed-in release stops almost immediately');
+  // No glide when zoomed in (2026-11-07). Since flat side up (owner, 2026-11-14) a finished drag also
+  // turns the view in place to level the centre tile: any change after release must be that turn,
+  // about the line of sight (the ground does not slide), and no larger than a level turn.
+  {
+    const [ax,ay,az,aw]=zoomedEnd, [bx,by,bz,bw]=[-zoomed[0]!,-zoomed[1]!,-zoomed[2]!,zoomed[3]!];
+    const d=[aw*bx+ax*bw+ay*bz-az*by, aw*by-ax*bz+ay*bw+az*bx, aw*bz+ax*by-ay*bx+az*bw, aw*bw-ax*bx-ay*by-az*bz];
+    const sinHalf=Math.hypot(d[0]!,d[1]!,d[2]!), angle=2*Math.atan2(sinHalf,Math.abs(d[3]!));
+    const alongSight=sinHalf<1e-6?1:Math.abs(d[2]!)/sinHalf;
+    assert(angle<.002||(alongSight>.95&&angle<=Math.PI/6+.05),`zoomed-in release does not glide (only the level turn): ${JSON.stringify({angle,alongSight})}`);
+  }
   await p.screenshot({path:`${shots}/planet-${width}.png`});
   const preTap=await p.evaluate(()=>(window as any).__severgrow.planet().q) as Quat;
   await p.mouse.click(cx,cy);await p.waitForTimeout(250);

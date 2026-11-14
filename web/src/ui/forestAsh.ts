@@ -41,6 +41,10 @@ import rock3 from '../assets/forest-ash/rock-03.webp?url';
 import rock4 from '../assets/forest-ash/rock-04.webp?url';
 import rock5 from '../assets/forest-ash/rock-05.webp?url';
 import goldAtlas from '../assets/forest-ash/gold-frames.webp?url';
+import planetForest from '../assets/forest-ash/planet-forest.webp?url';
+import planetAsh from '../assets/forest-ash/planet-ash.webp?url';
+import planetWater from '../assets/forest-ash/planet-water.webp?url';
+import planetToxic from '../assets/forest-ash/planet-toxic.webp?url';
 import water1 from '../assets/forest-ash/water-01.webp?url';
 import water2 from '../assets/forest-ash/water-02.webp?url';
 import water3 from '../assets/forest-ash/water-03.webp?url';
@@ -106,6 +110,11 @@ export const TERRITORIES: Record<TerritoryId, { tiles: readonly FaSprite[]; home
 /** The colour under each set's art (it shows only at a sprite's softened corners). */
 export const TERRITORY_BASE_COLOUR: Record<TerritoryId, string> = { forest: '#315321', ash: '#302c2c', water: '#173a52', toxic: '#2b2a1c' };
 export const faBaseColour = (owner: 0 | 1) => TERRITORY_BASE_COLOUR[sides[owner]];
+
+/** Each set's nine plain tiles for the planet (scripts/build-planet-tiles.py): a 3x3 atlas. */
+const PLANET_ATLAS: Record<TerritoryId, string> = { forest: planetForest, ash: planetAsh, water: planetWater, toxic: planetToxic };
+/** Your land on the planet wears your own set (player 0's side of the board). */
+export const faPlanetAtlasUrl = (): string => PLANET_ATLAS[sides[0]];
 
 /** The two sides on the board: [player 0's set, player 1's set]. */
 let sides: [TerritoryId, TerritoryId] = ['forest', 'ash'];

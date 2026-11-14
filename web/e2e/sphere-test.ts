@@ -218,7 +218,11 @@ try {
     await p.screenshot({ path: `${out}/planet-selected-${tag}.png` });
     // The rival's disputed tile is selectable too.
     const rivalAt = await screenOf(p, '4,0');
-    if (rivalAt && rivalAt.x > grid.x + 30 && rivalAt.x < grid.x + grid.width - 30) {
+    // Tappable means on screen AND not under the tile bar the previous tap opened (the level turn of
+    // flat side up can bring this tile beneath it in a short landscape window).
+    const rivalOpen = !!rivalAt && await p.evaluate(([x, y]) => document.elementFromPoint(x!, y!)?.tagName === 'CANVAS', [rivalAt.x, rivalAt.y]);
+    if (rivalAt && !rivalOpen) console.log(`note [${tag}] the rival's tile is under the tile bar here; its tap is checked at the other sizes`);
+    if (rivalAt && rivalOpen && rivalAt.x > grid.x + 30 && rivalAt.x < grid.x + grid.width - 30) {
       await p.mouse.click(rivalAt.x, rivalAt.y);
       await p.waitForTimeout(150);
       check(`[${tag}] a rival's disputed tile selects`, (await planet(p))!.selected === '4,0');
@@ -266,16 +270,24 @@ try {
     await p.mouse.down();
     for (let i = 1; i <= 10; i++) { await p.mouse.move(cx - 60 + i * 12, cy + i * 4); await p.waitForTimeout(16); }
     const releasePose=(await planet(p))!;
-    check(`[${tag}] geographic north remains upright during dragging`,Math.abs(releasePose.north[0]!)<1e-6&&releasePose.north[1]!>0);
+    // FLAT SIDE UP (owner, 2026-11-14: "the planet orientation switch to always show tiles flat side
+    // up") replaces the exact north-up rule these two checks pinned. While dragging, the view keeps
+    // the turn it had (no spin) and stays within 30 degrees of north, north still upward.
+    // (A geodesic hex is a little irregular, so levelling one can take a degree or two past 30.)
+    check(`[${tag}] dragging keeps the view's turn, within 30 degrees of north`,
+      Math.abs((releasePose as any).roll-(before as any).roll)<1e-6&&Math.abs((releasePose as any).roll)<=Math.PI/6+.05&&releasePose.north[1]!>0,
+      JSON.stringify({before:(before as any).roll,during:(releasePose as any).roll,north:releasePose.north}));
     await p.mouse.up();
-    // Zoomed-out releases may coast; wait for the inertial coast to settle (owner, 2026-11-07).
+    // Zoomed-out releases may coast, then the centre tile levels; wait for both to settle.
     await p.waitForFunction(()=>{
       const pl=(window as any).__severgrow.planet();
-      return pl && !pl.flying && Math.abs(pl.north[0])<1e-4;
-    },undefined,{timeout:2500}).catch(()=>undefined);
+      return pl && !pl.flying && !pl.levelling;
+    },undefined,{timeout:4000}).catch(()=>undefined);
     await settled(p);
     s = (await planet(p))!;
-    check(`[${tag}] north stays upright after release`,Math.abs(s.north[0]!)<1e-4&&s.north[1]!>0);
+    check(`[${tag}] after release the centre tile rests flat side up`,
+      (s as any).centreTilt!==null&&Math.abs((s as any).centreTilt)<.01&&Math.abs((s as any).roll)<=Math.PI/6+.05&&s.north[1]!>0,
+      JSON.stringify({tilt:(s as any).centreTilt,roll:(s as any).roll,north:s.north}));
     check(`[${tag}] a drag turns the planet`, JSON.stringify(s.q) !== JSON.stringify(before.q));
     check(`[${tag}] a drag never changes the selection`, s.selected === before.selected);
     // Zoomed in: coast must stop almost immediately (top of planet not visible).
