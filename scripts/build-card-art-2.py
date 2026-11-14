@@ -54,6 +54,23 @@ def card_image(rgba: np.ndarray, box) -> Image.Image:
     return Image.fromarray(np.dstack([np.clip(rgb, 0, 255), al]).round().astype(np.uint8), "RGBA")
 
 
+def tones(a: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """A card's two printed tones: its dark body and its cream (mean RGB of each)."""
+    rgb, al = a[..., :3], a[..., 3]
+    s = rgb.sum(-1)
+    return rgb[(s < 200) & (al > 200)].mean(0), rgb[(s > 500) & (al > 200)].mean(0)
+
+
+def match_faces(card: Image.Image, face: Image.Image) -> Image.Image:
+    """The back in exactly the faces' colours: per channel, the line through the back's two tones
+    (body, cream) onto the face's two tones. Texture and printing stay; only the colour moves."""
+    a = np.asarray(card).astype(float)
+    (bb, bc), (fb, fc) = tones(a), tones(np.asarray(face).astype(float))
+    gain = (fc - fb) / np.maximum(bc - bb, 1.0)
+    a[..., :3] = np.clip(fb + (a[..., :3] - bb) * gain, 0, 255)
+    return Image.fromarray(a.round().astype(np.uint8), "RGBA")
+
+
 def save(image: Image.Image, name: str, quality: int = 86) -> None:
     image.save(OUT / name, "WEBP", quality=quality, method=6)
 
@@ -71,21 +88,18 @@ def main() -> None:
     bomb = keyed("bomb")
     save(card_image(bomb, fa.split(bomb[..., 3] / 255.0, 1, 1)[0]), "bomb.webp", 88)
     back = keyed("back")
-    blank = card_image(back, fa.split(back[..., 3] / 255.0, 1, 1)[0])
+    blank = match_faces(card_image(back, fa.split(back[..., 3] / 255.0, 1, 1)[0]), Image.open(OUT / "moss.webp").convert("RGBA").crop((0, 0) + CELL))
     save(blank, "back-frame.webp", 88)
-    # Today's back carries the emblem centred at ~43% of the card's width: the same here.
+    # The emblem big (owner, 2026-11-14: "we want the emblem big"): two thirds of the card's width.
     emblem = Image.open(ROOT / "web" / "src" / "assets" / "futasaku-emblem.webp").convert("RGBA")
     emblem = emblem.crop(emblem.getchannel("A").getbbox())
-    # In the card's own cream: the colour of the blank back's printed border, sampled.
-    b = np.asarray(blank).astype(float)
-    edge = b[6:14, CELL[0] // 3: 2 * CELL[0] // 3]
-    cream = edge[edge[..., 3] > 200][:, :3]
-    cream = cream[cream.sum(axis=1).argsort()[-len(cream) // 4:]].mean(axis=0)
+    # In the faces' own cream (owner, 2026-11-14: the back exactly the colour of the rest).
+    cream = tones(np.asarray(Image.open(OUT / "moss.webp").convert("RGBA").crop((0, 0) + CELL)).astype(float))[1]
     e = np.asarray(emblem).astype(float)
     lum = (e[..., :3].mean(axis=2) / 255.0)[..., None]
     e[..., :3] = cream * (0.55 + 0.45 * lum)
     emblem = Image.fromarray(e.round().astype(np.uint8), "RGBA")
-    w = round(CELL[0] * 0.43)
+    w = round(CELL[0] * 0.66)
     emblem = emblem.resize((w, round(emblem.height * w / emblem.width)), Image.LANCZOS)
     withEmblem = blank.copy()
     withEmblem.alpha_composite(emblem, ((CELL[0] - emblem.width) // 2, (CELL[1] - emblem.height) // 2))
