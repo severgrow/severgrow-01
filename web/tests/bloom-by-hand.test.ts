@@ -62,7 +62,8 @@ describe('Bloom has its own colour', () => {
     // 2026-10-24 aqua border is gone, so the pick never draws a line round the printed card.
     const pick = /html\.futa04-information #hand \.card\.futa04-bloom-pick \{([^}]*)\}/.exec(info)?.[1] ?? '';
     expect(pick).toMatch(/border-color:\s*transparent;/);
-    expect(pick).toMatch(/box-shadow:\s*0 0 12px rgba\(143, 211, 201, 0\.38\)/);
+    expect(pick).toMatch(/box-shadow:\s*0 0 3px rgba\(143, 211, 201, 0\.48\), 0 0 12px 2px rgba\(143, 211, 201, 0\.28\)/);
+    expect(pick).not.toMatch(/inset|0 0 0 1px/);
     // The card's class list is now built once per render (main.ts renderHand); the rule is the same.
     expect(main).toMatch(/IS_FUTA04 && inBloom && 'futa04-bloom-pick',/);
   });
