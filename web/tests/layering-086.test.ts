@@ -81,4 +81,24 @@ describe('board and dock layering, 0.86 fixes', () => {
     expect(hand).toContain('2px - var(--cw) / 2');
     expect(hand.indexOf('max(')).toBeLessThan(hand.indexOf('min('));
   });
+
+  it('paints the pile\u2019s two slabs behind the card back, so the back is the visible face', () => {
+    // THE OWNER'S BUG (2026-11-14): "the back of the cards - draw pile is broken - no skin".
+    // `.pile-stack` carries the card-back art, but the ::before/::after slabs were opaque
+    // `--c-surface` and, because a pseudo-element always paints above its own element's
+    // background, they covered it completely: the pile read as plain grey slabs with a diagonal
+    // hatch. `z-index:-1` puts them behind the stack's own fill but in front of the (isolated)
+    // card box, so the offsets show as card thickness. A DOM is needed to *see* this, so the
+    // source text is pinned; web/e2e/futa04-pile-back.ts measures the computed styles and pixels.
+    const css = read('style.css');
+    // `.pile-stack::before,\n.pile-stack::after` also appears inside the shared first rule, so the
+    // block is matched with a regex that requires the slab-only declarations to be present.
+    const slabs = /\.pile-stack::before,\s*\.pile-stack::after \{[^}]*content: '[^']*'[^}]*z-index: -1;[^}]*\}/s.exec(css);
+    expect(slabs, 'the slab rule carries z-index: -1').not.toBeNull();
+    // The negative layer needs its own stacking context to stay inside the card box.
+    expect(rule(css, '.pile-card {')).toContain('isolation: isolate;');
+    // The hatch faked a pattern on a blank slab; with the real back in front it only shows as a
+    // few stray ticks on a 4px edge, so it is gone.
+    expect(rule(css, '.pile-stack::after {')).not.toContain('repeating-linear-gradient');
+  });
 });
