@@ -143,6 +143,15 @@ export const hash = (s: string) => {
   return (h >>> 0) / 4294967296;
 };
 
+/** How much an ordinary hex AT `key` is drawn at (1 off the bend). A cell picture's own size is
+ *  `S`; on the bent board an outer cell's hex is smaller, so every piece of per-cell art scales by
+ *  this, and the art, the gold rim and the hex stay one shape. */
+export const cellScale = (key: string): number => {
+  const { x, y } = centerOf(key);
+  const pts = cornerPts(key, S);
+  return pts.reduce((sum, [px, py]) => sum + Math.hypot(px - x, py - y), 0) / pts.length / S;
+};
+
 export const cornerPts = (key: string, size: number, jitter = 0) => {
   const pose = boardBulge();
   // On the bent board every CORNER is bent (not the tile about its centre), exactly as the Territory
