@@ -1175,6 +1175,13 @@ svg.usable .hex-cell {
    translate(x,y) scale(...) must instead use the SVG origin or it drifts off its hex. */
 #board .seed-stone { pointer-events: none; transform-box: view-box; transform-origin: 0 0; }
 .default-art-sprite, .default-rock-art, .default-rock-shadow, .default-ground-art, .default-home-art, .default-cell-rim { pointer-events: none; }
+.fa-art, .fa-tile-base, .fa-home-base, .fa-rim, .fa-spill-dim { pointer-events: none; }
+/* Forest & Ash (ui/defaultArtBoard.ts). An occupied gold tile draws its own frame over its art; the
+   frame layer (now under the tiles) keeps only the empty ones. */
+#board.fa-board .l-rich-frames .gold-frame.occupied { display: none; }
+/* The home's breath scales about the hex centre (the landmark's origin), not the middle of the
+   tree or smoke, so the home's hex stays where it is while it breathes. */
+#board.fa-board .landmark .fa-home-art { transform-box: view-box; transform-origin: 0 0; }
 .default-art-tile > path { pointer-events: none; }
 .seed-stone-shadow { fill: var(--seed-stone-shadow, rgba(0, 0, 0, .4)); }
 .seed-stone-art { pointer-events: none; overflow: hidden; }

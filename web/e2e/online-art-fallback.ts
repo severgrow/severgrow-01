@@ -35,7 +35,7 @@ import { expandYourMatches } from './helpers/lobby-matches.js';
 const PORT = 4396;
 const PREFIX = 'futa05:';
 /** Every board picture the duel draws: territory sprites, home art, rocks and the ground. */
-const BLOCKED = /meadow|ashen|garden|fortress|rock_hex|empty_ground/;
+const BLOCKED = /\/(forest|ash|rock)-0\d|home-(tree|volcano)|empty_ground/;
 
 let failed = 0;
 const check = (name: string, ok: boolean, note = '') => {
