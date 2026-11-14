@@ -14,7 +14,10 @@ import {
   numberPlate,
   strangleFinish,
 } from '../src/logic/landmark.js';
-import { centerOf } from '../src/ui/geom.js';
+import { FULL_LOOK, centerOf } from '../src/ui/geom.js';
+import { drawLandmark, setLandmarkState } from '../src/ui/landmarks.js';
+import { MATERIAL_TOKENS } from '../src/logic/materials.js';
+import type { MaterialToken } from '../src/logic/materials.js';
 
 afterEach(() => setOrient('pointy'));
 
@@ -69,13 +72,14 @@ describe('deterministic variation and motion', () => {
     expect(v.sway).toBeGreaterThanOrEqual(0);
     expect(v.sway).toBeLessThanOrEqual(1);
   });
-  it('idle motion runs only with motion on; Reduce motion and Effects Low stop it; danger shows its ring', () => {
-    expect(landmarkMotion({ reduceMotion: false, effects: 'normal' }, false)).toMatchObject({ idle: true, ring: false });
-    expect(landmarkMotion({ reduceMotion: true, effects: 'normal' }, false)).toMatchObject({ idle: false });
-    expect(landmarkMotion({ reduceMotion: false, effects: 'low' }, false)).toMatchObject({ idle: false });
-    expect(landmarkMotion({ reduceMotion: false, effects: 'normal' }, true)).toMatchObject({ ring: true, worried: true });
-    // danger is shown even without motion (a still ring, no trembling)
-    expect(landmarkMotion({ reduceMotion: true, effects: 'normal' }, true)).toMatchObject({ ring: true, worried: false });
+  it('idle motion runs only with motion on; Reduce motion and Effects Low stop it; danger still trembles', () => {
+    expect(landmarkMotion({ reduceMotion: false, effects: 'normal' }, false)).toEqual({ idle: true, worried: false });
+    expect(landmarkMotion({ reduceMotion: true, effects: 'normal' }, false)).toEqual({ idle: false, worried: false });
+    expect(landmarkMotion({ reduceMotion: false, effects: 'low' }, false)).toEqual({ idle: false, worried: false });
+    expect(landmarkMotion({ reduceMotion: false, effects: 'normal' }, true)).toEqual({ idle: true, worried: true });
+    // danger never trembles at Reduce motion; and it no longer asks for a ring at all
+    expect(landmarkMotion({ reduceMotion: true, effects: 'normal' }, true)).toEqual({ idle: false, worried: false });
+    expect('ring' in landmarkMotion({ reduceMotion: false, effects: 'normal' }, true)).toBe(false);
   });
 });
 
@@ -97,5 +101,84 @@ describe('the Strangle finish', () => {
     const b = strangleFinish({ speed: 1, reduceMotion: true }, 'volcano');
     expect(b.map((x) => x.k)).toEqual(['smother']);
     expect(b[0]!.ms).toBeLessThanOrEqual(600);
+  });
+});
+
+// The frame around a HOME that is being surrounded was removed completely (owner, 2026-11-14:
+// "remove completely the frame that's showing up when the home tile is getting surrounded ...
+// for now don't show it"). The ring group and its per-side segments must not be CREATED at all,
+// not merely hidden, and no ring state class or `data-blocked` may be written. There is no jsdom
+// in this repo, so a tiny DOM stub stands in (the pattern web/tests/seed-reveal.test.ts uses).
+class StubNode {
+  readonly attrs = new Map<string, string>();
+  children: StubNode[] = [];
+  readonly classes = new Set<string>();
+  readonly style = { setProperty: (_key: string, _value: string) => undefined };
+  constructor(readonly tag: string) {}
+  setAttribute(key: string, value: string) {
+    this.attrs.set(key, value);
+  }
+  appendChild(node: StubNode) {
+    this.children.push(node);
+    return node;
+  }
+  readonly classList = {
+    toggle: (name: string, on?: boolean) => { if (on) this.classes.add(name); else this.classes.delete(name); },
+    add: (name: string) => { this.classes.add(name); },
+    remove: (name: string) => { this.classes.delete(name); },
+  };
+  /** Class selectors only (`.a, .b`), which is all the removed ring ever used. */
+  querySelectorAll(selector: string): StubNode[] {
+    const wanted = selector.split(',').map((part) => part.trim().replace(/^\./, ''));
+    const out: StubNode[] = [];
+    for (const child of this.children) {
+      const names = (child.attrs.get('class') ?? '').split(/\s+/);
+      if (wanted.some((w) => names.includes(w))) out.push(child);
+      out.push(...child.querySelectorAll(selector));
+    }
+    return out;
+  }
+}
+
+const COLORS = Object.fromEntries(MATERIAL_TOKENS.map((t) => [t, '#000000'])) as Record<MaterialToken, string>;
+
+const installDocument = () => {
+  const doc = globalThis as unknown as { document?: unknown };
+  const previous = doc.document;
+  doc.document = { createElementNS: (_ns: string, tag: string) => new StubNode(tag) as unknown as SVGElement };
+  return () => {
+    doc.document = previous;
+  };
+};
+
+describe('no frame around a home that is being surrounded', () => {
+  it('draws the landmark alone: no ring group and no side segments are created', () => {
+    const restore = installDocument();
+    try {
+      for (const kind of ['tree', 'volcano'] as const) {
+        for (const o of ['pointy', 'flat'] as const) {
+          setOrient(o);
+          const parent = new StubNode('g');
+          const g = drawLandmark(parent as unknown as SVGGElement, kind, '0,0', { x: 0, y: 0 }, o, COLORS, FULL_LOOK);
+          expect(g.querySelectorAll('.lm-ring').length, `${kind} ${o} ring`).toBe(0);
+          expect(g.querySelectorAll('.lm-ring, .lm-seg').length, `${kind} ${o} segments`).toBe(0);
+        }
+      }
+    } finally {
+      restore();
+    }
+  });
+
+  it('sets only idle/danger/worried/strangled/won: no ring classes and no data-blocked', () => {
+    const g = new StubNode('g');
+    setLandmarkState(g as unknown as SVGGElement, { danger: true, tapped: false, strangled: false, won: false, idle: true, worried: true });
+    expect([...g.classes].sort()).toEqual(['danger', 'idle', 'worried']);
+    expect(g.attrs.has('data-blocked')).toBe(false);
+    // strangled replaces the living states entirely, and is alone
+    setLandmarkState(g as unknown as SVGGElement, { danger: true, tapped: false, strangled: true, won: false, idle: true, worried: true });
+    expect([...g.classes].sort()).toEqual(['strangled']);
+    setLandmarkState(g as unknown as SVGGElement, { danger: false, tapped: false, strangled: false, won: true, idle: false, worried: false });
+    expect([...g.classes].sort()).toEqual(['won']);
+    expect(g.attrs.has('data-blocked')).toBe(false);
   });
 });

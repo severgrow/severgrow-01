@@ -5048,7 +5048,7 @@ async function playStep(step: Step, my: number) {
           sound.snap();
         } else if (b.k === 'smother' || b.k === 'wither') {
           loserEl?.classList.add('strangled');
-          loserEl?.classList.remove('idle', 'danger', 'worried', 'show-ring', 'ring-soft', 'ring-strong');
+          loserEl?.classList.remove('idle', 'danger', 'worried');
           if (b.k === 'smother') sound.sigh();
           else sound.grind();
         } else if (b.k === 'bloom' || b.k === 'roar') {
@@ -7431,15 +7431,21 @@ function renderBoard(v: View, advice: Advice | null) {
   // The same slot holds Replay when nothing can be undone: ONLINE its disabled tooltip must say why
   // (the offline words stay exactly as they were).
   if (!replayOk && noReplay && !undoOk && isOnlineDuel()) undoSlot.title = noReplayTip();
-  // Step 4: the homes (tree, volcano): idle life, a calm worried state and the "sides blocked"
-  // ring in danger (or when tapped), smothered or withered after a Strangle. Public information.
+  // Step 4: the homes (tree, volcano): idle life, a calm worried state, smothered or withered
+  // after a Strangle. A home that is being surrounded shows no frame (owner, 2026-11-14).
   {
     const res = session.state.result;
     const states = ([0, 1] as const).map((p) => {
       const sides = homeSides(v, p);
       const m = landmarkMotion({ reduceMotion: settings.reduceMotion, effects: settings.effects }, sides.danger);
       const strangled = !busy() && res?.reason === 'strangle' && res.winner !== p;
-      return { ...sides, ...m, tapped: cardPinned && inspectKey === sides.key, strangled, won: !busy() && res?.reason === 'strangle' && res.winner === p };
+      return {
+        danger: sides.danger,
+        ...m,
+        tapped: cardPinned && inspectKey === sides.key,
+        strangled,
+        won: !busy() && res?.reason === 'strangle' && res.winner === p,
+      };
     });
     board.setHomes(states);
     // Only the player's home breathes, and only while it feeds a joined tile.

@@ -41,12 +41,12 @@ export type MotionSettings = { reduceMotion: boolean; effects: 'low' | 'normal' 
 
 /**
  * Which motions run: idle (sway, smoke, breathing glow, the odd ember or leaf) needs motion on
- * and Effects above Low; the danger ring always shows when in danger; the worried motion
- * (trembling leaves, the low rumble) only with motion on.
+ * and Effects above Low; the worried motion (trembling leaves, the low rumble) only with motion
+ * on. A home that is being surrounded shows no frame (owner, 2026-11-14).
  */
 export const landmarkMotion = (s: MotionSettings, danger: boolean) => {
   const moving = !s.reduceMotion && s.effects !== 'low';
-  return { idle: moving, ring: danger, worried: danger && moving };
+  return { idle: moving, worried: danger && moving };
 };
 
 /** The Strangle finish is never longer than this at Normal speed. */

@@ -297,8 +297,6 @@ export class DefaultArtBoardView extends BoardView {
     const art = el('g', { class: 'default-home-art fa-home-art' }, home);
     el('path', { d: hexPath('0,0', S, 'flat'), fill: faBaseColour(player), class: 'fa-home-base' }, art);
     this.art(art, faTileSprite(this.fa, key, player, true), 0, 0, cellScale(key), 'default-art-sprite');
-    const ring = home.querySelector('.lm-ring');
-    if (ring) home.appendChild(ring);
     return home;
   }
 
