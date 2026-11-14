@@ -229,6 +229,50 @@ try {
     await page.close();
   }
 
+  // --- The map fills its band on every phone size (guard) ---
+  // The tutorial paints the map in the band between the glass and the cockpit, so it must NOT
+  // reserve any camera space for the dock (`--cam-under` is 0 there: glass-surface.ts). A phone
+  // layout that runs the map under the cards publishes `--dock-under`, and a release-gate regression
+  // (0.86) had that reserve written as an INLINE style on #board-wrap: an inline value beats the
+  // tutorial's 0, so the camera framed the map in ~100px of a 383px box and shrank the board to a
+  // quarter size, pinned to the top of the band. This measures the rendered hexes, so whatever
+  // publishes the reserve next cannot bring that back silently.
+  {
+    for (const vp of [{ width: 320, height: 568 }, { width: 360, height: 780 }, { width: 430, height: 932 }] as const) {
+      const page = await browser.newPage({ viewport: vp, hasTouch: true, isMobile: true });
+      page.on('pageerror', e => errors.push(e.message));
+      await openTutorial(page, 2);
+      await page.waitForTimeout(600);
+      const m = await page.evaluate(() => {
+        const wrap = document.getElementById('board-wrap')!;
+        const glass = document.getElementById('futasaku-glass')!.getBoundingClientRect();
+        const dock = document.getElementById('dock')!.getBoundingClientRect();
+        const cells = [...document.querySelectorAll('#board .hex-cell path.hex')]
+          .map(el => el.getBoundingClientRect()).filter(r => r.height > 0);
+        const top = cells.length ? Math.min(...cells.map(r => r.top)) : NaN;
+        const bottom = cells.length ? Math.max(...cells.map(r => r.bottom)) : NaN;
+        return {
+          cells: cells.length,
+          under: getComputedStyle(wrap).getPropertyValue('--cam-under').trim(),
+          hexH: bottom - top,
+          gapTop: top - glass.bottom,
+          gapBottom: dock.top - bottom,
+          band: dock.top - glass.bottom,
+        };
+      });
+      const tag = `${vp.width}x${vp.height}`;
+      assert.ok(m.cells > 0, `${tag}: tutorial map is drawn (reserve ${m.under})`);
+      // No camera band may be reserved under the tutorial map: it does not run under the dock.
+      assert.equal(m.under, '0px', `${tag}: the tutorial reserves no camera space under the map (${m.under})`);
+      // Equal gaps glass→board and board→dock, both on screen.
+      assert.ok(m.gapTop > 4 && m.gapBottom > 4, `${tag}: map sits clear of glass and dock (${m.gapTop}/${m.gapBottom})`);
+      assert.ok(Math.abs(m.gapTop - m.gapBottom) <= 16, `${tag}: map is centred in its band (${m.gapTop} vs ${m.gapBottom})`);
+      // ...and it FILLS the band: the 0.86 regression left the map at a quarter of it.
+      assert.ok(m.hexH >= 0.6 * m.band, `${tag}: map uses its band (${m.hexH.toFixed(1)} of ${m.band.toFixed(1)}px)`);
+      await page.close();
+    }
+  }
+
   // --- One screenshot per chapter at 390x844 ---
   {
     const page = await browser.newPage({ viewport: VIEWPORTS[1], hasTouch: true, isMobile: true });

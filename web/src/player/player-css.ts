@@ -526,12 +526,15 @@ html[data-thumb] .board-wrap {
      this one number IS the board's vertical position on a phone. It stops at the dock's top, plus
      THE MAP'S OWN AIR: the spare height the dock's gaps took above its control row is empty, so the
      map may use it — a bigger card then grows the fan down instead of pushing the whole map up the
-     screen, which is what the live build did before the cards were enlarged. main.ts publishes that
-     as --cam-under itself, a RESOLVED px value on this element (the dock's height minus that air). It
-     must stay a plain px value: camera.ts reads the property with parseFloat, so a calc() token
-     would parse as NaN and drop the board to the bottom of the screen.
-     Measured against the live site at 320x568, 360x640, 390x844 and 430x932: within 1 px. */
-  --cam-under: var(--dock-h, 0px);
+     screen, which is what the live build did before the cards were enlarged.
+     The amount (--dock-under, a RESOLVED px value published by main.ts) is read here, in the SAME
+     rule as the negative margin that lays the map over the dock: a screen where the map does NOT run
+     under the dock (the tutorial, which paints it in the band between the glass and the cockpit:
+     glass-surface.ts sets --cam-under: 0px there) therefore reserves nothing, by construction. This
+     must stay a stylesheet declaration, never an inline style on the element: an inline value would
+     beat the tutorial's reset. And it must resolve to a plain px number: camera.ts reads the property
+     with parseFloat, so a calc() token would parse as NaN and drop the board to the bottom. */
+  --cam-under: var(--dock-under, var(--dock-h, 0px));
   margin-bottom: calc(-1 * var(--dock-h, 0px));
 }
 /* Short phones can use the clear space between the header controls. Extend the camera's

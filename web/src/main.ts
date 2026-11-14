@@ -7189,9 +7189,18 @@ function applyLayout() {
   // calc(). The map keeps the dock's spare air above its control row (`Thumb.air`): that air is
   // empty, so using it lets bigger cards grow the fan downwards instead of lifting the whole map up
   // the screen. Without `air` at all, the map sits exactly where it did before the cards grew.
-  const mapWrap = $('board-wrap');
-  if (thumbLayout) mapWrap.style.setProperty('--cam-under', px(Math.max(0, l.dock.h - thumbLayout.air)));
-  else mapWrap.style.removeProperty('--cam-under');
+  //
+  // The AMOUNT is published on the root as `--dock-under`; the wrap's own rule decides whether the
+  // map runs under the dock at all (`--cam-under: var(--dock-under, …)` in player/player-css.ts).
+  // It must not be written on the wrap directly: an inline value beats every stylesheet rule,
+  // including the tutorial's `--cam-under: 0px`, and the tutorial has no dock to run under — it
+  // paints the map in the band between the glass and the cockpit (glass-surface.ts). Writing it
+  // inline there reserved ~283px of a 383px box, so the camera shrank the tutorial map to a
+  // quarter of its size and pinned it to the top (the 0.86 release gate caught it:
+  // web/e2e/futa04-tutorial-lock.ts). One rule now owns both the negative margin and the reserve,
+  // so a layout that cancels the overlap (the tutorial) gets a zero reserve by construction.
+  if (thumbLayout) root.setProperty('--dock-under', px(Math.max(0, l.dock.h - thumbLayout.air)));
+  else root.removeProperty('--dock-under');
   root.setProperty('--dock-w', px(l.dock.w));
   root.setProperty('--board-margin', `${BOARD_MARGIN}px`);
   for (const [k, v] of Object.entries(l.rows)) root.setProperty(`--row-${k}`, px(v));
