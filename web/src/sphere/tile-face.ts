@@ -31,3 +31,23 @@ export function tileFace(centre: V3, corners: readonly V3[], north: V3 = [0, 1, 
     coords: uv.map(([x, y]) => [(x * c - y * s) * k, (x * s + y * c) * k] as [number, number]),
   };
 }
+
+/**
+ * NO TWO NEIGHBOURS ALIKE (owner, 2026-11-14): one of the nine plain tiles per planet cell. Each
+ * cell, in index order, takes the first of its own fixed shuffle of the nine that no placed
+ * neighbour wears; a cell has at most six neighbours, so one is always free. Deterministic.
+ */
+export function tileVariants(cells: readonly { index: number; neighbours: readonly number[] }[], count = 9): Uint8Array {
+  const variant = new Uint8Array(cells.length);
+  const placed = new Uint8Array(cells.length);
+  const order = (index: number) => Array.from({ length: count }, (_, i) => i)
+    .sort((a, b) => (Math.sin((index * count + a) * 78.233) * 43758.5453 % 1) - (Math.sin((index * count + b) * 78.233) * 43758.5453 % 1));
+  for (const c of cells) {
+    const taken = new Set<number>();
+    for (const n of c.neighbours) if (placed[n]) taken.add(variant[n]!);
+    const prefs = order(c.index);
+    variant[c.index] = prefs.find((v) => !taken.has(v)) ?? prefs[0]!;
+    placed[c.index] = 1;
+  }
+  return variant;
+}

@@ -121,7 +121,7 @@ export const CARDS_CSS = `
   opacity:0; transition:opacity .28s ease;
 }
 .futa04-cards .card :is(.c-num,.c-suit) { transition:opacity .22s ease; }
-.futa04-cards .dock .pile-top.card { border-radius:6px; }
+.futa04-cards .dock .pile-top.card { border-radius:5.9% / 4.2%; }
 .futa04-cards .card.s0 .futa04-card-art { background-image:url('${mossArt}'); }
 .futa04-cards .card.s1 .futa04-card-art { background-image:url('${ashArt}'); }
 .futa04-cards .card.s2 .futa04-card-art { background-image:url('${dewArt}'); }
@@ -136,8 +136,14 @@ export const CARDS_CSS = `
 .futa04-cards.reduce-motion .card .futa04-card-art,
 .futa04-cards.reduce-motion .card :is(.c-num,.c-suit) { transition:none; }
 :is(${READY_FACES})::after { display:none; }
-:is(${READY_FACES}):has(>.futa04-card-art) { border-color:transparent; }
-:is(${READY_FACES}):has(>.futa04-card-art):is(.playable,.lifted) { border-color:var(--c-accent); }
+/* THE GLOW WRAPS THE CARD (owner, 2026-11-14: "its glow should wrap the card perfectly" and "never do
+   the contour frame when selected"). With its art in, a card IS its art: the art covers the whole box
+   (border included), the box has no fill of its own and the art's own corner (15 of 256 x 356 px), so
+   every glow and shadow on the card follows the printed edge. No border colour when playable or
+   selected: the lift and the glow say it. */
+:is(${READY_FACES}):has(>.futa04-card-art) { border-color:transparent; background:transparent; border-radius:5.9% / 4.2%; }
+:is(${READY_FACES}):has(>.futa04-card-art):is(.playable,.lifted) { border-color:transparent; }
+:is(${READY_FACES}) > .futa04-card-art { inset:-1px; border-radius:5.9% / 4.2%; }
 .futa04-cards .futa04-mini-card .futa04-card-art { display:none; }
 /* The separately supplied tree-logo back is the only face-down artwork. */
 .futa04-cards .card.back,

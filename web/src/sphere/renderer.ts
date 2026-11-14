@@ -1,5 +1,5 @@
 import { CHALLENGE_STAMP_GLSL, stampCoordinates } from './challenge-stamp.js';
-import { tileFace } from './tile-face.js';
+import { tileFace, tileVariants } from './tile-face.js';
 import type { V3 } from './geometry.js';
 // THE PLANET IN SPACE. Two passes, no textures, no post-processing, no dependency:
 //   1. SPACE: one full-screen triangle draws the sky, a slowly sliding star field (two parallax
@@ -104,7 +104,7 @@ void main(){
   // under the same matte, grain, chamfer and light as every other tile. The branch is uniform
   // (off: no texture is read at all).
   if (uTilesOn > .5) {
-    float pick = floor(fract(vSeed * 9.731) * 9.0);
+    float pick = min(8.0, floor(floor(vSeed * 4096.0 + .5) / 455.0));
     vec2 cell = vec2(mod(pick, 3.0), floor(pick / 3.0));
     vec2 uv = clamp(vTile * .5 + .5, .006, .994);
     vec4 t = texture2D(uTiles, (cell + vec2(uv.x, 1.0 - uv.y)) * ${(160 / 512).toFixed(4)});
@@ -120,7 +120,8 @@ void main(){
   // Colour: a touch less saturated and darker, the matte of a real pigment.
   c = mix(c, vec3(dot(c, vec3(.3, .59, .11))), .14 * owned) * mix(1.0, .93, owned);
   // Each tile its own faint tone; the unknown a little more (it is terrain, not ground anyone keeps).
-  c *= kind < 1.5 ? .9 + .2 * vSeed : .975 + .05 * vSeed;
+  float tone = mod(floor(vSeed * 4096.0 + .5), 455.0) / 455.0;
+  c *= kind < 1.5 ? .9 + .2 * tone : .975 + .05 * tone;
   // Grain: two octaves, about three and ten blobs across a tile, a few percent either way.
   float grain = noise3(vLocal * 95.0) * .62 + noise3(vLocal * 330.0) * .38;
   c *= mix(.955, 1.045, grain) * (1.0 - .035 * landish * (1.0 - grain));
@@ -254,6 +255,10 @@ export class PlanetRenderer {
     // Each tile's own levelled frame (sphere/tile-face.ts), stored x100 so a corner just past the
     // unit circle still fits a byte; the shader scales it back (x1.27).
     const tiles = new Int8Array(vertices * 2);
+    // NO TWO NEIGHBOURS ALIKE (owner, 2026-11-14): one of the nine plain tiles per cell, each cell
+    // taking the first of its own shuffled nine that no already-placed neighbour wears. A tile has at
+    // most six neighbours, so one is always free. Fixed by the planet's cells: it never changes.
+    const variant = tileVariants(cells);
     this.turn = new Float32Array(cells.length);
     let to = 0;
     let so = 0;
@@ -262,7 +267,8 @@ export class PlanetRenderer {
       const uv = stampCoordinates(c.centre, c.corners.map(i => sphere.corners[i]!),north);
       const face = tileFace(c.centre, c.corners.map(i => sphere.corners[i]!), north);
       this.turn[c.index] = face.angle;
-      const seed = Math.floor((Math.sin(c.index * 12.9898) * 43758.5453 % 1 + 1) % 1 * 4095);
+      // The seed carries the tile's picture (variant * 455 + a tone of its own, below 4096).
+      const seed = variant[c.index]! * 455 + Math.floor((Math.sin(c.index * 12.9898) * 43758.5453 % 1 + 1) % 1 * 455);
       for (let i = 0; i < c.corners.length; i++) {
         const a = sphere.corners[c.corners[i]!]!, b = sphere.corners[c.corners[(i + 1) % c.corners.length]!]!;
         for (const p of [[0,0],uv[i]!,uv[(i+1)%uv.length]!]) { stamps[so++] = Math.round(p[0]! * 127); stamps[so++] = Math.round(p[1]! * 127); }

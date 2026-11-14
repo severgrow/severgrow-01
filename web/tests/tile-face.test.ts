@@ -2,7 +2,8 @@
 // tiles flat side up"). Each tile's picture is turned so the hex edge nearest north is its top, and
 // the turn is reported so the view can level the tile at the centre of the screen.
 import { describe, expect, it } from 'vitest';
-import { tileFace } from '../src/sphere/tile-face.js';
+import { tileFace, tileVariants } from '../src/sphere/tile-face.js';
+import { buildSphere } from '../src/sphere/geometry.js';
 import type { V3 } from '../src/sphere/geometry.js';
 
 const hexAround = (turnDeg: number, r = .02): V3[] => Array.from({ length: 6 }, (_, i) => {
@@ -29,4 +30,13 @@ describe('a planet tile faces flat side up', () => {
       for (const [x, y] of face.coords) expect(Math.hypot(x, y)).toBeCloseTo(1, 4);
     });
   }
+});
+
+describe('the planet never puts the same tile picture side by side', () => {
+  it('every cell differs from all of its neighbours, and all nine pictures are used', () => {
+    const sphere = buildSphere(32);
+    const v = tileVariants(sphere.cells);
+    for (const c of sphere.cells) for (const n of c.neighbours) expect(v[n]).not.toBe(v[c.index]);
+    expect(new Set(v).size).toBe(9);
+  });
 });
