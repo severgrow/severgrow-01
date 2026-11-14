@@ -12,7 +12,7 @@
 // it. It depends only on the board's cells, never on what is on them, so a tile's picture never
 // changes between renders, strengths, undo or replay.
 import { allNeighbors, coordKey, parseKey } from '../../../src/engine/index.js';
-import { FOREST_ASH_GEOMETRY, GOLD_ATLAS_SIZE, GOLD_FRAME_HEX_BOXES } from './forestAshData.js';
+import { BACKGROUND_NAMES, FOREST_ASH_GEOMETRY, GOLD_ATLAS_SIZE, GOLD_FRAME_HEX_BOXES } from './forestAshData.js';
 import type { ForestAshName, ForestAshSprite, SpillDir } from './forestAshData.js';
 import { S, SQ3, hash } from './geom.js';
 import forest1 from '../assets/forest-ash/forest-01.webp?url';
@@ -41,6 +41,31 @@ import rock3 from '../assets/forest-ash/rock-03.webp?url';
 import rock4 from '../assets/forest-ash/rock-04.webp?url';
 import rock5 from '../assets/forest-ash/rock-05.webp?url';
 import goldAtlas from '../assets/forest-ash/gold-frames.webp?url';
+import water1 from '../assets/forest-ash/water-01.webp?url';
+import water2 from '../assets/forest-ash/water-02.webp?url';
+import water3 from '../assets/forest-ash/water-03.webp?url';
+import water4 from '../assets/forest-ash/water-04.webp?url';
+import water5 from '../assets/forest-ash/water-05.webp?url';
+import water6 from '../assets/forest-ash/water-06.webp?url';
+import water7 from '../assets/forest-ash/water-07.webp?url';
+import water8 from '../assets/forest-ash/water-08.webp?url';
+import water9 from '../assets/forest-ash/water-09.webp?url';
+import toxic1 from '../assets/forest-ash/toxic-01.webp?url';
+import toxic2 from '../assets/forest-ash/toxic-02.webp?url';
+import toxic3 from '../assets/forest-ash/toxic-03.webp?url';
+import toxic4 from '../assets/forest-ash/toxic-04.webp?url';
+import toxic5 from '../assets/forest-ash/toxic-05.webp?url';
+import toxic6 from '../assets/forest-ash/toxic-06.webp?url';
+import toxic7 from '../assets/forest-ash/toxic-07.webp?url';
+import toxic8 from '../assets/forest-ash/toxic-08.webp?url';
+import toxic9 from '../assets/forest-ash/toxic-09.webp?url';
+import whirlpool from '../assets/forest-ash/home-whirlpool.webp?url';
+import reactor from '../assets/forest-ash/home-reactor.webp?url';
+import bg_cocoa from '../assets/forest-ash/bg-cocoa.webp?url';
+import bg_lichen from '../assets/forest-ash/bg-lichen.webp?url';
+import bg_cinder from '../assets/forest-ash/bg-cinder.webp?url';
+import bg_clay from '../assets/forest-ash/bg-clay.webp?url';
+import bg_slate from '../assets/forest-ash/bg-slate.webp?url';
 
 export type { SpillDir };
 export type FaSprite = ForestAshSprite & { url: string; name: ForestAshName };
@@ -60,7 +85,49 @@ export const FA_GOLD_ATLAS = goldAtlas;
 export const FA_GOLD_ATLAS_SIZE = GOLD_ATLAS_SIZE;
 export const FA_GOLD_BOXES = GOLD_FRAME_HEX_BOXES;
 
-/** Every picture the board may draw (the preload list). */
+/**
+ * THE TERRITORY SETS (owner, 2026-11-14: Water and Toxic join Forest and Ash). Each is nine plain
+ * grounds and a home. The board shows one set per side: Forest (you) against Ash by default; on
+ * /test/ the planet's colour menu can swap either side (ui/skinChoice.ts).
+ */
+export const TERRITORY_IDS = ['forest', 'ash', 'water', 'toxic'] as const;
+export type TerritoryId = (typeof TERRITORY_IDS)[number];
+const set = (id: string, urls: string[], home: string, homeUrl: string) => ({
+  tiles: urls.map((url, i) => sprite(`${id}-0${i + 1}` as ForestAshName, url)),
+  home: sprite(home as ForestAshName, homeUrl),
+});
+export const TERRITORIES: Record<TerritoryId, { tiles: readonly FaSprite[]; home: FaSprite }> = {
+  forest: { tiles: FA_FOREST, home: FA_HOMES[0] },
+  ash: { tiles: FA_ASH, home: FA_HOMES[1] },
+  water: set('water', [water1, water2, water3, water4, water5, water6, water7, water8, water9], 'home-whirlpool', whirlpool),
+  toxic: set('toxic', [toxic1, toxic2, toxic3, toxic4, toxic5, toxic6, toxic7, toxic8, toxic9], 'home-reactor', reactor),
+};
+
+/** The colour under each set's art (it shows only at a sprite's softened corners). */
+export const TERRITORY_BASE_COLOUR: Record<TerritoryId, string> = { forest: '#315321', ash: '#302c2c', water: '#173a52', toxic: '#2b2a1c' };
+export const faBaseColour = (owner: 0 | 1) => TERRITORY_BASE_COLOUR[sides[owner]];
+
+/** The two sides on the board: [player 0's set, player 1's set]. */
+let sides: [TerritoryId, TerritoryId] = ['forest', 'ash'];
+export const faSides = (): readonly [TerritoryId, TerritoryId] => sides;
+export const setFaSides = (mine: TerritoryId, theirs: TerritoryId) => { sides = [mine, theirs]; };
+
+/**
+ * BOARD BACKGROUNDS (owner, 2026-11-14): painted boards whose hexes sit on the cells. 'classic' is
+ * the ground the board had before (a tiled texture). Grey is to be the default once its file
+ * arrives; until then the classic ground stays.
+ */
+export type BackgroundId = 'classic' | (typeof BACKGROUND_NAMES)[number];
+const BG_URLS: Record<(typeof BACKGROUND_NAMES)[number], string> = { cocoa: bg_cocoa, lichen: bg_lichen, cinder: bg_cinder, clay: bg_clay, slate: bg_slate };
+export const BACKGROUNDS: readonly { id: BackgroundId; url: string | null }[] = [
+  { id: 'classic', url: null }, ...BACKGROUND_NAMES.map((id) => ({ id, url: BG_URLS[id] })),
+];
+let background: BackgroundId = 'classic';
+export const faBackground = () => background;
+export const setFaBackground = (id: BackgroundId) => { background = id; };
+export const faBackgroundUrl = (): string | null => BACKGROUNDS.find((b) => b.id === background)?.url ?? null;
+
+/** The pictures the default board draws (the preload list). Other sets load when chosen. */
 export const FA_ALL_URLS: readonly string[] = [
   ...FA_FOREST.map((s) => s.url), ...FA_ASH.map((s) => s.url), ...FA_HOMES.map((s) => s.url),
   ...FA_ROCKS.map((s) => s.url), FA_GOLD_ATLAS,
@@ -97,8 +164,10 @@ export const faVariants = (keys: Iterable<string>): FaVariants => {
 };
 
 /** The picture for a tile: its home, or its owner's ground in the cell's variant. */
-export const faTileSprite = (v: FaVariants, key: string, owner: 0 | 1, root: boolean): FaSprite =>
-  root ? FA_HOMES[owner] : (owner === 0 ? FA_FOREST : FA_ASH)[v.tile.get(key) ?? 0]!;
+export const faTileSprite = (v: FaVariants, key: string, owner: 0 | 1, root: boolean): FaSprite => {
+  const t = TERRITORIES[sides[owner]];
+  return root ? t.home : t.tiles[v.tile.get(key) ?? 0]!;
+};
 export const faRockSprite = (v: FaVariants, key: string): FaSprite => FA_ROCKS[v.rock.get(key) ?? 0]!;
 /** Which gold frame a bonus hex wears (each hex keeps one for the whole game). */
 export const faGoldVariant = (key: string): number => Math.floor(hash(`${key}:gold-frame`) * FA_GOLD_BOXES.length);

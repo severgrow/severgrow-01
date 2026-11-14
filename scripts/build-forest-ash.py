@@ -137,6 +137,41 @@ def fit_regular(alpha: np.ndarray) -> tuple[float, float, float]:
     return cx, cy, R
 
 
+def fit_iou(alpha: np.ndarray, R: float | None = None, lower: bool = False) -> tuple[float, float, float]:
+    """(cx, cy, R) of the flat-top hex that best overlaps the painted area (intersection over
+    union), searched coarse to fine. Sprays, drips and leaves are small next to a whole hex, so
+    they barely move it, unlike edge-based fits. `R` fixed: only the centre is searched. `lower`:
+    only the lower part counts (homes, whose top is a tree, a plume or a reactor)."""
+    m = alpha > 0.5
+    ys, xs = np.nonzero(m)
+    gx, gy = (xs.min() + xs.max()) / 2.0, (ys.min() + ys.max()) / 2.0
+    r0 = R if R else (xs.max() - xs.min()) / 2.0
+    if R:
+        gy = ys.max() - SQ3 / 2 * R
+    region = np.ones_like(m)
+    if lower:
+        region[: int(ys.max() - 0.75 * SQ3 * r0)] = False
+
+    def score(cx, cy, r):
+        h = hex_mask(m.shape, cx, cy, r) & region
+        mm = m & region
+        return (h & mm).sum() / max(1, (h | mm).sum())
+
+    best = (score(gx, gy, r0), gx, gy, r0)
+    for step in (8.0, 4.0, 2.0, 1.0, 0.5):
+        improved = True
+        while improved:
+            improved = False
+            _, cx, cy, r = best
+            for dx, dy, dr in ((step, 0, 0), (-step, 0, 0), (0, step, 0), (0, -step, 0), (0, 0, step), (0, 0, -step)):
+                if R and dr:
+                    continue
+                cand = (score(cx + dx, cy + dy, r + dr), cx + dx, cy + dy, r + dr)
+                if cand[0] > best[0] + 1e-6:
+                    best, improved = cand, True
+    return best[1], best[2], best[3]
+
+
 def fit_by_bottom(alpha: np.ndarray, R: float) -> tuple[float, float, float]:
     """(cx, cy, R) from the bottom edge only (the homes: tree and smoke hide the sides)."""
     m = solid(alpha)
@@ -323,6 +358,10 @@ SHEETS = {
     "rocks": ("rocks.jpg", 1, 5, 4, False),
     "gold-a": ("gold-frame-a.jpg", 1, 1, 26, False),
     "gold-b": ("gold-frame-b.jpg", 1, 1, 26, False),
+    # Water and Toxic (owner, 2026-11-14): same rules. Teal water and yellow-green slime are the
+    # art's own colours, so the lenient (foliage) key keeps them.
+    "water": ("water.webp", 2, 5, 4, True),
+    "toxic": ("toxic.webp", 2, 5, 3, True),
 }
 
 
@@ -527,12 +566,12 @@ def main(preview: Path | None):
     previews: list[tuple[str, np.ndarray]] = []
 
     # Forest + Ash: 9 ground variations and the home (last in the second row) each.
-    for sheet, home in (("forest", "tree"), ("ash", "volcano")):
+    for sheet, home in (("forest", "tree"), ("ash", "volcano"), ("water", "whirlpool"), ("toxic", "reactor")):
         rgba, boxes = load(sheet)
         if sheet == "forest":
             rgba = calm(rgba, sat=0.78, light=0.94)
         crops = [crop(rgba, b) for b in boxes]
-        fits = [fit_regular(c[..., 3] / 255.0) for c in crops[:9]]
+        fits = [fit_iou(c[..., 3] / 255.0) for c in crops[:9]]
         R = float(np.median([f[2] for f in fits]))
         for i, (c, f) in enumerate(zip(crops[:9], fits)):
             # Each tile is fitted to its own painted size (one is drawn ~2% larger than its siblings);
@@ -543,7 +582,7 @@ def main(preview: Path | None):
             e, img = export(f"{sheet}-{i + 1:02d}", c, cx, cy, own_R, spill=False)
             entries[f"{sheet}-{i + 1:02d}"] = e
             previews.append((f"{sheet}-{i + 1:02d}", img))
-        cx, cy, _ = fit_by_bottom(crops[9][..., 3] / 255.0, R)
+        cx, cy, _ = fit_iou(crops[9][..., 3] / 255.0, R, lower=True)
         e, img = export(f"home-{home}", crops[9], cx, cy, R, quality=88)
         entries[f"home-{home}"] = e
         previews.append((f"home-{home}", img))
@@ -614,7 +653,7 @@ def main(preview: Path | None):
         entries[name] = e
         previews.append((name, small))
 
-    write_data(entries, gold)
+    write_data(entries, gold, build_backgrounds())
     if preview:
         write_preview(preview, previews, entries)
 
@@ -671,7 +710,36 @@ def clean_gold(c: np.ndarray) -> np.ndarray:
     return np.dstack([np.clip(out_rgb, 0, 255), out_a * 255.0])
 
 
-def write_data(entries: dict[str, dict], gold: dict):
+BG_W = 1100  # exported background width (a board hex radius is then ~100 px, like the tiles)
+BACKGROUNDS = ("cocoa", "lichen", "cinder", "clay", "slate")
+
+
+def build_backgrounds() -> list[str]:
+    """The board backgrounds: each sheet is a painted radius-3 board (37 flat-top hexes, each with
+    its own tone) on green. Cut to the board's exact outline box (11 radii wide, 7 sqrt(3) radii
+    tall), the colour carried outward past the edge (so a bent rim never shows green or nothing),
+    and saved opaque. The board lays it so every painted hex sits on its own cell."""
+    names = []
+    for name in BACKGROUNDS:
+        src = SRC / "backgrounds" / f"{name}.webp"
+        if not src.exists():
+            continue
+        rgba = key_sheet(np.asarray(Image.open(src).convert("RGB")), 3, foliage=True)
+        a = rgba[..., 3] > 128
+        ys, xs = np.nonzero(a)
+        x0, x1, y0, y1 = xs.min(), xs.max() + 1, ys.min(), ys.max() + 1
+        c = rgba[y0:y1, x0:x1]
+        H = round(BG_W * (y1 - y0) / (x1 - x0))
+        small = np.dstack([np.asarray(Image.fromarray(c[..., i].astype(np.float32), mode="F").resize((BG_W, H), Image.LANCZOS)) for i in range(4)])
+        known = small[..., 3] > 250
+        rgb = np.dstack([spread(small[..., i], known, 60) for i in range(3)])
+        Image.fromarray(np.clip(rgb, 0, 255).round().astype(np.uint8), "RGB").save(OUT / f"bg-{name}.webp", "WEBP", quality=80, method=6)
+        print(f"  bg-{name}: {BG_W}x{H} from {x1 - x0}x{y1 - y0}")
+        names.append(name)
+    return names
+
+
+def write_data(entries: dict[str, dict], gold: dict, backgrounds: list[str]):
     lines = [
         "// GENERATED by scripts/build-forest-ash.py from art/forest-ash/source/*.jpg. Do not edit.",
         "//",
@@ -705,6 +773,8 @@ def write_data(entries: dict[str, dict], gold: dict):
     lines.append("/** gold-frames.webp: its size and, per frame, the hex's exact bounding box in atlas pixels. */")
     lines.append(f"export const GOLD_ATLAS_SIZE = {{ w: {gold['w']}, h: {gold['h']} }} as const;")
     crops = ", ".join(f"[{c[0]}, {c[1]}, {c[2]}, {c[3]}]" for c in gold["crops"])
+    lines.append("/** Board backgrounds (bg-<name>.webp): a painted radius-3 board, cut to its outline box. */")
+    lines.append("export const BACKGROUND_NAMES = [" + ", ".join(f"'{n}'" for n in backgrounds) + "] as const;")
     lines.append(f"export const GOLD_FRAME_HEX_BOXES: readonly (readonly [number, number, number, number])[] = [{crops}];")
     lines.append("")
     DATA.write_text("\n".join(lines))

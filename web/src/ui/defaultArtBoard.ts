@@ -16,17 +16,17 @@
 // canopy or smoke reaches is masked by that outline and gets a rim along it in its own style, so a
 // legal tile above the tree lights up around the canopy. Grass tips and rock bumps simply lie on top.
 // Nothing is traced at runtime: the mask is rebuilt only when which tiles stand where changes.
-import { allNeighbors, coordKey, parseKey } from '../../../src/engine/index.js';
+import { allCoords, allNeighbors, coordKey, hexDistance, parseKey } from '../../../src/engine/index.js';
 import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
 import { BoardView } from './board.js';
-import { S, centerOf, cornerPts, el, hexPath } from './geom.js';
+import { S, SQ3, centerOf, cornerPts, el, flatCentreOf, hash, hexPath, latticeCentre } from './geom.js';
 import { drawLandmark } from './landmarks.js';
 import { getOrient } from '../logic/orient.js';
 import { materialsOf } from '../logic/materials.js';
 import { drawSeedStone } from './seedstone.js';
 import { drawGoldFrame } from './goldframes.js';
 import { DEFAULT_ART_SPRITES } from './defaultArtSprites.js';
-import { FA_ALL_URLS, FA_ROCKS, faRockSprite, faTileSprite, faVariants, neighbourToward } from './forestAsh.js';
+import { FA_ALL_URLS, FA_ROCKS, faBackgroundUrl, faBaseColour, faRockSprite, faTileSprite, faVariants, neighbourToward } from './forestAsh.js';
 import type { FaSprite, FaVariants } from './forestAsh.js';
 // The replay's canvas pictures paint the same faces; they read this list from the module the board
 // already loaded, so neither the poster nor the video pulls a second copy of the sprite URLs.
@@ -99,8 +99,6 @@ export const boardArtReady: Promise<void> = Promise.all(artDecodes).then(() => u
 
 const f = (n: number) => n.toFixed(2);
 
-/** The territory colour under a tile's art (shows only at the art's soft corners). */
-export const FA_TERRITORY_BASE: readonly [string, string] = ['#315321', '#302c2c'];
 
 /** How much the bent board shrinks a cell here (1 on a flat board): its mean corner distance / S. */
 const cellScale = (key: string) => {
@@ -153,6 +151,7 @@ export class DefaultArtBoardView extends BoardView {
     this.fa = faVariants(keys);
     this.rockKeys.clear();
     this.rockLayer = null;
+    this.centreKey = null;
     this.spillSignature = '';
     this.spillOn.clear();
     const at = new Map(keys.map((k) => [k, centerOf(k)] as const));
@@ -172,8 +171,10 @@ export class DefaultArtBoardView extends BoardView {
   protected override drawCell(g: SVGGElement, key: string, terrain: Terrain) {
     const defs = this.svg.querySelector('defs')!;
     const id = this.id('default-ground');
+    const bg = faBackgroundUrl();
+    if (bg && !artUnavailable(bg)) this.paintedGround(g, key, bg);
     // A failed ground picture is dropped: the cell keeps the flat look and no placeholder is drawn.
-    if (!artUnavailable(groundUrl)) {
+    else if (!artUnavailable(groundUrl)) {
       if (!defs.querySelector(`#${id}`)) {
         const pattern = el('pattern', { id, x: 0, y: 0, width: 360, height: 360, patternUnits: 'userSpaceOnUse' }, defs);
         el('image', { href: groundUrl, x: 0, y: 0, width: 360, height: 360 }, pattern);
@@ -194,6 +195,44 @@ export class DefaultArtBoardView extends BoardView {
     }
   }
 
+  /** The board's centre cell (the painted background's middle hex sits on it). */
+  private centreKey: string | null = null;
+
+  /**
+   * One cell of a painted background (owner, 2026-11-14): the background is a painted radius-3
+   * board, 11 radii wide and 7 sqrt(3) tall, each hex with its own tone. The cell shows the painted
+   * hex at its own offset from the board's centre cell, placed on the cell as drawn (so the curved
+   * board keeps every painted hex on its cell). A cell beyond the painted 37 borrows one of them,
+   * fixed by its key. Drawn once per setup with the static ground.
+   */
+  private paintedGround(g: SVGGElement, key: string, url: string) {
+    if (!this.centreKey) {
+      const flats = this.keys.map((k) => flatCentreOf(k));
+      const mx = flats.reduce((a, p) => a + p.x, 0) / flats.length, my = flats.reduce((a, p) => a + p.y, 0) / flats.length;
+      let best = Infinity;
+      this.keys.forEach((k, i) => { const d = Math.hypot(flats[i]!.x - mx, flats[i]!.y - my); if (d < best) { best = d; this.centreKey = k; } });
+    }
+    const c0 = parseKey(this.centreKey!), c = parseKey(key);
+    let rel = { q: c.q - c0.q, r: c.r - c0.r };
+    if (hexDistance(rel, { q: 0, r: 0 }) > 3) {
+      const inner = allCoords(3);
+      rel = inner[Math.floor(hash(`${key}:fa-bg`) * inner.length)]!;
+    }
+    const o = latticeCentre(0, 0), p = latticeCentre(rel.q, rel.r);
+    const fx = p.x - o.x, fy = p.y - o.y;
+    const { x, y } = centerOf(key);
+    const k = cellScale(key);
+    const W = 11 * S, H = 7 * SQ3 * S;
+    const clipId = this.id(`fa-bg-${key.replace(',', '_')}`);
+    const defs = this.svg.querySelector('defs')!;
+    if (!defs.querySelector(`#${clipId}`)) el('path', { d: hexPath(key, S * 1.015, 'flat') }, el('clipPath', { id: clipId, clipPathUnits: 'userSpaceOnUse' }, defs));
+    el('image', {
+      href: url, x: f(x - k * (fx + W / 2)), y: f(y - k * (fy + H / 2)), width: f(k * W), height: f(k * H),
+      // At half strength over the board's dark base (owner, 2026-11-14: "50% of what's here").
+      preserveAspectRatio: 'none', 'clip-path': `url(#${clipId})`, opacity: 0.5, class: 'default-ground-art fa-painted-ground',
+    }, g);
+  }
+
   protected override drawHome(player: Player, key: string) {
     const home = drawLandmark(this.layers.homes, player === 0 ? 'tree' : 'volcano', key,
       centerOf(key), getOrient(), materialsOf(this.paletteId).colors, this.look);
@@ -201,7 +240,7 @@ export class DefaultArtBoardView extends BoardView {
     // The landmark is translated onto the hex centre: the art sits around (0, 0), and the home's
     // breath (style.css: scale about the art's centre) is pinned to the hex centre instead.
     const art = el('g', { class: 'default-home-art fa-home-art' }, home);
-    el('path', { d: hexPath('0,0', S, 'flat'), fill: FA_TERRITORY_BASE[player], class: 'fa-home-base' }, art);
+    el('path', { d: hexPath('0,0', S, 'flat'), fill: faBaseColour(player), class: 'fa-home-base' }, art);
     this.art(art, faTileSprite(this.fa, key, player, true), 0, 0, cellScale(key), 'default-art-sprite');
     const ring = home.querySelector('.lm-ring');
     if (ring) home.appendChild(ring);
@@ -262,7 +301,7 @@ export class DefaultArtBoardView extends BoardView {
     // The home's art lives on the home layer, above every tile.
     if (tile.root) return group;
     // The territory colour under the art fills its softened corners; the art itself is unclipped.
-    el('path', { d: hexPath(key, S, 'flat'), fill: FA_TERRITORY_BASE[owner], class: 'fa-tile-base' }, group);
+    el('path', { d: hexPath(key, S, 'flat'), fill: faBaseColour(owner), class: 'fa-tile-base' }, group);
     this.art(group, faTileSprite(this.fa, key, owner, false), x, y, cellScale(key), 'default-art-sprite');
     // A gold tile keeps its frame over its own art (and under the stone).
     if (this.richKeys.has(key)) drawGoldFrame(group, key, x, y, true);

@@ -24,7 +24,7 @@ import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
 import { getOrient, toScreen } from '../logic/orient.js';
 import { centerOf, S, SQ3 } from '../ui/geom.js';
 import { GOLD_FRAME_ATLAS, goldFrameCrop } from '../ui/goldframes.js';
-import { faRockSprite, faTileSprite, faVariants } from '../ui/forestAsh.js';
+import { faBaseColour, faRockSprite, faTileSprite, faVariants } from '../ui/forestAsh.js';
 import type { FaSprite, FaVariants } from '../ui/forestAsh.js';
 import { SEED_STONE_ATLAS, seedStoneCrop } from '../ui/seedstone.js';
 import type { ReplayModel } from './timeline.js';
@@ -70,8 +70,6 @@ export type BoardArt = {
   gold?: string;
 };
 
-/** The territory colours `DefaultArtBoardView` fills under its sprites. */
-export const TERRITORY_BASE: readonly [string, string] = ['#315321', '#302c2c'];
 /** The board's quiet rim, drawn over the art (never a bright seam). */
 export const CELL_RIM = 'rgba(178,174,163,0.18)';
 /** The carved counter's shadow (the board's `--seed-stone-shadow` fallback). */
@@ -427,7 +425,7 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
     const m = moving(cell);
     g.save();
     hexAt(g, cell.x, cell.y, L.hex);
-    g.fillStyle = TERRITORY_BASE[cell.owner];
+    g.fillStyle = faBaseColour(cell.owner);
     g.fill();
     g.restore();
     sprite(cell, faTileSprite(fa, cell.key, cell.owner, false));
@@ -464,7 +462,7 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
     if ((near && !near.has(cell.key)) || cell.owner === null || !cell.root) continue;
     g.save();
     hexAt(g, cell.x, cell.y, L.hex);
-    g.fillStyle = TERRITORY_BASE[cell.owner];
+    g.fillStyle = faBaseColour(cell.owner);
     g.fill();
     g.restore();
     sprite(cell, faTileSprite(fa, cell.key, cell.owner, true));
