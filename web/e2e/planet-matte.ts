@@ -180,18 +180,21 @@ try{
   await p.locator('#online-world-menu').click(); // fold the keys before touching the ground
   const grid=(await p.locator('#online-world-grid').boundingBox())!,cx=grid.x+grid.width/2,cy=grid.y+grid.height/2;
   await p.mouse.move(cx-35,cy+20);await p.mouse.down();await p.mouse.move(cx+50,cy-50,{steps:8});
-  const before=await p.evaluate(()=>(window as any).__severgrow.planet().q) as Quat;
+  const before=await p.evaluate(()=>(window as any).__severgrow.planet());
   await p.mouse.up();
   // Coast may run while the top of the planet is visible; wait for it to settle.
   await p.waitForTimeout(650);await settled(p);
   const after=await p.evaluate(()=>(window as any).__severgrow.planet());
-  // Flat side up (owner, 2026-11-14) replaces exact north-up: the centre tile rests level, north
-  // still upward and within 30 degrees.
-  if(Math.hypot(after.north[0],after.north[1])>.15){assert(after.centreTilt===null||Math.abs(after.centreTilt)<.01,'the centre tile rests flat side up');assert(after.north[1]>0&&Math.abs(after.roll)<=Math.PI/6+.05,'north stays upward, within 30 degrees (a geodesic hex may need a degree or two more)');}
-  void before;
+  // Owner, 2026-11-15: the view must not adjust after landing. The old levelling turn is gone; each
+  // tile's picture is levelled continuously by the renderer (sphere/tile-face.ts), so the camera
+  // keeps exactly the roll the finger left, north still upward.
+  assert(Math.abs(after.roll-before.roll)<1e-9,'releasing never turns the view');
+  assert(after.north[1]>0,'north stays upward after a drag');
   await p.waitForTimeout(400);
   const held=await p.evaluate(()=>(window as any).__severgrow.planet());
   assert(after.q.every((v:number,i:number)=>Math.abs(v-held.q[i])<.0005),'coast settles; no late correction');
+  assert(Math.abs(after.roll-held.roll)<1e-9&&(after.centreTilt===null)===(held.centreTilt===null)
+    &&Math.abs((after.centreTilt??0)-(held.centreTilt??0))<1e-6,'no post-release tilt or roll correction');
   // Zoomed in: release must stop almost immediately.
   await p.mouse.move(cx,cy);
   for(let i=0;i<10;i++){await p.mouse.wheel(0,-200);await p.waitForTimeout(16);}
@@ -199,15 +202,13 @@ try{
   const zoomed=await p.evaluate(()=>(window as any).__severgrow.planet().q) as Quat;
   await p.mouse.up();await p.waitForTimeout(140);
   const zoomedEnd=await p.evaluate(()=>(window as any).__severgrow.planet().q) as Quat;
-  // No glide when zoomed in (2026-11-07). Since flat side up (owner, 2026-11-14) a finished drag also
-  // turns the view in place to level the centre tile: any change after release must be that turn,
-  // about the line of sight (the ground does not slide), and no larger than a level turn.
+  // No glide when zoomed in (2026-11-07), and since 2026-11-15 no level turn either: the pose must
+  // be the one the finger left.
   {
     const [ax,ay,az,aw]=zoomedEnd, [bx,by,bz,bw]=[-zoomed[0]!,-zoomed[1]!,-zoomed[2]!,zoomed[3]!];
     const d=[aw*bx+ax*bw+ay*bz-az*by, aw*by-ax*bz+ay*bw+az*bx, aw*bz+ax*by-ay*bx+az*bw, aw*bw-ax*bx-ay*by-az*bz];
     const sinHalf=Math.hypot(d[0]!,d[1]!,d[2]!), angle=2*Math.atan2(sinHalf,Math.abs(d[3]!));
-    const alongSight=sinHalf<1e-6?1:Math.abs(d[2]!)/sinHalf;
-    assert(angle<.002||(alongSight>.95&&angle<=Math.PI/6+.05),`zoomed-in release does not glide (only the level turn): ${JSON.stringify({angle,alongSight})}`);
+    assert(angle<.002,`zoomed-in release does not glide or turn the view: ${JSON.stringify({angle})}`);
   }
   await p.screenshot({path:`${shots}/planet-${width}.png`});
   const preTap=await p.evaluate(()=>(window as any).__severgrow.planet().q) as Quat;
