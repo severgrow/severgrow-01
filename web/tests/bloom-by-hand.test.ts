@@ -58,7 +58,11 @@ describe('Bloom has its own colour', () => {
     // The id is load-bearing: the lifted-card cream (cards.ts, injected later) and the generic Grow
     // edge light are more specific, and both overrode a class-only rule — so a selected Bloom was
     // painted cream/green and looked like any other playable card. 2026-10-24.
-    expect(info).toMatch(/html\.futa04-information #hand \.card\.futa04-bloom-pick \{\s*border-color: #8fd3c9;/);
+    // Owner, 2026-11-14 ("never do the contour frame when selected"): the aqua is the GLOW only; the
+    // 2026-10-24 aqua border is gone, so the pick never draws a line round the printed card.
+    const pick = /html\.futa04-information #hand \.card\.futa04-bloom-pick \{([^}]*)\}/.exec(info)?.[1] ?? '';
+    expect(pick).toMatch(/border-color:\s*transparent;/);
+    expect(pick).toMatch(/box-shadow:\s*0 0 12px rgba\(143, 211, 201, 0\.38\)/);
     // The card's class list is now built once per render (main.ts renderHand); the rule is the same.
     expect(main).toMatch(/IS_FUTA04 && inBloom && 'futa04-bloom-pick',/);
   });
