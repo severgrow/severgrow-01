@@ -1686,8 +1686,17 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   margin: 4px 0 8px;
   padding-left: 18px;
 }
+/* Coach/tutorial advice: a SOFT outer halo that follows the element's own silhouette (owner,
+   2026-11-14: no contour frames on cards, and never two rings on one card). This used to be a
+   hard 2px zero-spread ring (`0 0 0 2px`); on a hand card that is exactly the forbidden contour,
+   and it could show whenever no step-specific glow outranked it. Blurred only, so even if it wins
+   on a card it hugs the printed rounded edge; in Throw the ember glow outranks it and it is never
+   visible beside it. The cream accent keeps it distinct from Grow's green, Bloom's aqua and
+   Throw's ember. */
 .coach-glow {
-  box-shadow: 0 0 0 2px var(--c-accent);
+  box-shadow:
+    0 0 3px color-mix(in srgb, var(--c-accent) 55%, transparent),
+    0 0 12px 2px color-mix(in srgb, var(--c-accent) 32%, transparent);
 }
 /* The moves-row Skip carries NO highlight (owner, 2026-10-15: "skip is highlighted on every grow
    — remove; i just wanted it to be possible during grow, but not extra highlighted"). So Skip is
@@ -6493,8 +6502,13 @@ html.final-turns .game::after {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Same glow as above, blurred only (owner, 2026-11-14: no contour rings on cards). This was
+     `0 0 0 2px var(--suit)`, a hard ring that could sit beside another glow on the same card. */
   .hand .card.fruit.fruit-ready {
-    box-shadow: 0 0 0 2px var(--suit);
+    box-shadow:
+      inset 1px 1px 0 color-mix(in srgb, var(--m-rimLight, #f2ede4) calc(var(--m-rim, 0.3) * 60%), transparent),
+      1px 4px 7px -3px color-mix(in srgb, #000 75%, transparent),
+      0 0 12px 2px color-mix(in srgb, var(--suit) 55%, transparent);
   }
 }
 /* a Fruit card's targets: a calm pearly dashed ring (any strength), no colour alarm */

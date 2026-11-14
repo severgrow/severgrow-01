@@ -107,12 +107,16 @@ html.futa04-information #hand .card.futa04-bloom-pick {
 .futa04-information .pile-label { display: none; }
 .futa04-information #deck.coach-glow { box-shadow: none; }
 .futa04-information #discard.futa04-bloom-draw .pile-top { border-color: transparent; }
+/* Picked for the Throw: 1.2x, not the old 1.31x. With the bigger 72pt phone card the end of the
+   fan at 1.31x pushed its rotated corner ~4px off the screen edge (futa04-critical measures every
+   hand card's box inside the viewport). 1.2x still lifts the picked card well above the 62pt card
+   it used to be (86 vs 81 px) and keeps the complete silhouette on screen. */
 .futa04-information #hand .card.futa04-throw-picked {
   filter: grayscale(1) !important; border-color: transparent; box-shadow: none !important;
-  transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 18px)) scale(1.31);
+  transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 18px)) scale(1.2);
 }
 .futa04-information[data-thumb] #hand .card.futa04-throw-picked {
-  transform: translate(var(--lx, 0px), var(--ly, 0px)) rotate(var(--rot, 0deg)) scale(1.31);
+  transform: translate(var(--lx, 0px), var(--ly, 0px)) rotate(var(--rot, 0deg)) scale(1.2);
 }
 .futa04-information #futa04-information-subline {
   min-width: 0;
@@ -396,9 +400,21 @@ html.futa04-information[data-step='throw'] #discard .gd-ring { animation: none !
 html.futa04-information #hand .card { touch-action: none; }
 /* A short edge light belongs to each card, and follows its fan rotation and lift. A card picked
    toward a Bloom opts out: its edge is the Bloom's aqua (see the bloom-pick rule above), never the
-   green of a plain Grow. */
-html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim):not(.futa04-bloom-pick) {
+   green of a plain Grow. A coach-advised card opts out too: it carries the cream advice halo below,
+   so one card never wears two glows. */
+html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim):not(.futa04-bloom-pick):not(.coach-glow) {
   box-shadow: 0 0 3px rgba(119,179,116,.22), 0 0 8px 1px rgba(88,158,89,.18), 0 5px 15px rgba(5,16,9,.30);
+}
+/* The coach's suggested card at rest: a cream halo, blurred along the printed edge (owner,
+   2026-11-14: no contour frames). Nothing here is a hard ring; the generic .coach-glow in
+   style.css is already a blur. Kept at (1,2,0) on purpose: the Grow edge light excludes this class,
+   and every Throw rule (1,3,0 or more) must outrank it, so one card never wears two colours and
+   Throw's ember always wins while a card is pickable. */
+html.futa04-information #hand .card.coach-glow {
+  box-shadow:
+    0 0 4px color-mix(in srgb, var(--c-accent) 60%, transparent),
+    0 0 14px 2px color-mix(in srgb, var(--c-accent) 34%, transparent),
+    0 5px 15px rgba(5,16,9,.30);
 }
 /* Scale is separate from the fan's rotate/translate, preserving its hit targets. */
 @keyframes futa04-card-breathe { 0%,100% { scale: 1; } 50% { scale: 1.055; } }
@@ -408,15 +424,18 @@ html.futa04-information[data-step='grow'][data-futa04-waiting='true'] #hand:not(
 html.futa04-information[data-step='grow'][data-futa04-waiting='true'] #moves > :is(.kind[data-kind^='bloom-'],.bloom-toggle):not(.on) .futa04-combination {
   animation: futa04-card-breathe 1.35s ease-in-out infinite;
 }
-/* THROW: the hand recedes by OPACITY and a cool ember edge, never by a filter. This rule used to
+/* THROW: the hand recedes by OPACITY and a cool ember edge, never by a filter, and never by a
+   hard line (owner, 2026-11-14: no contour frame, especially no double). The old
+   outline-color: ... !important drew a 1.5px ember ring on top of this glow; it is gone, so the
+   ember falloff below is the whole signal. It is a touch brighter and wider than the first
+   version so it still reads on a phone now that it carries the state alone. This rule used to
    desaturate every card with grayscale(.54) while the whole hand breathed on futa04-card-breathe
-   (below): a filter on an animating node re-rasterises all eight cards every frame for the length of
-   every Throw step. The ember edge and the 12% step-back already say "the pile is the target", and
-   the card's own colours stay readable (which is what the check names). */
+   (below): a filter on an animating node re-rasterises all eight cards every frame for the length
+   of every Throw step. The ember edge and the 12% step-back already say "the pile is the target",
+   and the card's own colours stay readable (which is what the check names). */
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) {
   opacity: .88;
-  outline-color: rgba(223,105,77,.35) !important;
-  box-shadow: 0 0 3px rgba(222,110,83,.29), 0 0 9px 1px rgba(186,66,47,.24), 0 5px 15px rgba(20,11,10,.34);
+  box-shadow: 0 0 4px rgba(222,110,83,.42), 0 0 12px 2px rgba(186,66,47,.34), 0 5px 15px rgba(20,11,10,.34);
   animation: futa04-card-breathe 1.35s ease-in-out infinite;
 }
 /* The lesson's suggested card is lifted out of the fan: still, one clean shadow, no green edge.

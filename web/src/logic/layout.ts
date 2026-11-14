@@ -36,7 +36,9 @@ export type Layout = {
 
 /**
  * The thumb layout v2 (test copy only, phones held upright): the MAP FIRST. The board gets the
- * full width and at least 60% of the usable height; the dock below takes at most 40% of it.
+ * full width and at least 55% of the usable height; the dock below takes at most 45% of it
+ * (owner, 2026-11-14: bigger cards; the size ladder now keeps climbing to 72 while the dock still
+ * fits, so a tall phone grows and a short one keeps its old card and its full-width map).
  * The dock has two bands: the hand as a gentle fan (centre card flat, end cards tilted 7 degrees,
  * a shallow curve, a slight rise to the right), anchored at the right edge for the right thumb;
  * under it the deck and the throw pile (left), a slot for the move buttons, Undo and Sort
@@ -165,7 +167,9 @@ const thumbDock = (W: number, usable: number, maxHand: number, side: 'right' | '
     return { t, h };
   };
   // the biggest cards whose compact fan fits the width with at least a 34pt strip per card
-  const sizes = [62, 60, 58, 56, 54, 52, 50, 48, 46, 44, 42, 40];
+  // (owner, 2026-11-14: "Make the cards a bit bigger"): the ceiling rose from 62 to 72 so a
+  // normal phone gets a card the size of the old fallback plus a step, not the old 62 forever.
+  const sizes = [72, 70, 68, 66, 64, 62, 60, 58, 56, 54, 52, 50, 48, 46, 44, 42, 40];
   const fits = (cw: number, cap: number) => {
     const b = build(cw);
     return b.t.slice >= THUMB.minSlice && b.h <= usable * cap ? b : null;
@@ -383,7 +387,10 @@ export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND, thumb
     const wideDesktop = W >= 1500;
     const dockW = wideDesktop ? Math.min(950, Math.round(W * 0.47))
       : Math.min(420, Math.max(340, Math.round(W * 0.32)));
-    const card = cardSize(dockW, maxHand, wideDesktop ? Math.min(150, Math.round(dockW * 0.17)) : 76);
+    // Card caps (owner, 2026-11-14: "Make the cards a bit bigger"): the compact dock's cap rose
+    // 76 -> 84 and the wide dock's 150 -> 168 (and 17% -> 18.5% of its width), so both desktop
+    // shapes grow instead of only the narrow band that the old 72 -> 76 cap happened to reach.
+    const card = cardSize(dockW, maxHand, wideDesktop ? Math.min(168, Math.round(dockW * 0.185)) : 84);
     const rows = { table: Math.max(HEIGHTS.table, card.h + PILE_LABEL), hand: card.h + HEIGHTS.handPad };
     // A phone on its side (owner, 2026-10-24): the board takes the whole height with the same tiny
     // margin above and below. The menu key and the wordmark sit in the corners, where a hexagonal
@@ -415,7 +422,7 @@ export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND, thumb
   }
 
   if (thumb) {
-    // the test copy's thumb layout v2: the map first; the dock (at most 40% of the usable
+    // the test copy's thumb layout v2: the map first; the dock (at most 45% of the usable
     // height) below it. `overlap`: how far the board may reach under the fan's band (smart
     // overlap: granted by the page only where no tile, home, gold or target hex is under a card)
     // (the screen keeps the bottom safe area itself: the dock sits on it, 12pt up)

@@ -946,10 +946,10 @@ html[data-step='draw']:not([data-guide='off']) .dock .hand-row > .hand .card.dim
 }
 
 /* THROW: every card faintly lit; the throw pile is the target; the deck steps back */
-html[data-step='throw']:not([data-guide='off']) .hand .card {
-  outline: 1.5px solid rgba(var(--gd-cream), 0.32);
-  outline-offset: 0;
-}
+/* No outline here (owner, 2026-11-14: "never do the contour frame when selected - and especially
+   never double"). This used to draw a hard 1.5px cream line on every hand card during Throw while
+   the ember box-shadow in player/information.ts drew a glow on the same edge. The ember glow alone
+   now says "pickable during Throw" (information.ts strengthens it so it reads at phone size). */
 html[data-step='throw']:not([data-guide='off']) #discard .gd-halo {
   opacity: 0.6;
 }

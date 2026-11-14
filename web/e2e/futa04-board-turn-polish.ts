@@ -813,10 +813,23 @@ async function bloomFlow(width: number, height: number) {
     const bloomHighlight = await page.evaluate(() => {
       const cards = [...document.querySelectorAll<HTMLElement>('#hand .futa04-bloom-pick')];
       const css = cards[0] ? getComputedStyle(cards[0]) : null;
-      return { count: cards.length, border: css?.borderTopColor ?? '', shadow: css?.boxShadow ?? '' };
+      return {
+        count: cards.length,
+        borderWidth: css?.borderTopWidth ?? '',
+        border: css?.borderTopColor ?? '',
+        shadow: css?.boxShadow ?? '',
+      };
     });
     equal(bloomHighlight.count, action.cards.length, `${label}: selected Bloom highlights exactly its cards`);
-    check(bloomHighlight.border === 'rgb(143, 211, 201)' && bloomHighlight.shadow.includes('143, 211, 201'),
+    // Owner, 2026-11-14: "never do the contour frame when selected". The bloom-pick rule in
+    // player/information.ts keeps the border transparent and the aqua glow alone marks the pick
+    // (this suite used to pin the RETIRED aqua border at rgb(143, 211, 201), i.e. the forbidden
+    // contour). Assert the absence of a border AND the presence of the aqua halo, and that the
+    // halo is not a zero-spread ring.
+    const bloomHasNoLine = bloomHighlight.borderWidth === '0px' || bloomHighlight.border === 'rgba(0, 0, 0, 0)';
+    check(bloomHasNoLine && !/0px 0px 0px/.test(bloomHighlight.shadow),
+      `${label}: the selected cards have no border line and no zero-spread ring (${JSON.stringify(bloomHighlight)})`);
+    check(bloomHighlight.shadow.includes('143, 211, 201'),
       `${label}: the selected cards glow the Bloom's aqua, never the Grow green (${JSON.stringify(bloomHighlight)})`);
     check(!/Bloom \d+ tiles|Skip sprout/.test(await page.locator('#moves').innerText()),`${label}: Bloom choices use combination icons rather than prose`);
     // The retired plate is gone; Futa04 shows the selected Bloom group on the LED after its

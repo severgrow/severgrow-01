@@ -533,9 +533,11 @@ html.futa04-information .dock #futa04-box :is(#deck,#discard) .pile-meta .pile-c
 /* Match the illustrated card's printed corners instead of the legacy card silhouette. */
 html.futa04-information.futa04-card-art-ready #hand .card:has(>.futa04-card-art) { border-radius:5.9% / 4.2%; } /* the printed card's own corner (player/cards.ts) */
 html.futa04-information.futa04-card-art-ready #hand .card > .futa04-card-art { border-radius:inherit; }
-html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim):not(.futa04-bloom-pick) { box-shadow:0 0 3px rgba(119,194,115,.4),0 0 6px 1px rgba(88,171,86,.43),0 5px 12px rgba(5,16,9,.30); }
-html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) { box-shadow:0 0 3px rgba(222,110,83,.5),0 0 7px 1px rgba(190,68,47,.53),0 5px 12px rgba(20,11,10,.34); }
-html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked { box-shadow:0 0 3px rgba(222,110,83,.5),0 0 7px 1px rgba(190,68,47,.53) !important; }
+html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim):not(.futa04-bloom-pick):not(.coach-glow) { box-shadow:0 0 3px rgba(119,194,115,.4),0 0 6px 1px rgba(88,171,86,.43),0 5px 12px rgba(5,16,9,.30); }
+/* The ember edge is the ONLY Throw signal now (owner, 2026-11-14: no contour line, no double), so
+   it is a touch brighter and wider than before; it still hugs the printed card corner. */
+html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) { box-shadow:0 0 4px rgba(222,110,83,.55),0 0 11px 2px rgba(190,68,47,.55),0 5px 12px rgba(20,11,10,.34); }
+html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked { box-shadow:0 0 4px rgba(222,110,83,.6),0 0 13px 2px rgba(190,68,47,.6) !important; }
 html.futa04-information :is(#deck,#discard) :is(.gd-halo,.gd-ring) { inset:0; border-radius:5.9% / 4.2%; }
 /* Both legal draw choices glow softly: a cool white light around the actual card, no outline box
    (owner, 2026-10-22: "remove the contour thing, make the glow a tiny bit brighter and make it
