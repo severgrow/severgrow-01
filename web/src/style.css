@@ -6769,67 +6769,8 @@ html.final-turns .game::after {
   transform-origin: 50% 50%;
   transform: scale(0.3);
 }
-/* the home's closed sides: one segment per hex side, drawn only while the home is hemmed in.
-   3 sides stay quiet at 0.7; 4-5 are full and breathe once slowly; 6 sides join into the
-   Strangle outline. Enemy pressure is solid and bright; rock and off-board sides are faint. */
-.lm-ring {
-  opacity: 0;
-  transition: opacity var(--dur-quick) var(--ease-out);
-}
-.landmark.ring-soft.show-ring .lm-ring {
-  opacity: 0.7;
-}
-.landmark.ring-strong.show-ring .lm-ring {
-  opacity: 1;
-  animation: lm-edge-beat var(--beat, 1500ms) ease-in-out infinite;
-}
-@keyframes lm-edge-beat {
-  0%,
-  100% {
-    opacity: 0.82;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-.lm-seg {
-  fill: none;
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  stroke-opacity: 0;
-  transition: stroke-opacity var(--dur-quick) var(--ease-out);
-}
-.lm-tree .lm-seg {
-  stroke: var(--c-danger);
-}
-.lm-volcano .lm-seg {
-  stroke: var(--c-you);
-}
-.lm-seg.on {
-  stroke-opacity: 1;
-}
-.lm-seg.on:not(.enemy) {
-  stroke-opacity: 0.35;
-}
-/* NO PER-FRAME FILTER (owner, 2026-11-02: the surrounded home "looks very plain and almost out of
-   place"). A `drop-shadow` on a segment re-rasterises every frame while the home breathes, which is
-   the exact cost we removed from the Territory fog. The glow is now a SECOND, WIDER, faint stroke on
-   the same path — same soft edge, painted once, and it moves with the compositor. */
-/* The warm edge stays, but ONLY on a home that is not currently trembling. `worried` animates the
-   canopy/sprite with a transform, and a `drop-shadow` on a child of an animating ancestor
-   re-rasterises every frame — the same trap the Territory fog had. In the common danger case the
-   glow is kept; while the home trembles the heavier stroke carries it instead. */
-.landmark.danger:not(.worried) .lm-tree .lm-seg.on { filter: drop-shadow(0 0 2.5px var(--c-danger)); }
-.landmark.danger:not(.worried) .lm-volcano .lm-seg.on { filter: drop-shadow(0 0 2.5px var(--c-you)); }
-/* The constriction: the ring gains weight as the home is hemmed in, so the threat is legible without
-   reading anything. 3 sides -> 5: 2.5px -> 4px. */
-.landmark[data-blocked='4'] .lm-seg { stroke-width: 3.2; }
-.landmark[data-blocked='5'] .lm-seg { stroke-width: 4; }
-.landmark[data-blocked='6'] .lm-seg { stroke-width: 4.6; }
-/* Critical (5 of 6 sides): a slow, deliberate swell — transform only, so it is compositor work. */
-.landmark[data-blocked='5']:not(.strangled) .lm-ring { animation: lm-constrict 1.9s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
-@keyframes lm-constrict { 0%, 100% { transform: scale(1); } 50% { transform: scale(0.972); } }
-.reduce-motion .landmark .lm-ring { animation: none; }
+/* A home that is being surrounded shows NO frame: the constricting ring was removed completely on
+   the owner's instruction (2026-11-14). Do not bring it back without a new direction from the owner. */
 
 /* idle: the canopy sways a few pixels, a leaf falls now and then; the smoke curls, the crater breathes, an ember pops */
 .landmark.idle.lm-tree .lm-canopy {
@@ -6970,8 +6911,7 @@ html.final-turns .game::after {
 }
 .reduce-motion .landmark .lm-canopy,
 .reduce-motion .landmark .lm-sprite,
-.reduce-motion .landmark .lm-smoke,
-.reduce-motion .landmark .lm-ring {
+.reduce-motion .landmark .lm-smoke {
   animation: none !important;
 }
 /* the coach and tips never cover the Undo chip at the right end of the message row */
