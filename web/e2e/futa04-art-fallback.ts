@@ -36,8 +36,13 @@ const waitFor = async (cond: () => Promise<boolean> | boolean, timeout = 30_000)
   return false;
 };
 
-/** Every board-art file this build ships: tile + home sprites, rocks and the ground. */
-const ART = /(?:meadow|ashen|garden|fortress|rock_hex|empty_ground)/;
+/**
+ * Every board-art file this build ships and the board draws: the territory sprites (Forest and Ash
+ * are the live root's two sides), the home art, the rocks, the gold-frame atlas, the painted board
+ * background, and the empty ground the board falls back to. Water/Toxic are only drawn when /test/
+ * picks them, so a live-root seat never asks for them.
+ */
+const ART = /(?:forest-0\d|ash-0\d|rock-0\d|home-(?:tree|volcano)|empty_ground|bg-(?:cocoa|lichen|cinder|clay|slate)|gold-frames|planet-all)/;
 
 /** The art elements the page is holding right now, plus what the board itself still shows. */
 const audit = (s: SeatSession) =>

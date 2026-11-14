@@ -34,8 +34,9 @@ import { expandYourMatches } from './helpers/lobby-matches.js';
 
 const PORT = 4396;
 const PREFIX = 'futa05:';
-/** Every board picture the duel draws: territory sprites, home art, rocks and the ground. */
-const BLOCKED = /\/(forest|ash|rock)-0\d|home-(tree|volcano)|empty_ground/;
+/** Every board picture the duel draws: territory sprites, home art, rocks, the gold-frame atlas,
+ *  the painted board background and the empty ground the board falls back to. */
+const BLOCKED = /\/(forest-0\d|ash-0\d|rock-0\d|home-(tree|volcano)|empty_ground|bg-(cocoa|lichen|cinder|clay|slate)|gold-frames|planet-all)/;
 
 let failed = 0;
 const check = (name: string, ok: boolean, note = '') => {
