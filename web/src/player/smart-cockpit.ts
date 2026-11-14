@@ -253,17 +253,16 @@ html.futa04-information #smart-led-window.scrolling #smart-led-hot {
   0%,100% { scale:1; opacity:1; }
   50% { scale:1.055; opacity:.86; }
 }
-/* Keep the throw hand's scale breathe (futa04-card-breathe) while the LED alarms —
-   idle must not replace body pulse with a glow-only cue. The cue is a tight rim, not a
-   halo, so the cards never read as lamps; colours and depth shadow are unchanged. */
+/* Keep the throw hand's scale breathe while the LED alarms — idle must not replace body pulse with
+   a glow-only cue. The light itself stays at the Throw step's QUIET level (owner, 2026-11-14: the
+   glow "drops a lot" when it is time to throw), so the animation only pulses scale: writing the
+   faint glow into a keyframe would make the re-prompt the brightest state the hand has. */
 @keyframes idle-urgency-throw {
   0%,100% {
     scale:1;
-    box-shadow:0 0 3px rgba(222,110,83,.40),0 1px 3px rgba(190,68,47,.26),0 5px 12px rgba(20,11,10,.28);
   }
   50% {
     scale:1.04;
-    box-shadow:0 0 5px 1px rgba(255,120,90,.60),0 1px 4px rgba(220,70,45,.34),0 5px 14px rgba(20,11,10,.36);
   }
 }
 /* Matching board cues while the LED holds the sticky idle re-prompt. */
@@ -536,11 +535,24 @@ html.futa04-information .dock #futa04-box :is(#deck,#discard) .pile-meta .pile-c
 /* Match the illustrated card's printed corners instead of the legacy card silhouette. */
 html.futa04-information.futa04-card-art-ready #hand .card:has(>.futa04-card-art) { border-radius:5.9% / 4.2%; } /* the printed card's own corner (player/cards.ts) */
 html.futa04-information.futa04-card-art-ready #hand .card > .futa04-card-art { border-radius:inherit; }
-html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim):not(.futa04-bloom-pick):not(.coach-glow) { box-shadow:0 0 3px rgba(119,194,115,.4),0 0 6px 1px rgba(88,171,86,.43),0 5px 12px rgba(5,16,9,.30); }
-/* The ember edge is the ONLY Throw signal now (owner, 2026-11-14: no contour line, no double), so
-   it is a touch brighter and wider than before; it still hugs the printed card corner. */
-html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) { box-shadow:0 0 4px rgba(222,110,83,.55),0 0 11px 2px rgba(190,68,47,.55),0 5px 12px rgba(20,11,10,.34); }
-html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked { box-shadow:0 0 4px rgba(222,110,83,.6),0 0 13px 2px rgba(190,68,47,.6) !important; }
+/* TAP = LIT, THROW = QUIET (owner, 2026-11-14: "the colors of cards when its time to tap them
+   should be more intense - and then dropping a lot when its time to throw"). A playable card is lit
+   in ITS OWN suit ink, in three soft outer layers that trace the printed card corner (5.9% / 4.2%,
+   player/cards.ts): a tight saturated edge, a mid halo and a wide wash. No border, no outline, no
+   zero-spread ring, and no filter — the step attribute owns the whole change, so nothing is written
+   per frame. The next rule is the other half of the same sentence: Throw drops most of the light. */
+html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim):not(.futa04-bloom-pick):not(.coach-glow) {
+  box-shadow:0 0 6px color-mix(in srgb, var(--suit, var(--c-accent)) 92%, transparent),
+    0 0 16px 2px color-mix(in srgb, var(--suit, var(--c-accent)) 58%, transparent),
+    0 0 30px 6px color-mix(in srgb, var(--suit, var(--c-accent)) 26%, transparent),
+    0 5px 14px rgba(3,8,6,.42);
+}
+/* The ember trace is the ONLY Throw signal (owner, 2026-11-14: no contour line, no double) and it
+   is deliberately QUIET: the hand has stopped being the thing you tap and become the thing you
+   discard from, so it sits far below the Grow light (same ember hues the card-contour test pins,
+   a fraction of the alpha). */
+html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) { opacity:.86; box-shadow:0 0 3px rgba(222,110,83,.16),0 0 8px 1px rgba(190,68,47,.10),0 4px 11px rgba(16,10,9,.28); }
+html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked { opacity:1; box-shadow:0 0 4px rgba(222,110,83,.34),0 0 10px 1px rgba(190,68,47,.24) !important; }
 html.futa04-information :is(#deck,#discard) :is(.gd-halo,.gd-ring) { inset:0; border-radius:5.9% / 4.2%; }
 /* Both legal draw choices glow softly: a cool white light around the actual card, no outline box
    (owner, 2026-10-22: "remove the contour thing, make the glow a tiny bit brighter and make it

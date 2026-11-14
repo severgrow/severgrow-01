@@ -10,6 +10,7 @@ import { hexCenter } from './drawing.js';
 import { positionSave } from './position.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
 import { contextKinds, pressContext } from './helpers/context-key.js';
+import { hueDistance, hueOf, outerGlow, peakColour, peakGlow, reachOf } from './helpers/card-light.js';
 
 // The page is served on a FREE port (helpers/preview-port.ts) so this suite can run in two
 // worktrees at once without fighting over a hardcoded number.
@@ -20,6 +21,17 @@ const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executab
 const dir = '/tmp/futasaku-smart-cockpit'; mkdirSync(dir,{recursive:true});
 let checks = 0;
 const check = (value:unknown,label:string) => { assert(value,label); checks++; };
+/** The hand card's painted light plus the ink it is lit in (cards.ts sets `--suit` per face). */
+const handLight = (page:Page,selector:string) => page.locator(selector).first().evaluate(el => {
+  const style=getComputedStyle(el);
+  return { shadow:style.boxShadow, suit:style.getPropertyValue('--suit').trim(), opacity:Number(style.opacity) };
+});
+const CSS_SWATCH = /^#([\da-f]{6})$/i;
+const swatchRgb = (hex:string):[number,number,number] => {
+  const m=CSS_SWATCH.exec(hex); if(!m) return [0,0,0];
+  const n=Number.parseInt(m[1]!,16);
+  return [(n>>16)&255,(n>>8)&255,n&255];
+};
 const waitPhase = (page:Page,value:string) => page.waitForFunction(want => (window as any).__severgrow?.state().phase===want && !(window as any).__severgrow.busy(),value);
 const near=(a:number,b:number)=>Math.abs(a-b)<.7;
 const rects = (page:Page) => page.evaluate(() => {
@@ -117,7 +129,14 @@ try {
       const rim = await page.evaluate(() => { const r = document.querySelector('#board .planet-turn-line')?.getBoundingClientRect(); return r ? { l: r.left, r: innerWidth - r.right } : null; });
       if (rim) check(rim.l <= 8 && rim.r <= 8 && rim.l >= 0 && rim.r >= 0, `${name}: the map fills the width (${JSON.stringify(rim)})`);
     }
-    check((await page.locator('#hand .card.playable').first().evaluate(el=>getComputedStyle(el).boxShadow)).includes('88, 171, 86'),`${name}: green card-edge light`);
+    // OWNER'S CARD-LIGHT RULE (2026-11-14): "the colors of cards when its time to tap them should be
+    // more intense - and then dropping a lot when its time to throw". The tappable hand is lit in
+    // each card's own suit ink; the same hand in the Throw step keeps only a trace of it.
+    const growLight=await handLight(page,'#hand .card.playable');
+    const growPeak=peakGlow(growLight.shadow), growReach=reachOf(growLight.shadow);
+    check(growPeak>=.6&&growReach>=24,`${name}: tappable hand is lit strongly (peak ${growPeak}, reach ${growReach}px)`);
+    check(outerGlow(growLight.shadow).length>=3,`${name}: the lit hand has several soft outer layers`);
+    check(hueDistance(hueOf(peakColour(growLight.shadow)),hueOf(swatchRgb(growLight.suit)))<=20,`${name}: the light is the card's own suit colour (${growLight.suit})`);
     check(JSON.stringify(await contextKinds(page))==='["skip","guide"]',`${name}: Skip leads the context key, "?" beside it in the menu`);
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-grow.png`});
     await pressContext(page,'skip'); await waitPhase(page,'DISCARD');
@@ -125,7 +144,11 @@ try {
     await page.waitForFunction(()=>document.getElementById('smart-led-text')?.textContent?.trim()==='0:0',undefined,{timeout:4000});
     check(await page.locator('#smart-led-text').innerText()==='0:0',`${name}: score rests in the LED during Throw`);
     check(!await page.locator('#smart-led-cells').evaluate(el=>el.classList.contains('scrolling')),`${name}: short Throw message remains stationary`);
-    check((await page.locator('#hand .card').first().evaluate(el=>getComputedStyle(el).boxShadow)).includes('190, 68, 47'),`${name}: red card-edge light`);
+    const throwLight=await handLight(page,'#hand .card:not(.futa04-throw-picked)');
+    const throwPeak=peakGlow(throwLight.shadow), throwReach=reachOf(throwLight.shadow);
+    check(throwPeak<=.25&&throwReach<=12,`${name}: throwing hand is quiet (peak ${throwPeak}, reach ${throwReach}px)`);
+    check(growPeak-throwPeak>=.5&&growReach-throwReach>=12,`${name}: the tap/throw light difference is large, not a tint shift`);
+    check(throwLight.opacity<.95,`${name}: the hand also steps back in opacity while throwing (${throwLight.opacity})`);
     check(JSON.stringify(await contextKinds(page))==='["guide"]',`${name}: only "?" in the context key when throwing`);
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-throw.png`});
     check(errors.length===0,`${name}: no browser errors: ${errors.join(' | ')}`);

@@ -19,6 +19,7 @@ import { fruitPosition, NINE_CHAIN } from './fruitcards-pos.js';
 import { goldFrameSize } from '../src/ui/goldframe-geometry.js';
 import { GOLD_ATLAS_SIZE, GOLD_LOOK_COUNT } from '../src/ui/forestAshData.js';
 import { fixture } from '../../tests/helpers.js';
+import { peakGlow, reachOf } from './helpers/card-light.js';
 
 const port = Number(process.env.FUTA04_POLISH_PORT ?? 4198);
 const external = process.env.FUTA04_URL;
@@ -358,8 +359,8 @@ async function pulseCheck(page: Page, label: string) {
   // Restore the exact motion state this check started from before any later click.
   await page.evaluate(on => document.documentElement.classList.toggle('reduce-motion', on), appReduced);
   await page.emulateMedia({ reducedMotion: browserReduced ? 'reduce' : 'no-preference' });
-  check(card.pulse && card.edge.includes('88, 171, 86') && card.blob === 'none',
-    `${label}: whole playable-card pulse runs and the old hand blob is gone (${JSON.stringify(card)})`);
+  check(card.pulse && peakGlow(card.edge) >= .6 && reachOf(card.edge) >= 24 && card.blob === 'none',
+    `${label}: whole playable-card pulse runs on a strongly lit card and the old hand blob is gone (${JSON.stringify(card)})`);
   check(led.motion && led.name === 'none',
     `${label}: the LED idle pulse runs with motion and is suppressed under Reduce Motion (${JSON.stringify(led)})`);
   equal(await state(page), before, `${label}: pulses cannot change game state`);

@@ -1908,41 +1908,32 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   border-radius: calc(var(--radius) * 0.6);
   box-shadow: 0 0 0 1.5px var(--c-accent), 0 0 14px -2px color-mix(in srgb, var(--c-accent) 55%, transparent);
 }
+/* THE PILE IS A STACK OF CARDS, NOT A CARD ON A SLAB (owner, 2026-11-14: "remove this weird
+   rectangle from behind the draw pile and make the draw pile look exactly like the pile in ritual
+   at the end when cards coming back together in middle screen"). The two layers behind the deck's
+   face are CARD SILHOUETTES: `player/cards.ts` paints the back art into them and `ui/card-stack.ts`
+   gives them the ritual deck's own fan (a fraction of the card's box, so both piles are the same
+   object at two sizes). They used to be opaque `--c-surface` rectangles with a 1.5px hairline —
+   that grey rectangle peeking out from behind the deck is exactly what the owner saw. No fill, no
+   border, no hard edge: only the printed back, at the printed corner, behind the face. */
 .pile-stack,
 .pile-stack::before,
 .pile-stack::after {
   position: absolute;
   inset: 4px 6px 6px 4px;
   border-radius: calc(var(--radius) * 0.6);
+}
+.pile-stack {
   border: 1.5px solid var(--c-line);
   background: var(--c-surface);
 }
+/* The fan's layers live behind the face but in front of the (isolated) card box. */
 .pile-stack::before,
 .pile-stack::after {
   content: '';
-  inset: auto;
-  width: 100%;
-  height: 100%;
-  /* ONE BACK, TWO EDGES (owner, 2026-11-14: "the back of the cards - draw pile is broken - no
-     skin"). `.pile-stack` wears the card-back art (player/cards.ts), and these two slabs are the
-     thickness behind it: the +2px and +4px offsets peek out as hairline card edges. They used to
-     paint OPAQUE `--c-surface` slabs ON TOP of the stack, which is why the pile read as plain grey
-     slabs with a diagonal hatch and no skin at all — a pseudo-element always paints above its own
-     element's background. `z-index:-1` moves them behind the stack's fill but in front of the
-     isolated card box, so the back art is the visible face and only the offsets show. */
+  inset: 0;
+  border-radius: inherit;
   z-index: -1;
-}
-.pile-stack::before {
-  left: 2px;
-  top: 2px;
-}
-.pile-stack::after {
-  left: 4px;
-  top: 4px;
-  /* The 45° hatch that used to fake a pattern on a blank slab is gone: with the real back in
-     front, the only visible part of this layer is a 4px crescent along the right and bottom edge,
-     where a 5px/6px diagonal repeat renders as a couple of stray ticks that look like a printing
-     fault rather than thickness. The plain surface plus its 1px hairline reads as a card edge. */
 }
 .pile-count {
   position: absolute;
@@ -5734,12 +5725,13 @@ html[data-layout='stack'] .board-wrap {
 .pile[data-layers='1'] .pile-stack::after {
   display: none;
 }
-.pile[data-layers='2'] .pile-stack::after {
+.pile[data-layers='2'] .pile-stack::before {
   display: none;
 }
-.pile[data-layers='4'] .pile-stack {
-  box-shadow: -2px -2px 0 -0.5px var(--c-surface), -2px -2px 0 0.5px var(--c-line), -4px -4px 0 -0.5px var(--c-surface), -4px -4px 0 0.5px var(--c-line);
-}
+/* The DRAW pile's thickness is the fan those layers draw (player/cards.ts), never a hard offset
+   shadow: a `0 0 0`/`2px 2px 0` edge is the "extra frame" the owner banned on a card. The two rules
+   below belong to the THROW pile's face-up top card, which has no `.pile-stack` layers to fan and is
+   not part of this change. */
 .pile[data-layers='3'] .pile-top.card {
   box-shadow: 2px 2px 0 -0.5px var(--c-surface), 2px 2px 0 0.5px var(--c-line);
 }
