@@ -85,8 +85,9 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
     `${w}: selected Grow card has edge light without an added contour`);
   const key = `${action.coord.q},${action.coord.r}`;
   const target = page.locator(`#board g.hex-cell[data-key="${key}"]`);
-  // The new artwork deliberately overhangs its hex. Measure and tap the actual hit path,
-  // whose centre is the rule cell, rather than the painted group's larger SVG bounds.
+  // `path.hex` is the rule cell itself. The cell group carries no picture — the painted ground and
+  // the tile art live in groups of their own (so the cell's own box is hex-sized) — and the artwork
+  // deliberately overhangs its hex from those other layers.
   const face = target.locator('path.hex');
   const box = await face.boundingBox(); assert(box);
   await page.screenshot({ path: `/tmp/main2-shots/${w}x${h}-grow.png` });

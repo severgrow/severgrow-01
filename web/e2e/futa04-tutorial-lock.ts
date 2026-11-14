@@ -171,8 +171,9 @@ try {
     await page.waitForFunction(() => {
       const glass = document.getElementById('futasaku-glass')?.getBoundingClientRect();
       const dock = document.getElementById('dock')?.getBoundingClientRect();
-      // Painted groups include tree, smoke, and grass overhangs. The gameplay hexes define
-      // the board's actual footprint and are what the camera centres in this band.
+      // The gameplay hexes define the board's own footprint: they are the rule cells, and the
+      // pictures that overhang them (tree, smoke, grass) live in other layers, so a cell group is
+      // exactly one hex. That is what the camera centres in this band.
       const cells = [...document.querySelectorAll('#board .hex-cell path.hex')];
       if (!glass || !dock || !cells.length) return false;
       let top = Infinity; let bottom = -Infinity;

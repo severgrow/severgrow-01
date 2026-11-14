@@ -208,7 +208,21 @@ export class DefaultArtBoardView extends BoardView {
     // The background the board paints is a picture like any other: ask for it (once) so a file that
     // cannot load is remembered and the cell keeps its flat look instead of a broken-image tile.
     requestArt(bg);
-    if (bg && !artUnavailable(bg)) this.paintedGround(g, key, bg);
+    // THE PAINTED GROUND IS NOT THE CELL'S GEOMETRY. Its picture is a painted board, 330x364 board
+    // units against a 60-unit hex, and a clip is paint-time only: kept inside the cell group it made
+    // `getBoundingClientRect()` on `.hex-cell` return the whole board, which is exactly what the
+    // guidance plates build their avoidance boxes from (player/guide.ts, player/thumb.ts). So the
+    // ground lives in a group of its own, painted straight after the cell in the same order as
+    // before: the flat hex, then the ground, then a rock's own edge.
+    let ground: SVGGElement | null = null;
+    const groundLayer = (): SVGGElement => {
+      if (!ground) {
+        ground = el('g', { class: 'fa-cell-ground', 'aria-hidden': 'true', 'pointer-events': 'none' });
+        g.after(ground);
+      }
+      return ground;
+    };
+    if (bg && !artUnavailable(bg)) this.paintedGround(groundLayer(), key, bg);
     // A failed ground picture is dropped: the cell keeps the flat look and no placeholder is drawn.
     else if (!artUnavailable(groundUrl)) {
       if (!defs.querySelector(`#${id}`)) {
@@ -220,7 +234,7 @@ export class DefaultArtBoardView extends BoardView {
     if (terrain === 'rock') {
       // Only rocks keep their edge; empty ground has no contour (fix/blast-input-planet-login).
       el('path', { d: hexPath(key, S - 1.1, 'flat'), fill: 'none',
-        stroke: 'rgba(178,174,163,0.18)', 'stroke-width': 0.75, class: 'default-cell-rim' }, g);
+        stroke: 'rgba(178,174,163,0.18)', 'stroke-width': 0.75, class: 'default-cell-rim' }, groundLayer());
       this.rockKeys.add(key);
       // Rocks have their own layer above the tiles (their bumps lie over any neighbour), in row order.
       if (!this.rockLayer) {
