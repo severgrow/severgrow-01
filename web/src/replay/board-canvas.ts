@@ -25,8 +25,8 @@ import { getOrient, toScreen } from '../logic/orient.js';
 import { centerOf, S } from '../ui/geom.js';
 import { GOLD_FRAME_ATLAS, goldFrameCrop } from '../ui/goldframes.js';
 import { goldFrameSize } from '../ui/goldframe-geometry.js';
-import { faBaseColour, faGoldVariants, faRockSprite, faTileSprite, faVariants } from '../ui/forestAsh.js';
-import type { FaSprite, FaVariants } from '../ui/forestAsh.js';
+import { faBaseColour, faGoldLooks, goldLookId, faRockSprite, faTileSprite, faVariants } from '../ui/forestAsh.js';
+import type { FaSprite, FaVariants, GoldLook } from '../ui/forestAsh.js';
 import { SEED_STONE_ATLAS, seedStoneCrop } from '../ui/seedstone.js';
 import type { ReplayModel } from './timeline.js';
 
@@ -293,26 +293,33 @@ export type GoldFramePlacement = {
   crop: { x: number; y: number; w: number; h: number };
   /** Pointy boards turn the flat-top art by -30 degrees, as the live board does. */
   rotate: number;
+  /** The look's own 60-degree turn (radians), added to `rotate`. */
+  turn: number;
+  /** The look is mirrored about the cell's vertical axis. */
+  mirror: boolean;
+  /** The look as the live board numbers it (design + 2*mirror + 4*rotation), for tests and parity. */
+  variant: number;
   occupied: boolean;
 };
 
 /**
- * Which gold frame design each bonus hex of THIS layout wears: the live board's own assignment
- * (`faGoldVariants`), built from the layout's own gold keys. The poster and the video call this, so
- * a shared picture shows exactly the frames the game showed. Pure and cached per board shape.
+ * Which gold frame LOOK each bonus hex of THIS layout wears: the live board's own assignment
+ * (`faGoldLooks`), built from the layout's own gold keys. The poster and the video call this, so a
+ * shared picture shows exactly the frames the game showed. Pure and cached per board shape.
  */
 let goldLooksKey = '';
-let goldLooksMemo: Map<string, number> = new Map();
-export const goldVariantsOf = (L: BoardLayout): ReadonlyMap<string, number> => {
+let goldLooksMemo: Map<string, GoldLook> = new Map();
+export const goldVariantsOf = (L: BoardLayout): ReadonlyMap<string, GoldLook> => {
   const gold = L.cells.filter((c) => c.terrain === 'rich').map((c) => c.key);
   const key = gold.join(' ');
-  if (key !== goldLooksKey) { goldLooksKey = key; goldLooksMemo = faGoldVariants(gold); }
+  if (key !== goldLooksKey) { goldLooksKey = key; goldLooksMemo = faGoldLooks(gold); }
   return goldLooksMemo;
 };
 
 /**
  * Where the bonus hexes' metal frames go: one per rich cell, with the same size, crop and turn as
  * `ui/goldframes.ts` draws on the live board. Pure, so a test can hold it to the board's geometry.
+ * The look only turns or mirrors the same hex-shaped box, so this placement never depends on it.
  */
 export const goldFramePlacements = (L: BoardLayout): GoldFramePlacement[] => {
   const k = L.hex / S;
@@ -331,6 +338,9 @@ export const goldFramePlacements = (L: BoardLayout): GoldFramePlacement[] => {
         h: size.height * k,
         crop: { x: crop.x - GOLD_FRAME_PAD, y: crop.y - GOLD_FRAME_PAD, w: crop.w + GOLD_FRAME_PAD * 2, h: crop.h + GOLD_FRAME_PAD * 2 },
         rotate,
+        turn: crop.rotation * (Math.PI / 3),
+        mirror: crop.mirror === 1,
+        variant: goldLookId(crop),
         occupied: cell.owner !== null,
       };
     });
@@ -414,6 +424,10 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
     g.save();
     g.translate(f.x, f.y);
     if (f.rotate) g.rotate(f.rotate);
+    // The look turns the same hexagon a further multiple of 60 degrees and may mirror it about the
+    // cell's vertical axis (the live board's `goldLookTransform` is the same composition).
+    if (f.turn) g.rotate(f.turn);
+    if (f.mirror) g.scale(-1, 1);
     g.globalAlpha = f.occupied ? 0.92 : 1;
     g.shadowColor = f.occupied ? GOLD_GLOW.occupied : GOLD_GLOW.empty;
     g.shadowBlur = (f.occupied ? 1.6 : 2.1) * 2 * k;

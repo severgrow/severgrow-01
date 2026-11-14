@@ -12,7 +12,7 @@
 // it. It depends only on the board's cells, never on what is on them, so a tile's picture never
 // changes between renders, strengths, undo or replay.
 import { allNeighbors, coordKey, parseKey } from '../../../src/engine/index.js';
-import { BACKGROUND_NAMES, FOREST_ASH_GEOMETRY, GOLD_ATLAS_SIZE, GOLD_FRAME_HEX_BOXES } from './forestAshData.js';
+import { BACKGROUND_NAMES, FOREST_ASH_GEOMETRY, GOLD_ATLAS_SIZE, GOLD_FRAME_HEX_BOXES, GOLD_LOOK_COUNT, GOLD_LOOKS_PER_DESIGN, GOLD_LOOK_ROTATIONS } from './forestAshData.js';
 import type { ForestAshName, ForestAshSprite, SpillDir } from './forestAshData.js';
 import { S, SQ3, hash } from './geom.js';
 import forest1 from '../assets/forest-ash/forest-01.webp?url';
@@ -148,6 +148,9 @@ const order = (keys: Iterable<string>) => [...keys].map((key) => ({ key, c: pars
  * scan order guarantees: at most three neighbours are placed before a cell). Each cell takes the
  * first variant in its own hash-shuffled preference list that no placed neighbour uses.
  */
+export const variantOrder = (key: string, salt: string, count: number): number[] =>
+  Array.from({ length: count }, (_, i) => i).sort((a, b) => hash(`${key}:${salt}:${a}`) - hash(`${key}:${salt}:${b}`));
+
 export const assignVariants = (keys: Iterable<string>, salt: string, count: number): Map<string, number> => {
   const out = new Map<string, number>();
   for (const { key, c } of order(keys)) {
@@ -156,8 +159,7 @@ export const assignVariants = (keys: Iterable<string>, salt: string, count: numb
       const v = out.get(coordKey(n));
       if (v !== undefined) taken.add(v);
     }
-    const prefs = Array.from({ length: count }, (_, i) => i)
-      .sort((a, b) => hash(`${key}:${salt}:${a}`) - hash(`${key}:${salt}:${b}`));
+    const prefs = variantOrder(key, salt, count);
     out.set(key, prefs.find((v) => !taken.has(v)) ?? prefs[0]!);
   }
   return out;
@@ -178,27 +180,67 @@ export const faTileSprite = (v: FaVariants, key: string, owner: 0 | 1, root: boo
 export const faRockSprite = (v: FaVariants, key: string): FaSprite => FA_ROCKS[v.rock.get(key) ?? 0]!;
 
 /**
- * THE TWO GOLD FRAMES, ONE PER BOARD (owner, 2026-11-14: "make sure we use both gold tile frames -
- * both design randonly assign, when possible not 2 the same next to each other"). The atlas holds two
- * designs; the same neighbour-aware pass the grounds and rocks use (`assignVariants`) picks one per
- * bonus hex from the board's OWN gold keys, in the board's own cell order.
+ * THE GOLD FRAME'S LOOK (owner, 2026-11-14: "make sure we use both gold tile frames - both design
+ * randonly assign, when possible not 2 the same next to each other", and later the same day "cheaply
+ * use rotation for the gold tiles - so they can be mirrored or upside down - for variety").
  *
- * It is a BOARD function, never a key function: a design picked from one key alone would ignore the
+ * A look is (design, rotation, mirror): one of the atlas's two frames, turned by a multiple of 60
+ * degrees, and optionally reflected. A hexagon maps onto itself at every 60-degree turn and about
+ * its own axis, so all 2 x 6 x 2 = 24 looks are the SAME crop shown a different way: no extra art,
+ * no size change, one `transform`. The supplied frames are lit from one side, so a turned or
+ * mirrored frame genuinely looks different.
+ *
+ * The look is chosen per BOARD, never per key: a look picked from one key alone would ignore the
  * hexes around it, and the live board, the replay canvas and the poster would then disagree about
- * the same hex. All three build this map from the same list (`faGoldVariants`).
- *
- * Two touching gold hexes always differ (each takes the first design no already-placed neighbour
- * wears). Only a triangle of three mutually touching gold hexes can be forced to repeat — two
- * designs cannot colour a triangle — and then the third takes its own first choice and one clash
- * remains, unavoidably. Because a clash is impossible without touching, the one assignment that can
- * come out all one design is a board whose gold hexes never touch; there the second hex is moved to
- * the other design, so both frames are used wherever the board has two gold hexes at all.
+ * the same hex. This is the ONE resolver all three build from the board's own gold keys.
  */
-export const faGoldVariants = (keys: Iterable<string>): Map<string, number> => {
-  const out = assignVariants(keys, 'fa-gold-frame', FA_GOLD_BOXES.length);
-  const designs = [...out.values()];
-  if (designs.length > 1 && designs.every((v) => v === designs[0]))
-    out.set([...out.keys()][1]!, (designs[0]! + 1) % FA_GOLD_BOXES.length);
+export type GoldLook = { design: number; rotation: number; mirror: 0 | 1 };
+export { GOLD_LOOK_ROTATIONS, GOLD_LOOKS_PER_DESIGN, GOLD_LOOK_COUNT };
+const GOLD_LOOK_SALT = 'fa-gold-look';
+
+/** A look as one number, so the neighbour-aware pass compares the WHOLE look, not just the design. */
+export const goldLookId = (look: GoldLook): number =>
+  look.design + FA_GOLD_BOXES.length * (look.mirror + 2 * look.rotation);
+
+export const goldLookOfId = (id: number): GoldLook => ({
+  design: id % FA_GOLD_BOXES.length,
+  mirror: (Math.floor(id / FA_GOLD_BOXES.length) % 2) as 0 | 1,
+  rotation: Math.floor(id / (FA_GOLD_BOXES.length * 2)),
+});
+
+/**
+ * One look per bonus hex, from the board's own gold keys, scanned in coordinate order (r, then q).
+ * Each hex takes the first look in its own hash-shuffled list that no already-placed gold neighbour
+ * wears. The order is a property of the KEYS, so the live board (which lists them in screen rows) and
+ * the replay (which lists them in board order) still walk the same sequence and agree key for key.
+ *
+ * With 12 looks per design a hex has at most six neighbours, so a free look always exists: no two
+ * touching gold hexes ever share a look, on any board (a triangle, impossible with two designs,
+ * is trivial with 24). Rotation is what makes that possible without repeating a design.
+ *
+ * The only thing the greedy pass can still get wrong for the owner is a board that happens to wear
+ * design 0 everywhere. Then one hex is moved to the other design, taking the first look of that
+ * design its own list offers that no neighbour already wears — so the board still shows both
+ * frames, and the move can only remove clashes (it never shares a look with a neighbour).
+ */
+export const faGoldLooks = (keys: Iterable<string>): Map<string, GoldLook> => {
+  const ids = assignVariants(keys, GOLD_LOOK_SALT, GOLD_LOOK_COUNT);
+  const values = [...ids.values()];
+  const designOf = (id: number) => id % FA_GOLD_BOXES.length;
+  if (values.length > 1 && values.every((id) => designOf(id) === designOf(values[0]!))) {
+    for (const { key, c } of order(ids.keys())) {
+      const taken = new Set<number>();
+      for (const n of allNeighbors(c)) {
+        const v = ids.get(coordKey(n));
+        if (v !== undefined) taken.add(v);
+      }
+      const other = variantOrder(key, GOLD_LOOK_SALT, GOLD_LOOK_COUNT)
+        .find((id) => designOf(id) !== designOf(values[0]!) && !taken.has(id));
+      if (other !== undefined) { ids.set(key, other); break; }
+    }
+  }
+  const out = new Map<string, GoldLook>();
+  for (const [key, id] of ids) out.set(key, goldLookOfId(id));
   return out;
 };
 

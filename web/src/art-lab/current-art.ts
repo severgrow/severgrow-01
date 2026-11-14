@@ -55,8 +55,9 @@ export const currentArt = async (progress: (f: number) => void = () => {}): Prom
   add('ground', ground, 'empty_ground_01.webp');
   FA_ROCKS.forEach((r, i) => add('rock', r.url, `rock_0${i + 1}.webp`));
   // bonus hexes are a gold frame today: BOTH designs, cropped from the game's atlas. The lab has no
-  // board to assign designs to (a board picks one design per gold hex, ui/forestAsh.ts
-  // `faGoldVariants`), so it asks for the raw atlas boxes by design number instead.
+  // board to assign looks to (a board picks design, turn and mirror per gold hex, ui/forestAsh.ts
+  // `faGoldLooks`), so it asks for the raw atlas boxes by design number instead: a look is that same
+  // crop turned or mirrored at draw time, so the lab needs no extra art for it.
   for (let v = 0; v < GOLD_FRAME_VARIANTS; v++) jobs.push(['gold', async () => {
     const c = goldFrameBox(v);
     const side = Math.max(c.w, c.h);

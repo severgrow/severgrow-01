@@ -7,7 +7,7 @@ import { CURRENT_RULES_VERSION, rulesConfig } from '../../src/engine/versions.js
 import { boardCoords, coordKey } from '../../src/engine/index.js';
 import { newMatch } from '../../src/engine/match.js';
 import { S } from '../src/ui/geom.js';
-import { faGoldVariants } from '../src/ui/forestAsh.js';
+import { faGoldLooks, goldLookId } from '../src/ui/forestAsh.js';
 import { goldFrameSize } from '../src/ui/goldframe-geometry.js';
 import { goldFrameCrop } from '../src/ui/goldframes.js';
 import { goldFramePlacements, GOLD_FRAME_PAD, goldVariantsOf, loadBoardArtUrls, screenCoordsOf } from '../src/replay/board-canvas.js';
@@ -40,8 +40,8 @@ describe('the canvas board\'s gold frames', () => {
   it('is the live board\'s frame: same size around the hex, same atlas crop for that hex', () => {
     const k = layout.hex / S;
     const size = goldFrameSize();
-    // The crop comes from the board's own design map (the same `faGoldVariants` the live board
-    // builds), not from the key alone; a key-only crop is what these tests used to pin.
+    // The crop comes from the board's own look map (the same `faGoldLooks` the live board builds),
+    // not from the key alone; a key-only crop is what these tests used to pin.
     const looks = goldVariantsOf(layout);
     for (const frame of goldFramePlacements(layout)) {
       const cell = rich.find((c) => c.key === frame.key)!;
@@ -65,15 +65,23 @@ describe('the canvas board\'s gold frames', () => {
     expect(art?.gold).toBeTruthy();
   });
 
-  it('wears the same design as the live board, key for key', () => {
-    // The live board builds `faGoldVariants` from `boardCoords(config)` filtered to the rich cells
+  it('wears the same look as the live board, key for key, and turns it the same way', () => {
+    // The live board builds `faGoldLooks` from `boardCoords(config)` filtered to the rich cells
     // (ui/board.ts `setup`); the poster builds `goldVariantsOf` from the layout's own cells. If these
     // ever disagree, a replay would show a different frame from the game it replays.
     const liveBoard = newMatch(SEED);
     const liveKeys = boardCoords(liveBoard.config).map(coordKey).filter((k) => liveBoard.terrain[k] === 'rich');
-    const live = faGoldVariants(liveKeys);
+    const live = faGoldLooks(liveKeys);
     const replay = goldVariantsOf(layout);
     expect(replay.size).toBe(live.size);
-    for (const [key, variant] of live) expect(replay.get(key), key).toBe(variant);
+    for (const [key, look] of live) expect(replay.get(key), key).toEqual(look);
+    // The canvas placement carries that look: the id, the turn in radians and the mirror.
+    for (const frame of goldFramePlacements(layout)) {
+      const look = live.get(frame.key)!;
+      expect(frame.variant).toBe(goldLookId(look));
+      expect(frame.turn).toBeCloseTo((look.rotation * Math.PI) / 3, 12);
+      expect(frame.mirror).toBe(look.mirror === 1);
+      expect(frame.crop.w).toBeGreaterThan(0);
+    }
   });
 });

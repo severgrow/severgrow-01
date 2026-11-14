@@ -115,3 +115,12 @@ export const GOLD_ATLAS_SIZE = { w: 1240, h: 541 } as const;
 /** Board backgrounds (bg-<name>.webp): a painted radius-3 board, cut to its outline box. */
 export const BACKGROUND_NAMES = ['cocoa', 'lichen', 'cinder', 'clay', 'slate'] as const;
 export const GOLD_FRAME_HEX_BOXES: readonly (readonly [number, number, number, number])[] = [[10.21, 10.28, 600, 519.62], [630.16, 10.1, 600, 519.62]];
+
+/**
+ * A gold frame's LOOK turns one of those boxes. A hexagon maps onto itself at every 60-degree turn
+ * and about its own axis, so each design wears 6 turns, plain or mirrored. Pure numbers, so the
+ * browser suites can check a frame's look without loading the art (ui/forestAsh.ts uses these).
+ */
+export const GOLD_LOOK_ROTATIONS = 6;
+export const GOLD_LOOKS_PER_DESIGN = GOLD_LOOK_ROTATIONS * 2;
+export const GOLD_LOOK_COUNT = GOLD_FRAME_HEX_BOXES.length * GOLD_LOOKS_PER_DESIGN;

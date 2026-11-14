@@ -17,7 +17,7 @@ import { assertDistChannel } from './helpers/dist-channel.js';
 import { resumeSavedGame } from './helpers/menu-nav.js';
 import { fruitPosition, NINE_CHAIN } from './fruitcards-pos.js';
 import { goldFrameSize } from '../src/ui/goldframe-geometry.js';
-import { GOLD_ATLAS_SIZE, GOLD_FRAME_HEX_BOXES } from '../src/ui/forestAshData.js';
+import { GOLD_ATLAS_SIZE, GOLD_LOOK_COUNT } from '../src/ui/forestAshData.js';
 import { fixture } from '../../tests/helpers.js';
 
 const port = Number(process.env.FUTA04_POLISH_PORT ?? 4198);
@@ -1094,7 +1094,10 @@ async function goldFrameVisuals() {
       check(visual.goldUnderTiles && visual.contourAboveGold && visual.contourMasked && visual.imageReady
         && Math.abs(visual.frameWidth-goldFrameSize().width)<.01 &&
         visual.centers.every(distance=>distance<4) && visual.strongerEmptyGlow &&
-        visual.variants.every(variant=>variant>=0 && variant<GOLD_FRAME_HEX_BOXES.length),
+        // A look is (design, 60-degree turn, mirror): 24 of them over the atlas's two designs, so the
+        // frame's number is now bounded by the look vocabulary, not by the two atlas boxes. The
+        // designs, the frame box and the rim are unchanged (checked just above and below).
+        visual.variants.every(variant=>variant>=0 && variant<GOLD_LOOK_COUNT),
         `standard ${width}: the 5% trimmed deterministic rims sit under spills, inside their hexes (${JSON.stringify(visual)})`);
       await page.screenshot({path:`${dir}/${width}x${height}-gold-frame-standard.png`});
       await page.reload(); await resumeSavedGame(page); await idle(page);
