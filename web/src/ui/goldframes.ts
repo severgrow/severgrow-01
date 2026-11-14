@@ -2,8 +2,11 @@
 // both in one transparent atlas. A tile key picks its frame for the whole game.
 // The glow is the board's own (`.gold-frame` drop-shadow in style.css); the art carries none.
 import { FA_GOLD_ATLAS, FA_GOLD_ATLAS_SIZE, FA_GOLD_BOXES, faGoldVariant } from './forestAsh.js';
-import { el, S, SQ3 } from './geom.js';
+import { goldFrameSize } from './goldframe-geometry.js';
+import { el } from './geom.js';
 import { getOrient } from '../logic/orient.js';
+
+export { GOLD_FRAME_SCALE, goldFrameSize } from './goldframe-geometry.js';
 
 /** The atlas and the exact crop one bonus hex's frame uses, shared with the replay poster. The crop
  *  is the hex's own bounding box in the atlas: the frame's outer edge lies on the hex. */
@@ -18,8 +21,7 @@ export const GOLD_FRAME_VARIANTS = FA_GOLD_BOXES.length;
 export function drawGoldFrame(parent: SVGElement, key: string, x: number, y: number, occupied: boolean) {
   const crop = goldFrameCrop(key);
   const pad = 6;
-  const width = S * 2.02;
-  const height = S * SQ3 * 1.01;
+  const { width, height } = goldFrameSize();
   const group = el('g', {
     class: `gold-frame ${occupied ? 'occupied' : 'empty'}`,
     'data-key': key,

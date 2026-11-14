@@ -4,7 +4,8 @@
 // different board from the game. These pin the canvas frames to the live board's own geometry.
 import { describe, expect, it } from 'vitest';
 import { CURRENT_RULES_VERSION, rulesConfig } from '../../src/engine/versions.js';
-import { S, SQ3 } from '../src/ui/geom.js';
+import { S } from '../src/ui/geom.js';
+import { goldFrameSize } from '../src/ui/goldframe-geometry.js';
 import { goldFrameCrop } from '../src/ui/goldframes.js';
 import { goldFramePlacements, GOLD_FRAME_PAD, loadBoardArtUrls, screenCoordsOf } from '../src/replay/board-canvas.js';
 import type { BoardLayout } from '../src/replay/board-canvas.js';
@@ -34,12 +35,13 @@ describe('the canvas board\'s gold frames', () => {
 
   it('is the live board\'s frame: same size around the hex, same atlas crop for that hex', () => {
     const k = layout.hex / S;
+    const size = goldFrameSize();
     for (const frame of goldFramePlacements(layout)) {
       const cell = rich.find((c) => c.key === frame.key)!;
       expect(frame.x).toBeCloseTo(cell.x, 6);
       expect(frame.y).toBeCloseTo(cell.y, 6);
-      expect(frame.w).toBeCloseTo(S * 2.02 * k, 6);
-      expect(frame.h).toBeCloseTo(S * SQ3 * 1.01 * k, 6);
+      expect(frame.w).toBeCloseTo(size.width * k, 6);
+      expect(frame.h).toBeCloseTo(size.height * k, 6);
       const crop = goldFrameCrop(frame.key);
       expect(frame.crop).toEqual({
         x: crop.x - GOLD_FRAME_PAD,
