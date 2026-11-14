@@ -319,9 +319,13 @@ export class DefaultArtBoardView extends BoardView {
     // The territory colour under the art fills its softened corners; the art itself is unclipped.
     el('path', { d: hexPath(key, S, 'flat'), fill: faBaseColour(owner), class: 'fa-tile-base' }, group);
     this.art(group, faTileSprite(this.fa, key, owner, false), x, y, cellScale(key), 'default-art-sprite');
-    // A gold tile keeps its frame over its own art (and under the stone), but grass,
-    // rock and home overhangs from neighbouring cells sit physically in front of it.
-    if (this.richKeys.has(key)) drawGoldFrame(group, key, x, y, true).setAttribute('mask', this.url('fa-spill'));
+    // A gold tile keeps its frame over its own art (and under the stone). NO `fa-spill` MASK (owner,
+    // 2026-11-14: "gold frames look like open arcs"): the traced spill outline is deliberately a
+    // little OUTSIDE the tree and the smoke, so masking with it deleted a band of the rim that no art
+    // covers — a rim with a bite out of it wherever a bonus hex touches a home. The home's own
+    // picture already stands above this layer (`l-homes` is drawn after `l-tiles`), so the canopy
+    // covers the rim by itself, exactly as it covers every other tile's art.
+    if (this.richKeys.has(key)) drawGoldFrame(group, key, x, y, true);
     drawSeedStone(group, key, x, y, tile.strength, owner);
     return group;
   }
