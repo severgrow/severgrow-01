@@ -1,6 +1,7 @@
 // Loaded only in Futa04. Rules, card identities and saved actions keep their existing names.
 import { bombText } from '../logic/bomb-text.js';
 import { CARD_FACES, cardArtUrl, cardArtUrls } from '../ui/card-art.js';
+import { CARD_STACK_SHADOW, cardStackPose } from '../ui/card-stack.js';
 
 /**
  * The six faces to decode, in the same order as `ART_KINDS` below. The URLs themselves live in
@@ -13,6 +14,17 @@ export const CARD_ART_URLS: readonly string[] = cardArtUrls();
 const mossArt = cardArtUrl('s0'), ashArt = cardArtUrl('s1'), dewArt = cardArtUrl('s2'), emberArt = cardArtUrl('s3'), bombArt = cardArtUrl('fruit'), backArt = cardArtUrl('back');
 const ART_KINDS = CARD_FACES;
 const READY_FACES=ART_KINDS.slice(0,5).map(kind=>`.futa04-cards.futa04-card-art-${kind}-ready .card.${kind}`).join(',');
+
+/**
+ * THE DRAW PILE IS THE RITUAL'S DECK, so its thickness is the ritual's own fan (`ui/card-stack.ts`):
+ * three visible layers — the face and the two card silhouettes behind it — with the stack's single
+ * contact shadow under the lowest one. The poses are written straight from the shared module, so
+ * the ceremony and the pile can never drift apart.
+ */
+const PILE_STACK_LAYERS = 3;
+const pileNear = cardStackPose(PILE_STACK_LAYERS, 1);
+const pileFar = cardStackPose(PILE_STACK_LAYERS, 2);
+const pileShadow = `0 calc(var(--pile-h, 71px) * ${CARD_STACK_SHADOW.y}) calc(var(--pile-h, 71px) * ${CARD_STACK_SHADOW.blur}) rgba(0,0,0,${CARD_STACK_SHADOW.alpha})`;
 
 let cardArtReady: Promise<void> | null = null;
 
@@ -158,17 +170,31 @@ export const CARDS_CSS = `
 :is(${READY_FACES}):has(>.futa04-card-art):is(.playable,.lifted) { border-color:transparent; }
 :is(${READY_FACES}) > .futa04-card-art { inset:0; border-radius:5.9% / 4.2%; }
 .futa04-cards .futa04-mini-card .futa04-card-art { display:none; }
-/* The separately supplied tree-logo back is the only face-down artwork. Only the deck's TOP card
-   wears it: the two slabs behind are plain card silhouettes with the card's own hairline, because a
-   back printed into every slab put a second and third printed border inside the pile — the "extra
-   frames" open request 3 in docs/HANDOFF-0.86.md asks to be gone. */
+/* THE DRAW PILE IS THE RITUAL'S DECK (owner, 2026-11-14: "remove this weird rectangle from behind
+   the draw pile and make the draw pile look exactly like the pile in ritual at the end when cards
+   coming back together in middle screen"). Every layer is the card back itself — the same face, the
+   same printed corner, the same small fan and tilt the ritual's nine-card stack has as it comes
+   back together, and ONE soft shadow under the lowest card. The two grey slabs with their own
+   hairline that used to sit behind the face (and read as a plain rectangle) are gone. */
 .futa04-cards .card.back,
-.futa04-cards #deck .pile-stack {
+.futa04-cards #deck .pile-stack,
+.futa04-cards #deck .pile-stack::before,
+.futa04-cards #deck .pile-stack::after {
   background-image:url('${backArt}'); background-size:100% 100%; background-position:center;
   border-color:transparent;
 }
+.futa04-cards #deck .pile-stack::before,
+.futa04-cards #deck .pile-stack::after { border:0; background-color:transparent; }
 .futa04-cards .card.back { border-radius:5.9% / 4.2%; }
-.futa04-cards #deck .pile-stack { box-shadow:0 2px 5px rgba(0,0,0,.38); }
+/* The face is the card you see; the two layers behind it are the pile's thickness, in the ritual's
+   order — the near layer above the far one. Percentages of the card's own box, so the pile and the
+   ritual deck are the same object at any size. */
+.futa04-cards #deck .pile-stack::after { translate:${pileNear.x}% ${pileNear.y}%; rotate:${pileNear.rot}deg; }
+.futa04-cards #deck .pile-stack::before { translate:${pileFar.x}% ${pileFar.y}%; rotate:${pileFar.rot}deg; }
+/* One shadow for the whole stack, cast by its lowest visible card (the ritual's own, at the pile's
+   height). data-layers is how many cards the pile shows (logic/piles.ts). */
+.futa04-cards #deck[data-layers='2'] .pile-stack::after { box-shadow:${pileShadow}; }
+.futa04-cards #deck:is([data-layers='3'],[data-layers='4']) .pile-stack::before { box-shadow:${pileShadow}; }
 @media (prefers-reduced-motion:reduce) {
   .futa04-cards .dock .hand-row > .hand .card { transition:none; }
 }

@@ -21,6 +21,7 @@ import { OPP } from '../../../src/strings.js';
 import { SUIT_NAMES } from '../../../src/engine/index.js';
 import type { Card } from '../../../src/engine/index.js';
 import { cardFace, suitClass } from '../ui/effects.js';
+import { cardStackPosePx } from '../ui/card-stack.js';
 import { preloadCardArt } from './cards.js';
 import type { RitualCard, StarterRitualView } from '../logic/starter-ritual.js';
 import { RITUAL_DECK_SIZE } from '../logic/starter-ritual.js';
@@ -992,11 +993,17 @@ class StarterRitual {
 
   // ---------------------------------------------------------------- helpers
 
+  /**
+   * The stack's resting fan — the SAME geometry the dock's draw pile draws (`ui/card-stack.ts`),
+   * given in px because the shuffle animates these poses as keyframes. Measured from the overlay's
+   * own card box, falling back to the reference box while the overlay is still hidden, so the
+   * shipped 2.4px / 5.76px fan is unchanged on every screen the ritual has been tuned on.
+   */
   private baseOffsets(): { x: number; y: number; rot: number }[] {
-    return Array.from({ length: DECK_LAYERS }, (_, index) => {
-      const depth = DECK_LAYERS - 1 - index;
-      return { x: depth * 0.3, y: depth * 0.72, rot: (index - (DECK_LAYERS - 1)) * 0.13 };
-    });
+    const rect = this.refs.deckAnchor.getBoundingClientRect();
+    const box = rect.width > 1 ? { width: rect.width, height: rect.height } : undefined;
+    return Array.from({ length: DECK_LAYERS }, (_, index) =>
+      cardStackPosePx(DECK_LAYERS, DECK_LAYERS - 1 - index, box));
   }
 
   /** The top two cards of the stack: the ones the deal takes off the deck and puts on the table. */
