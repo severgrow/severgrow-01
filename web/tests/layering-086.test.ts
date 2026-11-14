@@ -1,10 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { S, SQ3 } from '../src/ui/geom.js';
+import { GOLD_FRAME_SCALE, goldFrameSize } from '../src/ui/goldframe-geometry.js';
 
 // The board and the piles are drawn, not computed, so these are the invariants the owner's
 // 2026-11-14 report ("cards still look trimmed", "on draw pile the corners look wrong", "random
-// thing above the 9 stone") is held by. Each was a real, measured fault; a source assertion keeps
-// the next edit from quietly putting it back.
+// thing above the 9 stone") is held by. Each was a real, measured fault. Where the value is
+// reachable at runtime the assertion calls it (gold frames go through the shared geometry module);
+// source text is pinned only where a DOM would be needed to observe the drawing.
 const read = (p: string) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8');
 const rule = (src: string, selector: string) => {
   const start = src.indexOf(selector);
@@ -24,9 +27,26 @@ describe('board and dock layering, 0.86 fixes', () => {
   });
 
   it('draws a gold rim at the cell\u2019s own scale and never masks it with a spill outline', () => {
+    // BEHAVIOUR, not source text: the frame's box comes from the shared geometry module, which
+    // multiplies the hex by the cell's own scale, so an outer hex on a bent board draws a smaller
+    // rim rather than one whose edge overhangs the seam and gets sliced by the next cell.
+    const flat = goldFrameSize(1);
+    const bent = goldFrameSize(0.8);
+    expect(bent.width).toBeCloseTo(flat.width * 0.8, 10);
+    expect(bent.height).toBeCloseTo(flat.height * 0.8, 10);
+    // The shared 5% trim is part of the same box, and keeps the frame inside its hex (the untrimmed
+    // 2.02S frame is wider than the 2S hex, which is what put metal over the seam).
+    expect(GOLD_FRAME_SCALE).toBeGreaterThan(0);
+    expect(GOLD_FRAME_SCALE).toBeLessThan(1);
+    expect(flat.width).toBeCloseTo(S * 2.02 * GOLD_FRAME_SCALE, 10);
+    expect(flat.height).toBeCloseTo(S * SQ3 * 1.01 * GOLD_FRAME_SCALE, 10);
+    expect(flat.width).toBeLessThan(S * 2);
+    expect(flat.height).toBeLessThan(S * SQ3);
+    // The drawing itself needs a DOM, so this one wiring is pinned in source: the live board hands
+    // the shared module the cell's own scale (the replay canvas calls the same `goldFrameSize`), so
+    // the two painters cannot drift apart.
     const frames = read('ui/goldframes.ts');
-    expect(frames).toContain('const k = cellScale(key);');
-    expect(frames).toContain('S * 2.02 * k');
+    expect(frames).toContain('goldFrameSize(cellScale(key))');
     const board = read('ui/defaultArtBoard.ts');
     // The traced spill outline is drawn a little OUTSIDE the tree and the smoke, so masking the rim
     // with it deleted a band no art covers. The home's own layer already covers the rim.
