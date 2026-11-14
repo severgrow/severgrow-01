@@ -5256,8 +5256,24 @@ svg.board .fx-mote {
      those buttons (which sit above them) and the last card's rotated corner ran out of the screen —
      which is exactly what "trimmed" looks like. The base `.hand .card` rule always clamped the
      overlap to its container; the dock's own rule had dropped that clamp. Restored here, with the
-     fan's own corner overhang (a card half-height times sin(tilt) ~ 6px a side) kept clear. */
-  margin-left: min(calc(var(--slice, 40px) - var(--cw)), calc((100% - 14px - var(--n) * var(--cw)) / max(var(--n) - 1, 1)));
+     fan's own corner overhang (a card half-height times sin(tilt) ~ 6px a side) kept clear.
+
+     ...AND A CARD'S OWN CENTRE MUST STAY ITS OWN (0.86, measured). The clamp above is the whole
+     overlap budget, and it used to be able to squeeze the fan below HALF a card per card: with the
+     0.86 card sizes (72x102 / 84x119 / 167x237) the step fell to 36-38px against 37-42px card
+     halves (and to 54px against 83.5 on a 1920 screen, from a stale --slice), so the next card's
+     rotated face covered this card's centre — Playwright's click on card 13 was intercepted by card
+     15, and elementFromPoint(centre) returned the neighbour on every card but the last. The
+     overlap is the design (a fanned hand) but it may never eat a card past its midpoint; the max()
+     below is that floor, with 2px of rim for the neighbour's rotated left edge (measured: the
+     centre only clears at ~47-49% of a card, and removing the tilt does not help — the overlap,
+     not the rotation, is what covers it). It is a *floor* only: a hand with room still spreads by
+     --slice, and the fan stays inside the hand row (a full hand asks for at most 392px of the
+     410-420px row at 1280/1440, and 347px of 382 on a 390px phone). */
+  margin-left: max(
+    calc(2px - var(--cw) / 2),
+    min(calc(var(--slice, 40px) - var(--cw)), calc((100% - 14px - var(--n) * var(--cw)) / max(var(--n) - 1, 1)))
+  );
 }
 .dock .hand-row > .hand .card:first-child {
   margin-left: 0;

@@ -381,8 +381,11 @@ html.futa04-information.reduce-motion #smart-panel.hardware-reflect #smart-led-b
   html.futa04-information[data-layout='side'] .dock > #futa04-box {
     width:min(560px,100%); justify-self:end;
   }
+  /* No --slice here any more (0.86): the 54px pinned the fan's step to 54px against 167px cards,
+     which put card 15's face over card 13's centre on a 1920px screen. The layout's own slice (95px
+     for a full hand of 167px cards) is the designed spread and it fits this row. */
   html.futa04-information[data-layout='side'] .dock .hand-row > #hand {
-    justify-content:flex-end; --slice:54px;
+    justify-content:flex-end;
   }
   html.futa04-information[data-layout='side'] #futa04-box {
     --control-size:72px; --box-tools:224px; --box-pile:88px; --box-piles:184px;

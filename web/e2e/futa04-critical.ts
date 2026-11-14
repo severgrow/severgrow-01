@@ -33,18 +33,19 @@ const idle = async (p: Page) => {
     await p.waitForFunction(() => { const h = (window as any).__severgrow; return !h.busy() && h.state()?.actor === 0 && h.state()?.phase !== 'ACT'; }, undefined, { timeout: 30000 });
   }
 };
-// Fanned cards intentionally overlap. Click a visible piece of the requested card,
-// rather than Playwright's centre point, which can belong to the next card.
+// Fanned cards intentionally overlap, but never past a card's own midpoint (0.86): the centre of a
+// card must be that card's own surface. This used to search for any exposed piece because the
+// enlarged cards' overlap could put the next card over the centre; clicking the centre now asserts
+// the invariant on every viewport this suite walks instead of working around it.
 const clickVisibleCard = async (p: Page, id: number) => {
   const point = await p.locator(`#hand [data-card="${id}"]`).evaluate(el => {
     const r = el.getBoundingClientRect();
-    for (const xf of [.08, .2, .35, .5, .7, .9]) for (const yf of [.2, .45, .7, .85]) {
-      const x = r.left + r.width * xf, y = r.top + r.height * yf;
-      if (document.elementFromPoint(x, y)?.closest('#hand .card') === el) return { x, y };
-    }
-    return null;
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    const hit = document.elementFromPoint(x, y)?.closest('#hand .card') as HTMLElement | null;
+    return { x, y, hit: hit === el ? null : (hit?.dataset.card ?? 'nothing'), visible: r.width > 0 && r.height > 0 };
   });
-  assert(point, `Card ${id} has an exposed clickable surface`);
+  assert.equal(point.hit, null, `Card ${id} owns its centre (it is ${point.hit})`);
+  assert(point.visible, `Card ${id} is on screen`);
   await p.mouse.click(point.x, point.y);
 };
 mkdirSync('/tmp/main2-shots', { recursive: true });

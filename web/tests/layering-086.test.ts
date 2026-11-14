@@ -65,10 +65,20 @@ describe('board and dock layering, 0.86 fixes', () => {
     expect(cards).not.toMatch(/#deck \.pile-stack::(before|after)\s*\{\s*\n?\s*background-image/);
   });
 
-  it('keeps the hand fan inside the hand\u2019s own slot', () => {
+  it('keeps the hand fan inside its row and every card’s own centre its own', () => {
     const css = read('style.css');
-    const hand = rule(css, '  margin-left: min(calc(var(--slice, 40px) - var(--cw))');
+    // The clamp the owner's 2026-11-14 report asked for ("cards still look trimmed"): the overlap
+    // is measured against the hand's own box and the hand's real card count, so a full hand cannot
+    // run out of its slot and off the screen.
+    const hand = rule(css, '  margin-left: max(');
     expect(hand).toContain('100%');
     expect(hand).toContain('var(--n)');
+    // 0.86, measured: that clamp alone could squeeze the step below HALF a card (33-38px against
+    // 37-42px card halves), and the next card's rotated face then took this card's centre — a tap
+    // on the first card hit the second, and `elementFromPoint(centre)` returned the neighbour on
+    // every card but the last. The floor is the tap invariant: it may only ever WIDEN the fan
+    // (never narrow it), and the row has room for a full hand at 72x102 / 84x119 / 167x237.
+    expect(hand).toContain('2px - var(--cw) / 2');
+    expect(hand.indexOf('max(')).toBeLessThan(hand.indexOf('min('));
   });
 });
