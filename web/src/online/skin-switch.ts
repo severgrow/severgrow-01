@@ -42,7 +42,8 @@ export async function connectSkinSwitch(client: DuelClient, token: string, refre
     if (saved && TERRITORY_IDS.includes(saved)) chooseSkin({ mine: saved });
     else chooseSkin({ mine: DEFAULT_SKIN.mine });
     markChoice?.();
-    current.refresh();
+    // The initial world read already carries the public skin on each claim. Re-fetching here
+    // duplicates wallet/world requests on entry; a deliberate POST below still refreshes it.
   } catch { /* An older server has no skin route; the local preview stays usable. */ }
 }
 

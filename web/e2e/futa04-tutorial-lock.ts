@@ -171,7 +171,9 @@ try {
     await page.waitForFunction(() => {
       const glass = document.getElementById('futasaku-glass')?.getBoundingClientRect();
       const dock = document.getElementById('dock')?.getBoundingClientRect();
-      const cells = [...document.querySelectorAll('#board .hex-cell')];
+      // Painted groups include tree, smoke, and grass overhangs. The gameplay hexes define
+      // the board's actual footprint and are what the camera centres in this band.
+      const cells = [...document.querySelectorAll('#board .hex-cell path.hex')];
       if (!glass || !dock || !cells.length) return false;
       let top = Infinity; let bottom = -Infinity;
       for (const el of cells) {
