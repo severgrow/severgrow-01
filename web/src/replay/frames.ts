@@ -12,7 +12,8 @@
 import { drawReplayPoster, paintPosterCells, paintReplayFilm, posterFor, posterLayout, POSTER_H, POSTER_W } from './poster.js';
 import type { PosterData, PosterLayout, PosterTurn } from './poster.js';
 import type { ReplayModel, Strike } from './timeline.js';
-import { BOMB_ART_URL, paintStrike, STRIKE_TIMING } from './strike.js';
+import { paintStrike, STRIKE_TIMING } from './strike.js';
+import { BOMB_FACE, cardArtUrl } from '../ui/card-art.js';
 import { decodedPicture, hexCorner } from './board-canvas.js';
 import type { Player, Tile } from '../../../src/engine/index.js';
 import type { TileMotion } from './board-canvas.js';
@@ -244,7 +245,7 @@ export const paintMotionFrameCached = (
 
 /** The Bomb card(s) and burst over a painted frame (the same layout as the board under it). */
 const paintStrikeOver = (g: CanvasRenderingContext2D, data: PosterData, strike: { s: Strike; p: number }): void => {
-  paintStrike(g, posterLayout(data).board, strike.s, strike.p, decodedPicture(BOMB_ART_URL), hexCorner);
+  paintStrike(g, posterLayout(data).board, strike.s, strike.p, decodedPicture(cardArtUrl(BOMB_FACE)), hexCorner);
 };
 
 /** Paint one moving frame (the same painter as every other picture of the match). */

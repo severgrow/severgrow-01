@@ -5,11 +5,17 @@
 // the target and its six neighbours. No words: the card IS the explanation, in the game's own art.
 //
 // One timing curve (pure, tested) drives both the video painter here and the replay screen.
-import bombArtUrl from '../assets/cards/bomb.webp?url';
+import { BOMB_FACE, cardArtUrl } from '../ui/card-art.js';
 import type { BoardLayout } from './board-canvas.js';
 import type { Strike } from './timeline.js';
 
-export const BOMB_ART_URL: string = bombArtUrl;
+/**
+ * The Bomb card's art, as the strike draws it. Derived from `ui/card-art.ts` — the same table the
+ * hand's faces and the piles read — rather than a second direct import of the asset, so a card skin
+ * can never move one and leave the other behind. The painters ask `cardArtUrl(BOMB_FACE)` at draw
+ * time (so a skin swap reaches them); this constant stays exported for callers that name one URL.
+ */
+export const BOMB_ART_URL: string = cardArtUrl(BOMB_FACE);
 
 /** When, inside a strike beat (0 … 1 of its duration), each part happens. */
 export const STRIKE_TIMING = Object.freeze({
