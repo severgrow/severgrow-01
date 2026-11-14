@@ -183,11 +183,3 @@ html.v075 #board .planet-turn-line {
 }
 html.v075 body[data-turn='you'] #board .planet-turn-glow { opacity: .18; }
 html.v075 body[data-turn='you'] #board .planet-turn-line { opacity: .95; }
-
-/* Smoked metal around a recessed lamp. Static vector material, no new filters or idle loop. */
-html.v075 #board .planet-bezel { opacity:.74; }
-html.v075 #board .planet-bezel-gasket { stroke:#040705; stroke-width:4.4; stroke-opacity:.72; }
-html.v075 #board .planet-bezel-face { stroke-width:3.1; }
-html.v075 #board .planet-bezel-groove { stroke:#0a0e0b; stroke-width:1.65; }
-html.v075 #board .planet-bezel-etch { stroke:#080c09; stroke-width:.6; stroke-linecap:round; opacity:.85; }
-html.v075 #board .planet-turn-line { stroke-width:.85; }

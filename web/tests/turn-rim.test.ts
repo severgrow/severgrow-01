@@ -58,4 +58,14 @@ describe('active-turn board contour (0.83 polish)', () => {
     expect(Number(resting![1])).toBeLessThanOrEqual(0.12);
     expect(Number(yours![1])).toBe(1);
   });
+
+  // The 0.86 metal bezel was reverted (owner, 2026-11-14: the bare hairline looked "elegant").
+  // It had left a THIRD `.planet-turn-line` rule after its own block whose `stroke-width: .85`
+  // silently overrode the intended 1.15 hairline. The rule that wins must stay the 1.15 one.
+  it('keeps the 1.15 hairline as the declaration that wins', () => {
+    const css = readFileSync(join(fileURLToPath(new URL('..', import.meta.url)), 'src/polish-075.css'), 'utf8');
+    const blocks = [...css.matchAll(/html\.v075 #board \.planet-turn-line\s*\{([^}]*)\}/g)];
+    const widths = blocks.map((m) => m[1]!.match(/stroke-width:\s*([\d.]+)/)?.[1] ?? 'unset');
+    expect(widths.at(-1)).toBe('1.15');
+  });
 });

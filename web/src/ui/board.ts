@@ -4,7 +4,6 @@
 // whatever board it is given.
 import { FEATURES, IS_FUTA04 } from '../channel.js';
 import { outlinePath } from './outline.js';
-import { drawRimHardware } from './rim-hardware.js';
 import { DENY_SHAKE, DENY_SHAKE_MS } from './feel.js';
 import { allNeighbors, boardCoords, connectedKeys, coordKey, hexDistance, homeCoord, parseKey } from '../../../src/engine/index.js';
 import type { Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
@@ -481,7 +480,6 @@ export class BoardView {
     el('path',{d:rim,transform:'translate(0 2)',class:'planet-shadow-near',stroke:'#000','stroke-opacity':.08,'stroke-width':2,'stroke-linejoin':'round'},shadow);
     const glow=el('g',{class:'planet-turn-glow',fill:'none','stroke-linejoin':'round'},shadow);
     for(const [width,opacity] of [[8,.12],[5,.35],[3,.5]])el('path',{d:rim,'stroke-width':width!,'opacity':opacity!},glow);
-    drawRimHardware(skin, defs, this.id('planet-bezel-metal'), rim, edges);
     const turn = el('g', { class: 'planet-turn-rim' }, skin);
     el('path', { d: rim, fill: 'none', class: 'planet-turn-line' }, turn);
   }
