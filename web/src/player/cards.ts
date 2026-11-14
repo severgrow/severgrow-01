@@ -1,14 +1,17 @@
 // Loaded only in Futa04. Rules, card identities and saved actions keep their existing names.
 import { bombText } from '../logic/bomb-text.js';
-import mossArt from '../assets/cards/moss.webp?url';
-import ashArt from '../assets/cards/ash.webp?url';
-import dewArt from '../assets/cards/dew.webp?url';
-import emberArt from '../assets/cards/ember.webp?url';
-import bombArt from '../assets/cards/bomb.webp?url';
-import backArt from '../assets/cards/back.webp?url';
+import { CARD_FACES, cardArtUrl, cardArtUrls } from '../ui/card-art.js';
 
-export const CARD_ART_URLS = [mossArt, ashArt, dewArt, emberArt, bombArt, backArt];
-const ART_KINDS=['s0','s1','s2','s3','fruit','back'] as const;
+/**
+ * The six faces to decode, in the same order as `ART_KINDS` below. The URLs themselves live in
+ * `ui/card-art.ts` — the ONE table the hand, the piles and the Blast's strike card all read — so
+ * this module names no asset of its own any more.
+ */
+export const CARD_ART_URLS: readonly string[] = cardArtUrls();
+// The rules below name each face once. They are bound to the shared table (never to an asset
+// import of their own), so a card skin that replaces a face reaches this stylesheet too.
+const mossArt = cardArtUrl('s0'), ashArt = cardArtUrl('s1'), dewArt = cardArtUrl('s2'), emberArt = cardArtUrl('s3'), bombArt = cardArtUrl('fruit'), backArt = cardArtUrl('back');
+const ART_KINDS = CARD_FACES;
 const READY_FACES=ART_KINDS.slice(0,5).map(kind=>`.futa04-cards.futa04-card-art-${kind}-ready .card.${kind}`).join(',');
 
 let cardArtReady: Promise<void> | null = null;
@@ -20,7 +23,7 @@ export function preloadCardArt(): Promise<void> {
     cardArtReady = Promise.resolve();
     return cardArtReady;
   }
-  cardArtReady = Promise.all(CARD_ART_URLS.map(async url => {
+  cardArtReady = Promise.all(cardArtUrls().map(async url => {
     const image = new Image();
     image.decoding = 'async';
     image.src = url;

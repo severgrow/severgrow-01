@@ -22,7 +22,8 @@ import { boardAtIndex, frameAtTime, seekTo } from './seek.js';
 import { REPLAY_CSS } from './replay-css.js';
 import { posterFor, warmReplayFilm } from './poster.js';
 import { ledFrameUrl, ledPlateLayout, paintLedScore } from './led-plate.js';
-import { BOMB_ART_URL, paintStrike, STRIKE_TIMING } from './strike.js';
+import { paintStrike, STRIKE_TIMING } from './strike.js';
+import { BOMB_FACE, cardArtUrl } from '../ui/card-art.js';
 import { hexCorner } from './board-canvas.js';
 import { centerOf, S as GEOM_S } from '../ui/geom.js';
 import type { PosterData } from './poster.js';
@@ -431,7 +432,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
   boardBox.append(strikeCanvas);
   const bombArt = new Image();
   bombArt.decoding = 'async';
-  bombArt.src = BOMB_ART_URL;
+  bombArt.src = cardArtUrl(BOMB_FACE);
   let strikeRaf = 0;
   let strikeTimer = 0;
   const stopStrike = (): void => {

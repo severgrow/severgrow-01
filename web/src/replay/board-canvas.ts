@@ -17,7 +17,7 @@
 // `defaultArtBoard` does — so painting can never fail or stall.
 import { WORDMARK_URL } from '../player/branding.js';
 import { ledFrameUrl } from './led-plate.js';
-import { BOMB_ART_URL } from './strike.js';
+import { BOMB_FACE, cardArtUrl } from '../ui/card-art.js';
 import { warmReplayUI } from './typography.js';
 import { allCoords, allNeighbors, coordKey, mirror, parseKey } from '../../../src/engine/index.js';
 import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
@@ -89,7 +89,7 @@ export const warmBoardArt = (art: BoardArt | null = null): Promise<void> => {
   const urls = [
     WORDMARK,
     ledFrameUrl(),
-    BOMB_ART_URL,
+    cardArtUrl(BOMB_FACE),
     ...(source?.sprites ?? []),
     source?.ground ?? '',
     ...(source?.rocks ?? []),

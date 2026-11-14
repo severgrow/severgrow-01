@@ -1,7 +1,8 @@
 import { allNeighbors, coordKey, parseKey } from '../../../src/engine/index.js';
 import type { Step } from '../logic/anim.js';
 import type { Strike } from '../replay/timeline.js';
-import { BOMB_ART_URL, STRIKE_TIMING, strikeLook } from '../replay/strike.js';
+import { STRIKE_TIMING, strikeLook } from '../replay/strike.js';
+import { BOMB_FACE, cardArtUrl } from './card-art.js';
 import { centerOf, el, hexPath, S } from './geom.js';
 
 /** Same one-card / two-card vocabulary and footprint as the replay. Presentation only. */
@@ -40,7 +41,7 @@ export const showLiveStrike = (
   cards.style.transformBox = 'fill-box'; cards.style.transformOrigin = 'center';
   const h = S*2.15, w = h*256/356;
   const image = (dx: number, degrees: number) => el('image', {
-    class: 'live-strike-card', href: BOMB_ART_URL, x: dx-w/2, y: -h/2, width:w, height:h,
+    class: 'live-strike-card', href: cardArtUrl(BOMB_FACE), x: dx-w/2, y: -h/2, width:w, height:h,
     transform:`rotate(${degrees} ${dx} 0)`, preserveAspectRatio:'xMidYMid meet',
   }, cards);
   if (opts.cards !== false) { if (strike.cards === 2) { image(-w*.28,-9); image(w*.28,9); } else image(0,-4); }
