@@ -239,8 +239,8 @@ html.futa04-information #smart-led-window.scrolling #smart-led-hot {
    gradient spill: light now arrives as the display's own baked bloom, which starts at the
    lit dots and fades in every direction with no edge to read. */
 @keyframes idle-urgency-draw {
-  0%,100% { box-shadow:0 0 0 1px rgba(239,234,220,.44),0 1px 3px rgba(242,237,224,.10) !important; }
-  50% { box-shadow:0 0 0 1px rgba(239,234,220,.72),0 1px 4px rgba(242,237,224,.20) !important; }
+  0%,100% { box-shadow:0 0 4px rgba(239,234,220,.44),0 1px 3px rgba(242,237,224,.10); }
+  50% { box-shadow:0 0 7px 1px rgba(239,234,220,.60),0 1px 4px rgba(242,237,224,.20); }
 }
 @keyframes idle-urgency-grow {
   0%,100% { opacity:1; }
@@ -263,7 +263,7 @@ html.futa04-information #smart-led-window.scrolling #smart-led-hot {
   }
   50% {
     scale:1.04;
-    box-shadow:0 0 0 1px rgba(255,120,90,.72),0 1px 4px rgba(220,70,45,.34),0 5px 14px rgba(20,11,10,.36);
+    box-shadow:0 0 5px 1px rgba(255,120,90,.60),0 1px 4px rgba(220,70,45,.34),0 5px 14px rgba(20,11,10,.36);
   }
 }
 /* Matching board cues while the LED holds the sticky idle re-prompt. */
@@ -536,14 +536,14 @@ html.futa04-information.futa04-card-art-ready #hand .card > .futa04-card-art { b
 html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim):not(.futa04-bloom-pick) { box-shadow:0 0 3px rgba(119,194,115,.4),0 0 6px 1px rgba(88,171,86,.43),0 5px 12px rgba(5,16,9,.30); }
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) { box-shadow:0 0 3px rgba(222,110,83,.5),0 0 7px 1px rgba(190,68,47,.53),0 5px 12px rgba(20,11,10,.34); }
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked { box-shadow:0 0 3px rgba(222,110,83,.5),0 0 7px 1px rgba(190,68,47,.53) !important; }
-html.futa04-information #discard .gd-halo { inset:0; border-radius:6px; }
+html.futa04-information :is(#deck,#discard) :is(.gd-halo,.gd-ring) { inset:0; border-radius:5.9% / 4.2%; }
 /* Both legal draw choices glow softly: a cool white light around the actual card, no outline box
    (owner, 2026-10-22: "remove the contour thing, make the glow a tiny bit brighter and make it
    breathe"). The light is its own layer whose OPACITY breathes on the pile's 1.8 s breath
    (information.ts), so the two move as one and no shadow is ever re-painted per frame. The
    discard's amber edge is reserved for a card that completes a combo. */
 html.futa04-information[data-step='draw'] :is(#deck,#discard).ready .pile-card {
-  border-radius:calc(var(--cw) * .075);
+  border-radius:5.9% / 4.2%;
   box-shadow:none !important;
 }
 html.futa04-information[data-step='draw'] :is(#deck,#discard).ready .pile-card::after {
@@ -558,7 +558,7 @@ html.futa04-information.reduce-motion[data-step='draw'] :is(#deck,#discard).read
 @media (prefers-reduced-motion:reduce) { html.futa04-information[data-step='draw'] :is(#deck,#discard).ready .pile-card::after { animation:none; } }
 html.futa04-information[data-step='draw'] #discard.futa04-bloom-draw .pile-card { box-shadow:none !important; }
 html.futa04-information[data-step='draw'] :is(#deck,#discard) .gd-fx { display:none !important; }
-html.futa04-information[data-step='draw'] #discard.ready:not(.futa04-bloom-draw) .pile-top.card { border-color:var(--c-line); box-shadow:0 1px 2px rgba(0,0,0,.4); }
+html.futa04-information[data-step='draw'] #discard.ready:not(.futa04-bloom-draw) .pile-top.card { border-color:transparent; box-shadow:0 1px 2px rgba(0,0,0,.4); }
 /* When the Throw pile can complete a Bloom it is GOLD, not yellow (owner, 2026-10-26: "the glow
    around discard pile when it completes a bloom looks yellow - make it look more gold than
    yellow").
@@ -581,11 +581,11 @@ html.futa04-information[data-step='draw'] #discard.futa04-bloom-draw .pile-top.c
     0 2px 4px rgba(0,0,0,.45);
   transition:transform var(--dur-ack) var(--ease-standard),box-shadow .2s ease-out;
 }
-html.futa04-information .dock #discard .pile-top { border-radius:calc(var(--cw) * .075); }
+html.futa04-information .dock #discard .pile-top { border-radius:5.9% / 4.2%; }
 /* The empty Throw socket is the same card silhouette, not the legacy dashed rounded box. */
 html.futa04-information .dock #discard .pile-top.empty {
   box-sizing:border-box; border:1px solid color-mix(in srgb,var(--instrument-selection,#f2e5c5) 36%,transparent);
-  border-radius:calc(var(--cw) * .075); background:rgba(8,10,10,.12);
+  border-radius:5.9% / 4.2%; background:rgba(8,10,10,.12);
 }
 /* Legal empty sockets share one warm, recessed treatment on Forest and Volcano turns. */
 html.futa04-information #board .l-over .receptive-well {

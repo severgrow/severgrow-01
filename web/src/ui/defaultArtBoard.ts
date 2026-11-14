@@ -229,8 +229,8 @@ export class DefaultArtBoardView extends BoardView {
     if (!defs.querySelector(`#${clipId}`)) el('path', { d: hexPath(key, S * 1.015, 'flat') }, el('clipPath', { id: clipId, clipPathUnits: 'userSpaceOnUse' }, defs));
     el('image', {
       href: url, x: f(x - k * (fx + W / 2)), y: f(y - k * (fy + H / 2)), width: f(k * W), height: f(k * H),
-      // At half strength over the board's dark base (owner, 2026-11-14: "50% of what's here").
-      preserveAspectRatio: 'none', 'clip-path': `url(#${clipId})`, opacity: 0.5, class: 'default-ground-art fa-painted-ground',
+      // The selected board image is a quiet 10% layer over the dark base; tile art stays opaque.
+      preserveAspectRatio: 'none', 'clip-path': `url(#${clipId})`, opacity: 0.1, class: 'default-ground-art fa-painted-ground',
     }, g);
   }
 
@@ -255,6 +255,10 @@ export class DefaultArtBoardView extends BoardView {
     this.svg.insertBefore(this.layers.rich, this.layers.tiles);
     // The territory's outline runs under the homes: the canopy and the smoke cover it.
     this.svg.insertBefore(this.layers.contour, this.layers.homes);
+    // The board rim is a ground treatment. Keep it beneath the connected contour and the
+    // tree/smoke overhangs, which must remain physically in front of the board light.
+    const planetSkin = this.svg.querySelector<SVGGElement>('.l-planet-skin');
+    if (planetSkin) this.svg.insertBefore(planetSkin, this.layers.contour);
     // THE ONE EXCEPTION (owner, 2026-11-14: "the tile below the home tile still covers the home
     // tile with its top fringe"): a tile below a home lays its grass fringe over the home's lower
     // edge. Its picture is drawn again just above the homes, clipped to the home's hex, so only the

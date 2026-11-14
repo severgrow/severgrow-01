@@ -23,7 +23,10 @@ export type WorldClaim = {
    * a colour string, so the map and the picker can never disagree; the service resolves it.
    */
   colourId: number | null;
+  /** Public appearance chosen by this owner; absent means the established plain-colour default. */
+  skinId?: WorldSkinId | null;
 };
+export type WorldSkinId = 'forest' | 'ash' | 'water' | 'toxic';
 export type WorldSnapshot = { revision: number; claims: WorldClaim[] };
 
 /**
@@ -293,6 +296,9 @@ export interface WorldEconomyStore {
   colourChoice(playerId: string): Promise<{ colourId: number; chosenAt: number } | null>;
   /** Persist a palette choice (`src/tile-colours.ts`). Idempotent: the same id twice is one write. */
   setColourChoice(playerId: string, colourId: number, now: number): Promise<void>;
+  /** Optional for older test stores; production stores persist the authenticated owner's choice. */
+  skinChoice?(playerId: string): Promise<WorldSkinId | null>;
+  setSkinChoice?(playerId: string, skinId: WorldSkinId, now: number): Promise<void>;
   claim(playerId: string, cellId: string, requestId: string, now: number): Promise<ClaimResult>;
   /** Sell one of the player's own tiles back for `SEED_ECONOMY.tileSaleReturn`; idempotent by request. */
   sell(playerId: string, cellId: string, requestId: string, now: number): Promise<SellResult>;

@@ -78,9 +78,17 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
   const action = legalActions(viewFor(grown,0)).find(a=>a.t==='Sprout');
   assert(action?.t === 'Sprout');
   await clickVisibleCard(page, action.card);
+  const growSurface = await page.locator(`#hand [data-card="${action.card}"]`).evaluate(el => {
+    const s = getComputedStyle(el); return { border:s.borderTopColor, outline:s.outlineStyle, glow:s.boxShadow };
+  });
+  check(growSurface.border === 'rgba(0, 0, 0, 0)' && growSurface.outline === 'none' && !growSurface.glow.includes('0px 0px 0px 1px'),
+    `${w}: selected Grow card has edge light without an added contour`);
   const key = `${action.coord.q},${action.coord.r}`;
   const target = page.locator(`#board g.hex-cell[data-key="${key}"]`);
-  const box = await target.boundingBox(); assert(box);
+  // The new artwork deliberately overhangs its hex. Measure and tap the actual hit path,
+  // whose centre is the rule cell, rather than the painted group's larger SVG bounds.
+  const face = target.locator('path.hex');
+  const box = await face.boundingBox(); assert(box);
   await page.screenshot({ path: `/tmp/main2-shots/${w}x${h}-grow.png` });
   const hit = await page.evaluate(([x,y]) => document.elementFromPoint(x!,y!)?.closest('g.hex-cell')?.getAttribute('data-key'), [box.x+box.width/2,box.y+box.height/2]);
   if (hit !== key) console.log(await page.evaluate(([x,y]) => ({hit: document.elementFromPoint(x!,y!)?.outerHTML.slice(0,200),vb: document.querySelector('#board')?.getAttribute('viewBox'),wrap: document.querySelector('#board-wrap')?.getBoundingClientRect().toJSON(),under:getComputedStyle(document.querySelector('#board-wrap')!).getPropertyValue('--cam-under')}), [box.x+box.width/2,box.y+box.height/2]));
@@ -90,16 +98,16 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
     const tip=document.querySelector('#first-tip'); if(!tip || (tip as HTMLElement).hidden) return [];
     const r=tip.getBoundingClientRect();
     const overlaps=(el:Element)=>{const b=el.getBoundingClientRect();return b.width && r.left<b.right && r.right>b.left && r.top<b.bottom && r.bottom>b.top;};
-    return [...keys.filter(k=>{const el=document.querySelector(`#board .hex-cell[data-key="${k}"]`);return el&&overlaps(el);}), ...[...document.querySelectorAll('#board .landmark')].filter(overlaps).map(e=>'home:'+e.getAttribute('data-key'))];
+    return [...keys.filter(k=>{const el=document.querySelector(`#board .hex-cell[data-key="${k}"] path.hex`);return el&&overlaps(el);}), ...[...document.querySelectorAll('#board .landmark')].filter(overlaps).map(e=>'home:'+e.getAttribute('data-key'))];
   },legalKeys);
   check(obscured.length===0,`${w}: tip leaves all playable hexes and both homes clear (${obscured})`);
-  await target.click();
+  await face.click();
   await idle(page);
   let expectedGrow = apply(grown, action);
   const expectedView = viewFor(expectedGrow, 0);
   if (skipPlan(legalActions(expectedView), expectedView.hand.length, true).kind === 'auto') expectedGrow = apply(expectedGrow, {t:'EndAct'});
   check(JSON.stringify(await state(page)) === JSON.stringify(expectedGrow), `${w}: first valid target tap places exact action, including the automatic step`);
-  await target.click(); await idle(page);
+  await face.click(); await idle(page);
   check(JSON.stringify(await state(page)) === JSON.stringify(expectedGrow), `${w}: repeated target tap cannot duplicate the action`);
   check(await page.locator('#board .mark-line,#board .mark-ink').count() === 0, `${w}: artwork communicates ownership without shapes`);
   await page.click('#tool-undo'); await idle(page);
@@ -115,6 +123,9 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
   await clickVisibleCard(page, discard.card);
   check(JSON.stringify(await state(page)) === JSON.stringify(before), `${w}: selecting Throw leaves engine state unchanged`);
   check(await throwCard.evaluate(el => el.classList.contains('futa04-throw-picked') && getComputedStyle(el).filter === 'grayscale(1)'), `${w}: Throw selection is enlarged and colorless`);
+  check(await throwCard.evaluate(el => {
+    const s = getComputedStyle(el); return s.borderTopColor === 'rgba(0, 0, 0, 0)' && s.outlineStyle === 'none' && !s.boxShadow.includes('0px 0px 0px 1px');
+  }), `${w}: selected Throw card has red edge light without an added contour`);
   await clickVisibleCard(page, discard.card);
   await page.waitForTimeout(100);
   check(JSON.stringify(await state(page)) === JSON.stringify(before), `${w}: the second card tap deselects and never throws`);

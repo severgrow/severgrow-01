@@ -100,6 +100,7 @@ try {
       const rail = document.getElementById('futa04-information-rail');
       return !!rail && document.documentElement.classList.contains('futa04-information');
     }, undefined, { timeout: 15_000 });
+    await page.mouse.move(width / 2, 2);
     const trioStyles = () => page.evaluate(() => ['tool-undo', 'futa04-help-button', 'hand-sort']
       .map((id) => {
         const el = document.getElementById(id) as HTMLButtonElement | null;
@@ -113,6 +114,13 @@ try {
       stable = now === last && now !== 'missing|missing|missing' ? stable + 1 : 0;
       last = now;
     }
+    await page.waitForFunction(() => {
+      const undo = document.getElementById('tool-undo') as HTMLButtonElement | null;
+      const hint = document.getElementById('futa04-help-button');
+      if (!undo || !hint) return false;
+      const sameInk = getComputedStyle(undo).color === getComputedStyle(hint).color;
+      return undo.disabled ? !sameInk : sameInk;
+    }, undefined, { timeout: 15_000 });
     check(await page.locator('#futa04-help-button').isVisible(), `${width}: hint is discoverable`);
     const tools = await page.evaluate(() => {
       const hint = document.querySelector<HTMLElement>('#futa04-help-button')!;

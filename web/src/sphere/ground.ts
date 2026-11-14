@@ -27,7 +27,9 @@ export type Kind = (typeof KIND)[keyof typeof KIND];
 export type GroundInput = {
   /** The known (seen) cells of the flat world. */
   cells: readonly { id: string }[];
-  claims: readonly { cellId: string; ownerId: string; colour: string }[];
+  claims: readonly { cellId: string; ownerId: string; colour: string; skin?: 'forest' | 'ash' | 'water' | 'toxic' | null }[];
+  /** The viewer's default set on an older server or an account without a saved Planet choice. */
+  ownSkin?: 'forest' | 'ash' | 'water' | 'toxic';
   /** The flat map's undiscovered rings. Not drawn on the planet (owner, 2026-11-04); kept for callers. */
   fog?: Iterable<string>;
   /** Cells under an open challenge. */
@@ -49,6 +51,8 @@ export type Ground = {
   /** Per cell: bit i set when edge i borders a different owner or a different kind of ground. */
   border: Uint8Array;
   disputed: Uint8Array;
+  /** 0 is plain colour; 1..4 select Forest, Ash, Water or Toxic in the shared atlas. */
+  skin: Uint8Array;
   /** Per cell: the owner's id, for "same owner" questions; null where nobody owns it. */
   owner: (string | null)[];
 };
@@ -67,6 +71,7 @@ export const groundOf = (sphere: Sphere, map: LatticeMap, input: GroundInput): G
   const colour = new Float32Array(count * 3);
   const border = new Uint8Array(count);
   const disputed = new Uint8Array(count);
+  const skin = new Uint8Array(count);
   const owner: (string | null)[] = new Array<string | null>(count).fill(null);
   const paint = (index: number, k: Kind, rgb: readonly number[]) => {
     kind[index] = k;
@@ -96,6 +101,8 @@ export const groundOf = (sphere: Sphere, map: LatticeMap, input: GroundInput): G
     if (index === undefined) continue;
     paint(index, claim.ownerId === input.me ? KIND.mine : KIND.owned, colourRgb(claim.colour));
     owner[index] = claim.ownerId;
+    const id = claim.skin ?? (claim.ownerId === input.me ? input.ownSkin : null);
+    skin[index] = id === 'forest' ? 1 : id === 'ash' ? 2 : id === 'water' ? 3 : id === 'toxic' ? 4 : 0;
   }
   for (const id of input.disputes ?? []) {
     const index = map.cellOf.get(id);
@@ -111,7 +118,7 @@ export const groundOf = (sphere: Sphere, map: LatticeMap, input: GroundInput): G
     });
     border[cell.index] = bits;
   }
-  return { kind, colour, border, disputed, owner };
+  return { kind, colour, border, disputed, skin, owner };
 };
 
 /** The planet cell under flat tile `id`, or null when that tile is off the planet's map. */

@@ -44,7 +44,7 @@ const demoGround = (sphere: Sphere): Ground => {
   for (const [v, k, c, who] of holdings) for (const [i, r] of rings(nearest(normalise([v[0], v[1], v[2], 0]).slice(0, 3) as never), 2)) if (r <= 2) set(i, k, hexRgb(c), who);
   for (const c of sphere.cells) if (c.pentagon) { kind[c.index] = KIND.pentagon; colour.set(GROUND_RGB.pentagon, c.index * 3); }
   for (const c of sphere.cells) c.neighbours.forEach((nb, e) => { if (owner[c.index] !== owner[nb] || kind[c.index] !== kind[nb]) border[c.index] = (border[c.index] ?? 0) | (1 << e); });
-  return { kind, colour, border, disputed, owner };
+  return { kind, colour, border, disputed, skin: new Uint8Array(n), owner };
 };
 
 export const mountPlanet = (pane: HTMLElement, art: () => LabState) => {

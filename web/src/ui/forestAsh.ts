@@ -41,10 +41,7 @@ import rock3 from '../assets/forest-ash/rock-03.webp?url';
 import rock4 from '../assets/forest-ash/rock-04.webp?url';
 import rock5 from '../assets/forest-ash/rock-05.webp?url';
 import goldAtlas from '../assets/forest-ash/gold-frames.webp?url';
-import planetForest from '../assets/forest-ash/planet-forest.webp?url';
-import planetAsh from '../assets/forest-ash/planet-ash.webp?url';
-import planetWater from '../assets/forest-ash/planet-water.webp?url';
-import planetToxic from '../assets/forest-ash/planet-toxic.webp?url';
+import planetAll from '../assets/forest-ash/planet-all.webp?url';
 import water1 from '../assets/forest-ash/water-01.webp?url';
 import water2 from '../assets/forest-ash/water-02.webp?url';
 import water3 from '../assets/forest-ash/water-03.webp?url';
@@ -111,10 +108,8 @@ export const TERRITORIES: Record<TerritoryId, { tiles: readonly FaSprite[]; home
 export const TERRITORY_BASE_COLOUR: Record<TerritoryId, string> = { forest: '#315321', ash: '#302c2c', water: '#173a52', toxic: '#2b2a1c' };
 export const faBaseColour = (owner: 0 | 1) => TERRITORY_BASE_COLOUR[sides[owner]];
 
-/** Each set's nine plain tiles for the planet (scripts/build-planet-tiles.py): a 3x3 atlas. */
-const PLANET_ATLAS: Record<TerritoryId, string> = { forest: planetForest, ash: planetAsh, water: planetWater, toxic: planetToxic };
-/** Your land on the planet wears your own set (player 0's side of the board). */
-export const faPlanetAtlasUrl = (): string => PLANET_ATLAS[sides[0]];
+/** Four sets in one 1024px texture, uploaded once when the shared Planet opens. */
+export const faPlanetAllUrl = (): string => planetAll;
 
 /** The two sides on the board: [player 0's set, player 1's set]. */
 let sides: [TerritoryId, TerritoryId] = ['forest', 'ash'];
@@ -123,15 +118,15 @@ export const setFaSides = (mine: TerritoryId, theirs: TerritoryId) => { sides = 
 
 /**
  * BOARD BACKGROUNDS (owner, 2026-11-14): painted boards whose hexes sit on the cells. 'classic' is
- * the ground the board had before (a tiled texture). Grey is to be the default once its file
- * arrives; until then the classic ground stays.
+ * the ground the board had before (a tiled texture). Cinder is the quiet neutral default;
+ * the painted image is only a faint 10% layer beneath the tile artwork.
  */
 export type BackgroundId = 'classic' | (typeof BACKGROUND_NAMES)[number];
 const BG_URLS: Record<(typeof BACKGROUND_NAMES)[number], string> = { cocoa: bg_cocoa, lichen: bg_lichen, cinder: bg_cinder, clay: bg_clay, slate: bg_slate };
 export const BACKGROUNDS: readonly { id: BackgroundId; url: string | null }[] = [
   { id: 'classic', url: null }, ...BACKGROUND_NAMES.map((id) => ({ id, url: BG_URLS[id] })),
 ];
-let background: BackgroundId = 'classic';
+let background: BackgroundId = 'cinder';
 export const faBackground = () => background;
 export const setFaBackground = (id: BackgroundId) => { background = id; };
 export const faBackgroundUrl = (): string | null => BACKGROUNDS.find((b) => b.id === background)?.url ?? null;

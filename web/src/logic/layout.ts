@@ -297,7 +297,7 @@ const shapeUnits = (sh: Shape, orient: Orient, m: number) => {
 const isSide = (v: Viewport) => (v.w >= 760 && v.w >= v.h) || (v.w > v.h && v.h <= 560);
 
 /** The card size for a full hand in `width` px: big numerals, at least MIN_SLICE of each card. */
-export const cardSize = (width: number, maxHand = MAX_HAND, cap = 72) => {
+export const cardSize = (width: number, maxHand = MAX_HAND, cap = 76) => {
   const avail = width - 2 * (HAND_EDGE + SORT_W); // the fan sits between the two fixed end slots
   const w = Math.max(44, Math.min(cap, Math.floor(avail - (maxHand - 1) * MIN_SLICE), Math.floor(width * 0.2)));
   const slice = Math.min(w + 4, Math.floor((avail - w) / (maxHand - 1)));
@@ -383,7 +383,7 @@ export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND, thumb
     const wideDesktop = W >= 1500;
     const dockW = wideDesktop ? Math.min(950, Math.round(W * 0.47))
       : Math.min(420, Math.max(340, Math.round(W * 0.32)));
-    const card = cardSize(dockW, maxHand, wideDesktop ? Math.min(150, Math.round(dockW * 0.17)) : 72);
+    const card = cardSize(dockW, maxHand, wideDesktop ? Math.min(150, Math.round(dockW * 0.17)) : 76);
     const rows = { table: Math.max(HEIGHTS.table, card.h + PILE_LABEL), hand: card.h + HEIGHTS.handPad };
     // A phone on its side (owner, 2026-10-24): the board takes the whole height with the same tiny
     // margin above and below. The menu key and the wordmark sit in the corners, where a hexagonal

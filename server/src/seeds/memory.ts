@@ -26,6 +26,7 @@ import type {
   TrainingTicket,
   WorldChallenge,
   WorldClaim,
+  WorldSkinId,
   WorldDispute,
   WorldEconomyStore,
   WorldSnapshot,
@@ -44,7 +45,7 @@ type Receipt = { input: RewardInput; awarded: number; reason: string | null };
 type LedgerEntry = { id: string; playerId: string; delta: number; category: string; sourceKey: string; balanceAfter: number; createdAt: number };
 
 /** A claim as the memory store holds it: the owner colour is added on read, never stored twice. */
-type StoredClaim = Omit<WorldClaim, 'colourId'>;
+type StoredClaim = Omit<WorldClaim, 'colourId' | 'skinId'>;
 
 /** Synchronous critical sections under Node's event loop; the Postgres store uses row locks. */
 export class MemoryWorldEconomyStore implements WorldEconomyStore {
@@ -59,6 +60,7 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
   readonly challengeRequests = new Map<string, string>();
   /** Chosen palette slot per player (src/tile-colours.ts). Absent = derived from the player id. */
   readonly colours = new Map<string, number>();
+  readonly skins = new Map<string, WorldSkinId>();
   /** When each choice was saved, for the one-change-per-24 h rule. Kept beside the slot. */
   readonly colourTimes = new Map<string, number>();
   /** Verified Campaign clear shapes (migration 0021), one best row per level and player. */
@@ -82,7 +84,7 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
   async world(): Promise<WorldSnapshot> {
     const claims = [];
     for (const claim of this.claims.values()) {
-      claims.push({ ...claim, ownerLevel: await this.campaignHighestLevel(claim.ownerId), colourId: this.colours.get(claim.ownerId) ?? null });
+      claims.push({ ...claim, ownerLevel: await this.campaignHighestLevel(claim.ownerId), colourId: this.colours.get(claim.ownerId) ?? null, skinId: this.skins.get(claim.ownerId) ?? null });
     }
     return { revision: this.revision, claims };
   }
@@ -135,6 +137,8 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     this.colours.set(playerId, colourId);
     this.colourTimes.set(playerId, now);
   }
+  async skinChoice(playerId: string): Promise<WorldSkinId | null> { return this.skins.get(playerId) ?? null; }
+  async setSkinChoice(playerId: string, skinId: WorldSkinId): Promise<void> { this.skins.set(playerId, skinId); }
   async campaignHighestLevel(playerId: string): Promise<number | null> {
     let highest: number | null = null;
     for (const receipt of this.receipts.values()) {

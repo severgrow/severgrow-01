@@ -10,7 +10,7 @@ describe('the owner removes pile contour frames',()=>{
   });
   it('uses the actual card corner ratio for the quiet empty socket',()=>{
     const socket=rule('html.futa04-information .dock #discard .pile-top.empty {');
-    expect(socket).toContain('border-radius:calc(var(--cw) * .075)');
+    expect(socket).toContain('border-radius:5.9% / 4.2%');
     expect(socket).toMatch(/border:1px solid/);expect(socket).not.toMatch(/dashed|animation/);
   });
 });

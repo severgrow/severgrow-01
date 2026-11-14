@@ -1,6 +1,7 @@
 import type { DuelClient } from '../../../server/src/client.js';
 import { shouldReportFailure } from './blips.js';
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
+import { connectSkinSwitch, disconnectSkinSwitch } from './skin-switch.js';
 import type { SeedWallet, WorldChallengeWire, WorldChallengesPayload, WorldDispute } from '../../../server/src/seeds/types.js';
 import { worldNeighbours } from '../../../server/src/world.js';
 import { planetTileCount } from '../../../src/planet/geometry.js';
@@ -1230,7 +1231,10 @@ export class WorldView {
       this.identityKnown = true;
       if (!this.active) return;
       const changedIdentity = this.identity?.playerId !== identity?.playerId || this.identity?.token !== identity?.token;
-      if (changedIdentity) this.identity = identity;
+      if (changedIdentity) {
+        this.identity = identity;
+        if (!identity) disconnectSkinSwitch();
+      }
       this.chat.prefetch();
       // Paint the last good list from this device at once, then replace it with the fresh read. A
       // guest has no key at all, and never inherits another account's remembered list.
@@ -1260,6 +1264,7 @@ export class WorldView {
   freezeMenuPreview(on: boolean) { if (this.menuPreview) this.planet?.freeze(on); }
 
   close(instant = false) {
+    disconnectSkinSwitch();
     // A tile selection belongs to this visit. Clear both the retained globe highlight and its
     // action bar before handing the planet back to the menu; camera memory is independent.
     if (this.selected !== null) this.deselect();
@@ -1344,12 +1349,14 @@ export class WorldView {
       // per claim on a read that already happened.
       const colourChanged = this.world?.claims.length !== map.world.claims.length ||
         map.world.claims.some((claim, index) => this.world?.claims[index]?.colour !== claim.colour);
+      const skinChanged = this.world?.claims.length !== map.world.claims.length ||
+        map.world.claims.some((claim, index) => this.world?.claims[index]?.skin !== claim.skin);
       // The ground that changed hands, captured BEFORE the new map replaces the old one: this is the
       // only moment that knows both answers, and it is what the takeover ceremony points at.
       const moved = takeovers(this.world?.claims ?? null, map.world.claims, interfaceMotionAllowed());
       let painted = false;
       if (this.fromMemory || !this.world || map.world.revision > this.world.revision ||
-        (map.world.revision === this.world.revision && (force || walletChanged || ownerChanged || challengeChanged || colourChanged))) {
+        (map.world.revision === this.world.revision && (force || walletChanged || ownerChanged || challengeChanged || colourChanged || skinChanged))) {
         if (this.world?.version !== map.world.version) {
           this.box = lastChosenCamera(browserStorage(), map.world.version);
           this.touched = this.box !== null;
@@ -2931,6 +2938,7 @@ export class WorldView {
 
   /** Read the player's colour (a stored choice, or the palette default). Once per visit. */
   private async loadColour(identity: Identity): Promise<void> {
+    void connectSkinSwitch(this.client, identity.token, () => void this.refresh());
     try {
       const answer = await this.client.worldColour(identity.token);
       if (identity !== this.identity || !this.active) return;

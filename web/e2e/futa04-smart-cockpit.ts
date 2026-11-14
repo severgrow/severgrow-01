@@ -66,6 +66,7 @@ try {
     await page.waitForFunction(()=>document.getElementById('smart-panel') && document.querySelector('#hand .card'));
     // DRAW! holds ~1.2s under Reduce Motion, then score rests until the 4s idle re-prompt.
     await page.waitForFunction(()=>document.getElementById('smart-led-text')?.textContent?.trim()==='0:0',undefined,{timeout:4000});
+    await page.locator('#futa04-box > .piles').evaluate(el => Promise.all(el.getAnimations().map(animation => animation.finished)));
     let start=await rects(page); aligned(start,`${name} Draw`);
     check(await page.locator('#smart-led-text').innerText()==='0:0',`${name}: score rests in the LED during Draw`);
     check(await page.locator('#smart-led-cells').evaluate(el => (el as HTMLCanvasElement).width > 0),`${name}: phase text uses real LED cells`);
@@ -85,7 +86,10 @@ try {
     const x=start.piles[0]!.pile.x;
     for(let i=0;i<4;i++) {
       await page.locator('#hand-sort').click();
-      await page.waitForTimeout(240); // let the card-only sort animation finish
+      // Observe the settled card reorder rather than guessing a delay under a loaded CI runner.
+      await page.locator('#hand').evaluate(el => Promise.all(el.getAnimations({ subtree: true })
+        .filter(animation => Number.isFinite(animation.effect?.getComputedTiming().iterations ?? Infinity))
+        .map(animation => animation.finished)));
       const now=await rects(page);aligned(now,`${name} sort ${i+1}`);
       check(Math.abs(now.piles[0]!.pile.x-x)<1&&Math.abs(now.piles[1]!.pile.x-start.piles[1]!.pile.x)<1,`${name}: sorting keeps both piles anchored`);
     }

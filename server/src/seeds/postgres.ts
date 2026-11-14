@@ -29,6 +29,7 @@ import type {
   WorldChallengeStatus,
   WorldDispute,
   WorldEconomyStore,
+  WorldSkinId,
 } from './types.js';
 import { emptyWallet } from './types.js';
 
@@ -147,6 +148,13 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
       `select 1 from information_schema.tables where table_schema = 'public' and table_name = 'player_tile_colours'`,
     ).then((result) => result.rows.length > 0).catch(() => false);
     return colourTable;
+  };
+  let skinTable: Promise<boolean> | null = null;
+  const hasSkinTable = (): Promise<boolean> => {
+    skinTable ??= pool.query(
+      `select 1 from information_schema.tables where table_schema = 'public' and table_name = 'player_tile_skins'`,
+    ).then((result) => result.rows.length > 0).catch(() => false);
+    return skinTable;
   };
   /**
    * Is `campaign_clears` present (migration 0021)? Probed once per store, exactly like the colour
@@ -272,6 +280,7 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
     // Probed OUTSIDE the transaction: it is a catalogue read, and it must not take a second
     // connection while this read holds one.
     const colourTable = await hasColourTable();
+    const skinTable = await hasSkinTable();
     return transaction(pool, async (client) => {
       // A shared lock gives a revision and ownership list from the same committed claim state.
       // Claim writers take this row exclusively before inserting a claim.
@@ -284,9 +293,9 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
       // not match yields NULL → the claim carries no level, not a misleading 1. The lateral is
       // indexed by the receipts' (player_id, source_key) primary key, so it stays cheap on a map
       // every client polls.
-      const claims = await client.query(`select c.cell_id, c.owner_id, c.claimed_at, p.display_name as owner_name, lvl.level as owner_level${colourTable ? ', tc.colour_id' : ''}
+      const claims = await client.query(`select c.cell_id, c.owner_id, c.claimed_at, p.display_name as owner_name, lvl.level as owner_level${colourTable ? ', tc.colour_id' : ''}${skinTable ? ', ts.skin_id' : ''}
                     from world_claims c
-                    join players p on p.id = c.owner_id${colourTable ? '\n                    left join player_tile_colours tc on tc.player_id = c.owner_id' : ''}
+                    join players p on p.id = c.owner_id${colourTable ? '\n                    left join player_tile_colours tc on tc.player_id = c.owner_id' : ''}${skinTable ? '\n                    left join player_tile_skins ts on ts.player_id = c.owner_id' : ''}
                     left join lateral (
                       select max((substring(r.source_key from '^campaign:c[0-9]+-([0-9]+)$'))::int) as level
                       from seed_reward_receipts r
@@ -303,6 +312,7 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
           // No table (migration 0020 not applied yet) or no row for this owner: no choice, and the
           // service derives the player's default. The map never breaks on an unmigrated database.
           colourId: colourTable && r.colour_id != null ? number(r.colour_id) : null,
+          skinId: skinTable && ['forest', 'ash', 'water', 'toxic'].includes(String(r.skin_id)) ? r.skin_id as WorldSkinId : null,
         })),
       };
     });
@@ -393,6 +403,20 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => {
       `insert into player_tile_colours(player_id, colour_id, chosen_at) values($1,$2,$3)
        on conflict (player_id) do update set colour_id = excluded.colour_id, chosen_at = excluded.chosen_at`,
       [playerId, colourId, now],
+    );
+  },
+  async skinChoice(playerId) {
+    if (!(await hasSkinTable())) return null;
+    const { rows } = await pool.query('select skin_id from player_tile_skins where player_id = $1', [playerId]);
+    const id = rows[0]?.skin_id;
+    return ['forest', 'ash', 'water', 'toxic'].includes(String(id)) ? id as WorldSkinId : null;
+  },
+  async setSkinChoice(playerId, skinId, now) {
+    if (!(await hasSkinTable())) throw Object.assign(new Error('Skin migration pending.'), { code: 'SKIN_MIGRATION_PENDING' });
+    await pool.query(
+      `insert into player_tile_skins(player_id, skin_id, chosen_at) values($1,$2,$3)
+       on conflict (player_id) do update set skin_id = excluded.skin_id, chosen_at = excluded.chosen_at`,
+      [playerId, skinId, now],
     );
   },
   async claim(playerId, cellId, requestId, now): Promise<ClaimResult> {

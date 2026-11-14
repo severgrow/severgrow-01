@@ -259,7 +259,7 @@ export type WorldMapPayload = {
     version: number;
     revision: number;
     cells: { id: string; q: number; r: number }[];
-    claims: { cellId: string; ownerId: string; ownerName: string | null; ownerLevel: number | null; ownerTag: string; colour: string; claimedAt: number }[];
+    claims: { cellId: string; ownerId: string; ownerName: string | null; ownerLevel: number | null; ownerTag: string; colour: string; claimedAt: number; skin?: 'forest' | 'ash' | 'water' | 'toxic' | null }[];
     cost: number;
     /**
      * Historical field, kept for older clients. 0 since 2026-10-29: a challenge costs no Seeds; the

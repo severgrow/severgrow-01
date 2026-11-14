@@ -17,6 +17,7 @@ import type {
   WorldChallengeWire,
   WorldChallengesPayload,
   WorldEconomyStore,
+  WorldSkinId,
 } from './types.js';
 import { stepCampaignProof, stepTrainingProof, verifyCampaignProof, verifyLessonProof, verifyTrainingProof } from './verify.js';
 import type { ProofStep, VerifiedOffline } from './verify.js';
@@ -129,6 +130,7 @@ export class WorldEconomyService {
         ownerLevel: claim.ownerLevel,
         ownerTag: playerTag(claim.ownerId),
         colour: colourById(colours.get(claim.cellId) ?? colourIdFor(claim.ownerId, claim.colourId)).css,
+        skin: claim.skinId ?? null,
         claimedAt: claim.claimedAt,
       })),
       cost: SEED_ECONOMY.tileCost,
@@ -144,6 +146,26 @@ export class WorldEconomyService {
   }
 
   wallet(player: PlayerRecord) { return this.store.wallet(player.id); }
+
+  async skin(player: PlayerRecord): Promise<WorldSkinId | null> {
+    return await this.store.skinChoice?.(player.id) ?? null;
+  }
+
+  async chooseSkin(player: PlayerRecord, choice: unknown): Promise<WorldSkinId> {
+    if (choice !== 'forest' && choice !== 'ash' && choice !== 'water' && choice !== 'toxic') {
+      throw new ApiError('INVALID_REQUEST', 'Choose a tile skin.');
+    }
+    if (!this.store.setSkinChoice) throw new ApiError('SKIN_UNAVAILABLE', 'Skins are being updated.');
+    try {
+      await this.store.setSkinChoice(player.id, choice, this.now());
+    } catch (error) {
+      if ((error as { code?: unknown } | null)?.code === 'SKIN_MIGRATION_PENDING') {
+        throw new ApiError('SKIN_MIGRATION_PENDING', 'Skins are being updated. Try again shortly.');
+      }
+      throw error;
+    }
+    return choice;
+  }
 
   /**
    * ANOTHER PLAYER'S PUBLIC PROFILE (owner, 2026-11-01: "allow to look up other peoples profile on

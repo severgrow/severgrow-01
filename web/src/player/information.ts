@@ -45,7 +45,7 @@ html.futa04-information #hand .card.futa04-bloom-pick {
   /* No border line (owner, 2026-11-14: "never do the contour frame when selected"): the aqua glow
      alone marks the pick, and it wraps the printed card (player/cards.ts). */
   border-color: transparent;
-  box-shadow: 0 0 12px rgba(143, 211, 201, 0.38), inset 0 0 8px rgba(143, 211, 201, 0.10);
+  box-shadow: 0 0 3px rgba(143, 211, 201, 0.48), 0 0 12px 2px rgba(143, 211, 201, 0.28);
 }
 .futa04-information .dock .hand.waiting .card {
   opacity: .38 !important;
@@ -106,9 +106,9 @@ html.futa04-information #hand .card.futa04-bloom-pick {
 .futa04-information .futa04-mini-card { flex-shrink: 1; min-width: 8px; padding-inline: 0; }
 .futa04-information .pile-label { display: none; }
 .futa04-information #deck.coach-glow { box-shadow: none; }
-.futa04-information #discard.futa04-bloom-draw .pile-top { border-color: var(--c-gold); }
+.futa04-information #discard.futa04-bloom-draw .pile-top { border-color: transparent; }
 .futa04-information #hand .card.futa04-throw-picked {
-  filter: grayscale(1) !important; border-color: #dedede; box-shadow: none !important;
+  filter: grayscale(1) !important; border-color: transparent; box-shadow: none !important;
   transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 18px)) scale(1.31);
 }
 .futa04-information[data-thumb] #hand .card.futa04-throw-picked {
@@ -398,7 +398,7 @@ html.futa04-information #hand .card { touch-action: none; }
    toward a Bloom opts out: its edge is the Bloom's aqua (see the bloom-pick rule above), never the
    green of a plain Grow. */
 html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim):not(.futa04-bloom-pick) {
-  box-shadow: 0 0 0 1px rgba(119,179,116,.22), 0 0 8px 1px rgba(88,158,89,.18), 0 5px 15px rgba(5,16,9,.30);
+  box-shadow: 0 0 3px rgba(119,179,116,.22), 0 0 8px 1px rgba(88,158,89,.18), 0 5px 15px rgba(5,16,9,.30);
 }
 /* Scale is separate from the fan's rotate/translate, preserving its hit targets. */
 @keyframes futa04-card-breathe { 0%,100% { scale: 1; } 50% { scale: 1.055; } }

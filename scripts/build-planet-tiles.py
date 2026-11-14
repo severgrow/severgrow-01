@@ -47,7 +47,8 @@ def main() -> None:
     place = placements()
     k = (CELL / 2) / S  # px per board unit
     mask = hex_mask(CELL)
-    for name in SETS:
+    combined = Image.new("RGBA", (SIZE * 2, SIZE * 2))
+    for skin_index, name in enumerate(SETS):
         atlas = Image.new("RGBA", (SIZE, SIZE))
         for i in range(9):
             key = f"{name}-0{i + 1}"
@@ -59,7 +60,10 @@ def main() -> None:
             a[..., 3] *= mask
             atlas.alpha_composite(Image.fromarray(a.round().astype(np.uint8), "RGBA"), ((i % 3) * CELL, (i // 3) * CELL))
         atlas.save(ART / f"planet-{name}.webp", "WEBP", quality=84, method=6)
+        combined.alpha_composite(atlas, ((skin_index % 2) * SIZE, (skin_index // 2) * SIZE))
         print(f"  planet-{name}.webp")
+    combined.save(ART / "planet-all.webp", "WEBP", quality=84, method=6)
+    print("  planet-all.webp")
 
 
 if __name__ == "__main__":

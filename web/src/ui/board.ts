@@ -433,7 +433,8 @@ export class BoardView {
    * THE BOARD'S PLANET SKIN (0.75, owner 2026-11-04: "Board edges darken slightly, like the planet's
    * rim. Tiles take the planet's matte slabs and fine grout lines" and "Turn rim: a thin glow around the
    * board's edge like the planet's atmosphere: cream on the player's turn, dim on the opponent's").
-   * Drawn once per setup, above the tiles and homes and below every overlay, and never hit-tested:
+   * Drawn once per setup, above the tiles and beneath overlays, and never hit-tested. The
+   * default-art board places its home canopy and smoke above this ground treatment:
    *  - the slab: one soft top light and bottom shade per cell (the planet's chamfered, matte tiles);
    *  - the grout: a fine dark line round every cell;
    *  - the rim: a radial shade toward the board's edge, like the planet's limb;

@@ -44,6 +44,8 @@ export type ApiErrorCode =
   // setup: migration 0020 (a player's tile colour) has not been applied. The choice is refused
   // rather than silently dropped, and the map keeps working on the derived colour.
   | 'COLOUR_MIGRATION_PENDING'
+  | 'SKIN_MIGRATION_PENDING'
+  | 'SKIN_UNAVAILABLE'
   // the one-change-per-24 h rule (owner, 2026-10-30). 409: the request is valid, the clock is not.
   | 'COLOUR_COOLDOWN'
   // everything else
@@ -81,6 +83,8 @@ const STATUS: Record<ApiErrorCode, number> = {
   ADMIN_MIGRATION_PENDING: 503,
   CHALLENGE_MIGRATION_PENDING: 503,
   COLOUR_MIGRATION_PENDING: 503,
+  SKIN_MIGRATION_PENDING: 503,
+  SKIN_UNAVAILABLE: 503,
   COLOUR_COOLDOWN: 409,
   INTERNAL: 500,
 };

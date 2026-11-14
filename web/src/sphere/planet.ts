@@ -18,7 +18,7 @@ import { backdropHeld, onBackdropChange } from '../ui/render-gate.js';
 import { isDoubleTap, type TapPoint } from '../logic/double-tap.js';
 import { markPlanetPainted } from '../player/startup.js';
 import { uprightTarget,northUpDrag,NORTH_PITCH_LIMIT,coastGain,coastStep } from './upright.js';
-import { faPlanetAtlasUrl } from '../ui/forestAsh.js';
+import { faPlanetAllUrl, faSides } from '../ui/forestAsh.js';
 import { tileFace } from './tile-face.js';
 import { menuDiscRadius } from '../player/planet-lockup.js';
 import { claimSpace, DRIFT_PX_PER_MS, DRIFT_Y_SHARE, freeSpace, spaceDrift } from './space.js';
@@ -516,7 +516,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     if (!renderer || tilesFor === renderer || typeof Image === 'undefined') return;
     const made = tilesFor = renderer, tiles = new Image();
     tiles.decoding = 'async';
-    tiles.src = faPlanetAtlasUrl();
+    tiles.src = faPlanetAllUrl();
     void tiles.decode().then(() => { if (renderer === made && !disposed) { made.setTiles(tiles); ask(); } }).catch(() => undefined);
   };
   const fail = (text: string) => { fallback.textContent = text; fallback.hidden = false; canvas.hidden = true;announcePaint(); };
@@ -700,14 +700,14 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       input = next;
       const fog = [...(next.fog ?? [])];
       const disputes = [...(next.disputes ?? [])];
-      const sig = `${next.me}|${next.growAnywhere ? 1 : 0}|${next.cells.length}|${next.claims.map((c) => `${c.cellId}:${c.ownerId}:${c.colour}`).join(',')}|${fog.length}|${disputes.join(',')}`;
+      const sig = `${next.me}|${faSides()[0]}|${next.growAnywhere ? 1 : 0}|${next.cells.length}|${next.claims.map((c) => `${c.cellId}:${c.ownerId}:${c.colour}:${c.skin ?? ''}`).join(',')}|${fog.length}|${disputes.join(',')}`;
       const index = next.selected ? map.cellOf.get(next.selected) ?? null : null;
       // A REFRESH THAT CHANGES NOTHING DRAWS NOTHING: Territory re-sends the same world on every
       // poll, and that used to repaint the planet and re-pulse the selected tile each time.
       const newGround = sig !== signature, newSelection = index !== selected;
       if (newGround) {
         signature = sig;
-        ground = groundOf(sphere, map, { ...next, fog, disputes });
+        ground = groundOf(sphere, map, { ...next, ownSkin: faSides()[0], fog, disputes });
         selected = index;
         renderer?.setGround(ground, selected, kinOf(selected));
       } else if (newSelection) {

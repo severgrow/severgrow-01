@@ -135,6 +135,7 @@ jobs:
           - { suite: territory-gestures-ios, artifact: futa04 }
           - { suite: sphere-test, artifact: futa05-sphere }
           - { suite: sphere-test-ios, artifact: futa05-sphere }
+          - { suite: planet-skins, artifact: futa05-sphere }
           - { suite: planet-matte, artifact: futa05-sphere }
           - { suite: blast-input, artifact: futa05-sphere }
           - { suite: blast-input-ios, artifact: futa05-sphere }

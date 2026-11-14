@@ -505,6 +505,17 @@ export class DuelClient {
     return response.colour;
   }
 
+  async worldSkin(token: string): Promise<'forest' | 'ash' | 'water' | 'toxic' | null> {
+    const response = await this.request<{ skin: 'forest' | 'ash' | 'water' | 'toxic' | null }>('GET', '/v1/world/skin', { token });
+    return response.skin;
+  }
+
+  async chooseWorldSkin(token: string, skin: 'forest' | 'ash' | 'water' | 'toxic') {
+    const response = await this.request<{ skin: 'forest' | 'ash' | 'water' | 'toxic' }>(
+      'POST', '/v1/world/skin', { token, body: { skin } });
+    return response.skin;
+  }
+
   /**
    * The account's place: the furthest Campaign level its verified first-clear receipts show. It
    * rides the same authenticated wallet read, so no new route and no extra round trip is invented;

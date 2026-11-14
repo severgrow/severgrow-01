@@ -23,7 +23,11 @@ const [first,second]=blast.cards;const kind=kindOf(blast)!;
 const boardKey=coordKey(blast.target);
 const empty=Object.entries(state.board).find(([k,t])=>!t&&state.terrain[k]==='normal')![0];
 const point=async(p:Page,selector:string)=>p.evaluate(sel=>{
- const e=document.querySelector<HTMLElement>(sel);if(!e)throw Error('Missing '+sel);const r=e.getBoundingClientRect();
+ const e=document.querySelector<HTMLElement>(sel);if(!e)throw Error('Missing '+sel);
+ // Tile illustrations spill outside the rule hex. The SVG group bounds are visual, not
+ // clickable geometry, so sample the fixed hex path while keeping the original target.
+ const core=e.matches('.hex-cell')?e.querySelector(':scope > path.hex')??e:e;
+ const r=core.getBoundingClientRect();
  for(const fy of [.3,.15,.5,.7,.9])for(const fx of [.5,.25,.75,.1,.9]){
   const x=r.left+r.width*fx,y=r.top+r.height*fy;
   if(document.elementFromPoint(x,y)?.closest(sel)===e)return {x,y};
@@ -65,6 +69,11 @@ try{
    const p=await open();await pair(p);await p.screenshot({path:`${shots}/paired-${width}.png`});
    const picked=await p.locator(`#hand [data-card="${first}"],#hand [data-card="${second}"]`).evaluateAll(es=>es.map(e=>getComputedStyle(e).getPropertyValue('--lift')));
    assert.equal(picked[0],picked[1],'both Bombs lift together');
+   const selectedSurfaces=await p.locator(`#hand [data-card="${first}"],#hand [data-card="${second}"]`).evaluateAll(es=>es.map(e=>{
+     const style=getComputedStyle(e);return {border:style.borderTopColor,outline:style.outlineStyle,glow:style.boxShadow};
+   }));
+   assert(selectedSurfaces.every(s=>s.border==='rgba(0, 0, 0, 0)'&&s.outline==='none'&&s.glow.includes('143, 211, 201')),
+     'selected Bombs have one aqua glow around the card with no second contour');
    await tap(p,`#board .hex-cell[data-key="${boardKey}"]`,touch);
    await p.waitForFunction(ids=>{const h=(window as any).__severgrow;return !h.busy()&&ids.every(id=>!h.state().hands[0].some((c:any)=>c.id===id));},blast.cards).catch(async error=>{const trace=await p.evaluate(()=>({events:(window as any).__inputTrace,ghost:document.querySelector('.drag-ghost')?.outerHTML.slice(0,300),selection:(window as any).__severgrow.sel(),busy:(window as any).__severgrow.busy(),touch:getComputedStyle(document.getElementById('smart-bloom-button')!).touchAction,dim:document.getElementById('smart-bloom-button')?.hasAttribute('data-drag-dim')}));throw new Error('Native Blast trace '+JSON.stringify(trace),{cause:error});});
    assert.deepEqual(await p.evaluate(()=>(window as any).__severgrow.state().board),apply(state,blast).board);

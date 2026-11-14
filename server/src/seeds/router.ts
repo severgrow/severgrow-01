@@ -73,6 +73,13 @@ export const createWorldEconomyRouter = (deps: {
       const body = await bodyOf(req);
       return ok(200, { colour: await economy.chooseColour(player, body.colourId) });
     }
+    if (req.method === 'GET' && path === '/v1/world/skin') {
+      return ok(200, { skin: await economy.skin(player) });
+    }
+    if (req.method === 'POST' && path === '/v1/world/skin') {
+      const body = await bodyOf(req);
+      return ok(200, { skin: await economy.chooseSkin(player, body.skin) });
+    }
     if (req.method === 'POST' && path === '/v1/seeds/achievements/claim') {
       const body = await bodyOf(req);
       if (typeof body.id !== 'string') throw new ApiError('INVALID_REQUEST', 'Choose an achievement.');

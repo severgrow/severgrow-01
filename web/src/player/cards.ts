@@ -122,6 +122,13 @@ export const CARDS_CSS = `
 }
 .futa04-cards .card :is(.c-num,.c-suit) { transition:opacity .22s ease; }
 .futa04-cards .dock .pile-top.card { border-radius:5.9% / 4.2%; }
+.futa04-cards .dock :is(#deck,#discard) .pile-card,
+.futa04-cards .dock #deck .pile-stack,
+.futa04-cards .dock #deck .pile-stack::before,
+.futa04-cards .dock #deck .pile-stack::after {
+  border-radius:5.9% / 4.2%;
+}
+.futa04-cards .dock #deck[data-count='last'] .pile-stack { border-radius:5.9% / 4.2%; }
 .futa04-cards .card.s0 .futa04-card-art { background-image:url('${mossArt}'); }
 .futa04-cards .card.s1 .futa04-card-art { background-image:url('${ashArt}'); }
 .futa04-cards .card.s2 .futa04-card-art { background-image:url('${dewArt}'); }
@@ -153,6 +160,7 @@ export const CARDS_CSS = `
   background-image:url('${backArt}'); background-size:100% 100%; background-position:center;
   border-color:transparent;
 }
+.futa04-cards .card.back { border-radius:5.9% / 4.2%; }
 .futa04-cards #deck .pile-stack { box-shadow:0 2px 5px rgba(0,0,0,.38); }
 @media (prefers-reduced-motion:reduce) {
   .futa04-cards .dock .hand-row > .hand .card { transition:none; }

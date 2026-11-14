@@ -216,11 +216,21 @@ const checkPointerOnHex = async (p: Page, key: string, tag: string) => {
     last = now as string;
     await p.waitForTimeout(60);
   }
-  const m = await p.evaluate(`(() => {
+  const read = () => p.evaluate(`(() => {
     const R = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { x:+r.x.toFixed(2), y:+r.y.toFixed(2), w:+r.width.toFixed(2), h:+r.height.toFixed(2), right:+r.right.toFixed(2), bottom:+r.bottom.toFixed(2) }; };
     const cell = document.querySelector('#board .hex-cell[data-key="${key}"]');
     return { path: R(cell && cell.querySelector('path.hex')), glow: R(document.querySelector('#tutorial-focus .focus-glow')) };
-  })()`) as { path: Box | null; glow: Box | null };
+  })()`) as Promise<{ path: Box | null; glow: Box | null }>;
+  let m = await read();
+  // The overlay path can be stationary while the board camera is still changing its
+  // screen projection. Compare rendered bounds after that camera has settled too.
+  for (let i = 0; i < 40 && m.path && m.glow; i++) {
+    const dx = Math.abs((m.path.x + m.path.right - m.glow.x - m.glow.right) / 2);
+    const dy = Math.abs((m.path.y + m.path.bottom - m.glow.y - m.glow.bottom) / 2);
+    if (dx <= 2 && dy <= 2) break;
+    await p.waitForTimeout(60);
+    m = await read();
+  }
   check(!!m.path && !!m.glow, `${tag}: the light and the lit hex are both on screen`);
   if (!m.path || !m.glow) return;
   const dx = Math.abs((m.path.x + m.path.right) / 2 - (m.glow.x + m.glow.right) / 2);
@@ -346,8 +356,10 @@ const checkPlateClear = async (p: Page, lit: Lit, tag: string) => {
     dock: { y: number } | null;
     targets: { sel: string; box: { x: number; y: number; right: number; bottom: number } }[];
   };
-  // The camera eases after a beat and the plate follows it once it settles (the same follow-up
-  // call the game makes). Read where the caption RESTS: wait for two identical samples.
+  // The game deliberately schedules one plate refit 400ms after a beat (main.ts). Two identical
+  // samples in the first 80ms can still be the pre-refit position, so observe the settled state.
+  await p.waitForTimeout(430);
+  // Read where the caption RESTS: wait for two identical samples.
   let r = await p.evaluate(`(${PLATE_CLEAR})(${JSON.stringify(selectors)})`) as PlateGeom;
   for (let i = 0; i < 25 && r.plate; i++) {
     const before = JSON.stringify([r.plate, r.targets.map((t) => t.box)]);
@@ -378,10 +390,16 @@ const checkPlateClear = async (p: Page, lit: Lit, tag: string) => {
     // starts well above the map's bottom edge, so a lit hex down there often has the dock, the
     // hand or the display under it. The caption may never sit on any of those (that is the rule
     // above), so it goes to the nearest spot that is free — which can be the top band.
-    const lowerHalfFree = !r.dock || r.dock.y > midBoard + 8;
+    const plateHeight = r.plate.bottom - r.plate.y;
+    const lowerHalfFree = !r.dock || onBoard.every((t) => t.box.bottom + plateHeight + 8 < r.dock!.y);
     if (lowerHalfFree && onBoard.length && onBoard.every((t) => (t.box.y + t.box.bottom) / 2 > clearlyLower)) {
-      check(midPlate > midBoard,
-        `${tag}: the caption follows the action into the lower half (plate ${JSON.stringify(r.plate)} board mid ${Math.round(midBoard)} plate mid ${Math.round(midPlate)})`);
+      // Art can reach below the lit hex. At L3's rock, the home tree fills the gap under it, so a
+      // caption immediately ABOVE the rock is the clear, nearby position even when its centre is
+      // a few pixels above the board midpoint. The reading rule is proximity without occlusion.
+      const nearTarget = onBoard.some((t) =>
+        Math.abs(midPlate - (t.box.y + t.box.bottom) / 2) <= t.box.bottom - t.box.y);
+      check(midPlate > midBoard || nearTarget,
+        `${tag}: the caption stays beside the lower action (plate ${JSON.stringify(r.plate)} board mid ${Math.round(midBoard)} plate mid ${Math.round(midPlate)})`);
     }
   }
 };

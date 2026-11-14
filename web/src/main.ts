@@ -2048,7 +2048,10 @@ async function mountPlayerEnhancements() {
         if (session) render();
       });
     }));
-    camera = (await import('./player/camera.js')).installCamera(board.svg, $('board-wrap'), { reduceMotion: () => settings.reduceMotion, changed: () => smartCockpit?.sync() });
+    camera = (await import('./player/camera.js')).installCamera(board.svg, $('board-wrap'), {
+      reduceMotion: () => settings.reduceMotion,
+      changed: () => { smartCockpit?.sync(); if (lessonActive()) placeLessonPlate(); },
+    });
   }
   if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
     loads.push(import('./player/fonts.js').then((f) => f.applyFont()));
@@ -6135,7 +6138,11 @@ function unwatchPlateSettle() {
 /** A box for an element that is actually on screen, or null. */
 const plateBox = (el: Element | null): Spot | null => {
   if (!el) return null;
-  const r = el.getBoundingClientRect();
+  // A painted tile may overhang its rule cell or carry a temporary SVG effect. The
+  // caption follows the fixed hex geometry so those decorative bounds cannot send it
+  // to an unrelated part of the screen during Grow and Bloom.
+  const target = el.matches('.hex-cell') ? el.querySelector(':scope > path.hex') ?? el : el;
+  const r = target.getBoundingClientRect();
   if (r.width < 4 || r.height < 4) return null;
   return { l: r.left, t: r.top, r: r.right, b: r.bottom };
 };

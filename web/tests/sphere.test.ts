@@ -241,6 +241,24 @@ describe('the planet shows the real Territory', () => {
     expect(ground.disputed[at('2,0')]).toBe(1);
     expect(ground.disputed[at('1,0')]).toBe(0);
   });
+  it('maps each public skin to a stable atlas quadrant without changing ownership', () => {
+    const skinned = groundOf(sphere, map, {
+      cells: WORLD_CELLS, me: 'me', ownSkin: 'forest',
+      claims: [
+        { cellId: '0,0', ownerId: 'me', colour: '#336644' },
+        { cellId: '1,0', ownerId: 'rival', colour: '#cc8844', skin: 'ash' },
+        { cellId: '2,0', ownerId: 'water', colour: '#336688', skin: 'water' },
+        { cellId: '3,0', ownerId: 'toxic', colour: '#889944', skin: 'toxic' },
+        { cellId: '4,0', ownerId: 'plain', colour: '#aabbcc' },
+      ],
+    });
+    expect(skinned.skin[at('0,0')]).toBe(1);
+    expect(skinned.skin[at('1,0')]).toBe(2);
+    expect(skinned.skin[at('2,0')]).toBe(3);
+    expect(skinned.skin[at('3,0')]).toBe(4);
+    expect(skinned.skin[at('4,0')]).toBe(0);
+    expect(skinned.kind[at('1,0')]).toBe(KIND.owned);
+  });
   it('draws a border only where the ground changes', () => {
     const edgeTo = (from: string, to: string) => sphere.cells[at(from)]!.neighbours.indexOf(at(to));
     expect(ground.border[at('0,0')]! & (1 << edgeTo('0,0', '1,0'))).toBe(0);
