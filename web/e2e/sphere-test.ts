@@ -270,24 +270,26 @@ try {
     await p.mouse.down();
     for (let i = 1; i <= 10; i++) { await p.mouse.move(cx - 60 + i * 12, cy + i * 4); await p.waitForTimeout(16); }
     const releasePose=(await planet(p))!;
-    // FLAT SIDE UP (owner, 2026-11-14: "the planet orientation switch to always show tiles flat side
-    // up") replaces the exact north-up rule these two checks pinned. While dragging, the view keeps
-    // the turn it had (no spin) and stays within 30 degrees of north, north still upward.
-    // (A geodesic hex is a little irregular, so levelling one can take a degree or two past 30.)
-    check(`[${tag}] dragging keeps the view's turn, within 30 degrees of north`,
+    // FLAT SIDE UP, NO CAMERA CORRECTION (owner, 2026-11-15: the view "adjusts after landing —
+    // wrong ... feel should be the same as before"). Each tile's picture is levelled continuously
+    // by the renderer (sphere/tile-face.ts), so the view itself never has to turn to make tiles
+    // readable. A drag keeps the roll it had: north stays upward and the roll does not change.
+    check(`[${tag}] dragging keeps the view's turn, north still upward`,
       Math.abs((releasePose as any).roll-(before as any).roll)<1e-6&&Math.abs((releasePose as any).roll)<=Math.PI/6+.05&&releasePose.north[1]!>0,
       JSON.stringify({before:(before as any).roll,during:(releasePose as any).roll,north:releasePose.north}));
     await p.mouse.up();
-    // Zoomed-out releases may coast, then the centre tile levels; wait for both to settle.
+    // Zoomed-out releases may coast; wait for the glide to settle.
     await p.waitForFunction(()=>{
       const pl=(window as any).__severgrow.planet();
-      return pl && !pl.flying && !pl.levelling;
+      return pl && !pl.flying;
     },undefined,{timeout:4000}).catch(()=>undefined);
     await settled(p);
     s = (await planet(p))!;
-    check(`[${tag}] after release the centre tile rests flat side up`,
-      (s as any).centreTilt!==null&&Math.abs((s as any).centreTilt)<.01&&Math.abs((s as any).roll)<=Math.PI/6+.05&&s.north[1]!>0,
-      JSON.stringify({tilt:(s as any).centreTilt,roll:(s as any).roll,north:s.north}));
+    // THE REGRESSION: the old levelling turn rotated the sphere after pointerup. The release must
+    // leave the view's roll exactly as the finger left it, whatever the centre tile's lean is.
+    check(`[${tag}] releasing never turns the view`,
+      Math.abs((s as any).roll-(releasePose as any).roll)<1e-9&&s.north[1]!>0,
+      JSON.stringify({release:(releasePose as any).roll,after:(s as any).roll,north:s.north}));
     check(`[${tag}] a drag turns the planet`, JSON.stringify(s.q) !== JSON.stringify(before.q));
     check(`[${tag}] a drag never changes the selection`, s.selected === before.selected);
     // Zoomed in: coast must stop almost immediately (top of planet not visible).
@@ -318,11 +320,21 @@ try {
     for (let i = 1; i <= 6; i++) { await p.mouse.move(cx - 40 + i * 10, cy); await p.waitForTimeout(16); }
     const zoomedPose = (await planet(p))!;
     await p.mouse.up();
-    await p.waitForTimeout(120);
-    const zoomedAfter = (await planet(p))!;
-    check(`[${tag}] zoomed-in release stops almost immediately`,
-      zoomedAfter.q.every((v:number,i:number)=>Math.abs(v-zoomedPose.q[i]!)<.002),
-      `Δ=${zoomedAfter.q.map((v:number,i:number)=>Math.abs(v-zoomedPose.q[i]!).toFixed(4)).join(',')}`);
+    // THE OWNER'S REGRESSION CHECK (2026-11-15): with the top of the planet out of the window a
+    // release has no coast at all, so every frame after pointerup must be the pose the finger left.
+    // The old post-release levelling turn moved q (and the reported roll/tilt) right here.
+    const releaseFrames: Snapshot[] = [];
+    for (let i = 0; i < 8; i++) { await p.waitForTimeout(16); releaseFrames.push((await planet(p))!); }
+    const level = releaseFrames.every((f) => {
+      const fr = f as unknown as { q: number[]; roll: number; centreTilt: number | null };
+      const zp = zoomedPose as unknown as { q: number[]; roll: number; centreTilt: number | null };
+      return fr.q.every((v, i) => Math.abs(v - zp.q[i]!) < .002)
+        && Math.abs(fr.roll - zp.roll) < 1e-9
+        && (fr.centreTilt === null) === (zp.centreTilt === null)
+        && Math.abs((fr.centreTilt ?? 0) - (zp.centreTilt ?? 0)) < 1e-6;
+    });
+    check(`[${tag}] zoomed-in release never turns the view after pointerup`, level,
+      JSON.stringify(releaseFrames.map((f) => ({ roll: (f as any).roll, tilt: (f as any).centreTilt, q: f.q }))));
     // Restore a comfortable zoom for the rest of the suite.
     if (ios && webkitTouch) {
       const touch = (type: string, points: { x: number; y: number; id: number }[]) =>

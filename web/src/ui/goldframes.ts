@@ -2,8 +2,11 @@
 // both in one transparent atlas. A tile key picks its frame for the whole game.
 // The glow is the board's own (`.gold-frame` drop-shadow in style.css); the art carries none.
 import { FA_GOLD_ATLAS, FA_GOLD_ATLAS_SIZE, FA_GOLD_BOXES, faGoldVariant } from './forestAsh.js';
-import { cellScale, el, S, SQ3 } from './geom.js';
+import { cellScale, el } from './geom.js';
+import { goldFrameSize } from './goldframe-geometry.js';
 import { getOrient } from '../logic/orient.js';
+
+export { GOLD_FRAME_SCALE, goldFrameSize } from './goldframe-geometry.js';
 
 /** The atlas and the exact crop one bonus hex's frame uses, shared with the replay poster. The crop
  *  is the hex's own bounding box in the atlas: the frame's outer edge lies on the hex. */
@@ -30,17 +33,10 @@ export const noteGoldFrameArtFailure = (url: string): void => {
 export function drawGoldFrame(parent: SVGElement, key: string, x: number, y: number, occupied: boolean) {
   const crop = goldFrameCrop(key);
   const pad = 6;
-  // THE FRAME IS THE CELL'S HEX, AT THE CELL'S OWN SCALE (owner, 2026-11-14: "gold frames look like
-  // open arcs ... some cut at the board's edge"). Every other piece of per-cell art is drawn at
-  // `cellScale(key)`, because the bent board (BOARD_BULGE, ui/geom.ts) draws an outer hex smaller than
-  // S. The rim was the one piece that did not, so on a bent board its outer edge sat outside the hex
-  // it belongs to — where the cell in front of it, drawn later, sliced that overhang away and left a
-  // bright arc that started, ran along part of the hex and stopped. Measured on the flat product
-  // board this scale is exactly 1, so nothing moves there; it keeps the rim and the hex one shape
-  // wherever the board does bend.
-  const k = cellScale(key);
-  const width = S * 2.02 * k;
-  const height = S * SQ3 * 1.01 * k;
+  // THE FRAME IS THE CELL'S HEX, AT THE CELL'S OWN SCALE: `cellScale(key)` (see goldframe-geometry)
+  // keeps the rim and the hex one shape wherever a bent board draws the hex smaller than S, and the
+  // shared GOLD_FRAME_SCALE keeps it just inside the seam like the rocks.
+  const { width, height } = goldFrameSize(cellScale(key));
   const group = el('g', {
     class: `gold-frame ${occupied ? 'occupied' : 'empty'}`,
     'data-key': key,

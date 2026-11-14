@@ -22,8 +22,9 @@ import { warmReplayUI } from './typography.js';
 import { allCoords, allNeighbors, coordKey, mirror, parseKey } from '../../../src/engine/index.js';
 import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
 import { getOrient, toScreen } from '../logic/orient.js';
-import { centerOf, S, SQ3 } from '../ui/geom.js';
+import { centerOf, S } from '../ui/geom.js';
 import { GOLD_FRAME_ATLAS, goldFrameCrop } from '../ui/goldframes.js';
+import { goldFrameSize } from '../ui/goldframe-geometry.js';
 import { faBaseColour, faRockSprite, faTileSprite, faVariants } from '../ui/forestAsh.js';
 import type { FaSprite, FaVariants } from '../ui/forestAsh.js';
 import { SEED_STONE_ATLAS, seedStoneCrop } from '../ui/seedstone.js';
@@ -285,7 +286,7 @@ export type GoldFramePlacement = {
   /** The hex centre the frame sits on, in canvas pixels. */
   x: number;
   y: number;
-  /** The frame's box, in canvas pixels (the live board's 2.02 S by 1.01 √3 S). */
+  /** The frame's box, in canvas pixels (the live board's centred, 5% trimmed hex box). */
   w: number;
   h: number;
   /** The atlas rectangle, padded exactly as the live board's viewBox. */
@@ -301,6 +302,7 @@ export type GoldFramePlacement = {
  */
 export const goldFramePlacements = (L: BoardLayout): GoldFramePlacement[] => {
   const k = L.hex / S;
+  const size = goldFrameSize();
   const rotate = getOrient() === 'pointy' ? (-30 * Math.PI) / 180 : 0;
   return L.cells
     .filter((cell) => cell.terrain === 'rich')
@@ -310,8 +312,8 @@ export const goldFramePlacements = (L: BoardLayout): GoldFramePlacement[] => {
         key: cell.key,
         x: cell.x,
         y: cell.y,
-        w: S * 2.02 * k,
-        h: S * SQ3 * 1.01 * k,
+        w: size.width * k,
+        h: size.height * k,
         crop: { x: crop.x - GOLD_FRAME_PAD, y: crop.y - GOLD_FRAME_PAD, w: crop.w + GOLD_FRAME_PAD * 2, h: crop.h + GOLD_FRAME_PAD * 2 },
         rotate,
         occupied: cell.owner !== null,

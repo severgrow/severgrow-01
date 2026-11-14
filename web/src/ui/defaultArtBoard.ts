@@ -10,12 +10,12 @@
 //   <  the fringe of a tile below a home, over the home's lower edge (the one exception).
 // So grass tips lie over the empty ground or grass above them, and under a rock or a home.
 //
-// HIGHLIGHTS GO AROUND THE HOMES (owner: "the selection goes around the hex but inwards around the
-// tree / smoke"; "just home tiles"). The tree's and the volcano's outlines were traced once at build
-// time (forestAshData.ts), a little outside the art and as smooth curves. A highlight on a cell the
-// canopy or smoke reaches is masked by that outline and gets a rim along it in its own style, so a
-// legal tile above the tree lights up around the canopy. Grass tips and rock bumps simply lie on top.
-// Nothing is traced at runtime: the mask is rebuilt only when which tiles stand where changes.
+// HIGHLIGHTS ARE PLAIN HEXES (owner, 2026-11-14: "the selected tile should just be hex, but part
+// of it that goes under the spill is not shown"). A highlight on a cell that a neighbouring tree,
+// smoke or grass reaches is masked by the traced spill shapes, so the covered part of its own hex
+// line is simply hidden. Nothing traces the artwork's ragged edge and nothing is drawn twice: the
+// outline is always the hex, only occluded. The mask is rebuilt only when which tiles stand where
+// changes; nothing is traced at runtime.
 import { allCoords, allNeighbors, coordKey, hexDistance, parseKey } from '../../../src/engine/index.js';
 import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
 import { BoardView } from './board.js';
@@ -142,34 +142,31 @@ const f = (n: number) => n.toFixed(2);
  */
 const ROCK_ART_SCALE = 0.88;
 
+/**
+ * THE PAINTED BOARD'S TWO NUMBERS (owner, 2026-11-14: "slate, 85%, colour at 40%").
+ *
+ * The default ground is a painted `slate` board (ui/forestAsh.ts). These are its only knobs, and
+ * they apply to that picture alone — never to tile art, gold frames or the numbered stones.
+ *
+ *   FA_BACKGROUND_OPACITY     how much of the picture covers the cell's own flat ground colour.
+ *   FA_BACKGROUND_INTENSITY   the picture's colour strength: 0.4 keeps 40% of its original chroma,
+ *                             so slate reads as a quiet ground and the strength numbers and gold
+ *                             badges stay the thing you look at.
+ *
+ * The strength is one `feColorMatrix type="saturate"` on the painted `<image>`. A colour matrix is a
+ * per-pixel multiply, not a blur: it softens nothing, and it never re-rasterises the board's
+ * moving/scaling parent (see the feathering note in ui/board.ts). It runs in sRGB, so the picture's
+ * own luminance is what the chroma is folded into.
+ */
+export const FA_BACKGROUND_OPACITY = 0.85;
+export const FA_BACKGROUND_INTENSITY = 0.4;
+
 /** A traced spill outline moved onto a cell: scaled about the hex centre, then placed. */
 const placePath = (d: string, x: number, y: number, k: number) =>
   d.replace(/(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/g, (_, a: string, b: string) => `${f(x + Number(a) * k)},${f(y + Number(b) * k)}`);
 
-/**
- * A rim or shade takes its highlight's look as computed (stroke, glow, motion), not its classes: the
- * highlight's own rules (kinds, nearness, breathing) apply unchanged, and every query that counts
- * `.target`, `.selected` or `.dim` still counts only highlights.
- */
-// Not `opacity`: read at creation it is the first frame of the highlight's own fade-in (0); the
-// copied animation brings the rim in with it instead. Spills themselves are never dimmed: art that
-// reaches past its hex always shows at full strength (owner, 2026-11-14).
-const RIM_PROPS = ['stroke', 'stroke-width', 'stroke-opacity', 'stroke-dasharray', 'stroke-linejoin', 'filter',
-  'animation-name', 'animation-duration', 'animation-delay', 'animation-timing-function', 'animation-iteration-count',
-  'animation-direction', 'animation-fill-mode'] as const;
-const copyStroke = (to: SVGElement, cs: CSSStyleDeclaration) => {
-  let style = 'fill:none;';
-  for (const prop of RIM_PROPS) {
-    const value = cs.getPropertyValue(prop);
-    if (value) style += `${prop}:${value};`;
-  }
-  to.setAttribute('style', style);
-};
-
 /** What stands on a cell, for the drawing order: later kinds cover earlier ones. */
 const enum Kind { Empty = 0, Ground = 1, Rock = 2, Home = 3 }
-
-type Spill = { key: string; kind: Kind; d: string };
 
 export class DefaultArtBoardView extends BoardView {
   protected override usesWorldLayer() { return false; }
@@ -177,8 +174,8 @@ export class DefaultArtBoardView extends BoardView {
   private fa: FaVariants = { tile: new Map(), rock: new Map() };
   private rockKeys = new Set<string>();
   private rockLayer: SVGGElement | null = null;
-  /** Spills that are visible on each cell (drawn later than what stands there). */
-  private spillOn = new Map<string, Spill[]>();
+  /** Cells a visible spill (grass, canopy, smoke) reaches: their hex highlights are cut by it. */
+  private spillOn = new Set<string>();
   private spillSignature = '';
 
   /** Rows top to bottom (then left to right): a lower tile's grass lies over the tile above. */
@@ -281,10 +278,18 @@ export class DefaultArtBoardView extends BoardView {
     const clipId = this.id(`fa-bg-${key.replace(',', '_')}`);
     const defs = this.svg.querySelector('defs')!;
     if (!defs.querySelector(`#${clipId}`)) el('path', { d: hexPath(key, S * 1.015, 'flat') }, el('clipPath', { id: clipId, clipPathUnits: 'userSpaceOnUse' }, defs));
+    // One colour matrix, defined once and shared by every painted cell (see the constants above).
+    const filterId = this.id('fa-bg-intensity');
+    if (!defs.querySelector(`#${filterId}`)) {
+      const filter = el('filter', { id: filterId, 'color-interpolation-filters': 'sRGB' }, defs);
+      el('feColorMatrix', { type: 'saturate', values: String(FA_BACKGROUND_INTENSITY) }, filter);
+    }
     el('image', {
       href: url, x: f(x - k * (fx + W / 2)), y: f(y - k * (fy + H / 2)), width: f(k * W), height: f(k * H),
-      // The selected board image is a quiet 22% layer inside the hexes; tile art stays opaque.
-      preserveAspectRatio: 'none', 'clip-path': `url(#${clipId})`, opacity: 0.22, class: 'default-ground-art fa-painted-ground',
+      // The painted board fills the hexes; the colour matrix above keeps it quiet, and the filter
+      // touches this picture only (tile art, gold frames and stones are separate elements).
+      preserveAspectRatio: 'none', 'clip-path': `url(#${clipId})`, opacity: FA_BACKGROUND_OPACITY,
+      filter: `url(#${filterId})`, class: 'default-ground-art fa-painted-ground',
     }, g);
   }
 
@@ -317,6 +322,13 @@ export class DefaultArtBoardView extends BoardView {
     // tree/smoke overhangs, which must remain physically in front of the board light.
     const planetSkin = this.svg.querySelector<SVGGElement>('.l-planet-skin');
     if (planetSkin) this.svg.insertBefore(planetSkin, this.layers.contour);
+    // THE TURN RING SITS UNDER THE SPILLS (owner, 2026-11-14: "make the spill tiles go over it").
+    // The skin is a ground treatment and stays above the tiles; the turn rim is an indicator, so it
+    // moves out of the skin to just beneath the tile layer. Grass, canopy and smoke overhangs now
+    // paint over it wherever they reach, while it stays visible along every uncovered edge. Its
+    // path and stroke are unchanged: this is layering only.
+    const turnRim = this.svg.querySelector<SVGGElement>('.planet-turn-rim');
+    if (turnRim) this.svg.insertBefore(turnRim, this.layers.tiles);
     // THE ONE EXCEPTION (owner, 2026-11-14: "the tile below the home tile still covers the home
     // tile with its top fringe"): a tile below a home lays its grass fringe over the home's lower
     // edge. Its picture is drawn again just above the homes, clipped to the home's hex, so only the
@@ -405,7 +417,6 @@ export class DefaultArtBoardView extends BoardView {
       if (!t && !rock) continue;
       const sprite = t ? faTileSprite(this.fa, key, t.owner, !!t.root) : faRockSprite(this.fa, key);
       if (!sprite.spill || artUnavailable(sprite.url)) continue;
-      const kind: Kind = t?.root ? Kind.Home : rock ? Kind.Rock : Kind.Ground;
       const mine = this.rank(board, key, order);
       const covers: string[] = [];
       for (const dir of sprite.reach) {
@@ -418,11 +429,7 @@ export class DefaultArtBoardView extends BoardView {
       const { x, y } = centerOf(key);
       const d = placePath(sprite.spill, x, y, cellScale(key));
       masks.push(d);
-      for (const n of covers) {
-        const list = this.spillOn.get(n) ?? [];
-        list.push({ key, kind, d });
-        this.spillOn.set(n, list);
-      }
+      for (const n of covers) this.spillOn.add(n);
     }
     const defs = this.svg.querySelector('defs')!;
     const id = this.id('fa-spill');
@@ -436,14 +443,6 @@ export class DefaultArtBoardView extends BoardView {
     if (masks.length) el('path', { d: masks.join(''), fill: '#000' }, mask);
   }
 
-  /** A hex clip for one cell, inset like the highlights (shared by every rim on that cell). */
-  private cellClip(key: string) {
-    const id = this.id(`fa-cell-${key.replace(',', '_')}`);
-    const defs = this.svg.querySelector('defs')!;
-    if (!defs.querySelector(`#${id}`)) el('path', { d: hexPath(key, S - 2, 'flat') }, el('clipPath', { id, clipPathUnits: 'userSpaceOnUse' }, defs));
-    return `url(#${id})`;
-  }
-
   protected override hl<T extends SVGElement>(node: T, key: string): T {
     const cls = node.getAttribute('class') ?? '';
     // No hex-shaped overlay on a home (owner, 2026-11-14): the tree and the volcano stand whole,
@@ -452,17 +451,11 @@ export class DefaultArtBoardView extends BoardView {
       node.setAttribute('display', 'none');
       return node;
     }
-    const on = this.spillOn.get(key);
-    const dim = /(^|\s)dim(\s|$)/.test(cls);
-    if (on?.length) {
+    const on = this.spillOn.has(key);
+    if (on) {
+      // The plain hex outline only: the part under a neighbouring spill is cut away by the mask,
+      // so an overhang hides it exactly as it hides the ground behind (no traced art edge).
       node.setAttribute('mask', this.url('fa-spill'));
-      // The rim: the art's own edge inside this cell, in the highlight's own stroke (and motion).
-      const cs = !dim && !/draw-unavailable|available/.test(cls) && typeof getComputedStyle === 'function' ? getComputedStyle(node) : null;
-      if (cs && cs.stroke !== 'none' && parseFloat(cs.strokeWidth) > 0) {
-        const rim = el('path', { d: on.map((s) => s.d).join(''), class: 'fa-rim', 'clip-path': this.cellClip(key), 'aria-hidden': 'true' });
-        node.after(rim);
-        copyStroke(rim, cs);
-      }
     }
     return node;
   }

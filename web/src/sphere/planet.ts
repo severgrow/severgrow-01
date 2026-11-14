@@ -176,12 +176,14 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   let ground: Ground | null = null, input: PlanetInput | null = null, signature = '';
   let selected: number | null = null, pulseUntil = 0;
   let q: Quat = [0, 0, 0, 1], zoom = 1, targetZoom = 1;
-  // FLAT SIDE UP (owner, 2026-11-14: "always show tiles flat side up"). The view keeps north up while
-  // it moves, turned by a small `roll`; at rest the roll eases (at most 30 degrees) so the tile at
-  // the centre of the window sits flat side up, and its neighbours with it (sphere/tile-face.ts).
+  // FLAT SIDE UP, WITH NO CORRECTION AFTER RELEASE (owner, 2026-11-15: "the view of camera adjusts
+  // after landing — wrong ... feel should be the same as before"). Every tile's PICTURE is already
+  // levelled continuously by the renderer (sphere/tile-face.ts, sampled in each tile's own frame),
+  // so flat-side-up is a property of the ground itself, not a camera move. The view is north-up
+  // turned by a small `roll`; a flight sets the roll so it lands on a level tile, and a drag keeps
+  // the roll it picked up (dragging feel is exactly the north-up drag it was before). Nothing ever
+  // turns the view after the finger lifts.
   let roll = 0;
-  /** A finished drag (or keyboard pan) still owes the centre tile its level; zooms never do. */
-  let levelDue = false;
   /** Take the view's present roll as the one a drag keeps (no snap when a finger lands). */
   const syncRoll = () => { if (mode !== 'world') return; const up = rotate(q, north); roll = Math.atan2(-up[0], up[1]); };
   const rz = (r: number): Quat => [0, 0, Math.sin(r / 2), Math.cos(r / 2)];
@@ -330,7 +332,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       const inv=inverse(to),cell=pickCell(sphere,rotate(inv,[0,0,EYE]),rotate(inv,[0,0,-1]));
       const c=cell===null?null:sphere.cells[cell]!;
       roll=c&&!c.pentagon?-tileFace(c.centre,c.corners.map(i=>sphere.corners[i]!),north).angle:0;
-      to=levelled(to);levelDue=false;
+      to=levelled(to);
     }
     const lightTo = mode === 'menu' ? MENU_LIGHT : 1;
     if (!motion()) { q = to; zoom = targetZoom = toZoom; flight = null; frameTween = null; frameNow = frameTarget(); cropNow = cropTarget(); light = lightTo; ask(); return; }
@@ -422,20 +424,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     if(input&&ground)announcePaint();
     spaceDrift.x = offset[0]; spaceDrift.y = offset[1];
     const coasting = (Math.abs(coastVel.x) + Math.abs(coastVel.y)) > .02;
-    let levelling = false;
-    // A finished drag levels the tile at the centre of the window: a short turn about that tile's
-    // own axis (it stays where it is), measured on screen until its top edge is flat. Then it rests.
-    if (mode === 'world' && levelDue && !flight && !pointers.size && !coasting && zoom === targetZoom) {
-      const t = centreTilt();
-      if (!t || Math.abs(t.tilt) < .002) { levelDue = false; syncRoll(); }
-      else {
-        const turnBy = motion() && Math.abs(t.tilt) > .004 ? t.tilt * (1 - Math.exp(-dt / 90)) : t.tilt;
-        const h = Math.sin(turnBy / 2);
-        q = multiply([t.axis[0] * h, t.axis[1] * h, t.axis[2] * h, Math.cos(turnBy / 2)], q);
-        levelling = true;
-      }
-    }
-    const busy = !!flight || !!frameTween || zoom !== targetZoom || pulseUntil > now || coasting || levelling;
+    const busy = !!flight || !!frameTween || zoom !== targetZoom || pulseUntil > now || coasting;
     if (busy) ask();
     // The slow slide: a deliberate frame budget. The menu's own drift AND the card's star-only drift
     // ask at 20 fps (IDLE_DRIFT_MS); everything else — a flight, a coast, anything the player is
@@ -540,7 +529,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     canvas.focus({ preventScroll: true });
     stop(); lastFrame = 0; anchor = null; dragVel = { x: 0, y: 0 }; lastMoveAt = e.timeStamp || performance.now();
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    syncRoll(); levelDue = false;
+    syncRoll();
     try { canvas.setPointerCapture(e.pointerId); } catch { /* a cancelled touch */ }
     if (pointers.size === 1) { start = { x: e.clientX, y: e.clientY }; dragged = false; multi = false; lastPointer={x:e.clientX,y:e.clientY}; }
     else { multi = true; dragged = true; pinch = spread(); stopCoast(); }
@@ -584,8 +573,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     if(pointers.size===1)lastPointer={...pointers.values().next().value!};
     if(!pointers.size){
       start=null;
-      // A finished one-finger drag levels the centre tile once it (and any coast) comes to rest.
-      if (dragged && !multi) { levelDue = true; ask(); }
+      // Nothing levels the view after release (owner, 2026-11-15): the drag keeps the roll it had.
       // Start coast only after a real drag, when motion is allowed, scaled by how visible the top is.
       if (dragged && !multi && e.type === 'pointerup' && motion()) {
         const disc = discRadius(frameNow.width, frameNow.height, zoom);
@@ -653,7 +641,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     if(arrows[e.key]){
       e.preventDefault();stop();
       const [x,y]=arrows[e.key]!,step=(.3/zoom+.02)/Math.SQRT1_2;
-      syncRoll();q=levelled(northUpDrag(q,north,x*step,y*step,1));levelDue=true;ask();
+      syncRoll();q=levelled(northUpDrag(q,north,x*step,y*step,1));ask();
     } else if (['+', '=', '-'].includes(e.key)) {
       e.preventDefault(); stop();
       zoom=targetZoom=clampZoom(zoom*(e.key==='-'?1/1.25:1.25));
@@ -795,8 +783,9 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       frames: renderer?.frames ?? 0, bytes: renderer?.bytes ?? 0, pendingFrame: !!raf || !!flight || !!frameTween,
       flying: !!flight || !!frameTween, spinning: false, mode, spaceVisible: spaceVisible(), fallback: !fallback.hidden,
       north:[...rotate(q,north)],
-      /** Flat side up: the view's turn off north, and the centre tile's lean off flat on screen. */
-      roll, centreTilt: centreTilt()?.tilt ?? null, levelling: levelDue, tiles: !!renderer?.hasTiles,
+      /** Flat side up: the view's turn off north, and the centre tile's lean off flat on screen.
+       *  Reported for measurement only; the camera never levels itself after a release. */
+      roll, centreTilt: centreTilt()?.tilt ?? null, tiles: !!renderer?.hasTiles,
       light, frame: { ...frameNow }, crop: { ...cropNow },
       /** The globe's disc on screen (CSS px): centre and radius. */
       disc: { x: view.left + frameNow.x + frameNow.width / 2, y: view.top + frameNow.y + frameNow.height / 2, r: discRadius(frameNow.width, frameNow.height, zoom) },

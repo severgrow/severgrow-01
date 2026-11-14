@@ -1178,7 +1178,7 @@ svg.usable .hex-cell {
    translate(x,y) scale(...) must instead use the SVG origin or it drifts off its hex. */
 #board .seed-stone { pointer-events: none; transform-box: view-box; transform-origin: 0 0; }
 .default-art-sprite, .default-rock-art, .default-rock-shadow, .default-ground-art, .default-home-art, .default-cell-rim { pointer-events: none; }
-.fa-art, .fa-tile-base, .fa-home-base, .fa-rim, .fa-spill-dim { pointer-events: none; }
+.fa-art, .fa-tile-base, .fa-home-base, .fa-spill-dim { pointer-events: none; }
 /* Forest & Ash (ui/defaultArtBoard.ts). An occupied gold tile draws its own frame over its art; the
    frame layer (now under the tiles) keeps only the empty ones. */
 #board.fa-board .l-rich-frames .gold-frame.occupied { display: none; }

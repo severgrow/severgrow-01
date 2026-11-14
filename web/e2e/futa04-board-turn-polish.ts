@@ -16,6 +16,8 @@ import { positionSave } from './position.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
 import { resumeSavedGame } from './helpers/menu-nav.js';
 import { fruitPosition, NINE_CHAIN } from './fruitcards-pos.js';
+import { goldFrameSize } from '../src/ui/goldframe-geometry.js';
+import { GOLD_ATLAS_SIZE, GOLD_FRAME_HEX_BOXES } from '../src/ui/forestAshData.js';
 import { fixture } from '../../tests/helpers.js';
 
 const port = Number(process.env.FUTA04_POLISH_PORT ?? 4198);
@@ -1049,7 +1051,7 @@ async function goldFrameVisuals() {
       await page.goto(base);
       await resumeSavedGame(page); await idle(page);
       equal(await state(page),game,`standard ${width}: frame art does not change the position`);
-      const visual = await page.evaluate(async () => {
+      const visual = await page.evaluate(async ({ atlasW, atlasH }) => {
         const rich = [...document.querySelectorAll<SVGGElement>('#board .hex-cell.rich')];
         const owned = [...document.querySelectorAll<SVGGElement>('#board .l-rich-frames .gold-frame.occupied')];
         const forest = document.querySelector<SVGGElement>('#board .l-rich-frames .gold-frame.occupied[data-key="0,0"]')!;
@@ -1074,20 +1076,26 @@ async function goldFrameVisuals() {
           hiddenUnderTile:!document.querySelector('#board .l-rich-frames .gold-frame.empty[data-key="0,0"]'),
           owners:owned.length,forest:!!forest,volcano:!!volcano,
           oldMarkers:document.querySelectorAll('#board .gold-crystals, #board .gold-crystal-bed, #board .gold-badge, #board .skin-gold').length,
-          contourBelowGold:!!(document.querySelector('#board .l-territory-contour')!.compareDocumentPosition(document.querySelector('#board .l-rich-frames')!)&Node.DOCUMENT_POSITION_FOLLOWING),
-          imageReady:atlas.naturalWidth===2172&&atlas.naturalHeight===724,
+          // NEW ORDER (owner, 2026-11-14): the empty ground frames sit under the tile art, so a
+          // neighbour's spill covers them; the connected territory contour runs above those frames
+          // (and is itself cut by the spill mask). This is the intended paint order on this head.
+          goldUnderTiles:!!(document.querySelector('#board .l-rich-frames')!.compareDocumentPosition(document.querySelector('#board .l-tiles')!)&Node.DOCUMENT_POSITION_FOLLOWING),
+          contourAboveGold:!!(document.querySelector('#board .l-rich-frames')!.compareDocumentPosition(document.querySelector('#board .l-territory-contour')!)&Node.DOCUMENT_POSITION_FOLLOWING),
+          contourMasked:!!document.querySelector('#board .l-territory-contour')!.getAttribute('mask'),
+          imageReady:atlas.naturalWidth===atlasW&&atlas.naturalHeight===atlasH,
           frameWidth:Number(art.getAttribute('width')),centers,
           strongerEmptyGlow:getComputedStyle(empty).filter!==getComputedStyle(forest).filter,
           variants:rich.map(cell=>Number(document.querySelector(`#board .l-rich-frames .gold-frame[data-key="${cell.dataset.key}"]`)!.getAttribute('data-variant'))),
           noInterception:owned.every(frame=>getComputedStyle(frame).pointerEvents==='none')};
-      });
+      }, { atlasW: GOLD_ATLAS_SIZE.w, atlasH: GOLD_ATLAS_SIZE.h });
       check(visual.rich===rich.length && visual.empty===rich.length-2 && visual.hiddenUnderTile && visual.owners===2 &&
         visual.forest && visual.volcano && visual.oldMarkers===0 && visual.noInterception,
         `standard ${width}: frames mark empty and both occupied bonus tiles without old markers (${JSON.stringify(visual)})`);
-      check(visual.contourBelowGold && visual.imageReady && visual.frameWidth>59 && visual.frameWidth<63 &&
+      check(visual.goldUnderTiles && visual.contourAboveGold && visual.contourMasked && visual.imageReady
+        && Math.abs(visual.frameWidth-goldFrameSize().width)<.01 &&
         visual.centers.every(distance=>distance<4) && visual.strongerEmptyGlow &&
-        visual.variants.every(variant=>variant>=0 && variant<3),
-        `standard ${width}: three deterministic rim designs fit the hexes under the stones (${JSON.stringify(visual)})`);
+        visual.variants.every(variant=>variant>=0 && variant<GOLD_FRAME_HEX_BOXES.length),
+        `standard ${width}: the 5% trimmed deterministic rims sit under spills, inside their hexes (${JSON.stringify(visual)})`);
       await page.screenshot({path:`${dir}/${width}x${height}-gold-frame-standard.png`});
       await page.reload(); await resumeSavedGame(page); await idle(page);
       const reloaded = await page.locator('#board .l-rich-frames .gold-frame').evaluateAll(frames=>frames.map(frame=>Number(frame.getAttribute('data-variant'))));
