@@ -47,6 +47,7 @@ import { throwPileCompletesBloom } from './logic/pile-glow.js';
 import type { DisplayEvent } from './player/display-readout.js';
 import { createTheirsDim, replayedByOpponent } from './player/replay-display.js';
 import { outcomeCue } from './player/outcome-light.js';
+import { pulseAmbientLight } from './ui/ambient-light.js';
 import type { OutcomeLight } from './player/atmosphere.js';
 import { planetSnapshot } from './online/world-planet.js';
 import { gameHighlights } from './logic/highlights.js';
@@ -4554,6 +4555,15 @@ const impactOptions = () => ({ effects: settings.effects, reduceMotion: settings
  */
 function heavyImpact(kind: ImpactKind, key: string, size: number, f: number) {
   const ip = impactPlan(kind, size, impactOptions());
+  // THE ROOM'S LIGHT answers the same impact (owner, 2026-11-14: the background has to take part in
+  // big actions). An ADDITIONAL background response: the board's own settle, shake, dim and dust
+  // above are untouched, and nothing here publishes a light tone.
+  pulseAmbientLight(kind, {
+    strength: kind === 'blast' ? Math.min(1, 0.4 + size * 0.05) : 0.5,
+    reduced: settings.reduceMotion || motion() === 0,
+    quiet: settings.effects === 'low',
+    speed: f,
+  });
   const wrap = $('board-wrap');
   const body = ip.bodyMs * Math.max(f, 0.5);
   if (ip.settle > 0) anim(wrap, [{ scale: '1' }, { scale: String(1 - ip.settle), offset: 0.2 }, { scale: String(1 + ip.settle * 0.12), offset: 0.58 }, { scale: '1' }], { duration: body, easing: EASE.out });
@@ -5187,6 +5197,14 @@ async function playCut(c: CutInput, first: boolean, _chain: number, f: number, m
         break;
       case 'snap':
         at(s.at, () => {
+          // THE ROOM'S LIGHT takes the cut's own red for one beat, on the same frame as the tear
+          // (owner, 2026-11-14). Additional only: the cut's flash, shake and sound are untouched.
+          pulseAmbientLight('cut', {
+            strength: Math.min(1, 0.3 + c.keys.length * 0.09),
+            reduced: settings.reduceMotion || motion() === 0,
+            quiet: settings.effects === 'low',
+            speed: f,
+          });
           // one cut family, recognisable at every size; losing tiles uses the duller, lower cutMe
           const cue: 'cutSmall' | 'cutMedium' | 'cutBig' | 'cutHuge' | 'cutMe' = c.mine ? 'cutMe'
             : plan.tier === 'huge' ? 'cutHuge' : plan.tier === 'big' ? 'cutBig' : plan.tier === 'severe' ? 'cutMedium' : 'cutSmall';

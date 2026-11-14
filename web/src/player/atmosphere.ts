@@ -1,6 +1,7 @@
 // Futa04-only presentation. The grain is a static CSS background and the rim is baked once; no live
 // noise/blur filter, animation clock, gameplay input, state or per-frame drawing.
 import { cornerPts, S } from '../ui/geom.js';
+import { mountAmbientLight } from '../ui/ambient-light.js';
 import { publishLight, restoreDisplayLight } from './light.js';
 
 export const ATMOSPHERE_CSS = `
@@ -132,6 +133,10 @@ export function mountAtmosphere(): OutcomeLight {
   const texture = document.getElementById('texture');
   if (texture) texture.after(backdrop, outcome);
   else document.body.prepend(backdrop, outcome);
+  // THE ROOM'S LIGHT (ui/ambient-light.ts) joins the background stack here, with the other two
+  // page-level layers: it is created once, before any game is on screen, so the build never sees a
+  // frame without it.
+  mountAmbientLight();
   let running: Animation | null = null;
   let lastStart = 0;
   let lastStrength = 0;

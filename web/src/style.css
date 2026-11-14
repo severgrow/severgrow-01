@@ -248,6 +248,128 @@ html.space-first:not(.space-lit) #texture {
   display: none;
 }
 
+/* THE ROOM'S LIGHT (owner, 2026-11-14: "the plain black background behind the board is a bit too
+   dark, make it have some big light going on slowly never leak into the board --- all screen sizes
+   -- has to be integrated with background color actions during big actions in game"). ONE big soft
+   pool, drifting very slowly, as a background layer of its own (element built by
+   ui/ambient-light.ts, mounted from player/atmosphere.ts).
+
+   WHERE IT SITS: z-index 0, directly before #spores, so it is above #texture (the page colour) and
+   above the in-game black backdrop, and below #game and #menu (both z-index 1). Its children are
+   fixed and `pointer-events: none`, so the layer can never touch layout or take a tap.
+
+   IT CANNOT LIGHT THE BOARD, and that is a property of the paint, not a promise: every cell paints
+   an OPAQUE hex (`fill: var(--c-hexFill)`) and every tile paints opaque bodies over that, so the
+   board's own pixels are painted OVER this layer — the light is never composited through them.
+   (Pinned by web/tests/ambient-light.test.ts; measured with a hidden-vs-visible pixel diff.)
+
+   PAINT, NOT FILTER — the lesson already written above for the motes: the pool is ONE radial
+   gradient, rasterised once, and the drift is `transform` only, so the compositor moves a finished
+   layer. No `filter: blur()`, no animated `box-shadow`, nothing read from layout per frame. The
+   gradient uses `--c-bg` as its last stop rather than alpha-to-transparent, so the ramp ends on the
+   room's own colour with no seam where the layer's box ends.
+
+   96 s, three soft turning points, a couple of per cent of the screen: long enough that a player
+   never sees it turn round, small enough that it reads as light and not as motion. */
+#futa04-ambient-light {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  /* Where the brightest part of the pool sits, as a share of the light's own (larger) box. The
+     percentages below are converted back to viewport shares in the comment beside them, because
+     the box is inset -16%: viewport = -16 + share x 132.
+       portrait / stacked cockpit   50% 38%  ->  50% / 34%  (the board's own centre is 50% / 31-38%)
+       landscape and desktop (side) 34% 50%  ->  29% / 50%  (the board is the left column)
+       desktop quarters (quad=1)    30% 50%  ->  24% / 50%  (the board owns the left half) */
+  --al-x: 50%;
+  --al-y: 38%;
+  /* A channel that is not the product never builds it; if one ever does, it costs an empty box. */
+  display: none;
+}
+html[data-layout='side'] #futa04-ambient-light {
+  --al-x: 34%;
+  --al-y: 50%;
+}
+html[data-layout='side'][data-quad='1'] #futa04-ambient-light {
+  --al-x: 30%;
+  --al-y: 50%;
+}
+html.futasaku-product #futa04-ambient-light {
+  display: block;
+}
+/* Bigger than the screen on every side, so a drift of a few per cent can never show an edge. */
+#futa04-ambient-light > i {
+  position: absolute;
+  inset: -16%;
+  display: block;
+  pointer-events: none;
+}
+/* The pool: centred behind the board (see --al-x/--al-y above), one gradient, no filters. */
+#futa04-ambient-light .al-base {
+  background: radial-gradient(
+    ellipse 56% 44% at var(--al-x) var(--al-y),
+    color-mix(in srgb, var(--c-text) 8%, var(--c-bg)) 0%,
+    color-mix(in srgb, var(--c-you) 4%, var(--c-bg)) 44%,
+    var(--c-bg) 100%
+  );
+  animation: ambient-drift 96s ease-in-out infinite;
+  will-change: transform;
+}
+@keyframes ambient-drift {
+  0%,
+  100% {
+    transform: translate3d(-2.4%, 1.8%, 0);
+  }
+  34% {
+    transform: translate3d(2%, -1.4%, 0);
+  }
+  67% {
+    transform: translate3d(-0.6%, 2.4%, 0);
+  }
+}
+/* The big-action answer: the same pool in the action's own tone (ui/ambient-light.ts writes
+   `--ambient-tint` from LIGHT_TONES, then animates ONLY this element's opacity). It starts at 0, so
+   with nothing playing it paints nothing at all — one transparent layer, no per-frame cost. */
+#futa04-ambient-light .al-pulse {
+  opacity: 0;
+  background:
+    radial-gradient(
+      ellipse 52% 40% at var(--al-x) var(--al-y),
+      var(--ambient-tint, rgba(255, 195, 104, 0.30)) 0%,
+      transparent 74%
+    ),
+    radial-gradient(
+      ellipse 44% 34% at var(--al-x) var(--al-y),
+      color-mix(in srgb, var(--c-text) 14%, transparent) 0%,
+      transparent 70%
+    );
+}
+/* A move is playing: the pool holds where it is, exactly like the stars (two full-screen layers
+   sliding during a move cost the move frames on a slow phone). The big-action pulse is a JS
+   animation, so it is NOT held — it is the answer to that move. */
+html.futa04-move-active #futa04-ambient-light .al-base {
+  animation-play-state: paused;
+}
+/* Reduce motion: no drift and no pulse. The light is still THERE as a still wash. */
+.reduce-motion #futa04-ambient-light .al-base {
+  animation: none;
+  transform: none;
+}
+.reduce-motion #futa04-ambient-light .al-pulse {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  #futa04-ambient-light .al-base {
+    animation: none;
+    transform: none;
+  }
+  #futa04-ambient-light .al-pulse {
+    display: none;
+  }
+}
+
 /* ---------- icons ---------- */
 .i {
   display: inline-flex;
@@ -2105,12 +2227,14 @@ html.futasaku-product .install-prompt-scrim {
    cannot reach those.
    PSEUDO-ELEMENTS COUNT TOO: the full-screen warm pass is `#game::before`, and a `*` selector never
    matches it. Left running, it kept the finish card's blur recompositing every frame — measured at
-   90% of a GPU core with the planet already asleep. */
+   90% of a GPU core with the planet already asleep. The room's light
+   (`#futa04-ambient-light`, ui/ambient-light.ts) is in the list for the same reason: one slow
+   drifting layer behind the glass would be recomposited by the blur every frame. */
 html.backdrop-held :is(#game, #menu, #texture)::before,
 html.backdrop-held :is(#game, #menu, #texture)::after,
-html.backdrop-held :is(#game, #menu, #texture, #spores) *,
-html.backdrop-held :is(#game, #menu, #texture, #spores) *::before,
-html.backdrop-held :is(#game, #menu, #texture, #spores) *::after {
+html.backdrop-held :is(#game, #menu, #texture, #spores, #futa04-ambient-light) *,
+html.backdrop-held :is(#game, #menu, #texture, #spores, #futa04-ambient-light) *::before,
+html.backdrop-held :is(#game, #menu, #texture, #spores, #futa04-ambient-light) *::after {
   animation-play-state: paused !important;
 }
 .sheet {
