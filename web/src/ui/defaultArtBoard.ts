@@ -10,12 +10,12 @@
 //   <  the fringe of a tile below a home, over the home's lower edge (the one exception).
 // So grass tips lie over the empty ground or grass above them, and under a rock or a home.
 //
-// HIGHLIGHTS GO AROUND THE HOMES (owner: "the selection goes around the hex but inwards around the
-// tree / smoke"; "just home tiles"). The tree's and the volcano's outlines were traced once at build
-// time (forestAshData.ts), a little outside the art and as smooth curves. A highlight on a cell the
-// canopy or smoke reaches is masked by that outline and gets a rim along it in its own style, so a
-// legal tile above the tree lights up around the canopy. Grass tips and rock bumps simply lie on top.
-// Nothing is traced at runtime: the mask is rebuilt only when which tiles stand where changes.
+// HIGHLIGHTS ARE PLAIN HEXES (owner, 2026-11-14: "the selected tile should just be hex, but part
+// of it that goes under the spill is not shown"). A highlight on a cell that a neighbouring tree,
+// smoke or grass reaches is masked by the traced spill shapes, so the covered part of its own hex
+// line is simply hidden. Nothing traces the artwork's ragged edge and nothing is drawn twice: the
+// outline is always the hex, only occluded. The mask is rebuilt only when which tiles stand where
+// changes; nothing is traced at runtime.
 import { allCoords, allNeighbors, coordKey, hexDistance, parseKey } from '../../../src/engine/index.js';
 import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
 import { BoardView } from './board.js';
@@ -131,30 +131,8 @@ const cellScale = (key: string) => {
 const placePath = (d: string, x: number, y: number, k: number) =>
   d.replace(/(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/g, (_, a: string, b: string) => `${f(x + Number(a) * k)},${f(y + Number(b) * k)}`);
 
-/**
- * A rim or shade takes its highlight's look as computed (stroke, glow, motion), not its classes: the
- * highlight's own rules (kinds, nearness, breathing) apply unchanged, and every query that counts
- * `.target`, `.selected` or `.dim` still counts only highlights.
- */
-// Not `opacity`: read at creation it is the first frame of the highlight's own fade-in (0); the
-// copied animation brings the rim in with it instead. Spills themselves are never dimmed: art that
-// reaches past its hex always shows at full strength (owner, 2026-11-14).
-const RIM_PROPS = ['stroke', 'stroke-width', 'stroke-opacity', 'stroke-dasharray', 'stroke-linejoin', 'filter',
-  'animation-name', 'animation-duration', 'animation-delay', 'animation-timing-function', 'animation-iteration-count',
-  'animation-direction', 'animation-fill-mode'] as const;
-const copyStroke = (to: SVGElement, cs: CSSStyleDeclaration) => {
-  let style = 'fill:none;';
-  for (const prop of RIM_PROPS) {
-    const value = cs.getPropertyValue(prop);
-    if (value) style += `${prop}:${value};`;
-  }
-  to.setAttribute('style', style);
-};
-
 /** What stands on a cell, for the drawing order: later kinds cover earlier ones. */
 const enum Kind { Empty = 0, Ground = 1, Rock = 2, Home = 3 }
-
-type Spill = { key: string; kind: Kind; d: string };
 
 export class DefaultArtBoardView extends BoardView {
   protected override usesWorldLayer() { return false; }
@@ -162,8 +140,8 @@ export class DefaultArtBoardView extends BoardView {
   private fa: FaVariants = { tile: new Map(), rock: new Map() };
   private rockKeys = new Set<string>();
   private rockLayer: SVGGElement | null = null;
-  /** Spills that are visible on each cell (drawn later than what stands there). */
-  private spillOn = new Map<string, Spill[]>();
+  /** Cells a visible spill (grass, canopy, smoke) reaches: their hex highlights are cut by it. */
+  private spillOn = new Set<string>();
   private spillSignature = '';
 
   /** Rows top to bottom (then left to right): a lower tile's grass lies over the tile above. */
@@ -377,7 +355,6 @@ export class DefaultArtBoardView extends BoardView {
       if (!t && !rock) continue;
       const sprite = t ? faTileSprite(this.fa, key, t.owner, !!t.root) : faRockSprite(this.fa, key);
       if (!sprite.spill || artUnavailable(sprite.url)) continue;
-      const kind: Kind = t?.root ? Kind.Home : rock ? Kind.Rock : Kind.Ground;
       const mine = this.rank(board, key, order);
       const covers: string[] = [];
       for (const dir of sprite.reach) {
@@ -390,11 +367,7 @@ export class DefaultArtBoardView extends BoardView {
       const { x, y } = centerOf(key);
       const d = placePath(sprite.spill, x, y, cellScale(key));
       masks.push(d);
-      for (const n of covers) {
-        const list = this.spillOn.get(n) ?? [];
-        list.push({ key, kind, d });
-        this.spillOn.set(n, list);
-      }
+      for (const n of covers) this.spillOn.add(n);
     }
     const defs = this.svg.querySelector('defs')!;
     const id = this.id('fa-spill');
@@ -408,14 +381,6 @@ export class DefaultArtBoardView extends BoardView {
     if (masks.length) el('path', { d: masks.join(''), fill: '#000' }, mask);
   }
 
-  /** A hex clip for one cell, inset like the highlights (shared by every rim on that cell). */
-  private cellClip(key: string) {
-    const id = this.id(`fa-cell-${key.replace(',', '_')}`);
-    const defs = this.svg.querySelector('defs')!;
-    if (!defs.querySelector(`#${id}`)) el('path', { d: hexPath(key, S - 2, 'flat') }, el('clipPath', { id, clipPathUnits: 'userSpaceOnUse' }, defs));
-    return `url(#${id})`;
-  }
-
   protected override hl<T extends SVGElement>(node: T, key: string): T {
     const cls = node.getAttribute('class') ?? '';
     // No hex-shaped overlay on a home (owner, 2026-11-14): the tree and the volcano stand whole,
@@ -424,17 +389,11 @@ export class DefaultArtBoardView extends BoardView {
       node.setAttribute('display', 'none');
       return node;
     }
-    const on = this.spillOn.get(key);
-    const dim = /(^|\s)dim(\s|$)/.test(cls);
-    if (on?.length) {
+    const on = this.spillOn.has(key);
+    if (on) {
+      // The plain hex outline only: the part under a neighbouring spill is cut away by the mask,
+      // so an overhang hides it exactly as it hides the ground behind (no traced art edge).
       node.setAttribute('mask', this.url('fa-spill'));
-      // The rim: the art's own edge inside this cell, in the highlight's own stroke (and motion).
-      const cs = !dim && !/draw-unavailable|available/.test(cls) && typeof getComputedStyle === 'function' ? getComputedStyle(node) : null;
-      if (cs && cs.stroke !== 'none' && parseFloat(cs.strokeWidth) > 0) {
-        const rim = el('path', { d: on.map((s) => s.d).join(''), class: 'fa-rim', 'clip-path': this.cellClip(key), 'aria-hidden': 'true' });
-        node.after(rim);
-        copyStroke(rim, cs);
-      }
     }
     return node;
   }
