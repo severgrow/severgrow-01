@@ -238,3 +238,29 @@ then use the existing `futa0.5-online` release flow, including its server deploy
 promote a failed gate, change `main`, or force-push over concurrent work. Recheck the remote head
 before integration. Production verification must check the actually served build and server,
 not just branch refs. Physical iPhone/Android thermal and power validation remains a separate step.
+
+## Beta 0.86: Forest & Ash board, new cards, planet tiles (2026-11-14)
+
+Same machine, serial runs, `motion-cost.ts` (unchanged fixtures, 390x844, CPU slowdown 4), medians of
+three: the published Blast build (`4b4ad839`, the base) against the 0.86 build (board art that spills
+over its hex, rocks/homes layers, home outline mask and rims, painted backgrounds off by default, new
+card atlases, planet tile atlas).
+
+| Action | Main-thread work base / 0.86 | Script | Style recalc | rAF p95 |
+| --- | --- | --- | --- | --- |
+| Blast | 1,052 / 1,051 ms | 100 / 97 | 272 / 271 | 33 / 33 |
+| Bomb | 1,285 / 1,319 ms | 93 / 92 | 349 / 381 | 33 / 33 |
+| Huge Cut | 1,444 / 1,427 ms | 108 / 99 | 314 / 347 | 17 / 17 |
+| Bloom | 649 / 674 ms | 49 / 51 | 162 / 176 | 17 / 33 |
+
+This machine reads about half of the 2026-11 table above (e.g. Blast 1,052 vs 2,101 ms): compare rows
+here with each other, not with that table. Total work is flat (-1% to +4%); style recalculation is up
+9-10% on Bomb, Huge Cut and Bloom (more `<image>` nodes: unclipped sprites, a rocks layer, a home
+fringe layer), and Bloom's p95 moved up one frame bucket (17 -> 33 ms). Not yet reduced; recorded so it
+is not accepted silently. Candidates: share one `<use>` per sprite variant, drop the per-tile territory
+base path where the art is opaque.
+
+Planet: `sphere-test` (all four sizes) passes "no idle rendering while the ground fills the window" and
+"at rest only the slow star slide runs" with the levelling turn; the tile atlas (512x512, mipmapped) is
+uploaded once, the first time the world view opens, never for the menu planet and never at rest. The
+ground buffers grow by one 2-byte attribute per vertex (`renderer.bytes` reports it).
