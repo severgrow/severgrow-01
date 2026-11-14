@@ -59,8 +59,10 @@ describe('the beta line is a quiet version line between the wordmark and the ent
     // 0.82 -> 0.83: owner-authorised misc polish pass (logos, iOS launch, planet coast, CI).
     // 0.83 -> 0.84 (owner, 2026-11-08: "0.84 is fine"): the 0.84 features, the feel pass, the live fixes.
     // 0.84 -> 0.85 (owner, 2026-11-12: "change version name to 0.85"): the sharpening batch — throw flick, opponent deal, Blitz key and guide, planet framing, share card, LESSON n LEARNED, Find Opponent resume, cold start.
-    expect(FEEDBACK.betaVersion).toBe('0.85');
-    expect(FEEDBACK.betaNote(FEEDBACK.betaVersion)).toContain('0.85');
+    // 0.85 -> 0.86 (owner, 2026-11-14: "we changing beta name to 0.86"): cards, the Blast pass with its
+    // board turn rim, the Forest & Ash default with Water and Toxic, backgrounds and the planet view.
+    expect(FEEDBACK.betaVersion).toBe('0.86');
+    expect(FEEDBACK.betaNote(FEEDBACK.betaVersion)).toContain('0.86');
     // Owner (2026-10-31): one quiet line, not a sentence — "BETA 0.7 · FEEDBACK".
     expect(FEEDBACK.betaLink).toBe('Feedback');
     expect(lineSource).toContain('FEEDBACK.betaLink');

@@ -1274,7 +1274,7 @@ export const FEEDBACK = Object.freeze({
   empty: 'Please write a few words first.',
   guideLink: 'Tester guide',
   close: 'Close',
-  betaVersion: '0.85',
+  betaVersion: '0.86',
   /**
    * The beta line on the main menu, between the wordmark and the buttons: ONE quiet instrument
    * label — the version, then the way to say something (owner, 2026-10-31: minimal; the four-line
