@@ -6933,8 +6933,35 @@ html.final-turns .game::after {
   transform-origin: 50% 50%;
   transform: scale(0.3);
 }
-/* A home that is being surrounded shows NO frame: the constricting ring was removed completely on
-   the owner's instruction (2026-11-14). Do not bring it back without a new direction from the owner. */
+/* NO FRAME AROUND A HOME THAT IS BEING SURROUNDED (owner, 2026-11-14: "remove completely the frame
+   that's showing up when the home tile is getting surrounded ... for now don't show it"). The ring
+   group, its six per-side segments, their breathing edge and `lm-edge-beat` are gone and must not
+   come back without a new direction.
+   THE MOTION CAME BACK ALONE (owner, 2026-11-15: "Bring back the tremble only — no ring, just the
+   home reacting"). The constriction's own swell — the old `lm-constrict`, `scale(1) -> 0.972 ->
+   scale(1)` over 1.9 s — now runs on `.lm-art`, the landmark's wrapper around its DRAWING and
+   nothing else: no path, no stroke, no segment, so no ring can reappear with it. It is one slow
+   breathe, not a shake; transform only, so the compositor owns it and no filter or shadow is ever
+   repainted; and `.landmark` is `pointer-events: none`, so no hit area can move. */
+.landmark .lm-art {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+.landmark.constricted:not(.strangled) .lm-art {
+  animation: lm-constrict 1.9s ease-in-out infinite;
+}
+@keyframes lm-constrict {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(0.972); }
+}
+.reduce-motion .landmark.constricted .lm-art {
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .landmark.constricted .lm-art {
+    animation: none !important;
+  }
+}
 
 /* idle: the canopy sways a few pixels, a leaf falls now and then; the smoke curls, the crater breathes, an ember pops */
 .landmark.idle.lm-tree .lm-canopy {
@@ -7075,7 +7102,8 @@ html.final-turns .game::after {
 }
 .reduce-motion .landmark .lm-canopy,
 .reduce-motion .landmark .lm-sprite,
-.reduce-motion .landmark .lm-smoke {
+.reduce-motion .landmark .lm-smoke,
+.reduce-motion .landmark .lm-art {
   animation: none !important;
 }
 /* the coach and tips never cover the Undo chip at the right end of the message row */

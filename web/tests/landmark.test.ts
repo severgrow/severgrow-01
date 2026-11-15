@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { DIRECTIONS, coordKey } from '../../src/engine/index.js';
 import { setOrient } from '../src/logic/orient.js';
 import {
+  CONSTRICT_SIDES,
   FINISH_CAP_MS,
   landmarkBox,
   landmarkMotion,
@@ -73,13 +74,26 @@ describe('deterministic variation and motion', () => {
     expect(v.sway).toBeLessThanOrEqual(1);
   });
   it('idle motion runs only with motion on; Reduce motion and Effects Low stop it; danger still trembles', () => {
-    expect(landmarkMotion({ reduceMotion: false, effects: 'normal' }, false)).toEqual({ idle: true, worried: false });
-    expect(landmarkMotion({ reduceMotion: true, effects: 'normal' }, false)).toEqual({ idle: false, worried: false });
-    expect(landmarkMotion({ reduceMotion: false, effects: 'low' }, false)).toEqual({ idle: false, worried: false });
-    expect(landmarkMotion({ reduceMotion: false, effects: 'normal' }, true)).toEqual({ idle: true, worried: true });
+    expect(landmarkMotion({ reduceMotion: false, effects: 'normal' }, false)).toEqual({ idle: true, worried: false, constricted: false });
+    expect(landmarkMotion({ reduceMotion: true, effects: 'normal' }, false)).toEqual({ idle: false, worried: false, constricted: false });
+    expect(landmarkMotion({ reduceMotion: false, effects: 'low' }, false)).toEqual({ idle: false, worried: false, constricted: false });
+    expect(landmarkMotion({ reduceMotion: false, effects: 'normal' }, true)).toEqual({ idle: true, worried: true, constricted: false });
     // danger never trembles at Reduce motion; and it no longer asks for a ring at all
-    expect(landmarkMotion({ reduceMotion: true, effects: 'normal' }, true)).toEqual({ idle: false, worried: false });
+    expect(landmarkMotion({ reduceMotion: true, effects: 'normal' }, true)).toEqual({ idle: false, worried: false, constricted: false });
     expect('ring' in landmarkMotion({ reduceMotion: false, effects: 'normal' }, true)).toBe(false);
+  });
+  it('a home being constricted asks for the tremble at five blocked sides only, and only with motion on', () => {
+    const normal = { reduceMotion: false, effects: 'normal' } as const;
+    expect(CONSTRICT_SIDES).toBe(5);
+    // exactly five: four is not yet a constriction, six is the surround itself (the Strangle finish)
+    expect([0, 3, 4].map((n) => landmarkMotion(normal, true, n).constricted)).toEqual([false, false, false]);
+    expect(landmarkMotion(normal, true, CONSTRICT_SIDES).constricted).toBe(true);
+    expect(landmarkMotion(normal, true, 6).constricted).toBe(false);
+    // the same two gates as every other home motion
+    expect(landmarkMotion({ reduceMotion: true, effects: 'normal' }, true, CONSTRICT_SIDES).constricted).toBe(false);
+    expect(landmarkMotion({ reduceMotion: false, effects: 'low' }, true, CONSTRICT_SIDES).constricted).toBe(false);
+    // and it is motion, never a ring: the state object has no ring at any blocked count
+    for (const n of [0, 3, 5, 6]) expect('ring' in landmarkMotion(normal, true, n)).toBe(false);
   });
 });
 
@@ -107,8 +121,13 @@ describe('the Strangle finish', () => {
 // The frame around a HOME that is being surrounded was removed completely (owner, 2026-11-14:
 // "remove completely the frame that's showing up when the home tile is getting surrounded ...
 // for now don't show it"). The ring group and its per-side segments must not be CREATED at all,
-// not merely hidden, and no ring state class or `data-blocked` may be written. There is no jsdom
-// in this repo, so a tiny DOM stub stands in (the pattern web/tests/seed-reveal.test.ts uses).
+// not merely hidden, and no ring state class or `data-blocked` may be written.
+//
+// Owner, 2026-11-15: "Bring back the tremble only — no ring, just the home reacting." So the
+// landmark now carries a `constricted` state (the swell of its own artwork, style.css
+// `lm-constrict`), and these checks moved with it: the MOTION may come back, the FRAME may not.
+// There is no jsdom in this repo, so a tiny DOM stub stands in (the pattern
+// web/tests/seed-reveal.test.ts uses).
 class StubNode {
   readonly attrs = new Map<string, string>();
   children: StubNode[] = [];
@@ -162,6 +181,10 @@ describe('no frame around a home that is being surrounded', () => {
           const g = drawLandmark(parent as unknown as SVGGElement, kind, '0,0', { x: 0, y: 0 }, o, COLORS, FULL_LOOK);
           expect(g.querySelectorAll('.lm-ring').length, `${kind} ${o} ring`).toBe(0);
           expect(g.querySelectorAll('.lm-ring, .lm-seg').length, `${kind} ${o} segments`).toBe(0);
+          // The constriction's wrapper holds the DRAWING and nothing else: exactly one, and it
+          // draws no path of its own (so the tremble can never be a frame).
+          expect(g.querySelectorAll('.lm-art').length, `${kind} ${o} art wrapper`).toBe(1);
+          expect(g.querySelectorAll('.lm-art')[0]!.querySelectorAll('.lm-ring, .lm-seg').length).toBe(0);
         }
       }
     } finally {
@@ -169,16 +192,24 @@ describe('no frame around a home that is being surrounded', () => {
     }
   });
 
-  it('sets only idle/danger/worried/strangled/won: no ring classes and no data-blocked', () => {
+  it('sets only idle/danger/worried/constricted/strangled/won: no ring classes, no data-blocked, no geometry', () => {
     const g = new StubNode('g');
-    setLandmarkState(g as unknown as SVGGElement, { danger: true, tapped: false, strangled: false, won: false, idle: true, worried: true });
+    const before = g.children.length;
+    setLandmarkState(g as unknown as SVGGElement, { danger: true, tapped: false, strangled: false, won: false, idle: true, worried: true, constricted: false });
     expect([...g.classes].sort()).toEqual(['danger', 'idle', 'worried']);
     expect(g.attrs.has('data-blocked')).toBe(false);
+    // The constriction is one class on the landmark: it never adds a node, an attribute or a
+    // ring class, and it is the ONLY thing it may change.
+    setLandmarkState(g as unknown as SVGGElement, { danger: true, tapped: false, strangled: false, won: false, idle: true, worried: true, constricted: true });
+    expect([...g.classes].sort()).toEqual(['constricted', 'danger', 'idle', 'worried']);
+    expect(g.attrs.has('data-blocked')).toBe(false);
+    expect(g.children.length, 'the tremble adds no element').toBe(before);
+    expect([...g.classes].some((c) => /ring/.test(c)), 'no ring class, ever').toBe(false);
     // strangled replaces the living states entirely, and is alone
-    setLandmarkState(g as unknown as SVGGElement, { danger: true, tapped: false, strangled: true, won: false, idle: true, worried: true });
+    setLandmarkState(g as unknown as SVGGElement, { danger: true, tapped: false, strangled: true, won: false, idle: true, worried: true, constricted: true });
     expect([...g.classes].sort()).toEqual(['strangled']);
-    setLandmarkState(g as unknown as SVGGElement, { danger: false, tapped: false, strangled: false, won: true, idle: false, worried: false });
-    expect([...g.classes].sort()).toEqual(['won']);
+    setLandmarkState(g as unknown as SVGGElement, { danger: false, tapped: false, strangled: false, won: true, idle: false, worried: false, constricted: true });
+    expect([...g.classes].sort()).toEqual(['constricted', 'won']);
     expect(g.attrs.has('data-blocked')).toBe(false);
   });
 });
