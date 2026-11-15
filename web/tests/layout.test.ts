@@ -3,7 +3,7 @@
 // gap around the board is over 16pt, and the corner tools never cover a tile.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { allCoords, coordKey } from '../../src/engine/index.js';
-import { BOARD_MARGIN, CENTRE_MIN, HAND_EDGE, HEIGHTS, SIDE_GAP, MAX_GAP, MAX_HAND, MIN_SLICE, SORT_W, THUMB, TOOL, boardUnits, computeLayout, overlaps, setSlimHud } from '../src/logic/layout.js';
+import { BOARD_MARGIN, CENTRE_MIN, HAND_EDGE, HEIGHTS, LIVE_CARD_CEILING, SIDE_GAP, MAX_GAP, MAX_HAND, MIN_SLICE, SORT_W, TOOL, boardUnits, computeLayout, overlaps, setSlimHud } from '../src/logic/layout.js';
 import type { Box, Layout, Viewport } from '../src/logic/layout.js';
 import { setOrient } from '../src/logic/orient.js';
 import { cornerPts } from '../src/ui/geom.js';
@@ -207,36 +207,58 @@ describe('thumb layout: cards are at least the 44pt touch minimum', () => {
     expect(t.card.w + (MAX_HAND - 1) * t.slice).toBeLessThanOrEqual(390);
   });
 
-  it('a bigger card never lifts the map (owner, 2026-11-14: "we put the board a bit lower")', () => {
-    // THE MAP'S WINDOW is what places the board on a phone (player/player-css.ts: the camera frames
-    // the board in `--cam-under`, and main.ts publishes it from `dock.h - thumb.air`). Growing the
-    // cards once pushed the whole map up the screen; `air` (the dock's spare height above its
-    // control row) is what the map reclaims, so the window must NOT change with the card size.
-    // Measured the same way the browser suites do: the smallest card ladder against the product's.
-    const cap = THUMB.cap;
-    const windowOf = (w: number, h: number, at: number) => {
-      const before = THUMB.cap;
-      (THUMB as { cap: number }).cap = at;
-      try {
-        const l = computeLayout({ w, h }, 3, MAX_HAND, 'right');
-        const t = l.thumb!;
-        return { window: l.dock.h - t.air, card: t.card.w, air: t.air };
-      } finally {
-        (THUMB as { cap: number }).cap = before;
-      }
-    };
-    for (const [w, h] of [[320, 568], [360, 640], [390, 844], [430, 932]] as const) {
-      const small = windowOf(w, h, 0.4);
-      const big = windowOf(w, h, cap);
-      // The cards really did grow (the test would be empty on a phone where the ladder is capped).
-      expect(big.card, `${w}x${h} card`).toBeGreaterThanOrEqual(small.card);
-      // ...and the map's window never shrank: with smaller cards it may be larger (there is more
-      // room), but a bigger card may never take the map's place.
-      expect(big.window, `${w}x${h} window`).toBeGreaterThanOrEqual(small.window - 1);
-      expect(big.air).toBeGreaterThanOrEqual(0);
+  it('the board sits where the LIVE build put it, whatever today\'s cards are (owner, 2026-11-15)', () => {
+    // THE MAP'S WINDOW is what places the board on a phone: the camera frames the map in
+    // `--cam-under` less than the wrap's height, and main.ts publishes it as
+    // `computeLayout(..., LIVE_CARD_CEILING).dock.h` (after the brand polish). So the board's place
+    // is a CONTRACT with the live build, not a function of the cards a player holds:
+    //   * growing today's cards moves the dock, never the board (the reference never reads them),
+    //   * the window is built from the same viewport, so a notched iPhone's safe-area insets are
+    //     part of it. The 2026-11-14 build instead published `dock.h - thumb.air`; the insets take
+    //     that spare air away, so on a 390x844 iPhone it reserved the whole taller dock and the
+    //     board sat 15 px high (0 px in a headless browser, which reports no insets).
+    //   * the part of the dock the map runs over is the dock's OWN empty band above its control
+    //     row, so a bigger card can never put the map on the piles.
+    const reserveOf = (v: { w: number; h: number; safeTop?: number; safeBottom?: number }) =>
+      computeLayout(v, 3, MAX_HAND, 'right', 0, LIVE_CARD_CEILING);
+    const productOf = (v: { w: number; h: number; safeTop?: number; safeBottom?: number }) =>
+      computeLayout(v, 3, MAX_HAND, 'right');
+    const phones = [
+      { w: 320, h: 568 }, { w: 360, h: 640 },
+      { w: 390, h: 844 }, { w: 390, h: 844, safeTop: 47, safeBottom: 34 },
+      { w: 375, h: 812, safeTop: 44, safeBottom: 34 },
+      { w: 393, h: 852, safeTop: 59, safeBottom: 34 },
+      { w: 430, h: 932 }, { w: 430, h: 932, safeTop: 47, safeBottom: 34 },
+    ];
+    for (const v of phones) {
+      const ref = reserveOf(v);
+      const product = productOf(v);
+      const label = `${v.w}x${v.h}${v.safeTop ? ` +${v.safeTop}/${v.safeBottom}` : ''}`;
+      expect(ref.dock.h, `${label}: the window is `).toBeGreaterThan(0);
+      // The map's window is never the whole dock when the cards grew past the live ceiling...
+      expect(ref.dock.h, `${label}: reserve <= dock`).toBeLessThanOrEqual(product.dock.h);
+      // ...and what it does run over is the dock's empty band above its control row: the piles'
+      // row is never touched by the window's bottom edge (both in viewport px).
+      const band = product.parts.piles.y - product.dock.y;
+      expect(product.dock.h - ref.dock.h, `${label}: reclaim inside the band`).toBeLessThanOrEqual(band);
     }
-    // On a tall phone the dock granted itself spare air, so the map gets a real share of it back.
-    expect(windowOf(390, 844, cap).air).toBeGreaterThan(0);
+    // The 2026-11-14 formula was `dock.h - thumb.air`. On a phone whose dock has no spare air left
+    // (the safe areas took it) that reserves the WHOLE dock — 11 px more at 390x844 with 47/34
+    // insets, which is the 15 px the board sat high. It must never equal the reserve again.
+    for (const v of phones) {
+      if (!v.safeTop) continue;
+      const product = productOf(v);
+      const label = `${v.w}x${v.h} +${v.safeTop}/${v.safeBottom}`;
+      expect(product.dock.h - product.thumb!.air, `${label}: old formula`).toBeGreaterThan(reserveOf(v).dock.h);
+      // What the dock reclaimed for itself (its spare air) no longer covers the cards' growth, which
+      // is why `dock.h - air` lifted the board on exactly these phones.
+      expect(product.thumb!.air, `${label}: air no longer covers the reclaim`).toBeLessThan(product.dock.h - reserveOf(v).dock.h);
+    }
+    // The numbers the live cockpit measures on a phone (its own 62pt ceiling, this suite's 44pt
+    // slim header): 288 px with a 390x844 iPhone's insets and 316 px without them. They are the
+    // pre-brand-polish heights, like `dock.h` itself; main.ts publishes the polished reference.
+    expect(reserveOf({ w: 390, h: 844, safeTop: 47, safeBottom: 34 }).dock.h).toBe(288);
+    expect(reserveOf({ w: 390, h: 844 }).dock.h).toBe(316);
   });
 });
 

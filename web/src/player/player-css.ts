@@ -521,19 +521,22 @@ html[data-thumb] .dock .pile-label {
 
 /* ---- the map runs on under the cards (phones): faded, the focus decides how much ---- */
 html[data-thumb] .board-wrap {
-  /* WHERE THE MAP'S WINDOW ENDS (owner, 2026-11-14: "we put the board a bit lower in old - bring
-     that back too"). The camera frames the board in --cam-under less than the wrap's height, so
-     this one number IS the board's vertical position on a phone. It stops at the dock's top, plus
-     THE MAP'S OWN AIR: the spare height the dock's gaps took above its control row is empty, so the
-     map may use it — a bigger card then grows the fan down instead of pushing the whole map up the
-     screen, which is what the live build did before the cards were enlarged.
-     The amount (--dock-under, a RESOLVED px value published by main.ts) is read here, in the SAME
-     rule as the negative margin that lays the map over the dock: a screen where the map does NOT run
-     under the dock (the tutorial, which paints it in the band between the glass and the cockpit:
-     glass-surface.ts sets --cam-under: 0px there) therefore reserves nothing, by construction. This
-     must stay a stylesheet declaration, never an inline style on the element: an inline value would
-     beat the tutorial's reset. And it must resolve to a plain px number: camera.ts reads the property
-     with parseFloat, so a calc() token would parse as NaN and drop the board to the bottom. */
+  /* WHERE THE MAP'S WINDOW ENDS (owner, 2026-11-15: "the board on mobile still sits too high - has
+     to be the same as current .com build"). The camera frames the board in --cam-under less than
+     the wrap's height, so this one number IS the board's vertical position on a phone.
+     The amount (--dock-under, a RESOLVED px value published by main.ts) is the dock height of the
+     cockpit the LIVE build lays out — the cockpit the board's place was measured against — so today's
+     bigger cards cannot lift the board: they grow the dock downwards over the map's window instead.
+     It is derived from the same viewport (safe-area insets included), which the 2026-11-14 build's
+     "dock height minus its spare air" was not: the insets take the spare away, so on a notched
+     iPhone it reserved the whole dock and the board sat 15 px high.
+     It is read in the SAME rule as the negative margin that lays the map over the dock: a screen
+     where the map does NOT run under the dock (the tutorial, which paints it in the band between the
+     glass and the cockpit: glass-surface.ts sets --cam-under: 0px there) therefore reserves nothing,
+     by construction. This must stay a stylesheet declaration, never an inline style on the element:
+     an inline value would beat the tutorial's reset. And it must resolve to a plain px number:
+     camera.ts reads the property with parseFloat, so a calc() token would parse as NaN and drop the
+     board to the bottom. */
   --cam-under: var(--dock-under, var(--dock-h, 0px));
   margin-bottom: calc(-1 * var(--dock-h, 0px));
 }
