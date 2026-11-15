@@ -28,6 +28,14 @@ const handLight = (page:Page,selector:string) => page.locator(selector).first().
   return { shadow:style.boxShadow, suit:style.getPropertyValue('--suit').trim(), opacity:Number(style.opacity) };
 });
 const waitPhase = (page:Page,value:string) => page.waitForFunction(want => (window as any).__severgrow?.state().phase===want && !(window as any).__severgrow.busy(),value);
+/** Wait for any running opacity TRANSITIONS on the matching nodes to land (the hand fades between
+    steps on --dur-quick). Only transitions are awaited: the hand's own breath is an infinite CSS
+    animation and must not block. */
+const settleOpacity = (page:Page,selector:string) => page.evaluate(want => {
+  const transitions = [...document.querySelectorAll(want)].flatMap(el => el.getAnimations()
+    .filter(animation => (animation as CSSTransition).transitionProperty === 'opacity'));
+  return Promise.all(transitions.map(animation => animation.finished));
+}, selector).catch(() => undefined);
 const near=(a:number,b:number)=>Math.abs(a-b)<.7;
 const rects = (page:Page) => page.evaluate(() => {
   const r = (id:string) => document.getElementById(id)!.getBoundingClientRect();
@@ -174,6 +182,9 @@ try {
     }, undefined, { timeout: 8_000 }).then((h) => h.jsonValue()).catch(() => null);
     check(ledThrow === '0:0', `${name}: score rests in the LED during Throw (${JSON.stringify(ledThrow)})`);
     check(!await page.locator('#smart-led-cells').evaluate(el=>el.classList.contains('scrolling')),`${name}: short Throw message remains stationary`);
+    // The step change animates the cards' opacity (--dur-quick); read it only once those transitions
+    // have landed, or a loaded runner can sample a half-faded card and call the design wrong.
+    await settleOpacity(page,'#hand .card');
     const throwLight=await handLight(page,'#hand .card:not(.futa04-throw-picked)');
     const throwPeak=peakGlow(throwLight.shadow), throwReach=reachOf(throwLight.shadow);
     // OWNER, 2026-11-15: "glow when time to throw should be around the hand - just like during grow,
