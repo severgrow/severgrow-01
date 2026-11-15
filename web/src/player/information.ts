@@ -435,16 +435,21 @@ html.futa04-information[data-step='grow'][data-futa04-waiting='true'] #hand:not(
 html.futa04-information[data-step='grow'][data-futa04-waiting='true'] #moves > :is(.kind[data-kind^='bloom-'],.bloom-toggle):not(.on) .futa04-combination {
   animation: futa04-card-breathe 1.35s ease-in-out infinite;
 }
-/* THROW: the hand recedes by OPACITY and a whisper of the same light, never by a filter, and never
-   by a hard line (owner, 2026-11-14: no contour frame, especially no double). The old
-   outline-color: ... !important drew a 1.5px ring on top of this glow; it is gone. Owner,
-   2026-11-14, the second half of the Grow rule: the glow "drops a lot" when it is time to throw, so
-   this is the same --fa-light at a fraction of the Grow alpha — the hand reads unlit beside its lit
-   self. This rule used to desaturate every card with grayscale(.54) while the whole hand breathed:
-   a filter on an animating node re-rasterises all eight cards every frame. */
+/* THROW: the SAME light and the SAME geometry as Grow, held lower — never by a filter, never by a
+   hard line (owner, 2026-11-14: no contour frame, especially no double). The old
+   outline-color: ... !important drew a 1.5px ring on top of this glow; it is gone.
+   OWNER, 2026-11-15: "glow when time to throw should be around the hand - just like during grow,
+   but with lower color saturation". So the reach, the layer count (tight edge + mid halo + wide
+   wash) and the printed corner are the Grow ones; only the colour is quieter. Two computed
+   changes, never a filter (this node breathes, and a filter would re-rasterise every card each
+   frame): alpha (peak .36 vs Grow .64) and saturation (--fa-light mixed 65/35 with its own
+   neutral grey, HSL .35 → ~.11). Mirrors the live rule in smart-cockpit.ts. */
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) {
   opacity: .86;
-  box-shadow: 0 0 3px color-mix(in srgb, var(--fa-light, #f2ede4) 12%, transparent), 0 0 8px 1px color-mix(in srgb, var(--fa-light, #f2ede4) 8%, transparent), 0 4px 11px rgba(16,10,9,.28);
+  box-shadow: 0 0 5px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 36%, transparent),
+    0 0 14px 2px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 22%, transparent),
+    0 0 24px 5px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 8%, transparent),
+    0 5px 14px rgba(16,10,9,.34);
   animation: futa04-card-breathe 1.35s ease-in-out infinite;
 }
 /* The lesson's suggested card is lifted out of the fan: still, one clean shadow, no green edge.
@@ -458,8 +463,16 @@ html.futa04-information #hand .card.tutorial-target-card {
     0 2px 6px -2px rgba(0,0,0,.55),
     0 0 20px rgba(233,216,173,.14) !important;
 }
+/* Selected for the Throw: the hand-off. This card's light is gone (depth only) and the rest of the
+   hand yields (next rule), so the only lit thing left is the Throw pile — .futa04-throw-target
+   below turns its halo up to peak .42. Same rule in smart-cockpit.ts. */
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked {
-  opacity: 1; box-shadow: 0 0 4px color-mix(in srgb, var(--fa-light, #f2ede4) 30%, transparent), 0 0 10px 1px color-mix(in srgb, var(--fa-light, #f2ede4) 20%, transparent) !important;
+  opacity: 1; box-shadow: 0 4px 11px rgba(16,10,9,.30) !important;
+}
+html.futa04-information[data-step='throw'] #hand:not(.waiting):has(.futa04-throw-picked) .card:not(.futa04-throw-picked) {
+  box-shadow: 0 0 4px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 8%, transparent),
+    0 0 10px 1px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 4%, transparent),
+    0 4px 11px rgba(16,10,9,.30);
 }
 html.futa04-information:is(.futa04-move-active,.futa04-information-blocked,.reduce-motion) #hand .card { animation: none !important; }
 html.futa04-information:is(.futa04-move-active,.futa04-information-blocked,.reduce-motion) #moves .futa04-combination { animation: none !important; }

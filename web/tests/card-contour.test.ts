@@ -66,7 +66,7 @@ describe('a hand card never wears a contour in any guide/step state', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('Throw still lights the hand with a warm amber glow, just no line', () => {
+  it('Throw lights the hand with the shared light, and no line', () => {
     const throwRules = SOURCES.flatMap(([name, src]) =>
       rules(src)
         .filter((rule) => /data-step='throw'/.test(rule.selector) && rule.selector.includes('.card'))
@@ -75,7 +75,10 @@ describe('a hand card never wears a contour in any guide/step state', () => {
     expect(throwRules.length).toBeGreaterThan(0);
     const lights = throwRules.filter((rule) => rule.body.includes('box-shadow'));
     expect(lights.length).toBeGreaterThan(0);
-    for (const rule of lights) {
+    // The rule that lights the throwable hand (not the picked card, not the hand-wide yield).
+    const idle = lights.filter((rule) => !/\.card\.futa04-throw-picked/.test(rule.selector) && !rule.selector.includes(':has('));
+    expect(idle.length).toBeGreaterThan(0);
+    for (const rule of idle) {
       // The hand stays lit by a soft blur, and the light is the cockpit's one living light
       // (`--fa-light`, near-white) — not a card's suit ink and not a bare colour literal.
       // Owner, 2026-11-15: "just amber classic glow", then "make it less intense and closer to
@@ -83,6 +86,41 @@ describe('a hand card never wears a contour in any guide/step state', () => {
       expect(rule.body, `${rule.name}: ${rule.selector}`).toMatch(/box-shadow:[^;]*var\(--fa-light/);
       expect(rule.body, `${rule.name}: ${rule.selector}`).not.toMatch(/var\(--suit/);
     }
+    // The picked card HANDS ITS LIGHT TO THE PILE (owner, 2026-11-15: "then when selected the glow
+    // should be on the discard pile"), so it paints only its depth shadow — no light at all.
+    const picked = lights.filter((rule) => rule.selector.includes('.card.futa04-throw-picked'));
+    expect(picked.length).toBeGreaterThan(0);
+    for (const rule of picked) {
+      expect(rule.body, `${rule.name}: ${rule.selector}`).not.toContain('var(--fa-light');
+      expect(rule.body, `${rule.name}: ${rule.selector}`).not.toContain('color-mix');
+      expect(rule.body, `${rule.name}: ${rule.selector}`).toMatch(/box-shadow:[^;]*rgba\(/);
+    }
+  });
+
+  it('Throw keeps Grow geometry, but a lower alpha and a desaturated mix of the same token', () => {
+    const lightLayers = (body: string) =>
+      [...body.matchAll(/0 0 ([\d.]+)px(?: ([\d.]+)px)? color-mix\(/g)].map((m) => `${m[1]}/${m[2] ?? '0'}`);
+    const alphas = (body: string) =>
+      [...body.matchAll(/\) ([\d.]+)%, transparent\)/g)].map((m) => Number(m[1]));
+    const grow = SOURCES.flatMap(([, src]) => rules(src))
+      .find((rule) => /data-step='grow'/.test(rule.selector) && rule.selector.includes('.card.playable') && rule.body.includes('box-shadow'))!;
+    const idle = SOURCES.flatMap(([, src]) => rules(src))
+      .find((rule) => /data-step='throw'/.test(rule.selector) && rule.selector.includes('.card:not(.futa04-throw-picked)')
+        && !rule.selector.includes(':has(') && rule.body.includes('box-shadow'))!;
+    expect(grow).toBeTruthy();
+    expect(idle).toBeTruthy();
+    // Owner, 2026-11-15: "around the hand - just like during grow". Same three layers, same reach.
+    expect(lightLayers(idle.body)).toEqual(lightLayers(grow.body));
+    const growPeak = Math.max(...alphas(grow.body));
+    const throwPeak = Math.max(...alphas(idle.body));
+    expect(growPeak).toBeCloseTo(64, 0);
+    expect(throwPeak).toBeLessThan(growPeak * 0.75);
+    expect(throwPeak).toBeGreaterThan(growPeak * 0.4);
+    // "lower color saturation": the token is mixed with its own neutral, computed in the colour.
+    expect(idle.body).toContain('var(--fa-light, #f2ede4) 65%, #8b8882');
+    expect(grow.body).not.toContain('#8b8882');
+    // And it is a colour mix, never a filter (a filter on a breathing card re-rasterises the hand).
+    expect(idle.body).not.toMatch(/filter:/);
   });
 });
 

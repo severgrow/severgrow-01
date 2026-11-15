@@ -176,8 +176,20 @@ try {
     check(!await page.locator('#smart-led-cells').evaluate(el=>el.classList.contains('scrolling')),`${name}: short Throw message remains stationary`);
     const throwLight=await handLight(page,'#hand .card:not(.futa04-throw-picked)');
     const throwPeak=peakGlow(throwLight.shadow), throwReach=reachOf(throwLight.shadow);
-    check(throwPeak<=.25&&throwReach<=12,`${name}: throwing hand is quiet (peak ${throwPeak}, reach ${throwReach}px)`);
-    check(growPeak-throwPeak>=.5&&growReach-throwReach>=12,`${name}: the tap/throw light difference is large, not a tint shift`);
+    // OWNER, 2026-11-15: "glow when time to throw should be around the hand - just like during grow,
+    // but with lower color saturation". So Throw now keeps Grow's GEOMETRY (3 layers, same 24px
+    // reach) and is quieter by two computed means: lower alpha, and the same --fa-light mixed 65/35
+    // with its neutral grey. It must still be clearly dimmer than Grow — asserted as a ratio, not a
+    // hand-tuned difference — and it must still be visibly lit (the old .12 whisper is the bug).
+    const saturationOf=(rgb:readonly [number,number,number])=>{const [r,g,b]=rgb.map(v=>v/255) as [number,number,number];
+      const max=Math.max(r,g,b),min=Math.min(r,g,b),l=(max+min)/2,d=max-min;return d===0?0:d/(1-Math.abs(2*l-1));};
+    const throwRatio=throwPeak/growPeak;
+    check(throwPeak>=.3&&throwPeak<=.42,`${name}: the throwing hand is lit by the same light, softer (peak ${throwPeak})`);
+    check(Math.abs(throwReach-growReach)<=1,`${name}: the throw glow keeps Grow's reach (${throwReach} vs ${growReach}px)`);
+    check(outerGlow(throwLight.shadow).length>=3,`${name}: the throw glow keeps Grow's three soft layers (${outerGlow(throwLight.shadow).length})`);
+    check(throwRatio>=.4&&throwRatio<=.75,`${name}: Throw is still measurably quieter than Grow (${throwRatio.toFixed(2)}x)`);
+    const throwSat=saturationOf(peakColour(throwLight.shadow)), growSat=saturationOf(peakColour(growLight.shadow));
+    check(throwSat<=growSat*.5,`${name}: the throw light is the same token at lower saturation (${throwSat.toFixed(2)} vs ${growSat.toFixed(2)})`);
     check(throwLight.opacity<.95,`${name}: the hand also steps back in opacity while throwing (${throwLight.opacity})`);
     // OWNER, 2026-11-15: "use the same on draw pile during draw and on discard pile during throw".
     // The Throw pile's light must be that same near-white, not the old red ember.
@@ -416,6 +428,43 @@ try {
   await skipBloom.locator('#discard').click();
   check(await skipBloom.evaluate(()=>(window as any).__severgrow.state().phase!=='DISCARD'),'Bloom skip: tapping the Throw pile throws the picked card');
   await skipBloom.close();
+  // OWNER, 2026-11-15: "glow when time to throw should be around the hand ... and then when selected
+  // the glow should be on the discard pile". One page, three states, so the HAND-OFF is measured as
+  // a single relation: Grow hand > Throw hand > yielded Throw hand, and the discard halo is the
+  // brightest light only while a card is picked.
+  const handoff=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+  await handoff.addInitScript(()=>{ (window as any).__name=(fn:unknown)=>fn;
+    localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})); });
+  await handoff.goto(`${BASE}?seed=2`); await handoff.waitForSelector('#deck.ready');
+  await handoff.waitForFunction(()=>document.getElementById('smart-panel')&&document.querySelector('#hand .card'));
+  await handoff.locator('#deck').evaluate(el=>(el as HTMLButtonElement).click()); await waitPhase(handoff,'ACT');
+  await handoff.waitForTimeout(300);
+  const growHand=await handLight(handoff,'#hand .card.playable');
+  const growPeakH=peakGlow(growHand.shadow);
+  await pressContext(handoff,'skip'); await waitPhase(handoff,'DISCARD');
+  await handoff.waitForTimeout(300);
+  const idleHand=await handLight(handoff,'#hand .card:not(.futa04-throw-picked)');
+  const idlePeak=peakGlow(idleHand.shadow);
+  const halo=async()=>handoff.evaluate(()=>{const h=document.querySelector<HTMLElement>('#futa04-box #discard .gd-halo')!;
+    const s=getComputedStyle(h);return {shadow:s.boxShadow,opacity:Number(s.opacity)};});
+  const idleHalo=await halo();
+  const idleHaloEff=peakGlow(idleHalo.shadow)*idleHalo.opacity;
+  check(idlePeak>idleHaloEff,`Handoff: while choosing, the light is on the hand (${idlePeak} > ${idleHaloEff.toFixed(2)})`);
+  await handoff.locator('#hand [data-card]').first().click();
+  await handoff.waitForSelector('#hand .futa04-throw-picked'); await handoff.waitForTimeout(500);
+  const pickedHand=await handLight(handoff,'#hand .futa04-throw-picked');
+  const yieldedHand=await handLight(handoff,'#hand .card:not(.futa04-throw-picked)');
+  const yieldedPeak=peakGlow(yieldedHand.shadow);
+  const selectedHalo=await halo();
+  const selectedHaloEff=peakGlow(selectedHalo.shadow)*selectedHalo.opacity;
+  check(outerGlow(pickedHand.shadow).length===0,`Handoff: the picked card gives up its light (${outerGlow(pickedHand.shadow).length} lit layers)`);
+  check(yieldedPeak<=.1,`Handoff: the rest of the hand yields while a card is picked (peak ${yieldedPeak})`);
+  check(growPeakH>idlePeak&&idlePeak>yieldedPeak,`Handoff: Grow > Throw > selected Throw (${growPeakH} > ${idlePeak} > ${yieldedPeak})`);
+  check(selectedHaloEff>=.38,`Handoff: the discard halo becomes the lit target (effective ${selectedHaloEff.toFixed(2)})`);
+  check(selectedHaloEff>idleHaloEff*1.5,`Handoff: selection turns the pile's light up (${idleHaloEff.toFixed(2)} -> ${selectedHaloEff.toFixed(2)})`);
+  check(selectedHaloEff>yieldedPeak*4,`Handoff: the pile is the brightest light in the cockpit (${selectedHaloEff.toFixed(2)} vs hand ${yieldedPeak})`);
+  await handoff.screenshot({path:`${dir}/390x844-throw-selected.png`});
+  await handoff.close();
   const cameraPage=await browser.newPage({viewport:{width:1280,height:800}});
   await cameraPage.addInitScript(()=>{ (window as any).__name=(fn:unknown)=>fn; localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})); });
   await cameraPage.goto(`${BASE}?seed=2`); await cameraPage.waitForSelector('#deck.ready');
