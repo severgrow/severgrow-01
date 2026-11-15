@@ -26,7 +26,7 @@ import { materialsOf } from '../logic/materials.js';
 import { drawSeedStone } from './seedstone.js';
 import { drawGoldFrame, noteGoldFrameArtFailure } from './goldframes.js';
 import { DEFAULT_ART_SPRITES } from './defaultArtSprites.js';
-import { FA_ALL_URLS, FA_ROCKS, faBackgroundUrl, faBaseColour, faRockSprite, faSetUrls, faSides, faTileSprite, faVariants, neighbourToward } from './forestAsh.js';
+import { FA_ALL_URLS, FA_ROCKS, faBaseColour, faGroundUrl, faRockSprite, faSetUrls, faSides, faTileSprite, faVariants, neighbourToward } from './forestAsh.js';
 import type { FaSprite, FaVariants } from './forestAsh.js';
 import type { TerritoryId } from './forestAsh.js';
 import { warmBoardArt } from './art-warm.js';
@@ -109,8 +109,9 @@ const requestArt = (url: string | null | undefined): void => {
 
 if (typeof Image !== 'undefined') {
   // The look the first board draws: both default sides, the rocks, the gold frames, the empty
-  // ground and the background this browser has chosen.
-  for (const url of [...FA_ALL_URLS, groundUrl, faBackgroundUrl()]) requestArt(url);
+  // ground and the ground copy of the background this browser has chosen (its colour strength is
+  // baked in — no filter is drawn on the board).
+  for (const url of [...FA_ALL_URLS, groundUrl, faGroundUrl()]) requestArt(url);
 }
 
 /**
@@ -224,10 +225,21 @@ const ROCK_ART_SCALE = 0.88;
  *                             so slate reads as a quiet ground and the strength numbers and gold
  *                             badges stay the thing you look at.
  *
- * The strength is one `feColorMatrix type="saturate"` on the painted `<image>`. A colour matrix is a
- * per-pixel multiply, not a blur: it softens nothing, and it never re-rasterises the board's
- * moving/scaling parent (see the feathering note in ui/board.ts). It runs in sRGB, so the picture's
- * own luminance is what the chroma is folded into.
+ * THE STRENGTH IS BAKED INTO THE PICTURE, NOT A RUNTIME FILTER (2026-11-15). It used to be one
+ * `feColorMatrix type="saturate"` on each cell's `<image>`, and the board paid for it on WebKit:
+ * a filter is applied BEFORE the clip, so each of the 37 cells built a full-picture filter surface
+ * (default filter region 120%, ~444x490 CSS px → 1,332x1,470 device px at DPR 3 × 4 bytes ≈ 7.8 MB
+ * × 37 ≈ 290 MB) and every board repaint ran 37 saturate passes over ~72 M pixels. Sustained play at
+ * iPhone pixel density collapsed to 3.6 fps (mean) with 1.36 s full-board repaints; the same board
+ * with those pictures hidden repaints in 17 ms. Chromium composites the same page at 60 fps, which is
+ * why four earlier perf passes missed it. So `bg-<name>-ground.webp` carries the same matrix in its
+ * pixels (scripts/build-forest-ash.py, `--grounds`) and the board draws it with NO filter at all.
+ *
+ * DO NOT reach for a substitute for that filter. All three were tried and all three are wrong:
+ *   - CSS `filter` on the `<image>`: WebKit paints the picture UNFILTERED (the approved art changes).
+ *   - a filter on the parent `<g>`: the same, the ground is painted unfiltered.
+ *   - `ctx.filter` (2D canvas): the same again, and it is not this picture's path.
+ * Baking is the only form that keeps the owner's colour on WebKit.
  */
 export const FA_BACKGROUND_OPACITY = 0.85;
 export const FA_BACKGROUND_INTENSITY = 0.4;
@@ -276,7 +288,8 @@ export class DefaultArtBoardView extends BoardView {
   protected override drawCell(g: SVGGElement, key: string, terrain: Terrain) {
     const defs = this.svg.querySelector('defs')!;
     const id = this.id('default-ground');
-    const bg = faBackgroundUrl();
+    // The ground PICTURE (the board background with its colour strength baked in, ui/forestAsh.ts).
+    const bg = faGroundUrl();
     // The background the board paints is a picture like any other: ask for it (once) so a file that
     // cannot load is remembered and the cell keeps its flat look instead of a broken-image tile.
     requestArt(bg);
@@ -349,18 +362,14 @@ export class DefaultArtBoardView extends BoardView {
     const clipId = this.id(`fa-bg-${key.replace(',', '_')}`);
     const defs = this.svg.querySelector('defs')!;
     if (!defs.querySelector(`#${clipId}`)) el('path', { d: hexPath(key, S * 1.015, 'flat') }, el('clipPath', { id: clipId, clipPathUnits: 'userSpaceOnUse' }, defs));
-    // One colour matrix, defined once and shared by every painted cell (see the constants above).
-    const filterId = this.id('fa-bg-intensity');
-    if (!defs.querySelector(`#${filterId}`)) {
-      const filter = el('filter', { id: filterId, 'color-interpolation-filters': 'sRGB' }, defs);
-      el('feColorMatrix', { type: 'saturate', values: String(FA_BACKGROUND_INTENSITY) }, filter);
-    }
     el('image', {
       href: url, x: f(x - k * (fx + W / 2)), y: f(y - k * (fy + H / 2)), width: f(k * W), height: f(k * H),
-      // The painted board fills the hexes; the colour matrix above keeps it quiet, and the filter
-      // touches this picture only (tile art, gold frames and stones are separate elements).
+      // The painted board fills the hexes. Its colour strength is IN THE PICTURE (url is the
+      // -ground copy, ui/forestAsh.ts) and there is deliberately NO filter here: a filter on this
+      // element is applied before the clip and costs WebKit a full-picture surface per cell (see the
+      // constants above). Opacity is a separate knob and stays as the owner set it.
       preserveAspectRatio: 'none', 'clip-path': `url(#${clipId})`, opacity: FA_BACKGROUND_OPACITY,
-      filter: `url(#${filterId})`, class: 'default-ground-art fa-painted-ground',
+      class: 'default-ground-art fa-painted-ground',
     }, g);
   }
 
@@ -480,7 +489,7 @@ export class DefaultArtBoardView extends BoardView {
   /** Every picture this board may paint: its two sides' sets, the homes, rocks, gold and ground. */
   private warmUrls(): string[] {
     const urls = new Set<string>([...FA_ALL_URLS, groundUrl]);
-    const bg = faBackgroundUrl();
+    const bg = faGroundUrl();
     if (bg) urls.add(bg);
     for (const side of faSides()) for (const url of faSetUrls(side)) urls.add(url);
     return [...urls];

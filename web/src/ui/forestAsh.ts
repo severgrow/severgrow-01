@@ -67,6 +67,14 @@ import bg_lichen from '../assets/forest-ash/bg-lichen.webp?url';
 import bg_cinder from '../assets/forest-ash/bg-cinder.webp?url';
 import bg_clay from '../assets/forest-ash/bg-clay.webp?url';
 import bg_slate from '../assets/forest-ash/bg-slate.webp?url';
+// The board's ground copies: the same paintings with the board's 40% colour strength BAKED IN
+// (scripts/build-forest-ash.py, `--grounds`). The board draws these; the originals above stay for
+// the world colour chips and the skin chooser, which show the saturated painting.
+import bg_cocoa_ground from '../assets/forest-ash/bg-cocoa-ground.webp?url';
+import bg_lichen_ground from '../assets/forest-ash/bg-lichen-ground.webp?url';
+import bg_cinder_ground from '../assets/forest-ash/bg-cinder-ground.webp?url';
+import bg_clay_ground from '../assets/forest-ash/bg-clay-ground.webp?url';
+import bg_slate_ground from '../assets/forest-ash/bg-slate-ground.webp?url';
 
 export type { SpillDir };
 export type FaSprite = ForestAshSprite & { url: string; name: ForestAshName };
@@ -123,16 +131,32 @@ export const setFaSides = (mine: TerritoryId, theirs: TerritoryId) => { sides = 
  * BOARD BACKGROUNDS (owner, 2026-11-14): painted boards whose hexes sit on the cells. 'classic' is
  * the ground the board had before (a tiled texture). Slate is the quiet default the owner chose
  * (there is no grey source picture); ui/defaultArtBoard.ts shows it at 85% opacity and 40% colour.
+ *
+ * TWO FILES PER BACKGROUND, and the difference matters (2026-11-15):
+ *   url        the painting, fully saturated. The world colour chips and the skin chooser show it.
+ *   groundUrl  the same painting with the board's 40% colour strength baked in. The BOARD draws
+ *              this. It used to draw `url` through a per-cell `feColorMatrix`, which on WebKit cost
+ *              37 full-board filter surfaces and the game its frame rate (see defaultArtBoard.ts).
+ * 'classic' has neither: it is a tiled texture, drawn from its own picture.
  */
 export type BackgroundId = 'classic' | (typeof BACKGROUND_NAMES)[number];
 const BG_URLS: Record<(typeof BACKGROUND_NAMES)[number], string> = { cocoa: bg_cocoa, lichen: bg_lichen, cinder: bg_cinder, clay: bg_clay, slate: bg_slate };
-export const BACKGROUNDS: readonly { id: BackgroundId; url: string | null }[] = [
-  { id: 'classic', url: null }, ...BACKGROUND_NAMES.map((id) => ({ id, url: BG_URLS[id] })),
+const BG_GROUND_URLS: Record<(typeof BACKGROUND_NAMES)[number], string> = {
+  cocoa: bg_cocoa_ground, lichen: bg_lichen_ground, cinder: bg_cinder_ground, clay: bg_clay_ground, slate: bg_slate_ground,
+};
+export const BACKGROUNDS: readonly { id: BackgroundId; url: string | null; groundUrl: string | null }[] = [
+  { id: 'classic', url: null, groundUrl: null },
+  ...BACKGROUND_NAMES.map((id) => ({ id, url: BG_URLS[id], groundUrl: BG_GROUND_URLS[id] })),
 ];
 let background: BackgroundId = 'slate';
 export const faBackground = () => background;
 export const setFaBackground = (id: BackgroundId) => { background = id; };
 export const faBackgroundUrl = (): string | null => BACKGROUNDS.find((b) => b.id === background)?.url ?? null;
+/**
+ * The picture the BOARD paints for the current background (its colour strength already in the
+ * pixels). Null for 'classic', whose ground is the tiled texture in defaultArtBoard.ts.
+ */
+export const faGroundUrl = (): string | null => BACKGROUNDS.find((b) => b.id === background)?.groundUrl ?? null;
 
 /** The pictures the default board draws (the preload list). Other sets load when chosen. */
 export const FA_ALL_URLS: readonly string[] = [

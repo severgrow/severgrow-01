@@ -654,6 +654,9 @@ def main(preview: Path | None):
         previews.append((name, small))
 
     write_data(entries, gold, build_backgrounds())
+    # The board's ground copies are baked from the files just written (never from the sheet: they
+    # must be the same pixels the board would otherwise filter at runtime).
+    build_grounds()
     if preview:
         write_preview(preview, previews, entries)
 
@@ -712,6 +715,58 @@ def clean_gold(c: np.ndarray) -> np.ndarray:
 
 BG_W = 1100  # exported background width (a board hex radius is then ~100 px, like the tiles)
 BACKGROUNDS = ("cocoa", "lichen", "cinder", "clay", "slate")
+
+# THE BOARD'S GROUND IS THE PICTURE, NOT A FILTER (2026-11-15).
+#
+# The board draws each of its 37 cells from one painted board picture, and it used to quiet that
+# picture with an SVG `feColorMatrix type="saturate"` on every cell's `<image>`. WebKit applies a
+# filter BEFORE the clip, so each of the 37 cells built a filter surface the size of the whole
+# picture (~444x490 CSS px, 7.8 MB at DPR 3): ~290 MB of surfaces and 37 saturate passes over ~72 M
+# pixels on every board repaint. Sustained play on WebKit at iPhone pixel density fell to 3.6 fps
+# (the same page ran at ~47 fps without the painted ground). Chromium hides it, which is why the
+# earlier perf passes missed it.
+#
+# So the saturation is baked into a second copy of each background, `bg-<name>-ground.webp`, and the
+# board draws that with no filter at all. The originals stay: the world colour chips and the skin
+# chooser show the saturated painting.
+GROUND_SATURATION = 0.4
+
+
+def saturate_srgb(rgb: np.ndarray, s: float) -> np.ndarray:
+    """The exact `feColorMatrix type="saturate"` transform, in sRGB (gamma-encoded) space, which is
+    what `color-interpolation-filters="sRGB"` gives the board. Written out per channel (the same
+    numbers in the same order as the SVG spec) so it can be checked against the matrix by eye."""
+    px = rgb.astype(np.float64)
+    r, g, b = px[..., 0], px[..., 1], px[..., 2]
+    out = np.stack([
+        (0.213 + 0.787 * s) * r + (0.715 - 0.715 * s) * g + (0.072 - 0.072 * s) * b,
+        (0.213 - 0.213 * s) * r + (0.715 + 0.285 * s) * g + (0.072 - 0.072 * s) * b,
+        (0.213 - 0.213 * s) * r + (0.715 - 0.715 * s) * g + (0.072 + 0.928 * s) * b,
+    ], axis=-1)
+    return np.clip(out, 0.0, 255.0).round().astype(np.uint8)
+
+
+def build_grounds() -> list[str]:
+    """The board's ground copies, baked from the committed `bg-<name>.webp` so they are made from the
+    SAME pixels the board draws today (a re-cut from the original sheet would be a second generation
+    of lossy artefacts and could not match the filter result). Lossless, because a lossy pass would
+    put noise back into the pixels this exists to make exact."""
+    names = []
+    for name in BACKGROUNDS:
+        src = OUT / f"bg-{name}.webp"
+        if not src.exists():
+            continue
+        rgb = np.asarray(Image.open(src).convert("RGB"))
+        out = saturate_srgb(rgb, GROUND_SATURATION)
+        path = OUT / f"bg-{name}-ground.webp"
+        Image.fromarray(out).save(path, "WEBP", lossless=True, method=6)
+        # Read the file back: the encoder round trip must be exact, or the ground is not the filter's
+        # result any more.
+        back = np.asarray(Image.open(path).convert("RGB")).astype(np.int16)
+        drift = int(np.abs(back - out.astype(np.int16)).max())
+        print(f"  bg-{name}-ground: {out.shape[1]}x{out.shape[0]} {path.stat().st_size // 1024} KiB, round-trip drift {drift}/255")
+        names.append(name)
+    return names
 
 
 def build_backgrounds() -> list[str]:
@@ -815,5 +870,11 @@ def write_preview(dir: Path, previews, entries):
 
 if __name__ == "__main__":
     args = sys.argv[1:]
+    if "--grounds" in args:
+        # Only the board's ground copies, from the committed bg-<name>.webp files. The sprite pipeline
+        # is untouched (running it would rewrite every other picture for no reason).
+        print(f"baking the board's ground pictures at s = {GROUND_SATURATION}")
+        build_grounds()
+        raise SystemExit(0)
     prev = Path(args[args.index("--preview") + 1]) if "--preview" in args else None
     main(prev)

@@ -89,14 +89,21 @@ describe('board art that fails to load', () => {
   // The painted board background used to be the one picture the board drew without asking for it
   // (FA_ALL_URLS never held `bg-*`), so `artUnavailable(bg)` could never be true and a 404 painted a
   // broken-image tile on all 37 cells. It is requested now, like every other picture.
-  it('requests the board background it paints, so a failed one is dropped too', async () => {
+  //
+  // Since 2026-11-15 the board draws the GROUND copy of the background (its colour strength baked
+  // in, ui/forestAsh.ts) instead of the saturated picture through a per-cell filter, so that is the
+  // picture this asserts. The saturated file is still exported for the world colour chips.
+  it('requests the board ground it paints, so a failed one is dropped too', async () => {
     const mod = await importModule(() => true);
     const ash = await import('../src/ui/forestAsh.js');
-    const bg = ash.faBackgroundUrl();
+    const bg = ash.faGroundUrl();
     expect(bg).toBeTruthy();
     expect(record.asked).toContain(bg);
     expect(mod.artUnavailable(bg ?? undefined)).toBe(true);
     expect(record.removed).toContain(bg);
+    // The saturated paintings stay for the UI that still shows them (skin chooser, world chips).
+    expect(ash.faBackgroundUrl()).toBeTruthy();
+    expect(ash.faBackgroundUrl()).not.toBe(bg);
   });
 });
 
