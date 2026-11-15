@@ -117,7 +117,7 @@ import { liftOf, settleOvershootOf, shadowOf, weightOf } from './logic/card-weig
 import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface, INTERFACE_MOTION } from './ui/interface-motion.js';
 import { screenArrival } from './ui/screen-motion.js';
 import type { ScreenName } from './ui/screen-motion.js';
-import { BOARD_MARGIN, HEIGHTS, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setFixedBoardOrient, setSlimHud, THUMB } from './logic/layout.js';
+import { BOARD_MARGIN, HEIGHTS, LIVE_CARD_CEILING, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setFixedBoardOrient, setSlimHud, THUMB } from './logic/layout.js';
 import { mountSkinSwitch } from './online/skin-switch.js';
 import type { Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
@@ -7189,12 +7189,20 @@ function applyLayout() {
   root.setProperty('--hud-h', px(FEATURES.slimHeader ? SLIM_HUD : HEIGHTS.hud));
   root.setProperty('--race-h', px(FEATURES.slimHeader ? 0 : HEIGHTS.race));
   root.setProperty('--dock-h', px(l.dock.h));
-  // THE BOARD'S VERTICAL PLACE ON A PHONE (owner, 2026-11-14: "we put the board a bit lower in old
-  // - bring that back too"). The camera frames the map in `--cam-under` less than the wrap's
-  // height, and it READS that number with parseFloat — so it must be a resolved px value, never a
-  // calc(). The map keeps the dock's spare air above its control row (`Thumb.air`): that air is
-  // empty, so using it lets bigger cards grow the fan downwards instead of lifting the whole map up
-  // the screen. Without `air` at all, the map sits exactly where it did before the cards grew.
+  // THE BOARD'S VERTICAL PLACE ON A PHONE (owner, 2026-11-15: "the board on mobile still sits too
+  // high - has to be the same as current .com build"). The camera frames the map in `--cam-under`
+  // less than the wrap's height, and it READS that number with parseFloat — so it must be a
+  // resolved px value, never a calc().
+  //
+  // WHAT THE NUMBER IS: the dock height of the cockpit the LIVE build (f4ba65f5) lays out at this
+  // viewport (`LIVE_CARD_CEILING`, logic/layout.ts) — i.e. the cockpit the board's place was
+  // measured against. It is therefore independent of today's cards: a bigger hand grows the dock
+  // downwards over the map's window (the dock's empty band above its control row) instead of
+  // lifting the board. It also includes the safe-area insets, because the reference cockpit is
+  // built from the same viewport — that is what the 2026-11-14 build got wrong: it took the
+  // reserve from the dock's SPARE AIR, and a notched iPhone's insets take the spare away, so the
+  // whole (taller) dock was reserved and the board sat 15 px high on a 390x844 iPhone. A headless
+  // browser reports no insets and so measured 0.0 px, which is why that fix looked right.
   //
   // The AMOUNT is published on the root as `--dock-under`; the wrap's own rule decides whether the
   // map runs under the dock at all (`--cam-under: var(--dock-under, …)` in player/player-css.ts).
@@ -7205,8 +7213,12 @@ function applyLayout() {
   // quarter of its size and pinned it to the top (the 0.86 release gate caught it:
   // web/e2e/futa04-tutorial-lock.ts). One rule now owns both the negative margin and the reserve,
   // so a layout that cancels the overlap (the tutorial) gets a zero reserve by construction.
-  if (thumbLayout) root.setProperty('--dock-under', px(Math.max(0, l.dock.h - thumbLayout.air)));
-  else root.removeProperty('--dock-under');
+  if (thumbLayout && thumbSide) {
+    const view = { w, h, ...safeArea() };
+    const liveCockpit = computeLayout(view, radius, maxHand, thumbSide, thumbOverlap, LIVE_CARD_CEILING);
+    if (branding) Object.assign(liveCockpit, branding.polishLayout(liveCockpit, view, radius));
+    root.setProperty('--dock-under', px(Math.max(0, liveCockpit.dock.h)));
+  } else root.removeProperty('--dock-under');
   root.setProperty('--dock-w', px(l.dock.w));
   root.setProperty('--board-margin', `${BOARD_MARGIN}px`);
   for (const [k, v] of Object.entries(l.rows)) root.setProperty(`--row-${k}`, px(v));

@@ -68,11 +68,9 @@ export type Thumb = {
   /** THE SPARE AIR the dock took above its control row, dock px (0 when it took none).
    *
    *  `thumbDock` grants spare height to the two gaps around the control row so a map held back by
-   *  the width does not leave one huge void. That is the same air the owner asked for when he said
-   *  the bigger cards must not lift the map ("we put the board a bit lower in old - bring that back
-   *  too", 2026-11-14): the map's window runs on under it (`--cam-under` in player/player-css.ts,
-   *  published from this number), so growing the cards moves the dock's own parts down instead of
-   *  pushing the map up. 0 on the phones whose dock already fits. */
+   *  the width does not leave one huge void. This is that grant. It is NOT the board's window: the
+   *  camera's reserve is the dock height of the LIVE build's cockpit (`LIVE_CARD_CEILING`), so it
+   *  never follows today's cards or this number — see `main.ts` "THE BOARD'S VERTICAL PLACE". */
   air: number;
 };
 /** Thumb layout v3: the card slice (wanted, most), the picked card's lift, the pile column, the
@@ -84,6 +82,26 @@ export type Thumb = {
 export const THUMB = { slice: 45, minSlice: 35, maxSlice: 50, sliceOf: 0.67, lift: 10, pileW: 56, edge: 8, icon: 44, tilt: 7, rise: 0.12, cap: 0.45, /** the touch minimum a card may not go below */ minCard: 44, /** the dock cap allowed to reach it on the shortest phone */ minCardCap: 0.48, overlapMax: 0, bottom: 12, mapGap: 24, gap: 14 } as const;
 /** Room kept above the dock's top element (a picked card's lift reaches into it). */
 const TOP_KEEP = 2;
+
+/**
+ * THE LIVE BUILD'S CARD CEILING (62): the hand's cards on the live site (`f4ba65f5`) never grew
+ * past 62 x 88, and the board's place on a phone is measured against that build (owner,
+ * 2026-11-15: "the board on mobile still sits too high - has to be the same as current .com
+ * build").
+ *
+ * So the camera's window for the map is NOT taken from today's dock. It is the dock height of a
+ * cockpit laid out with this ceiling — the place the board was measured at — which makes the
+ * board's vertical position a fixed contract instead of a function of the cards. A bigger hand then
+ * grows the dock downwards over the map's window (the dock's spare band above its control row)
+ * instead of lifting the board. Passing it to `computeLayout` builds exactly that reference
+ * cockpit; `main.ts` publishes its dock height as `--dock-under`.
+ *
+ * The 2026-11-14 attempt took the reserve from the dock's own spare air instead. That worked only
+ * where the dock had spare height: on a notched iPhone the safe-area insets take the spare away, so
+ * the reserve fell back to the whole (taller) dock and the board sat 15 px high — while a headless
+ * browser, which reports no insets, measured 0.0 px.
+ */
+export const LIVE_CARD_CEILING = 62;
 
 /** The centres, rotations (deg) and outward normals of `n` cards in the fan (dock px). */
 export const fanSlots = (t: Thumb, n: number): { x: number; y: number; rot: number; nx: number; ny: number }[] => {
@@ -115,7 +133,7 @@ export const fanSlots = (t: Thumb, n: number): { x: number; y: number; rot: numb
  * 3. the map above, with the same gap above the control row as below it (the move buttons sit
  *    exactly halfway between the map and the hand).
  */
-const thumbDock = (W: number, usable: number, maxHand: number, side: 'right' | 'left', extra = 0) => {
+const thumbDock = (W: number, usable: number, maxHand: number, side: 'right' | 'left', extra = 0, ceiling = Infinity) => {
   const { edge: M, pileW, icon, lift, tilt } = THUMB;
   const G = THUMB.gap + extra;
   const rad = (tilt * Math.PI) / 180;
@@ -179,7 +197,10 @@ const thumbDock = (W: number, usable: number, maxHand: number, side: 'right' | '
   // the biggest cards whose compact fan fits the width with at least a 34pt strip per card
   // (owner, 2026-11-14: "Make the cards a bit bigger"): the ceiling rose from 62 to 72 so a
   // normal phone gets a card the size of the old fallback plus a step, not the old 62 forever.
-  const sizes = [72, 70, 68, 66, 64, 62, 60, 58, 56, 54, 52, 50, 48, 46, 44, 42, 40];
+  // `ceiling` rebuilds the cockpit the LIVE build had (see LIVE_CARD_CEILING): that one decides
+  // where the board sits, never the cards a player holds today.
+  const sizes = [72, 70, 68, 66, 64, 62, 60, 58, 56, 54, 52, 50, 48, 46, 44, 42, 40]
+    .filter((cw) => cw <= ceiling);
   const fits = (cw: number, cap: number) => {
     const b = build(cw);
     return b.t.slice >= THUMB.minSlice && b.h <= usable * cap ? b : null;
@@ -381,7 +402,13 @@ const toolsIn = (zone: Box): Layout['tools'] => {
   };
 };
 
-export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND, thumb: 'right' | 'left' | null = null, overlap = 0): Layout => {
+/**
+ * `cardCeiling` rebuilds the cockpit with the hand's cards capped at that width (the size ladder is
+ * filtered, nothing else changes). It exists for ONE caller use: `main.ts` builds the cockpit the
+ * live build had (`LIVE_CARD_CEILING`) and publishes its dock height as the board's window
+ * (`--dock-under`), so a bigger hand moves the dock and never the board.
+ */
+export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND, thumb: 'right' | 'left' | null = null, overlap = 0, cardCeiling = Infinity): Layout => {
   const st = v.safeTop ?? 0;
   const sb = v.safeBottom ?? 0;
   const sl = v.safeLeft ?? 0;
@@ -437,14 +464,14 @@ export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND, thumb
     // overlap: granted by the page only where no tile, home, gold or target hex is under a card)
     // (the screen keeps the bottom safe area itself: the dock sits on it, 12pt up)
     const usable = v.h - top - sb;
-    const first = thumbDock(W, usable, Math.max(5, maxHand), thumb);
+    const first = thumbDock(W, usable, Math.max(5, maxHand), thumb, 0, cardCeiling);
     // a map held back by the width leaves spare height: a third of it widens the two equal gaps
     // around the control row (up to 20pt each), the rest goes above the map
     const z0 = v.h - sb - first.h - top;
     const f0 = bestFit(W - 2 * THUMB.edge, z0, radius);
     const spare = z0 - boardUnits(radius, f0.orient).h * f0.scale;
     const extra = Math.max(0, Math.min(20, Math.floor(spare / 6)));
-    const { t, h } = extra > 0 ? thumbDock(W, usable, Math.max(5, maxHand), thumb, extra) : first;
+    const { t, h } = extra > 0 ? thumbDock(W, usable, Math.max(5, maxHand), thumb, extra, cardCeiling) : first;
     const dock: Box = { x: sl, y: v.h - sb - h, w: W, h };
     const zone: Box = { x: sl + THUMB.edge, y: top, w: W - 2 * THUMB.edge, h: dock.y - top + Math.max(0, Math.min(overlap, t.band.h)) };
     const fit = bestFit(zone.w, zone.h, radius);
