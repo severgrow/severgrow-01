@@ -163,8 +163,16 @@ try {
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-grow.png`});
     await pressContext(page,'skip'); await waitPhase(page,'DISCARD');
     aligned(await rects(page),`${name} Throw`);
-    await page.waitForFunction(()=>document.getElementById('smart-led-text')?.textContent?.trim()==='0:0',undefined,{timeout:4000});
-    check(await page.locator('#smart-led-text').innerText()==='0:0',`${name}: score rests in the LED during Throw`);
+    // Read the value the wait actually observed. The old pair (a `waitForFunction`, then a second
+    // independent `innerText()` read) raced: the LED can roll again between the two, so on a loaded
+    // CI runner at 1920x1080 it reported a value it had just seen settle. Asserting the observed
+    // value is stricter, not looser — a never-settling LED now fails here instead of throwing an
+    // opaque timeout.
+    const ledThrow = await page.waitForFunction(() => {
+      const text = document.getElementById('smart-led-text')?.textContent?.trim() ?? '';
+      return text === '0:0' ? text : false;
+    }, undefined, { timeout: 8_000 }).then((h) => h.jsonValue()).catch(() => null);
+    check(ledThrow === '0:0', `${name}: score rests in the LED during Throw (${JSON.stringify(ledThrow)})`);
     check(!await page.locator('#smart-led-cells').evaluate(el=>el.classList.contains('scrolling')),`${name}: short Throw message remains stationary`);
     const throwLight=await handLight(page,'#hand .card:not(.futa04-throw-picked)');
     const throwPeak=peakGlow(throwLight.shadow), throwReach=reachOf(throwLight.shadow);
