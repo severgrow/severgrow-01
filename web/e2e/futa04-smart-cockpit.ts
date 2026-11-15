@@ -126,16 +126,17 @@ try {
     }
     // OWNER'S CARD-LIGHT RULE (2026-11-14): "the colors of cards when its time to tap them should be
     // more intense - and then dropping a lot when its time to throw". The tappable hand is lit in
-    // ONE colour — the house amber; the same hand in the Throw step keeps only a trace of it.
-    // OWNER, 2026-11-15, on the version that mixed each card's own suit ink: "the glow on grow move
-    // on hand shouldnt be so colorful - wher ethis came from? just amber classic glow." So the hue
-    // check is now amber (`#f2c14e`) for every card, and the hand may not show several hues at once.
-    const AMBER: readonly [number, number, number] = [0xf2, 0xc1, 0x4e];
+    // ONE colour — the cockpit's near-white `--fa-light`; the same hand in Throw keeps a whisper.
+    // Two later corrections from the owner, both in here: "shouldnt be so colorful ... just amber
+    // classic glow" (it was mixed from each card's --suit) and "the glow is too intense now - make
+    // it less intense and closer to white". So: one token, near-white, and a gentler peak.
+    const LIGHT: readonly [number, number, number] = [0xf2, 0xed, 0xe0];
     const growLight=await handLight(page,'#hand .card.playable');
     const growPeak=peakGlow(growLight.shadow), growReach=reachOf(growLight.shadow);
-    check(growPeak>=.6&&growReach>=24,`${name}: tappable hand is lit strongly (peak ${growPeak}, reach ${growReach}px)`);
+    check(growPeak>=.5&&growPeak<=.78,`${name}: tappable hand is lit but not blooming (peak ${growPeak})`);
+    check(growReach>=20&&growReach<=26,`${name}: the light reaches the card's neighbourhood, not the board (reach ${growReach}px)`);
     check(outerGlow(growLight.shadow).length>=3,`${name}: the lit hand has several soft outer layers`);
-    check(hueDistance(hueOf(peakColour(growLight.shadow)),hueOf(AMBER))<=24,`${name}: the light is the house amber, not a suit ink (peak ${JSON.stringify(peakColour(growLight.shadow))})`);
+    check(hueDistance(hueOf(peakColour(growLight.shadow)),hueOf(LIGHT))<=26,`${name}: the light is the shared near-white, not a suit ink (peak ${JSON.stringify(peakColour(growLight.shadow))})`);
     // A rainbow hand is the bug, so prove it is not one: every plainly playable card must peak at the
     // amber. The only exceptions are deliberate and pre-existing — a card the coach is hinting at
     // wears the cream advice halo (`.coach-glow`, which opts out of the Grow light so one card never
@@ -170,6 +171,11 @@ try {
     check(throwPeak<=.25&&throwReach<=12,`${name}: throwing hand is quiet (peak ${throwPeak}, reach ${throwReach}px)`);
     check(growPeak-throwPeak>=.5&&growReach-throwReach>=12,`${name}: the tap/throw light difference is large, not a tint shift`);
     check(throwLight.opacity<.95,`${name}: the hand also steps back in opacity while throwing (${throwLight.opacity})`);
+    // OWNER, 2026-11-15: "use the same on draw pile during draw and on discard pile during throw".
+    // The Throw pile's light must be that same near-white, not the old red ember.
+    const discardLight=await page.evaluate(()=>{const h=document.querySelector('#futa04-box #discard .gd-halo');return h?getComputedStyle(h).boxShadow:'';});
+    check(!!discardLight&&discardLight!=='none',`${name}: the Throw pile is lit as the throw target`);
+    check(hueDistance(hueOf(peakColour(discardLight)),hueOf(LIGHT))<=26,`${name}: the Throw pile wears the same light as the hand (peak ${JSON.stringify(peakColour(discardLight))})`);
     check(JSON.stringify(await contextKinds(page))==='["guide"]',`${name}: only "?" in the context key when throwing`);
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-throw.png`});
     check(errors.length===0,`${name}: no browser errors: ${errors.join(' | ')}`);

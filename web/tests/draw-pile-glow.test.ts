@@ -24,7 +24,9 @@ describe('the Draw step piles glow and breathe, with no outline box', () => {
 
   it('the glow is a soft light a little brighter than before (0.27), and only its opacity breathes', () => {
     const glow = rule(cockpit, "html.futa04-information[data-step='draw'] :is(#deck,#discard).ready .pile-card::after {");
-    const alpha = Number(/rgba\(242,237,224,([.\d]+)\)/.exec(glow)?.[1]);
+    // The light comes from the cockpit's one shared colour token (owner, 2026-11-15: "use the same on
+    // draw pile during draw"), so the alpha is the colour-mix percentage rather than a literal rgba.
+    const alpha = Number(/color-mix\(in srgb, var\(--fa-light[^)]*\) ([.\d]+)%/.exec(glow)?.[1]) / 100;
     expect(alpha).toBeGreaterThan(0.27);
     expect(alpha).toBeLessThanOrEqual(0.5);
     expect(glow).toMatch(/animation:futa04-draw-pile-glow 1\.8s ease-in-out 240ms infinite/);

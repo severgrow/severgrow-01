@@ -55,14 +55,16 @@ describe('the Throw pile has no contour while throwing', () => {
     const halo = rule(INFORMATION_CSS, THROW_HALO);
     // The contour was a spread-only layer: `0 0 0 <n>px <colour>` paints a hard rectangle.
     expect(halo).not.toMatch(/box-shadow:[^;]*\b0 0 0 /);
-    // The soft ember light is still there (this is not "remove the glow").
-    expect(halo).toMatch(/box-shadow:[^;]*0 0 22px 2px rgba\(173,64,47,\.32\)/);
+    // The soft light is still there (this is not "remove the glow"), and it is the cockpit's one
+    // shared light — owner, 2026-11-15: "use the same on ... discard pile during throw". The ember
+    // RGB this used to pin was a second colour nobody asked for.
+    expect(halo).toMatch(/box-shadow:[^;]*0 0 22px 2px color-mix\(in srgb, var\(--fa-light[^)]*\) 32%/);
   });
 
   it('the picked pile lights the same way, with no ring either', () => {
     const halo = rule(INFORMATION_CSS, TARGET_HALO);
     expect(halo).not.toMatch(/box-shadow:[^;]*\b0 0 0 /);
-    expect(halo).toMatch(/box-shadow:[^;]*0 0 26px 4px rgba\(190,80,60,\.42\)/);
+    expect(halo).toMatch(/box-shadow:[^;]*0 0 26px 4px color-mix\(in srgb, var\(--fa-light[^)]*\) 42%/);
     expect(halo).toContain('opacity: 1');
   });
 

@@ -76,10 +76,11 @@ describe('a hand card never wears a contour in any guide/step state', () => {
     const lights = throwRules.filter((rule) => rule.body.includes('box-shadow'));
     expect(lights.length).toBeGreaterThan(0);
     for (const rule of lights) {
-      // The hand stays lit by a soft blur, and the light is the house amber (`--c-gold`, #f2c14e) —
-      // not a card's suit ink and not a bare colour literal. Owner, 2026-11-15: "just amber classic
-      // glow"; the ember RGB this used to pin was one more colour nobody asked for.
-      expect(rule.body, `${rule.name}: ${rule.selector}`).toMatch(/box-shadow:[^;]*(?:var\(--c-gold\)|242, ?193, ?78)/);
+      // The hand stays lit by a soft blur, and the light is the cockpit's one living light
+      // (`--fa-light`, near-white) — not a card's suit ink and not a bare colour literal.
+      // Owner, 2026-11-15: "just amber classic glow", then "make it less intense and closer to
+      // white"; both replaced one more colour nobody asked for, so the rule is one token now.
+      expect(rule.body, `${rule.name}: ${rule.selector}`).toMatch(/box-shadow:[^;]*var\(--fa-light/);
       expect(rule.body, `${rule.name}: ${rule.selector}`).not.toMatch(/var\(--suit/);
     }
   });

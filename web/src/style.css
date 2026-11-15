@@ -24,6 +24,14 @@
   --c-hexFill: #222325;
   --c-rock: #58524a;
   --c-gold: #f2c14e;
+  /* THE COCKPIT'S LIVING LIGHT (owner, 2026-11-15: "make it less intense and closer to off-white.
+     use the same on draw pile during draw and on discard pile during throw"). ONE colour for every
+     "this is what you can act on" light — the tappable hand, the pile you draw from, the pile you
+     throw to — instead of an amber for cards, a cream for the deck and a red ember for the discard.
+     It is the project's existing off-white (`logic/off-white.ts`), not a new near-white: no pure
+     white is allowed anywhere in the game, so "closer to off-white" means this cream.
+     Each place decides its own alpha, which is how the tap/throw difference stays. */
+  --fa-light: #f2ede4;
   --c-you: #7fcf8d;
   --c-bot: #ff6b4a;
   --c-youInk: #18191a;

@@ -379,7 +379,7 @@ html.futa04-information #futa04-box #discard.futa04-throw-target {
    (rgb 82,43,35 against a rgb 23,23,23 backdrop). Only the ring goes; the soft ember light stays. */
 html.futa04-information #futa04-box #discard.futa04-throw-target .gd-halo {
   opacity: 1;
-  box-shadow: 0 0 26px 4px rgba(190,80,60,.42);
+  box-shadow: 0 0 26px 4px color-mix(in srgb, var(--fa-light, #f2ede4) 42%, transparent);
 }
 /* Reduce motion: the pile still ENDS bigger — the size is information, not decoration — and only
    the transition is dropped, so it is simply bigger the moment the card is picked. */
@@ -391,10 +391,12 @@ html.futa04-information.reduce-motion #futa04-box #discard.futa04-throw-target {
   html.futa04-information #futa04-box #discard.futa04-throw-target { transform: scale(1.16); transition: none; }
 }
 /* The resting throw light: the same contour removal as the picked state. The old ring was
-   0 0 0 1px rgba(218,104,80,.38); what is left is the ember falloff alone. */
+   0 0 0 1px rgba(218,104,80,.38); what is left is the falloff alone. The colour is now the
+   cockpit's --fa-light, the same light the hand is tap-lit with (owner, 2026-11-15: "use the same on
+   ... discard pile during throw"); only the alpha differs, which is what keeps Throw quiet. */
 html.futa04-information[data-step='throw'] #discard .gd-halo {
   opacity: .62; transition: none;
-  box-shadow: 0 0 22px 2px rgba(173,64,47,.32);
+  box-shadow: 0 0 22px 2px color-mix(in srgb, var(--fa-light, #f2ede4) 32%, transparent);
 }
 html.futa04-information[data-step='throw'] #discard .gd-ring { animation: none !important; opacity: 0; }
 /* The hand is a drag surface (Grow and the new swipe-up Throw): it must own the vertical gesture,
@@ -405,13 +407,13 @@ html.futa04-information #hand .card { touch-action: none; }
    toward a Bloom opts out: its edge is the Bloom's aqua (see the bloom-pick rule above), never the
    green of a plain Grow. A coach-advised card opts out too: it carries the cream advice halo below,
    so one card never wears two glows. Mirrors the live rule in smart-cockpit.ts (the same state must
-   read the same whichever sheet is injected last). ONE COLOUR: the house amber (--c-gold). The
-   light was mixed from the card's own --suit until 2026-11-15, which painted a rainbow hand nobody
-   asked for (owner: "shouldnt be so colorful ... just amber classic glow"). */
+   read the same whichever sheet is injected last). ONE COLOUR for the whole cockpit: --fa-light,
+   the project off-white (owner, 2026-11-15: "make it less intense and closer to off-white"), after the version
+   mixed from each card's own --suit painted a rainbow hand nobody asked for. */
 html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim):not(.futa04-bloom-pick):not(.coach-glow) {
-  box-shadow: 0 0 6px color-mix(in srgb, var(--c-gold) 92%, transparent),
-    0 0 16px 2px color-mix(in srgb, var(--c-gold) 58%, transparent),
-    0 0 30px 6px color-mix(in srgb, var(--c-gold) 26%, transparent),
+  box-shadow: 0 0 5px color-mix(in srgb, var(--fa-light, #f2ede4) 64%, transparent),
+    0 0 14px 2px color-mix(in srgb, var(--fa-light, #f2ede4) 38%, transparent),
+    0 0 24px 5px color-mix(in srgb, var(--fa-light, #f2ede4) 15%, transparent),
     0 5px 14px rgba(3,8,6,.42);
 }
 /* The coach's suggested card at rest: a cream halo, blurred along the printed edge (owner,
@@ -433,16 +435,16 @@ html.futa04-information[data-step='grow'][data-futa04-waiting='true'] #hand:not(
 html.futa04-information[data-step='grow'][data-futa04-waiting='true'] #moves > :is(.kind[data-kind^='bloom-'],.bloom-toggle):not(.on) .futa04-combination {
   animation: futa04-card-breathe 1.35s ease-in-out infinite;
 }
-/* THROW: the hand recedes by OPACITY and a quiet amber trace, never by a filter, and never by a
-   hard line (owner, 2026-11-14: no contour frame, especially no double). The old
-   outline-color: ... !important drew a 1.5px ember ring on top of this glow; it is gone. Owner,
+/* THROW: the hand recedes by OPACITY and a whisper of the same light, never by a filter, and never
+   by a hard line (owner, 2026-11-14: no contour frame, especially no double). The old
+   outline-color: ... !important drew a 1.5px ring on top of this glow; it is gone. Owner,
    2026-11-14, the second half of the Grow rule: the glow "drops a lot" when it is time to throw, so
-   these are the same amber hues at a fraction of the Grow alpha — the hand reads unlit beside its
-   lit self. This rule used to desaturate every card with grayscale(.54) while the whole hand
-   breathed: a filter on an animating node re-rasterises all eight cards every frame. */
+   this is the same --fa-light at a fraction of the Grow alpha — the hand reads unlit beside its lit
+   self. This rule used to desaturate every card with grayscale(.54) while the whole hand breathed:
+   a filter on an animating node re-rasterises all eight cards every frame. */
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) {
   opacity: .86;
-  box-shadow: 0 0 3px color-mix(in srgb, var(--c-gold) 16%, transparent), 0 0 8px 1px color-mix(in srgb, var(--c-gold) 10%, transparent), 0 4px 11px rgba(16,10,9,.28);
+  box-shadow: 0 0 3px color-mix(in srgb, var(--fa-light, #f2ede4) 12%, transparent), 0 0 8px 1px color-mix(in srgb, var(--fa-light, #f2ede4) 8%, transparent), 0 4px 11px rgba(16,10,9,.28);
   animation: futa04-card-breathe 1.35s ease-in-out infinite;
 }
 /* The lesson's suggested card is lifted out of the fan: still, one clean shadow, no green edge.
@@ -457,7 +459,7 @@ html.futa04-information #hand .card.tutorial-target-card {
     0 0 20px rgba(233,216,173,.14) !important;
 }
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked {
-  opacity: 1; box-shadow: 0 0 4px color-mix(in srgb, var(--c-gold) 34%, transparent), 0 0 10px 1px color-mix(in srgb, var(--c-gold) 24%, transparent) !important;
+  opacity: 1; box-shadow: 0 0 4px color-mix(in srgb, var(--fa-light, #f2ede4) 30%, transparent), 0 0 10px 1px color-mix(in srgb, var(--fa-light, #f2ede4) 20%, transparent) !important;
 }
 html.futa04-information:is(.futa04-move-active,.futa04-information-blocked,.reduce-motion) #hand .card { animation: none !important; }
 html.futa04-information:is(.futa04-move-active,.futa04-information-blocked,.reduce-motion) #moves .futa04-combination { animation: none !important; }
