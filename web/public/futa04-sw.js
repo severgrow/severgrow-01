@@ -32,7 +32,11 @@ function cachePrefix() {
 // v4 (2026-11-12): the Art Lab went live at /art/ on this origin. Workers without the /art/ guard
 // saved the lab's page as the game's offline copy when a designer opened it (and cached the lab's
 // files), so a new cache name drops those copies on the first launch after this deploy.
-const CACHE = `${PREFIX}v4`;
+// v5 (2026-11-15): the saved page is no longer trusted on its own (see `navigate`). A page could run
+// a 150-commit-old shell indefinitely: the worker answered every launch from the saved copy and only
+// refreshed it for the NEXT one, and a home-screen app that is resumed never navigates at all. The
+// new name makes the first launch of a stuck client start from a copy this worker has proved.
+const CACHE = `${PREFIX}v5`;
 const scope = new URL(self.registration.scope);
 const shell = ['./', './index.html', './manifest.webmanifest', './futasaku-icon-192.png', './futasaku-icon-512.png'];
 self.addEventListener('install', (e) => {
@@ -45,7 +49,11 @@ const purge = () => caches.keys().then((keys) => Promise.all(keys.filter((k) => 
 self.addEventListener('activate', (e) => e.waitUntil(Promise.all([
   purge(),
   self.registration.navigationPreload?.enable().catch(() => undefined),
-]).then(() => self.clients.claim())));
+]).then(() => self.clients.claim()).then(() => savedPage().then(pageEntry)).then((entry) => {
+  // A new worker just took over: pages already running may be a build behind, and a resumed
+  // home-screen app will not navigate again today. They are told, and the page decides (menu only).
+  if (entry) announce(entry);
+}).catch(() => undefined)));
 const immutable = (url) => url.pathname.includes('/assets/') || /[?&]v=[0-9a-f]{6,}/.test(url.search);
 // The only page this worker may keep as the offline copy is the scope's OWN page. A navigation to a
 // sub-page (the Art Lab, the admin dashboard, a forwarding route) must never be saved as the root
@@ -66,24 +74,89 @@ const networkFirst = (req, key) =>
 // THE INSTALLED APP OPENS AT ONCE (owner, 2026-11-06: "after adding the app to home screen it loads
 // long and flashes white"): iOS shows a blank WHITE page between its launch screen and the first paint,
 // so any wait here is a white flash. A saved page is answered immediately and refreshed in the
-// background for the next launch (its build files are hashed, so an older page still finds its own
-// files); only a first visit, with nothing saved yet, waits for the network.
+// background (its build files are hashed, so an older page still finds its own files); only a first
+// visit, with nothing saved yet, waits for the network.
+//
+// BUT A SAVED PAGE IS ONLY GOOD WHILE ITS OWN BUILD IS STILL ON THE SITE (owner, 2026-11-15: "after
+// opening /test on browser mobile - should never ever happen"; his phone ran a page from 2026-11-12,
+// 150 commits behind, with board and card pictures painted as the browser's broken-image placeholder).
+// The saved copy names the one code file it runs (`assets/index-<hash>.js` in its own HTML). A deploy
+// replaces the whole directory, so ONE `HEAD` on that file settles it for the entire build: if it
+// answers 404/410 the saved page can no longer run — its own scripts, chunks and pictures are gone —
+// and this launch gets the deployed page instead. That is the only launch that pays the white flash,
+// and only when it is a real update. Any other answer (200, another status, a network error, a slow
+// server) keeps the saved page, so offline and a flaky connection behave exactly as before.
+//
+// This test lives in the WORKER, not in the page, on purpose: a page from November cannot be fixed by
+// new page code it does not contain. The worker is replaced by the browser on its own schedule, so
+// this is the only place that can rescue a client which is already stuck.
+const ENTRY_FILE = /assets\/index-[A-Za-z0-9_-]+\.js/;
+/** The build's entry code file named by a page, e.g. `assets/index-BoVygnnJ.js`. */
+const entryOf = (html) => {
+  const match = ENTRY_FILE.exec(html || '');
+  return match ? match[0] : null;
+};
+/** The entry file of a stored page, or null when it names none / cannot be read. Never rejects. */
+const pageEntry = (res) => (res ? res.clone().text().then(entryOf, () => null) : Promise.resolve(null));
+const savedPage = () => caches.open(CACHE).then((c) => c.match('./index.html', { ignoreSearch: true })).catch(() => undefined);
+/** The tightest deadline a launch can afford before it must show the saved page. */
+const VERIFY_MS = 1200;
+/**
+ * Is the saved page's own entry file still on the site? One `HEAD`, raced against a short deadline so
+ * a slow or offline connection can never hold the launch: a timeout, an error or a server that will
+ * not answer HEAD all mean "keep the saved page" (it is the only copy the device has, and the app is
+ * not the thing at fault). Only a definite 404/410 means the build is gone.
+ */
+const stillOnSite = (entry, base) => {
+  const head = fetch(new URL(entry, base), { method: 'HEAD', cache: 'no-store' })
+    .then((res) => res.status !== 404 && res.status !== 410, () => true);
+  const deadline = new Promise((done) => setTimeout(() => done(true), VERIFY_MS));
+  return Promise.race([head, deadline]);
+};
+/**
+ * TELL THE PAGES ALREADY RUNNING (a resumed home-screen app never navigates, so no navigation will
+ * ever tell it). The page decides what to do — it reloads only on the menu, never over a game — and an
+ * older page that does not listen is simply unaffected. The message carries the entry file the site
+ * now runs, so the page needs no second download of its own to compare.
+ */
+const announce = (entry) => {
+  const clients = self.clients;
+  if (!clients || !clients.matchAll) return;
+  clients.matchAll({ type: 'window' })
+    .then((list) => { for (const client of list) { try { client.postMessage({ type: 'futa-shell', entry }); } catch { /* a page that cannot take it */ } } })
+    .catch(() => undefined);
+};
 const navigate = async (event) => {
-  const network = Promise.resolve(event.preloadResponse).then((preloaded) => preloaded || fetch(event.request))
-    .then((res) => {
-      if (res.ok && ownPage(res.url)) {
-        const copy = res.clone();
-        event.waitUntil(caches.open(CACHE).then((c) => c.put('./index.html', copy)).catch(() => undefined));
+  // The page request is started first, exactly as before: navigation preload is usually already in
+  // flight, and a first visit has nothing saved to answer with.
+  const started = Promise.resolve(event.preloadResponse).then((preloaded) => preloaded || fetch(event.request));
+  const cached = await savedPage();
+  const savedEntry = await pageEntry(cached);
+  const network = started.then(async (res) => {
+    if (res.ok && ownPage(res.url)) {
+      const copy = res.clone();
+      event.waitUntil(caches.open(CACHE).then((c) => c.put('./index.html', copy)).catch(() => undefined));
+      // A deploy landed while pages are open: tell them the entry the saved page now names.
+      if (savedEntry) {
+        const entry = await pageEntry(res.clone());
+        if (entry && entry !== savedEntry) announce(entry);
       }
-      return res;
-    });
+    }
+    return res;
+  });
   event.waitUntil(network.then(() => undefined, () => undefined));
-  const cached = await caches.open(CACHE).then((c) => c.match('./index.html', { ignoreSearch: true })).catch(() => undefined);
   // A STALE-PAGE RECOVERY (owner, 2026-11-08: "territory keeps loading forever"): the page reloads with
   // ?_fresh= when its own code files are gone from the site. Answering that from the same saved page
   // would fail again, so the recovery waits for the network page (the saved one only when offline).
   if (new URL(event.request.url).searchParams.has('_fresh')) return network.catch(() => cached || Response.error());
-  return cached || network;
+  if (!cached) return network;
+  // A page that names its own entry, whose entry is gone, must not be answered: its code files are
+  // gone with it. Offline is never asked (there is no answer to get, and the saved page is the app).
+  const offline = self.navigator && self.navigator.onLine === false;
+  if (savedEntry && !offline && !(await stillOnSite(savedEntry, event.request.url))) {
+    return network.catch(() => cached);
+  }
+  return cached;
 };
 // P-5: never cache the duel API. Cross-origin calls already bypass this worker; when the API
 // is same-origin under the app path (or proxied), still skip caching match GETs.

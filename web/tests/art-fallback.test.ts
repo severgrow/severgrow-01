@@ -99,3 +99,101 @@ describe('board art that fails to load', () => {
     expect(record.removed).toContain(bg);
   });
 });
+
+// NO BROWSER PLACEHOLDER, EVER (owner, 2026-11-15). `artUnavailable()` only protects the pictures a
+// module remembers to ask about. The page has painters that never ask — the gold-frame atlas, the
+// strength-stone atlas, a card over a Blast, a menu mark — and on a stale shell every one of their
+// files is gone, which is how the owner got a page full of WebKit's blue "?" tiles. The rule is now
+// enforced where the failure lands: the element that failed leaves the page before it can be painted.
+type FakeEl = {
+  localName: string;
+  nodeType: number;
+  removed: boolean;
+  complete?: boolean;
+  naturalWidth?: number;
+  getAttribute: (name: string) => string | null;
+  setAttribute: (name: string, value: string) => void;
+  removeAttribute: (name: string) => void;
+  remove: () => void;
+};
+
+const fakeEl = (localName: string, attrs: Record<string, string | number> = {}): FakeEl => {
+  const map = new Map<string, string>(Object.entries(attrs).map(([k, v]) => [k, String(v)]));
+  const el: FakeEl = {
+    localName,
+    nodeType: 1,
+    removed: false,
+    getAttribute: (name) => map.get(name) ?? null,
+    setAttribute: (name, value) => { map.set(name, value); },
+    removeAttribute: (name) => { map.delete(name); },
+    remove: () => { el.removed = true; },
+  };
+  return el;
+};
+
+/** A document and a window that can be handed a resource error, as the browser does. */
+const installPage = (nodes: FakeEl[]) => {
+  vi.stubGlobal('document', {
+    querySelectorAll: (selector: string) => (selector === 'svg image'
+      ? nodes.filter((node) => node.localName === 'image')
+      : nodes.filter((node) => node.localName === 'image' || node.localName === 'img')),
+  });
+  const listeners: Array<(event: Event) => void> = [];
+  vi.stubGlobal('window', {
+    addEventListener: (type: string, cb: (event: Event) => void, capture: boolean) => {
+      if (type === 'error' && capture) listeners.push(cb);
+    },
+  });
+  return (target: unknown) => {
+    for (const cb of listeners) cb({ target } as unknown as Event);
+  };
+};
+
+describe('a picture the page did not ask about', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    // Intact files unless a test says otherwise: the guard must not touch art that loads.
+    vi.stubGlobal('Image', class extends FakeImage { constructor() { super(() => false); } });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('takes the failed <image> out of the page, so WebKit has nothing to draw a placeholder over', async () => {
+    const stale = fakeEl('image', { href: '/assets/gone-1a2b.webp', width: 100, height: 100 });
+    const fire = installPage([stale]);
+    const mod = await import('../src/ui/defaultArtBoard.js');
+    fire(stale);
+    expect(stale.removed).toBe(true);
+    expect(mod.artUnavailable('/assets/gone-1a2b.webp')).toBe(true);
+  });
+
+  it('clears a failed <img> but keeps its box (the layout is not ours to change)', async () => {
+    const lost = fakeEl('img', { src: '/assets/card-gone.webp', width: 120, height: 160 });
+    const fire = installPage([lost]);
+    await import('../src/ui/defaultArtBoard.js');
+    fire(lost);
+    expect(lost.getAttribute('src')).toBeNull();
+    expect(lost.removed).toBe(false);
+    expect(lost.getAttribute('data-art-missing')).toBe('');
+  });
+
+  it('leaves a picture that loaded, and anything that is not a picture, alone', async () => {
+    const good = fakeEl('image', { href: '/assets/fine.webp' });
+    const script = fakeEl('script', { src: '/assets/index-abc.js' });
+    const fire = installPage([good, script]);
+    await import('../src/ui/defaultArtBoard.js');
+    fire(script);
+    expect(script.removed).toBe(false);
+    expect(good.removed).toBe(false);
+    expect(good.getAttribute('href')).toBe('/assets/fine.webp');
+  });
+
+  it('sweeps a picture that was already broken before the board module loaded', async () => {
+    const early = fakeEl('img', { src: '/assets/menu-gone.webp' });
+    early.complete = true;
+    early.naturalWidth = 0;
+    installPage([early]);
+    const mod = await import('../src/ui/defaultArtBoard.js');
+    expect(early.getAttribute('src')).toBeNull();
+    expect(mod.artUnavailable('/assets/menu-gone.webp')).toBe(true);
+  });
+});

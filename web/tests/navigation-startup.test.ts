@@ -3,13 +3,14 @@ import {runInNewContext} from 'node:vm';
 import {expect,it,vi} from 'vitest';
 
 const source=readFileSync(new URL('../public/futa04-sw.js',import.meta.url),'utf8');
-function worker(fetcher:typeof fetch,cached?:Response){
+function worker(fetcher:typeof fetch,cached?:Response,extra:{clients?:any;onLine?:boolean}={}){
  const listeners=new Map<string,(e:any)=>void>();const put=vi.fn(async (_key:string,_response:Response)=>{});
  const timers=new Map<number,{fn:()=>void;ms:number}>();let next=0;
  const cache={match:vi.fn(async()=>cached?.clone()),put};
  runInNewContext(source,{URL,Response,Promise,setTimeout:(fn:()=>void,ms:number)=>{timers.set(++next,{fn,ms});return next;},clearTimeout:(id:number)=>timers.delete(id),fetch:fetcher,
   caches:{open:async()=>cache,keys:async()=>[]},
-  self:{registration:{scope:'https://game.example/'},addEventListener:(type:string,fn:any)=>listeners.set(type,fn)}});
+  self:{registration:{scope:'https://game.example/'},addEventListener:(type:string,fn:any)=>listeners.set(type,fn),
+   clients:extra.clients,navigator:extra.onLine===undefined?undefined:{onLine:extra.onLine}}});
  const navigate=(preloadResponse?:Promise<Response>,url='https://game.example/')=>{let answer:Promise<Response>|undefined;const tasks:Promise<unknown>[]=[];
   listeners.get('fetch')!({request:{url,method:'GET',mode:'navigate'},
    preloadResponse,
@@ -121,4 +122,101 @@ it('still saves the game’s own page for the next launch',async()=>{
  await Promise.all(n.tasks);
  expect(w.cache.put).toHaveBeenCalled();
  expect(await w.cache.put.mock.calls[0]![1].text()).toBe('the game');
+});
+
+// A SAVED PAGE WHOSE OWN BUILD IS GONE MUST NOT BE ANSWERED (owner, 2026-11-15: his phone ran a page
+// from 2026-11-12, 150 commits behind, with pictures painted as the browser's broken-image
+// placeholder — "should never ever happen"). Every build names its entry file `assets/index-<hash>.js`
+// and a deploy replaces the whole directory, so one HEAD on that file settles the whole build. The
+// test has to live in the worker: a page cannot be repaired by code it does not contain.
+const page=(entry:string)=>new Response(`<!doctype html><script type="module" src="./assets/${entry}"></script>`);
+/** A fetcher that answers per address and method, so HEAD and the page can differ. */
+const routed=(routes:Record<string,(init?:RequestInit)=>Response|Promise<Response>>)=>vi.fn(async (input:any,init?:RequestInit)=>{
+ const href=typeof input==='string'||input instanceof URL?String(input):String(input?.url??'');
+ const key=`${init?.method??input?.method??'GET'} ${new URL(href,'https://game.example/').pathname}`;
+ const hit=routes[key]??routes[key.replace(/^HEAD /,'GET ')];
+ if(!hit)throw new Error(`unrouted ${key}`);
+ return hit(init);
+}) as unknown as typeof fetch;
+
+it('answers from the network when the saved page’s own entry file is gone',async()=>{
+ const fetcher=routed({
+  'HEAD /assets/index-OLD.js':()=>new Response('',{status:404}),
+  'GET /':()=>page('index-NEW.js'),
+ });
+ const w=worker(fetcher,page('index-OLD.js'));
+ const n=w.navigate();
+ expect(await (await n.answer).text()).toContain('index-NEW.js');
+ await Promise.all(n.tasks);
+});
+
+it('still answers from the saved page, at once, when its entry file is still there',async()=>{
+ let release!:(r:Response)=>void;
+ const fetcher=vi.fn((_input:any,init?:RequestInit)=>{
+  if(init?.method==='HEAD')return Promise.resolve(new Response('',{status:200}));
+  return new Promise<Response>(r=>{release=r;});            // the page itself is slow
+ }) as unknown as typeof fetch;
+ const w=worker(fetcher,page('index-SAME.js'));
+ const n=w.navigate();let shown=false;void n.answer.then(()=>{shown=true;});
+ await new Promise<void>(r=>setImmediate(r));
+ expect(shown).toBe(true);                                   // no wait for the page
+ expect(await (await n.answer).text()).toContain('index-SAME.js');
+ release(page('index-SAME.js'));await Promise.all(n.tasks);
+});
+
+it('keeps the saved page when the entry cannot be checked (offline, a slow or refusing server)',async()=>{
+ for(const fetcher of [
+  vi.fn(async()=>{throw new TypeError('offline');}) as unknown as typeof fetch,
+  vi.fn((_input:any,init?:RequestInit)=>init?.method==='HEAD'
+   ? Promise.resolve(new Response('',{status:405}))
+   : Promise.resolve(page('index-NEW.js'))) as unknown as typeof fetch,
+ ]){
+  const w=worker(fetcher,page('index-OLD.js'));
+  expect(await (await w.navigate().answer).text()).toContain('index-OLD.js');
+ }
+});
+
+it('does not hold the launch on a hanging check: the deadline answers with the saved page',async()=>{
+ const fetcher=vi.fn((_input:any,init?:RequestInit)=>init?.method==='HEAD'
+  ? new Promise<Response>(()=>{})                            // never answers
+  : Promise.resolve(page('index-NEW.js'))) as unknown as typeof fetch;
+ const w=worker(fetcher,page('index-OLD.js'));
+ const n=w.navigate();
+ await new Promise<void>(r=>setImmediate(r));
+ w.expire();
+ expect(await (await n.answer).text()).toContain('index-OLD.js');
+});
+
+it('asks nothing of the network when the device is already offline',async()=>{
+ const fetcher=vi.fn(async()=>{throw new TypeError('offline');}) as unknown as typeof fetch;
+ const w=worker(fetcher,page('index-OLD.js'),{onLine:false});
+ expect(await (await w.navigate().answer).text()).toContain('index-OLD.js');
+ // the navigation started one request; the entry check made none
+ expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it('tells pages that are already running when a deploy replaced the saved page',async()=>{
+ const posted:any[]=[];
+ const clients={matchAll:async()=>[{postMessage:(m:any)=>posted.push(m)}]};
+ const fetcher=routed({
+  'HEAD /assets/index-OLD.js':()=>new Response('',{status:200}),
+  'GET /':()=>page('index-NEW.js'),
+ });
+ const w=worker(fetcher,page('index-OLD.js'),{clients});
+ const n=w.navigate();
+ await n.answer;await Promise.all(n.tasks);await new Promise<void>(r=>setImmediate(r));
+ expect(posted).toEqual([{type:'futa-shell',entry:'assets/index-NEW.js'}]);
+});
+
+it('says nothing when the saved page was already the deployed one',async()=>{
+ const posted:any[]=[];
+ const clients={matchAll:async()=>[{postMessage:(m:any)=>posted.push(m)}]};
+ const fetcher=routed({
+  'HEAD /assets/index-SAME.js':()=>new Response('',{status:200}),
+  'GET /':()=>page('index-SAME.js'),
+ });
+ const w=worker(fetcher,page('index-SAME.js'),{clients});
+ const n=w.navigate();
+ await n.answer;await Promise.all(n.tasks);await new Promise<void>(r=>setImmediate(r));
+ expect(posted).toEqual([]);
 });

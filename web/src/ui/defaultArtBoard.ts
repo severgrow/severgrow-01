@@ -120,6 +120,76 @@ const requestSet = (id: TerritoryId): void => {
   for (const url of faSetUrls(id)) requestArt(url);
 };
 
+// ---- NO BROWSER PLACEHOLDER, EVER (owner, 2026-11-15: "should never ever happen") ----
+//
+// `artUnavailable()` protects the pictures a module REMEMBERS to ask about before drawing them (the
+// board's sprites, sets, ground and background). The page has more painters than that, and every one
+// of them can be handed a file that is not there: the gold-frame atlas, the strength-stone atlas, a
+// card laid over a Blast (`ui/live-strike.ts`), a marked material's photo, a menu mark. One picture
+// nobody asked about is one browser placeholder; on a stale shell — its build's files gone with the
+// deploy — that is every picture at once, which is exactly the owner's screenshot (2026-11-15).
+//
+// Asking about each one in each module would be the same rule written many times and lost again the
+// next time a painter is added, so the rule is enforced where the failure actually lands: a picture
+// that fails fires `error` on its own element, and that element is taken out of the page in the same
+// task, before anything can be painted. Resource errors do not bubble, but they always travel the
+// capture path, so one listener on `window` sees every `<image>` and every `<img>` in the document.
+//
+//   <image>  removed. The fallback under it is already drawn — the tile's flat territory colour, the
+//            home's landmark, the rock simply not being there, an empty gold frame.
+//   <img>    loses its `src`/`srcset`, so the box stays where the layout put it and nothing is drawn.
+//            (It is also recorded, so a module that asks `artUnavailable()` now gets the truth.)
+//
+// Both are recorded, so `artUnavailable()` is truthful for every picture the page has drawn, not only
+// the ones the board preloads.
+const pictureUrl = (node: Element): string | null => {
+  if (node.localName === 'image') return node.getAttribute('href') ?? node.getAttribute('xlink:href');
+  if (node.localName === 'img') return node.getAttribute('src');
+  return null;
+};
+
+/** Nothing left for the browser to draw a placeholder over. */
+const discardPicture = (node: Element): void => {
+  if (node.localName === 'img') {
+    node.removeAttribute('src');
+    node.removeAttribute('srcset');
+    node.setAttribute('data-art-missing', '');
+    return;
+  }
+  node.remove();
+};
+
+/** A picture failed to load: remember it, and take its element out of the page. */
+const onPictureError = (event: Event): void => {
+  const target = event.target as Element | null;
+  if (!target || target.nodeType !== 1) return;
+  const url = pictureUrl(target);
+  if (!url) return;
+  noteArtFailure(url);
+  discardPicture(target);
+};
+
+/** A picture that failed BEFORE this module loaded (the menu is drawn before the board's module). */
+const sweepFailedPictures = (): void => {
+  if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return;
+  for (const node of Array.from(document.querySelectorAll('img, image'))) {
+    if (node.localName === 'img') {
+      const img = node as HTMLImageElement;
+      const url = img.getAttribute('src');
+      if (url && img.complete && img.naturalWidth === 0) { noteArtFailure(url); discardPicture(img); }
+    } else {
+      // An `<image>` has no "did it fail" flag to read. Asking for the file is the same probe every
+      // other picture uses: on failure it removes this element and remembers the URL.
+      requestArt(node.getAttribute('href') ?? undefined);
+    }
+  }
+};
+
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('error', onPictureError, true);
+  sweepFailedPictures();
+}
+
 /**
  * Resolves when every picture the first board composes is decoded (or has failed): the ground,
  * both homes, the territory faces, the rocks and the gold frames. The downloads already started
