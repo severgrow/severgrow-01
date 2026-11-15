@@ -40,13 +40,22 @@ export const landmarkVariant = (key: string) => {
 export type MotionSettings = { reduceMotion: boolean; effects: 'low' | 'normal' | 'high' | string };
 
 /**
- * Which motions run: idle (sway, smoke, breathing glow, the odd ember or leaf) needs motion on
- * and Effects above Low; the worried motion (trembling leaves, the low rumble) only with motion
- * on. A home that is being surrounded shows no frame (owner, 2026-11-14).
+ * The number of blocked sides at which a home is being CONSTRICTED: five of six. The sixth is the
+ * surround itself, which has its own Strangle finish (`strangleFinish`), so the slow swell belongs
+ * to the turn before it, exactly where the old ring's `lm-constrict` ran.
  */
-export const landmarkMotion = (s: MotionSettings, danger: boolean) => {
+export const CONSTRICT_SIDES = 5;
+
+/**
+ * Which motions run: idle (sway, smoke, breathing glow, the odd ember or leaf) needs motion on
+ * and Effects above Low; the worried motion (trembling leaves, the low rumble) and the constriction
+ * only with motion on. A home that is being surrounded shows no frame (owner, 2026-11-14) — but its
+ * own artwork does tremble while it is hemmed in (owner, 2026-11-15: "Bring back the tremble only
+ * — no ring, just the home reacting"). `blocked` is `HomeSides.blocked`.
+ */
+export const landmarkMotion = (s: MotionSettings, danger: boolean, blocked = 0) => {
   const moving = !s.reduceMotion && s.effects !== 'low';
-  return { idle: moving, worried: danger && moving };
+  return { idle: moving, worried: danger && moving, constricted: blocked === CONSTRICT_SIDES && moving };
 };
 
 /** The Strangle finish is never longer than this at Normal speed. */

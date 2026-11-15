@@ -155,20 +155,31 @@ const volcano = (g: SVGGElement, c: Colors, look: MaterialLook, key: string) => 
  * Draws a home landmark at a tile centre and returns its group (kept across renders). The
  * landmark is the drawing alone: there is no closed-side frame around a home being surrounded
  * (owner, 2026-11-14: remove the ring completely for now).
+ *
+ * The drawing sits in ONE wrapper of its own (`.lm-art`), which holds nothing but the artwork: no
+ * path, no stroke, no segment. That wrapper is what the constriction animates (owner, 2026-11-15:
+ * "Bring back the tremble only — no ring, just the home reacting"), so the home's own picture is
+ * what moves and no frame can come back with it.
  */
 export const drawLandmark = (parent: SVGGElement, kind: LandmarkKind, key: string, at: { x: number; y: number }, orient: Orient, colors: Colors, look: MaterialLook): SVGGElement => {
   const g = el('g', { class: `landmark lm-${kind}`, 'data-key': key, transform: `translate(${f(at.x)},${f(at.y)})` }, parent);
-  const body = el('g', { class: 'lm-body', transform: `scale(${fitScale(kind, orient).toFixed(3)})` }, g);
+  const art = el('g', { class: 'lm-art' }, g);
+  const body = el('g', { class: 'lm-body', transform: `scale(${fitScale(kind, orient).toFixed(3)})` }, art);
   const inner = el('g', { class: 'lm-sprite' }, body);
   (kind === 'tree' ? tree : volcano)(inner, colors, look, key);
   return g;
 };
 
-/** Updates a landmark's state classes: idle, danger, worried, tapped, strangled, won. */
-export const setLandmarkState = (g: SVGGElement, s: { danger: boolean; tapped: boolean; strangled: boolean; won: boolean; idle: boolean; worried: boolean }) => {
+/**
+ * Updates a landmark's state classes: idle, danger, worried, constricted, tapped, strangled, won.
+ * `constricted` is motion only (the swell of the home's own art); it creates nothing and it is
+ * never a ring, a segment or an outline.
+ */
+export const setLandmarkState = (g: SVGGElement, s: { danger: boolean; tapped: boolean; strangled: boolean; won: boolean; idle: boolean; worried: boolean; constricted: boolean }) => {
   g.classList.toggle('idle', s.idle && !s.strangled);
   g.classList.toggle('danger', s.danger && !s.strangled);
   g.classList.toggle('worried', s.worried && !s.strangled);
+  g.classList.toggle('constricted', s.constricted && !s.strangled);
   g.classList.toggle('strangled', s.strangled);
   g.classList.toggle('won', s.won);
 };

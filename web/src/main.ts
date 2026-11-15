@@ -7479,7 +7479,7 @@ function renderBoard(v: View, advice: Advice | null) {
     const res = session.state.result;
     const states = ([0, 1] as const).map((p) => {
       const sides = homeSides(v, p);
-      const m = landmarkMotion({ reduceMotion: settings.reduceMotion, effects: settings.effects }, sides.danger);
+      const m = landmarkMotion({ reduceMotion: settings.reduceMotion, effects: settings.effects }, sides.danger, sides.blocked);
       const strangled = !busy() && res?.reason === 'strangle' && res.winner !== p;
       return {
         danger: sides.danger,

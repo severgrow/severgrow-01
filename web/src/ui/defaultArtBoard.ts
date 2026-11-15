@@ -299,7 +299,11 @@ export class DefaultArtBoardView extends BoardView {
     home.querySelector('.lm-body')?.remove();
     // The landmark is translated onto the hex centre: the art sits around (0, 0), and the home's
     // breath (style.css: scale about the art's centre) is pinned to the hex centre instead.
-    const art = el('g', { class: 'default-home-art fa-home-art' }, home);
+    // The art goes INSIDE the landmark's own `.lm-art` wrapper: that wrapper is what the
+    // constriction animates (the home reacting as it is hemmed in), so the movement has to carry
+    // this skin's picture and not only the procedural drawing the body held.
+    const host = home.querySelector<SVGGElement>('.lm-art') ?? home;
+    const art = el('g', { class: 'default-home-art fa-home-art' }, host);
     el('path', { d: hexPath('0,0', S, 'flat'), fill: faBaseColour(player), class: 'fa-home-base' }, art);
     this.art(art, faTileSprite(this.fa, key, player, true), 0, 0, cellScale(key), 'default-art-sprite');
     return home;

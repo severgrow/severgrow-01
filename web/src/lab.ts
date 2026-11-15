@@ -162,7 +162,7 @@ export const showLab = (detail: Detail = 'normal', reduceMotion = false) => {
             el('polygon', { points: pts, fill: kind === 'tree' ? m.colors.moss : m.colors.fireCrust, stroke: m.colors.rockDark }, g);
             const lm = drawLandmark(g, kind, `lab-${kind}`, { x: 0, y: 0 }, orient, m.colors, look);
             const danger = st === 'danger';
-            setLandmarkState(lm, { danger, tapped: st === 'tapped', strangled: st === 'strangled', won: st === 'won', idle: !reduceMotion && detail !== 'low', worried: danger && !reduceMotion });
+            setLandmarkState(lm, { danger, tapped: st === 'tapped', strangled: st === 'strangled', won: st === 'won', idle: !reduceMotion && detail !== 'low', worried: danger && !reduceMotion, constricted: false });
           }
         }
       }
