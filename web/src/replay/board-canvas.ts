@@ -24,7 +24,7 @@ import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
 import { getOrient, toScreen } from '../logic/orient.js';
 import { centerOf, S } from '../ui/geom.js';
 import { GOLD_FRAME_ATLAS, goldFrameCrop, goldFrameKeys } from '../ui/goldframes.js';
-import { goldFrameSize } from '../ui/goldframe-geometry.js';
+import { goldFrameFit, goldFrameSize } from '../ui/goldframe-geometry.js';
 import { faBaseColour, faGoldLooks, goldLookId, faRockSprite, faTileSprite, faVariants } from '../ui/forestAsh.js';
 import type { FaSprite, FaVariants, GoldLook } from '../ui/forestAsh.js';
 import { SEED_STONE_ATLAS, seedStoneCrop } from '../ui/seedstone.js';
@@ -339,12 +339,22 @@ export const goldFramePlacements = (L: BoardLayout): GoldFramePlacement[] => {
   return goldFrameCells(L)
     .map((cell) => {
       const crop = goldFrameCrop(looks, cell.key);
+      const w = size.width * k, h = size.height * k;
+      // THE LIVE BOARD'S RULE, ON THE CANVAS TOO: a frame is trimmed to its own hexagon so that no
+      // look can paint past the seam (`goldFrameFit`, ui/goldframe-geometry.ts). The canvas board is
+      // a flat lattice, where the fit is exactly 1 — so the poster keeps the live size — but the two
+      // painters now share one rule instead of the poster being allowed to drift.
+      const hexPts = Array.from({ length: 6 }, (_, i) => {
+        const a = (i * Math.PI) / 3;
+        return [cell.x + L.hex * Math.cos(a), cell.y + L.hex * Math.sin(a)] as const;
+      });
+      const fit = goldFrameFit(hexPts, cell.x, cell.y, (w / 2) * (crop.w / (crop.w + GOLD_FRAME_PAD * 2)));
       return {
         key: cell.key,
         x: cell.x,
         y: cell.y,
-        w: size.width * k,
-        h: size.height * k,
+        w: w * fit,
+        h: h * fit,
         crop: { x: crop.x - GOLD_FRAME_PAD, y: crop.y - GOLD_FRAME_PAD, w: crop.w + GOLD_FRAME_PAD * 2, h: crop.h + GOLD_FRAME_PAD * 2 },
         rotate,
         turn: crop.rotation * (Math.PI / 3),
@@ -431,6 +441,13 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
     const f = frames.get(key);
     if (!gold || !f) return;
     g.save();
+    // THE FRAME IS CLIPPED TO ITS OWN HEX, as on the live board (ui/goldframes.ts): the rim and its
+    // warm shadow may not paint past the seam, so no look can put gold outside the board. The
+    // canvas's cells are a flat lattice (no bend), so the fit above is exactly 1 and this only ever
+    // trims the shadow.
+    g.beginPath();
+    hexAt(g, f.x, f.y, L.hex);
+    g.clip();
     g.translate(f.x, f.y);
     if (f.rotate) g.rotate(f.rotate);
     // The look turns the same hexagon a further multiple of 60 degrees and may mirror it about the

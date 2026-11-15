@@ -646,7 +646,7 @@ export class BoardView {
         this.richSignature=gold;rich.replaceChildren();
         for (const key of this.frameKeys) {
           const { x, y } = centerOf(key);
-          drawGoldFrame(rich, this.goldLooks, key, x, y, !!board[key]);
+          drawGoldFrame(rich, this.goldLooks, key, x, y, !!board[key], this.id(`gold-clip-${key}`));
         }
       }
     }
