@@ -243,11 +243,22 @@ ${T} .tile-num {
 `;
 
 let installed = false;
+/** True when the document already carries a font preload for exactly this file. */
+const preloaded = (href: string): boolean => {
+  const wanted = new URL(href, document.baseURI).href;
+  return [...document.querySelectorAll('link[rel="preload"][as="font"]')]
+    .some((link) => (link as HTMLLinkElement).href === wanted);
+};
 /** The @font-face rules, the role rules and a preload of the interface font. */
 export const installFonts = () => {
   if (installed) return;
   installed = true;
+  // THE PRODUCT BUILDS ALREADY PRELOAD THESE THREE in index.html, so the page has started the
+  // fetch before this module runs. Adding a second link for the same file made the browser fetch
+  // each face twice (measured: 6 requests / 103,904 bytes for 51,952 bytes of fonts) and logged
+  // "preloaded but not used" three times. Preload only what the document has not asked for yet.
   for (const href of [fragmentMono, numerals, besley]) {
+    if (preloaded(href)) continue;
     const pre = document.createElement('link');
     pre.rel = 'preload';
     pre.as = 'font';

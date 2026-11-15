@@ -59,7 +59,13 @@ export default defineConfig({
     // the line arrives. `paintBetaLine` reuses the button and its early-click guard.
     const escapeHtml = (text: string) => text.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
     const betaLine = `<p id="menu-beta" class="tagline">${escapeHtml(FEEDBACK.betaNote(FEEDBACK.betaVersion))} <button type="button" data-fb="menu-link">${escapeHtml(FEEDBACK.betaLink)}</button></p>`;
-    return modern ? html
+    // THE 0.75 SHEET ONLY BELONGS TO A page that carries `html.v075` (the `spaceFirst` build below):
+    // all 42 of its rules are scoped to that class, which nothing else ever writes. Shipping it to
+    // the locked 0.4 line (and the experiment copy) delivered ~11 KB of stylesheet that can never
+    // match a single element. Dropping the link here removes the file from that build's bundle;
+    // futa05 keeps it, untouched.
+    const withoutV075 = spaceFirst ? html : html.replace('    <link rel="stylesheet" href="./src/polish-075.css" />\n', '');
+    return modern ? withoutV075
       .replace('<html lang="en"', `<html lang="en" class="${htmlClass}"`)
       .replace('<p id="menu-beta" class="tagline" hidden></p>', betaLine)
       // PLAY is the product's one way in, and on these channels FEATURES.campaign is true. It ships
@@ -79,6 +85,16 @@ export default defineConfig({
       /\/(?:sphere\/planet|online\/lobby-ui)\.ts$/.test(chunk.facadeModuleId??'')&&
       !html.includes(`href="./${chunk.fileName}"`))tags.push({tag:'link',attrs:{rel:'modulepreload',href:`./${chunk.fileName}`},injectTo:'head'});
     return {html,tags};
+  } } }, { name: 'strip-html-comments', transformIndexHtml: { order:'post', handler(html) {
+    // THE SHIPPED DOCUMENT IS ~30 KB OF COMMENTS (29% of the file: 104 comments, 28,681 bytes). The
+    // HTML is the one resource every visitor waits for before any script, style or font can start,
+    // and its prose compresses far less than the markup around it: dropping the comments takes the
+    // built page from 97,471 to 68,790 bytes and its gzip from 24,185 to 12,700. A browser never
+    // renders, reads or needs a comment; the source file keeps every one of them, so nothing is
+    // lost for the next person reading the markup. No `<!--[if ...]>` conditional exists in the
+    // document, and no comment sits inside a <script>/<style> block (checked in the build output),
+    // so a plain strip cannot cut live markup.
+    return html.replace(/<!--[\s\S]*?-->/g, '');
   } } }, { name: 'isolate-development-art', configResolved(config) { output = resolve(config.root, config.build.outDir); }, closeBundle() {
     const channel = process.env.CHANNEL ?? 'futa04';
     // The static /privacy page — real HTML at the real path, on every channel. Google's OAuth
