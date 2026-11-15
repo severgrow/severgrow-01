@@ -442,13 +442,17 @@ html.futa04-information[data-step='grow'][data-futa04-waiting='true'] #moves > :
    but with lower color saturation". So the reach, the layer count (tight edge + mid halo + wide
    wash) and the printed corner are the Grow ones; only the colour is quieter. Two computed
    changes, never a filter (this node breathes, and a filter would re-rasterise every card each
-   frame): alpha (peak .36 vs Grow .64) and saturation (--fa-light mixed 65/35 with its own
-   neutral grey, HSL .35 → ~.11). Mirrors the live rule in smart-cockpit.ts. */
+   frame): alpha and saturation (--fa-light mixed 65/35 with its own neutral grey, HSL .35 → ~.11).
+   Owner, 2026-11-15: "during throw ... make the colors less intense by 20%", so the glow's three
+   layers are now .29/.18/.06 — 80% of the .36/.22/.08 they were, same shape and same 24px reach.
+   The same owner, same day: "opacity is too low on all - increase by 12% and keep it like that
+   everywhere", so the card sits at .92 in the idle AND yielded states (.82 x 1.12 = .92).
+   Mirrors the live rule in smart-cockpit.ts. */
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) {
-  opacity: .86;
-  box-shadow: 0 0 5px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 36%, transparent),
-    0 0 14px 2px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 22%, transparent),
-    0 0 24px 5px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 8%, transparent),
+  opacity: .92;
+  box-shadow: 0 0 5px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 29%, transparent),
+    0 0 14px 2px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 18%, transparent),
+    0 0 24px 5px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 6%, transparent),
     0 5px 14px rgba(16,10,9,.34);
   animation: futa04-card-breathe 1.35s ease-in-out infinite;
 }
@@ -469,7 +473,12 @@ html.futa04-information #hand .card.tutorial-target-card {
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked {
   opacity: 1; box-shadow: 0 4px 11px rgba(16,10,9,.30) !important;
 }
-html.futa04-information[data-step='throw'] #hand:not(.waiting):has(.futa04-throw-picked) .card:not(.futa04-throw-picked) {
+/* The rest of the hand yields while a card is picked, keeping the SAME .92 opacity as the unpicked
+   Throw hand (owner: "keep it like that everywhere") — the yield is light only, not a second
+   dimming. The .dock #hand.hand part is load-bearing: the product's fan recede (ui/instrument.css)
+   pins .82 on every card while one is lifted, and this rule has to outrank it. */
+html.futa04-information[data-step='throw'] .dock #hand.hand:not(.waiting):has(.futa04-throw-picked) .card:not(.futa04-throw-picked) {
+  opacity: .92;
   box-shadow: 0 0 4px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 8%, transparent),
     0 0 10px 1px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 4%, transparent),
     0 4px 11px rgba(16,10,9,.30);

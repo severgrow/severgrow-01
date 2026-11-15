@@ -184,13 +184,19 @@ try {
     const saturationOf=(rgb:readonly [number,number,number])=>{const [r,g,b]=rgb.map(v=>v/255) as [number,number,number];
       const max=Math.max(r,g,b),min=Math.min(r,g,b),l=(max+min)/2,d=max-min;return d===0?0:d/(1-Math.abs(2*l-1));};
     const throwRatio=throwPeak/growPeak;
-    check(throwPeak>=.3&&throwPeak<=.42,`${name}: the throwing hand is lit by the same light, softer (peak ${throwPeak})`);
+    // OWNER, 2026-11-15: "during throw ... make the colors less intense by 20%", which took the peak
+    // from .36 to .29. The band's top is .34 so the previous .36 fails it, and its floor .28 keeps a
+    // real light (the old .12 whisper still fails). Same shape, same reach.
+    check(throwPeak>=.28&&throwPeak<=.34,`${name}: the throwing hand is lit by the same light, softer (peak ${throwPeak})`);
     check(Math.abs(throwReach-growReach)<=1,`${name}: the throw glow keeps Grow's reach (${throwReach} vs ${growReach}px)`);
     check(outerGlow(throwLight.shadow).length>=3,`${name}: the throw glow keeps Grow's three soft layers (${outerGlow(throwLight.shadow).length})`);
     check(throwRatio>=.4&&throwRatio<=.75,`${name}: Throw is still measurably quieter than Grow (${throwRatio.toFixed(2)}x)`);
     const throwSat=saturationOf(peakColour(throwLight.shadow)), growSat=saturationOf(peakColour(growLight.shadow));
     check(throwSat<=growSat*.5,`${name}: the throw light is the same token at lower saturation (${throwSat.toFixed(2)} vs ${growSat.toFixed(2)})`);
-    check(throwLight.opacity<.95,`${name}: the hand also steps back in opacity while throwing (${throwLight.opacity})`);
+    // OWNER, 2026-11-15: "opacity is too low on all - increase by 12% and keep it like that
+    // everywhere". .82 x 1.12 = .92, and the arrow is asserted both ways: the old .86 fails the
+    // floor, and full opacity fails the ceiling (the hand still recedes a little while throwing).
+    check(throwLight.opacity>=.9&&throwLight.opacity<1,`${name}: the hand is solid while throwing, not full (${throwLight.opacity})`);
     // OWNER, 2026-11-15: "use the same on draw pile during draw and on discard pile during throw".
     // The Throw pile's light must be that same near-white, not the old red ember.
     const discardLight=await page.evaluate(()=>{const h=document.querySelector('#futa04-box #discard .gd-halo');return h?getComputedStyle(h).boxShadow:'';});
@@ -450,6 +456,7 @@ try {
   const idleHalo=await halo();
   const idleHaloEff=peakGlow(idleHalo.shadow)*idleHalo.opacity;
   check(idlePeak>idleHaloEff,`Handoff: while choosing, the light is on the hand (${idlePeak} > ${idleHaloEff.toFixed(2)})`);
+  check(idleHand.opacity>=.9&&idleHand.opacity<1,`Handoff: the throwable hand is solid, at the shared .92 (${idleHand.opacity})`);
   await handoff.locator('#hand [data-card]').first().click();
   await handoff.waitForSelector('#hand .futa04-throw-picked'); await handoff.waitForTimeout(500);
   const pickedHand=await handLight(handoff,'#hand .futa04-throw-picked');
@@ -459,6 +466,10 @@ try {
   const selectedHaloEff=peakGlow(selectedHalo.shadow)*selectedHalo.opacity;
   check(outerGlow(pickedHand.shadow).length===0,`Handoff: the picked card gives up its light (${outerGlow(pickedHand.shadow).length} lit layers)`);
   check(yieldedPeak<=.1,`Handoff: the rest of the hand yields while a card is picked (peak ${yieldedPeak})`);
+  // "keep it like that everywhere": the yielded cards are as solid as the unpicked throwable hand,
+  // so the yield is a light drop only — one opacity across the whole Throw hand.
+  check(yieldedHand.opacity===idleHand.opacity,`Handoff: the yielded hand keeps the same opacity (${yieldedHand.opacity} vs ${idleHand.opacity})`);
+  check(pickedHand.opacity===1,`Handoff: the picked card stays fully solid as it leaves (${pickedHand.opacity})`);
   check(growPeakH>idlePeak&&idlePeak>yieldedPeak,`Handoff: Grow > Throw > selected Throw (${growPeakH} > ${idlePeak} > ${yieldedPeak})`);
   check(selectedHaloEff>=.38,`Handoff: the discard halo becomes the lit target (effective ${selectedHaloEff.toFixed(2)})`);
   check(selectedHaloEff>idleHaloEff*1.5,`Handoff: selection turns the pile's light up (${idleHaloEff.toFixed(2)} -> ${selectedHaloEff.toFixed(2)})`);

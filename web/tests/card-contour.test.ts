@@ -114,13 +114,34 @@ describe('a hand card never wears a contour in any guide/step state', () => {
     const growPeak = Math.max(...alphas(grow.body));
     const throwPeak = Math.max(...alphas(idle.body));
     expect(growPeak).toBeCloseTo(64, 0);
-    expect(throwPeak).toBeLessThan(growPeak * 0.75);
+    // Owner, 2026-11-15: "during throw ... make the colors less intense by 20%". The three layers
+    // are pinned exactly, at 79-80% of the .36/.22/.08 they shipped with: less intense, same light.
+    expect(alphas(idle.body)).toEqual([29, 18, 6]);
+    expect(throwPeak).toBeLessThan(growPeak * 0.55);
     expect(throwPeak).toBeGreaterThan(growPeak * 0.4);
     // "lower color saturation": the token is mixed with its own neutral, computed in the colour.
     expect(idle.body).toContain('var(--fa-light, #f2ede4) 65%, #8b8882');
     expect(grow.body).not.toContain('#8b8882');
     // And it is a colour mix, never a filter (a filter on a breathing card re-rasterises the hand).
     expect(idle.body).not.toMatch(/filter:/);
+  });
+  it('the Throw hand is one opacity in both states (owner: "keep it like that everywhere")', () => {
+    // Owner, 2026-11-15: "opacity is too low on all - increase by 12% and keep it like that
+    // everywhere". .82 was the lowest hand opacity (the recede while a card is lifted), so the base
+    // is .82 x 1.12 = .92, and the unpicked and yielded Throw states must both carry it.
+    const throwUp = SOURCES.flatMap(([name, src]) => rules(src).map((rule) => ({ name, ...rule })))
+      .filter((rule) => /data-step='throw'/.test(rule.selector) && rule.selector.includes('#hand')
+        && rule.body.includes('opacity') && !rule.selector.includes('.card.futa04-throw-picked'));
+    expect(throwUp.length).toBeGreaterThan(0);
+    for (const rule of throwUp) {
+      expect(rule.body, `${rule.name}: ${rule.selector}`).toMatch(/(^|;)\s*opacity:\s*\.92\s*(;|$)/);
+    }
+    // The picked card keeps its own .92-free opacity: it is fully solid while it leaves, and it is
+    // already stepped away from the grayscale treatment in player/information.ts.
+    const picked = SOURCES.flatMap(([, src]) => rules(src))
+      .filter((rule) => /data-step='throw'/.test(rule.selector) && rule.selector.includes('.card.futa04-throw-picked'));
+    expect(picked.length).toBeGreaterThan(0);
+    for (const rule of picked) expect(rule.body).toMatch(/opacity:\s*1/);
   });
 });
 

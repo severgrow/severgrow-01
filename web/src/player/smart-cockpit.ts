@@ -557,19 +557,27 @@ html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not
    saturation"). The same three soft outer layers, the same 5 / 14 / 24px reach and the same
    printed corner: the light is recognisably the Grow light. It is quieter in two computed ways,
    never a filter (a filter on this breathing node re-rasterises every card each frame):
-   1. alpha — peak .36 against Grow's .64, so Grow still leads the Throw hand;
+   1. alpha — peak .29 against Grow's .64, so Grow still leads the Throw hand. Owner,
+      2026-11-15: "during throw ... make the colors less intense by 20%", so the earlier
+      .36/.22/.08 became .29/.18/.06 — the same three layers at 80% of their alpha;
    2. saturation — the colour is --fa-light mixed 65/35 with its own neutral grey (#8b8882), which
       drops HSL saturation from .35 to ~.11 while staying the same warm near-white.
-   Owner, 2026-11-14: no contour line, no double. The next two rules are the hand-off: the picked
-   card gives up its glow, then the rest of the hand drops to a whisper, so the light lands on the
-   Throw pile. Mirrored in information.ts (either sheet may be injected last). */
-html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) { opacity:.86; box-shadow:0 0 5px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 36%, transparent),0 0 14px 2px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 22%, transparent),0 0 24px 5px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 8%, transparent),0 5px 14px rgba(16,10,9,.34); }
+   The card sits at .92 in BOTH Throw states — the same value when nothing is picked and when
+   another card is (owner, 2026-11-15: "opacity is too low on all - increase by 12% and keep it
+   like that everywhere"; .82 x 1.12 = .92). Owner, 2026-11-14: no contour line, no double. The
+   next two rules are the hand-off: the picked card gives up its glow, then the rest of the hand
+   drops to a trace, so the light lands on the Throw pile. Mirrored in information.ts (either
+   sheet may be injected last). */
+html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) { opacity:.92; box-shadow:0 0 5px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 29%, transparent),0 0 14px 2px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 18%, transparent),0 0 24px 5px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 6%, transparent),0 5px 14px rgba(16,10,9,.34); }
 /* Selected for the Throw: this card's light is gone (depth only), because the discard halo is now
    the lit target (information.ts, .futa04-throw-target). */
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked { opacity:1; box-shadow:0 4px 11px rgba(16,10,9,.30) !important; }
 /* The rest of the hand YIELDS as one movement while a card is picked: a trace, not the Throw glow,
-   so exactly one thing in the cockpit is lit. */
-html.futa04-information[data-step='throw'] #hand:not(.waiting):has(.futa04-throw-picked) .card:not(.futa04-throw-picked) { box-shadow:0 0 4px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 8%, transparent),0 0 10px 1px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 4%, transparent),0 4px 11px rgba(16,10,9,.30); }
+   so exactly one thing in the cockpit is lit. Its opacity is the SAME .92 as the unpicked hand
+   ("keep it like that everywhere"), so the yield reads as light only, not as a second dimming.
+   .dock #hand.hand is load-bearing: the product's own fan recede (ui/instrument.css) sets .82 on
+   every card while one is lifted, and this rule must outrank it, or the chosen value never applies. */
+html.futa04-information[data-step='throw'] .dock #hand.hand:not(.waiting):has(.futa04-throw-picked) .card:not(.futa04-throw-picked) { opacity:.92; box-shadow:0 0 4px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 8%, transparent),0 0 10px 1px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 4%, transparent),0 4px 11px rgba(16,10,9,.30); }
 html.futa04-information :is(#deck,#discard) :is(.gd-halo,.gd-ring) { inset:0; border-radius:5.9% / 4.2%; }
 /* Both legal draw choices glow softly: a near-white light around the actual card, no outline box
    (owner, 2026-10-22: "remove the contour thing, make the glow a tiny bit brighter and make it
