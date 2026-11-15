@@ -95,6 +95,22 @@ try {
       assert(box.left >= geometry.panel.left && box.right <= geometry.panel.right, `${id}: fits sheet width`);
       assert(box.height >= 44 || id === 'sound' || id === 'vibration' || id === 'reduceMotion' || id === 'largeText' || id === 'guide', `${id}: 44px button target`);
     }
+    // SPEED IS NOT OFFERED WHERE IT CANNOT BE KEPT (owner, 2026-11-15: "remove the Speed control
+    // instead — don't show a setting that doesn't stick"). `speed` is a fixed default on these
+    // channels (logic/settings.ts), so the whole row is gone from this sheet: no layout box (so no
+    // stray gap, no tab stop) and no words for a screen reader to announce.
+    const speed = await page.evaluate(() => {
+      const seg = document.getElementById('speed-seg');
+      const row = seg?.closest('.row') as HTMLElement | null;
+      return {
+        box: seg ? seg.getClientRects().length : 0,
+        row: row?.getBoundingClientRect().height ?? 0,
+        spoken: /(^|\n)\s*Speed\s*($|\n)/.test(document.getElementById('sheet-settings')!.innerText),
+      };
+    });
+    assert.equal(speed.box, 0, 'the Speed control has no box on the product sheet');
+    assert.equal(speed.row, 0, 'the Speed row leaves no empty gap in the sheet');
+    assert(!speed.spoken, 'the Speed row is not announced on the product sheet');
     if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/settings-${width}x${height}${largeText ? '-large' : ''}.png` });
     // When extra account controls make the sheet scroll, its title and close key must stay above rows.
     await page.evaluate(async () => {

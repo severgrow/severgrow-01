@@ -767,7 +767,14 @@
             <div class="row"><span data-copy="materialDetail"></span><div class="seg" role="radiogroup" aria-label="Material detail" id="detail-seg"></div></div>
             <div class="row"><span data-copy="topGlow"></span><div class="seg" role="radiogroup" aria-label="Top-rank glow" id="glow-seg"></div></div>
             <label class="row"><span data-copy="eyeCandy"></span><input type="checkbox" data-setting="eyeCandy" /></label>
-            <div class="row"><span data-copy="speed"></span><div class="seg" role="radiogroup" aria-label="Animation speed" id="speed-seg"></div></div>
+            <!-- SPEED IS NOT OFFERED WHERE IT CANNOT BE KEPT (owner, 2026-11-15: "remove the Speed
+                 control instead — don't show a setting that doesn't stick"). On the Futasaku channels
+                 `speed` is a fixed default (logic/settings.ts, ESSENTIAL_SETTINGS), so this row is
+                 marked classic-only ITSELF as well as sitting in this classic-only group: the row
+                 alone carries the switch, so a future regrouping can never put a discarded choice
+                 back on the product sheet. Display:none (style.css) leaves no gap, no tab stop and
+                 nothing for a screen reader. The classic line keeps the control, where it IS saved. -->
+            <div class="row" data-only="classic"><span data-copy="speed"></span><div class="seg" role="radiogroup" aria-label="Animation speed" id="speed-seg"></div></div>
             <div class="row"><span data-copy="effects"></span><div class="seg" role="radiogroup" aria-label="Effects intensity" id="effects-seg"></div></div>
             <div id="sound-volume">
             <label class="row slider"><span data-copy="sfxVolume"></span><input type="range" min="0" max="100" step="5" data-volume="sfxVolume" aria-label="Effects volume" /></label>

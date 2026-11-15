@@ -114,3 +114,31 @@ describe('every retired option is a fixed default on the Futasaku channels', () 
     });
   });
 });
+
+// OWNER (2026-11-15): "remove the Speed control instead — don't show a setting that doesn't stick."
+// `speed` is not an essential, so the product channels throw the choice away on every reload
+// (parseSettings above). The sheet must therefore offer no Speed row there — not the label, not the
+// control, and no empty row where they were — while the classic line, where the choice IS saved,
+// keeps it. This is the regression tripwire: it fails if the row is ever shown again on the product
+// sheet while `speed` is still discarded.
+describe('Speed is offered only where the choice is kept', () => {
+  /** The row that holds both the label and the segmented control: they must leave together. */
+  const speedRow = sheet.split('\n').find((line) => line.includes('id="speed-seg"')) ?? '';
+  /** True the day `speed` becomes an essential: then showing the row is honest again. */
+  const keptOnProduct = (ESSENTIAL_SETTINGS as readonly string[]).includes('speed');
+
+  it('the product sheet shows no Speed row while the choice would be thrown away', () => {
+    if (keptOnProduct) return; // it is saved now: this rule has done its job, revisit deliberately
+    // The fact the rule rests on, asserted rather than assumed: a saved Fast does not survive.
+    expect(parseSettings(JSON.stringify({ speed: 'fast' }), false, true).speed).toBe(DEFAULT_SETTINGS.speed);
+    expect(essentialSheet, 'no Speed label may reach the product sheet').not.toContain('data-copy="speed"');
+    expect(essentialSheet, 'no Speed control may reach the product sheet').not.toContain('id="speed-seg"');
+    expect(speedRow, 'the Speed row itself carries the classic-only switch').toMatch(/data-only="classic"/);
+  });
+
+  it('the classic line keeps the control, because there the choice is saved', () => {
+    expect(sheet, 'the classic sheet still has the control').toContain('id="speed-seg"');
+    expect(sheet, 'and its label').toContain('data-copy="speed"');
+    expect(parseSettings(JSON.stringify({ speed: 'fast' })).speed).toBe('fast');
+  });
+});
