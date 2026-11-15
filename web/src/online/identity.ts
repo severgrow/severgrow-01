@@ -160,7 +160,7 @@ export const createIdentityStore = (options: {
     } catch {
       return { ok: false, reason: 'storage_blocked', message: STORAGE_BLOCKED_MESSAGE };
     }
-    const status = await createGuest();
+    const status = await mintGuest();
     if (status.ok) {
       options.onReplaced?.(status.identity);
       return { ...status, replaced: true };
@@ -169,6 +169,24 @@ export const createIdentityStore = (options: {
   };
 
   let recovering: Promise<IdentityStatus> | null = null;
+
+  /**
+   * ONE GUEST MINT AT A TIME (owner, 2026-11-15: "pressing the level takes several seconds to
+   * start"). The boot warm-up and the first Practice tap both call `ensure()`; with nothing stored
+   * each used to POST its own guest, so the tap always paid a fresh round trip (and the device could
+   * end up with two guests, the second overwriting the first). Callers now share the mint already on
+   * its way, so a tap during the boot warm-up costs nothing extra.
+   */
+  let minting: Promise<IdentityStatus> | null = null;
+  const mintGuest = (): Promise<IdentityStatus> => {
+    if (minting) return minting;
+    const inFlight = createGuest();
+    minting = inFlight;
+    void inFlight.finally(() => {
+      if (minting === inFlight) minting = null;
+    });
+    return inFlight;
+  };
 
   const recover = (): Promise<IdentityStatus> => {
     if (recovering) return recovering;
@@ -197,7 +215,7 @@ export const createIdentityStore = (options: {
           message: STORAGE_BLOCKED_MESSAGE,
         };
       }
-      return createGuest();
+      return mintGuest();
     },
 
     recover,
