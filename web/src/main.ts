@@ -2411,19 +2411,20 @@ async function startGame(
   turnGuide?.reset();
   // The deal (the owner's card shuffle): a new match, a rematch, a restart.
   if (settings.sound) sound.shuffle();
+  // THE THREE THINGS THE DEAL NEEDS ARE FETCHED AT THE SAME TIME, NEVER ONE AFTER ANOTHER (owner,
+  // 2026-11-15: "in practice match, pressing the level takes several seconds to start"). They have
+  // nothing to do with each other — the first lesson board's own art, the card faces, and the Seeds
+  // ticket — and each has its own cap, so waiting for them side by side costs the SLOWEST one
+  // instead of their sum. Nothing here starts a game sooner than its inputs are ready: every one of
+  // them is still awaited, with the same caps, before the board and the hand are built below.
   // The first lesson board on a cold first visit waits (briefly, capped) for its own art. Repeat
   // visits, the side menu and every non-lesson game skip this entirely.
-  if (campaign) {
-    await warmFirstBoard();
-    if (generation !== startGameGeneration) return;
-  }
+  const firstBoard = campaign ? warmFirstBoard() : Promise.resolve();
   // Card faces decode while the menu is up. Await them (capped ~2 s) before the deal so mid-game
   // class flips do not jump the hand art (owner, 2026-11-07). Already-ready = 0 ms, never theater.
-  {
-    const cards = await import('./player/cards.js');
-    await Promise.race([cards.preloadCardArt().catch(() => undefined), new Promise<void>((r) => setTimeout(r, 2000))]);
-    if (generation !== startGameGeneration) return;
-  }
+  const cardsReady = import('./player/cards.js')
+    .then((cards) => Promise.race([cards.preloadCardArt().catch(() => undefined), new Promise<void>((r) => setTimeout(r, 2000))]))
+    .catch(() => undefined);
   // A server-issued ticket makes a new Training result verifiable. An offline start stays playable
   // with its local seed, but cannot claim spendable Seeds without a prior ticket. Guests are paid
   // too (owner, 2026-11-08) — the wait must cover minting a guest on a cold Edge, not only a warm
@@ -2440,16 +2441,29 @@ async function startGame(
     seed = ready.seed;
     ticketId = ready.id;
   } else if (!campaign && (difficulty !== null || blitzStart !== null)) level = opponentFor(level, seed);
-  if (!ready && difficulty && onlineBuildEnabled() && !IS_TEST) {
-    // Read before the request starts: 8 s only for a cold guest mint, 3 s once an identity is here.
-    const ticketWaitMs = trainingTicketWaitMs(seedIdentityWarm());
-    const ticket = await Promise.race([
-      // Issued through the seed module, not the online lobby: a training game started before the
-      // hub had mounted (or after its chunk failed to load) used to begin with no ticket at all,
-      // which meant no proof and no payment for a game the player had already played.
-      requestTrainingTicket(level),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), ticketWaitMs)),
-    ]);
+  // The ticket request starts HERE, beside the card faces and the first board above: it is a network
+  // round trip and nothing else in the start depends on it. Still awaited, with the same cap, before
+  // the state is built — the ticket names the seed the match is played from, so it can never be
+  // applied late.
+  const ticketP = !ready && difficulty && onlineBuildEnabled() && !IS_TEST
+    ? (() => {
+        // Read before the request starts: 8 s only for a cold guest mint, 3 s once an identity is here.
+        const ticketWaitMs = trainingTicketWaitMs(seedIdentityWarm());
+        return Promise.race([
+          // Issued through the seed module, not the online lobby: a training game started before the
+          // hub had mounted (or after its chunk failed to load) used to begin with no ticket at all,
+          // which meant no proof and no payment for a game the player had already played.
+          requestTrainingTicket(level),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), ticketWaitMs)),
+        ]).catch(() => null);
+      })()
+    : null;
+  await firstBoard;
+  if (generation !== startGameGeneration) return;
+  await cardsReady;
+  if (generation !== startGameGeneration) return;
+  if (ticketP) {
+    const ticket = await ticketP;
     if (generation !== startGameGeneration) return;
     if (ticket) { seed = ticket.seed; ticketId = ticket.id; }
   }
