@@ -537,22 +537,26 @@ html.futa04-information.futa04-card-art-ready #hand .card:has(>.futa04-card-art)
 html.futa04-information.futa04-card-art-ready #hand .card > .futa04-card-art { border-radius:inherit; }
 /* TAP = LIT, THROW = QUIET (owner, 2026-11-14: "the colors of cards when its time to tap them
    should be more intense - and then dropping a lot when its time to throw"). A playable card is lit
-   in ITS OWN suit ink, in three soft outer layers that trace the printed card corner (5.9% / 4.2%,
-   player/cards.ts): a tight saturated edge, a mid halo and a wide wash. No border, no outline, no
-   zero-spread ring, and no filter — the step attribute owns the whole change, so nothing is written
-   per frame. The next rule is the other half of the same sentence: Throw drops most of the light. */
+   in THE HOUSE AMBER, in three soft outer layers that trace the printed card corner (5.9% / 4.2%,
+   player/cards.ts): a tight edge, a mid halo and a wide wash. No border, no outline, no zero-spread
+   ring, and no filter — the step attribute owns the whole change, so nothing is written per frame.
+   The next rule is the other half of the same sentence: Throw drops most of the light.
+   OWNER, 2026-11-15, ON THE SUIT-COLOURED VERSION OF THIS RULE: "the glow on grow move on hand
+   shouldnt be so colorful - wher ethis came from? just amber classic glow." It came from here: the
+   light was mixed from the card's own --suit, so one hand showed blue, purple, green and red at
+   once — a rainbow nobody asked for, and it fought the board's single warm palette. One colour now,
+   --c-gold (the app's amber), for every card in every state. */
 html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim):not(.futa04-bloom-pick):not(.coach-glow) {
-  box-shadow:0 0 6px color-mix(in srgb, var(--suit, var(--c-accent)) 92%, transparent),
-    0 0 16px 2px color-mix(in srgb, var(--suit, var(--c-accent)) 58%, transparent),
-    0 0 30px 6px color-mix(in srgb, var(--suit, var(--c-accent)) 26%, transparent),
+  box-shadow:0 0 6px color-mix(in srgb, var(--c-gold) 92%, transparent),
+    0 0 16px 2px color-mix(in srgb, var(--c-gold) 58%, transparent),
+    0 0 30px 6px color-mix(in srgb, var(--c-gold) 26%, transparent),
     0 5px 14px rgba(3,8,6,.42);
 }
-/* The ember trace is the ONLY Throw signal (owner, 2026-11-14: no contour line, no double) and it
+/* The amber trace is the ONLY Throw signal (owner, 2026-11-14: no contour line, no double) and it
    is deliberately QUIET: the hand has stopped being the thing you tap and become the thing you
-   discard from, so it sits far below the Grow light (same ember hues the card-contour test pins,
-   a fraction of the alpha). */
-html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) { opacity:.86; box-shadow:0 0 3px rgba(222,110,83,.16),0 0 8px 1px rgba(190,68,47,.10),0 4px 11px rgba(16,10,9,.28); }
-html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked { opacity:1; box-shadow:0 0 4px rgba(222,110,83,.34),0 0 10px 1px rgba(190,68,47,.24) !important; }
+   discard from, so it sits far below the Grow light (the same amber, a fraction of the alpha). */
+html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) { opacity:.86; box-shadow:0 0 3px color-mix(in srgb, var(--c-gold) 16%, transparent),0 0 8px 1px color-mix(in srgb, var(--c-gold) 10%, transparent),0 4px 11px rgba(16,10,9,.28); }
+html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked { opacity:1; box-shadow:0 0 4px color-mix(in srgb, var(--c-gold) 34%, transparent),0 0 10px 1px color-mix(in srgb, var(--c-gold) 24%, transparent) !important; }
 html.futa04-information :is(#deck,#discard) :is(.gd-halo,.gd-ring) { inset:0; border-radius:5.9% / 4.2%; }
 /* Both legal draw choices glow softly: a cool white light around the actual card, no outline box
    (owner, 2026-10-22: "remove the contour thing, make the glow a tiny bit brighter and make it

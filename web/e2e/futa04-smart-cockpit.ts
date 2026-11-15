@@ -21,17 +21,12 @@ const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executab
 const dir = '/tmp/futasaku-smart-cockpit'; mkdirSync(dir,{recursive:true});
 let checks = 0;
 const check = (value:unknown,label:string) => { assert(value,label); checks++; };
-/** The hand card's painted light plus the ink it is lit in (cards.ts sets `--suit` per face). */
+/** The hand card's painted light plus its opacity. The ink is no longer read: the hand is lit in one
+    house amber for every card (owner, 2026-11-15), so `--suit` cannot affect the glow any more. */
 const handLight = (page:Page,selector:string) => page.locator(selector).first().evaluate(el => {
   const style=getComputedStyle(el);
   return { shadow:style.boxShadow, suit:style.getPropertyValue('--suit').trim(), opacity:Number(style.opacity) };
 });
-const CSS_SWATCH = /^#([\da-f]{6})$/i;
-const swatchRgb = (hex:string):[number,number,number] => {
-  const m=CSS_SWATCH.exec(hex); if(!m) return [0,0,0];
-  const n=Number.parseInt(m[1]!,16);
-  return [(n>>16)&255,(n>>8)&255,n&255];
-};
 const waitPhase = (page:Page,value:string) => page.waitForFunction(want => (window as any).__severgrow?.state().phase===want && !(window as any).__severgrow.busy(),value);
 const near=(a:number,b:number)=>Math.abs(a-b)<.7;
 const rects = (page:Page) => page.evaluate(() => {
@@ -131,12 +126,38 @@ try {
     }
     // OWNER'S CARD-LIGHT RULE (2026-11-14): "the colors of cards when its time to tap them should be
     // more intense - and then dropping a lot when its time to throw". The tappable hand is lit in
-    // each card's own suit ink; the same hand in the Throw step keeps only a trace of it.
+    // ONE colour — the house amber; the same hand in the Throw step keeps only a trace of it.
+    // OWNER, 2026-11-15, on the version that mixed each card's own suit ink: "the glow on grow move
+    // on hand shouldnt be so colorful - wher ethis came from? just amber classic glow." So the hue
+    // check is now amber (`#f2c14e`) for every card, and the hand may not show several hues at once.
+    const AMBER: readonly [number, number, number] = [0xf2, 0xc1, 0x4e];
     const growLight=await handLight(page,'#hand .card.playable');
     const growPeak=peakGlow(growLight.shadow), growReach=reachOf(growLight.shadow);
     check(growPeak>=.6&&growReach>=24,`${name}: tappable hand is lit strongly (peak ${growPeak}, reach ${growReach}px)`);
     check(outerGlow(growLight.shadow).length>=3,`${name}: the lit hand has several soft outer layers`);
-    check(hueDistance(hueOf(peakColour(growLight.shadow)),hueOf(swatchRgb(growLight.suit)))<=20,`${name}: the light is the card's own suit colour (${growLight.suit})`);
+    check(hueDistance(hueOf(peakColour(growLight.shadow)),hueOf(AMBER))<=24,`${name}: the light is the house amber, not a suit ink (peak ${JSON.stringify(peakColour(growLight.shadow))})`);
+    // A rainbow hand is the bug, so prove it is not one: every plainly playable card must peak at the
+    // amber. The only exceptions are deliberate and pre-existing — a card the coach is hinting at
+    // wears the cream advice halo (`.coach-glow`, which opts out of the Grow light so one card never
+    // wears two glows), and a dim card is not offering a play at all.
+    const plain=await page.evaluate(()=>[...document.querySelectorAll('#hand .card.playable')]
+      .filter(el=>!el.classList.contains('coach-glow')&&!el.classList.contains('dim'))
+      .map(el=>getComputedStyle(el).boxShadow.replace(/\s+/g,'')));
+    check(plain.every(s=>s&&s!=='none'),`${name}: every plainly playable card carries the amber light`);
+    check(new Set(plain).size===1,`${name}: the whole hand is lit in ONE colour, not per suit (${new Set(plain).size} distinct shadows)`);
+    const suitBleed=await page.evaluate(()=>[...document.querySelectorAll('#hand .card.playable')]
+      .filter(el=>{
+        const suit=getComputedStyle(el).getPropertyValue('--suit').trim();
+        const m=/^#([\da-f]{6})$/i.exec(suit); if(!m) return false;
+        const n=Number.parseInt(m[1]!,16), rgb=[(n>>16)&255,(n>>8)&255,n&255] as const;
+        const hue=(c:readonly[number,number,number])=>{const max=Math.max(...c),min=Math.min(...c);if(max===min)return -1;
+          const d=max-min;const h=max===c[0]?((c[1]-c[2])/d)%6:max===c[1]?(c[2]-c[0])/d+2:(c[0]-c[1])/d+4;return (h*60+360)%360;};
+        const mine=hue(rgb);
+        const shadows=[...el.ownerDocument.defaultView!.getComputedStyle(el).boxShadow.matchAll(/color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)/g)]
+          .map(x=>[Math.round(+x[1]!*255),Math.round(+x[2]!*255),Math.round(+x[3]!*255)] as const);
+        return shadows.some(c=>{const h=hue(c);if(h<0)return false;const d=Math.abs(h-mine);return Math.min(d,360-d)<=20;});
+      }).length);
+    check(suitBleed===0,`${name}: no card is lit in its own suit ink (${suitBleed} card(s) still match --suit)`);
     check(JSON.stringify(await contextKinds(page))==='["skip","guide"]',`${name}: Skip leads the context key, "?" beside it in the menu`);
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-grow.png`});
     await pressContext(page,'skip'); await waitPhase(page,'DISCARD');

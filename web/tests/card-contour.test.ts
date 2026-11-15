@@ -66,7 +66,7 @@ describe('a hand card never wears a contour in any guide/step state', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('Throw still lights the hand with an ember glow, just no line', () => {
+  it('Throw still lights the hand with a warm amber glow, just no line', () => {
     const throwRules = SOURCES.flatMap(([name, src]) =>
       rules(src)
         .filter((rule) => /data-step='throw'/.test(rule.selector) && rule.selector.includes('.card'))
@@ -76,7 +76,11 @@ describe('a hand card never wears a contour in any guide/step state', () => {
     const lights = throwRules.filter((rule) => rule.body.includes('box-shadow'));
     expect(lights.length).toBeGreaterThan(0);
     for (const rule of lights) {
-      expect(rule.body, `${rule.name}: ${rule.selector}`).toMatch(/box-shadow:[^;]*(?:222, ?110, ?83|190, ?68, ?47)/);
+      // The hand stays lit by a soft blur, and the light is the house amber (`--c-gold`, #f2c14e) —
+      // not a card's suit ink and not a bare colour literal. Owner, 2026-11-15: "just amber classic
+      // glow"; the ember RGB this used to pin was one more colour nobody asked for.
+      expect(rule.body, `${rule.name}: ${rule.selector}`).toMatch(/box-shadow:[^;]*(?:var\(--c-gold\)|242, ?193, ?78)/);
+      expect(rule.body, `${rule.name}: ${rule.selector}`).not.toMatch(/var\(--suit/);
     }
   });
 });
