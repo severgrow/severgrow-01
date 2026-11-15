@@ -99,23 +99,38 @@ void main(){
   // the curve, and the night side fades through a broad dusk instead of a hard line.
   float day = smoothstep(-.32, 1.0, ndl);
   vec3 c = vColour;
+  // THE SKIN IS ONE SURFACE, AND IT WEARS ONE PICTURE (owner, 2026-11-15: "it looks like it puts color
+  // on tiles and skin on top -- looking ugly", and — about the art — "the rotation of tiles there is
+  // also messed up, should be always in default orientation").
+  //
+  // Two rules, both here rather than in the data (how a skin is CHOSEN is not this file's business):
+  //  1. A skinned tile is the picture ALONE. The owner's colour is not under it and not mixed into it
+  //     (that line used to be mix(c, t.rgb, t.a * ...), which left the owner's colour in every soft
+  //     edge the atlas has, reading as a coloured margin and a pale halo round the art). The
+  //     picture's own colour is used even where its alpha is soft.
+  //  2. Every tile of a set wears the set's DEFAULT picture (cell 0,0 of its quadrant). The nine plain
+  //     pictures are nine different paintings whose wave crests do not agree, so shuffling them
+  //     across the planet (owner, 2026-11-14: "all nine plain pictures, never the same one beside
+  //     itself" — a BOARD rule) read on the planet as tiles turned every which way. The frame itself
+  //     was already honest (every tile's picture-up projects to the same direction, tested in
+  //     web/tests/planet-skin.test.ts); the pictures were not. The per-tile tone below still gives
+  //     neighbouring tiles their own light, so a holding never looks stamped out of one cell.
   // One public set per owner, in a single 2x2 atlas. An owner without a saved set keeps the
   // established colour-only appearance; the local viewer still wears their default set.
-  if (uTilesOn > .5 && vSkin > .5) {
-    float pick = min(8.0, floor(floor(vSeed * 4096.0 + .5) / 455.0));
-    vec2 cell = vec2(mod(pick, 3.0), floor(pick / 3.0));
+  float owned = step(2.5, kind) * step(kind, 4.5);
+  float skinned = uTilesOn * step(.5, vSkin) * owned;
+  if (skinned > .5) {
     vec2 uv = clamp(vTile * .5 + .5, .006, .994);
     float set = floor(vSkin + .5) - 1.0;
     vec2 quadrant = vec2(mod(set, 2.0), floor(set / 2.0)) * .5;
-    vec4 t = texture2D(uTiles, quadrant + (cell + vec2(uv.x, 1.0 - uv.y)) * ${(160 / 1024).toFixed(5)});
-    c = mix(c, t.rgb, t.a * step(2.5, kind) * step(kind, 4.5));
+    vec4 t = texture2D(uTiles, quadrant + vec2(uv.x, 1.0 - uv.y) * ${(160 / 1024).toFixed(5)});
+    c = t.rgb;
   }
   // THE TILE'S MATERIAL (owner, 2026-11-04: the tiles "stand out as too baloony or plasticky ...
   // make them look more organic more real but cool and cheap"). A tile is a FLAT slab, not a
   // cushion: its top is lit evenly and only a narrow chamfer at the very edge turns toward or away
   // from the sun. A fine grain fixed to the planet and a slight tone of its own per tile make a
   // holding read as fields, or glazed clay, rather than one moulded piece of plastic.
-  float owned = step(2.5, kind) * step(kind, 4.5);
   float landish = step(1.5, kind) * step(kind, 2.5);
   // Colour: a touch less saturated and darker, the matte of a real pigment.
   c = mix(c, vec3(dot(c, vec3(.3, .59, .11))), .14 * owned) * mix(1.0, .93, owned);
@@ -161,9 +176,13 @@ ${derivatives ? `  vec2 grad = vec2(dFdx(e), dFdy(e));
   // The atmosphere seen edge-on.
   float rim = pow(1.0 - max(dot(n, v), 0.0), 3.0);
   colour += vec3(.36, .5, .44) * rim * (.25 + .75 * day) * .55;
-  // Owner borders: a quiet inner line in the tile's own colour, lifted a little (no glowing rim).
+  // OWNER BORDERS: a quiet inner line, and on a skinned tile the ONE place the owner's colour shows
+  // (owner, 2026-11-15: the owners must still be tellable apart, but never by washing the art). On a
+  // plain tile it is the tile's own colour, lifted a little, exactly as before; on a skinned tile it
+  // is the owner's colour. Edge only — two pixels, inside the tile, under the grout.
   float band = smoothstep(1.0 - w * 4.2, 1.0 - w * 2.6, e) * border * owned;
-  colour = mix(colour, mix(c, vec3(.94, .91, .82), .3) * lit, band * .6);
+  vec3 edge = mix(mix(c, vec3(.94, .91, .82), .3), mix(vColour, vec3(.94, .91, .82), .3), skinned);
+  colour = mix(colour, edge * lit, band * .6);
   // The selection ring.
   float ring = smoothstep(1.0 - w * 6.0, 1.0 - w * 3.5, e) * selected;
   colour = mix(colour, vec3(.97, .94, .85), ring * (.82 + .18 * uPulse));
@@ -258,9 +277,11 @@ export class PlanetRenderer {
     const tiles = new Int8Array(vertices * 2);
     const skins = new Uint8Array(vertices);
     this.skinLook = skins;
-    // NO TWO NEIGHBOURS ALIKE (owner, 2026-11-14): one of the nine plain tiles per cell, each cell
-    // taking the first of its own shuffled nine that no already-placed neighbour wears. A tile has at
-    // most six neighbours, so one is always free. Fixed by the planet's cells: it never changes.
+    // EACH TILE ITS OWN LIGHT (owner, 2026-11-15, after "always in default orientation" made every
+    // tile of a set wear the same picture): the seed still carries a tone of its own (0..454, i.e. the
+    // low three figures below 4096), and the variant only feeds that tone now — the picture a skinned
+    // tile samples is the set's DEFAULT cell, chosen in the shader. `tileVariants` keeps its own rule
+    // (no two neighbours share an index) so neighbouring tiles never share a tone.
     const variant = tileVariants(cells);
     this.turn = new Float32Array(cells.length);
     let to = 0;
@@ -268,7 +289,7 @@ export class PlanetRenderer {
     for (const c of cells) {
       const face = tileFace(c.centre, c.corners.map(i => sphere.corners[i]!), north);
       this.turn[c.index] = face.angle;
-      // The seed carries the tile's picture (variant * 455 + a tone of its own, below 4096).
+      // The seed carries the tile's tone (below 4096; the picture is fixed per set in the shader).
       const seed = variant[c.index]! * 455 + Math.floor((Math.sin(c.index * 12.9898) * 43758.5453 % 1 + 1) % 1 * 455);
       for (let i = 0; i < c.corners.length; i++) {
         const a = sphere.corners[c.corners[i]!]!, b = sphere.corners[c.corners[(i + 1) % c.corners.length]!]!;

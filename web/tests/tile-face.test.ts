@@ -1,6 +1,9 @@
 // THE PLANET'S TILES SIT FLAT SIDE UP (owner, 2026-11-14: "the planet orientation ... always show
 // tiles flat side up"). Each tile's picture is turned so the hex edge nearest north is its top, and
-// the turn is reported so the view can level the tile at the centre of the screen.
+// the turn is reported so the view can level the tile at the centre of the screen. Since 2026-11-15
+// that turn also guarantees the SKIN's orientation: the same construction on every tile leaves every
+// picture upright in the same direction (web/tests/planet-skin.test.ts), and the variant index below
+// now only carries a tile's tone — every tile of a set wears the set's default picture.
 import { describe, expect, it } from 'vitest';
 import { tileFace, tileVariants } from '../src/sphere/tile-face.js';
 import { buildSphere } from '../src/sphere/geometry.js';
@@ -32,8 +35,8 @@ describe('a planet tile faces flat side up', () => {
   }
 });
 
-describe('the planet never puts the same tile picture side by side', () => {
-  it('every cell differs from all of its neighbours, and all nine pictures are used', () => {
+describe('every planet tile has its own tone, and its own turn levelled', () => {
+  it('no two neighbours share a variant index, and all nine are used (the tone it now feeds)', () => {
     const sphere = buildSphere(32);
     const v = tileVariants(sphere.cells);
     for (const c of sphere.cells) for (const n of c.neighbours) expect(v[n]).not.toBe(v[c.index]);
