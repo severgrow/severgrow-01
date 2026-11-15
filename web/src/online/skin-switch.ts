@@ -1,10 +1,12 @@
 // THE BOARD SKIN SWITCH (owner, 2026-11-14), on /test/ only: inside the planet's colour pane, under
 // the twenty colours. Three rows of named chips with a real thumbnail each: your tiles, their tiles
 // and the board background. A tap stores the choice (ui/skinChoice.ts); the next match wears it.
-// Static DOM, no timers or subscriptions; built once, re-marked on tap.
+// Static DOM, no timers; built once and re-marked by the ONE change notification in ui/skinChoice.ts
+// (a tap here, the account's own answer, or another tab), so a chip never marks a skin the board is
+// not wearing.
 import { BACKGROUNDS, TERRITORIES, TERRITORY_IDS } from '../ui/forestAsh.js';
 import type { BackgroundId, TerritoryId } from '../ui/forestAsh.js';
-import { DEFAULT_SKIN, SKIN_SWITCH, chooseSkin, previewSkin, skinChoice } from '../ui/skinChoice.js';
+import { SKIN_SWITCH, adoptServerSkin, chooseSkin, onSkinChoice, skinChoice, skinRevision } from '../ui/skinChoice.js';
 import type { SkinChoice } from '../ui/skinChoice.js';
 import type { DuelClient } from '../../../server/src/client.js';
 
@@ -25,40 +27,46 @@ const CSS = `
 `;
 
 let account: { client: DuelClient; token: string; refresh: () => void } | null = null;
-let markChoice: (() => void) | null = null;
-let saving = false;
+/**
+ * Which save owns the switch. A newer tap (or a different account) bumps it, so an answer to an
+ * older save — a success or a refusal — is out of date and can never move the choice.
+ */
+let saveSeq = 0;
+/**
+ * The skin the ACCOUNT is known to hold (from its own read, or from a save it accepted). A refused
+ * save goes back to this, never to whatever the tap before it happened to be wearing.
+ */
+let confirmed: TerritoryId | null = null;
 
 /** The token comes from the signed-in Planet view, never from a tile or a browser-supplied owner. */
 export async function connectSkinSwitch(client: DuelClient, token: string, refresh: () => void): Promise<void> {
   if (!SKIN_SWITCH) return;
   if (account?.token === token) { account.refresh = refresh; return; }
   const current = account = { client, token, refresh };
-  saving = false;
-  // A new account must never inherit the previous account's local preview while its own public
-  // choice is loading. That default is only PREVIEWED for this visit: writing it to storage (as an
-  // earlier build did) meant a read that failed or answered null left the stored choice at Forest,
-  // overwriting what this browser had — every visit, for good.
-  const before = skinChoice();
-  previewSkin({ mine: DEFAULT_SKIN.mine });
-  markChoice?.();
+  saveSeq++;  // a save from the previous account (or session) can no longer own this switch
+  confirmed = null;
+  // The switch marks, and the board wears, THIS browser's own choice while the account's answer is
+  // on its way. It used to preview Forest here, which made the pane claim a skin the board would not
+  // draw for the whole length of the read — and on a slow or failing connection the player could
+  // enter a match believing Forest was chosen while the stored skin was Water.
+  const issued = skinRevision();
   try {
     const saved = await client.worldSkin(token);
     if (account !== current) return;
-    // The server's own answer is the truth, and storing it is what keeps the next visit fast.
-    if (saved && TERRITORY_IDS.includes(saved)) chooseSkin({ mine: saved });
-    else chooseSkin({ mine: before.mine });
-    markChoice?.();
+    // The account's answer is the truth for "your tiles" — but only when nothing was chosen since
+    // this read left. A read that is out of date is dropped, never written back over the tap; a
+    // failed or empty answer leaves this browser's choice alone (ui/skinChoice.ts: adoptServerSkin).
+    confirmed = saved && TERRITORY_IDS.includes(saved) ? saved : null;
+    // The switch marks itself through ui/skinChoice.ts's one notification; nothing to do here.
+    adoptServerSkin(saved, issued);
     // The initial world read already carries the public skin on each claim. Re-fetching here
     // duplicates wallet/world requests on entry; a deliberate POST below still refreshes it.
   } catch {
-    if (account !== current) return;
-    // No answer (an older server, a dropped connection): put back what this browser already had.
-    chooseSkin({ mine: before.mine });
-    markChoice?.();
+    /* No answer (an older server, a dropped connection): the browser's own choice stands. */
   }
 }
 
-export function disconnectSkinSwitch(): void { account = null; saving = false; }
+export function disconnectSkinSwitch(): void { account = null; saveSeq++; }
 
 export function mountSkinSwitch(pane: HTMLElement | null): void {
   if (!SKIN_SWITCH || !pane || pane.querySelector('#world-skin-switch')) return;
@@ -87,7 +95,9 @@ export function mountSkinSwitch(pane: HTMLElement | null): void {
       b.setAttribute('aria-pressed', String(on));
     }
   };
-  markChoice = mark;
+  // The pane marks what the board wears, whoever changed it: this pane, an account read, or another
+  // tab (ui/skinChoice.ts). One subscription, no per-tap bookkeeping.
+  onSkinChoice(mark);
   for (const [label, field, options] of rows) {
     const title = document.createElement('p');
     title.className = 'world-pane-label';
@@ -113,25 +123,31 @@ export function mountSkinSwitch(pane: HTMLElement | null): void {
       name.textContent = NAMES[o.id];
       b.append(chip, name);
       b.addEventListener('click', () => {
-        if (field === 'mine' && saving) return;
         note.hidden = true;
         const previous = skinChoice();
-        chooseSkin({ [field]: o.id }); mark();
+        chooseSkin({ [field]: o.id });   // the pane re-marks itself (ui/skinChoice.ts)
         if (field !== 'mine' || !account) return;
         const selected = o.id as TerritoryId;
         const owner = account;
-        saving = true;
+        // THE LAST TAP OWNS THE SWITCH. A save that is still in flight used to swallow every later
+        // tap silently (one stalled request locked "Your tiles" for good). Now a newer tap is
+        // accepted, and only the newest save's answer may move the choice — an older answer, success
+        // or refusal, is out of date and is dropped.
+        const ticket = ++saveSeq;
         void owner.client.chooseWorldSkin(owner.token, selected).then((saved) => {
-          if (account !== owner) return;
-          chooseSkin({ mine: saved }); mark(); owner.refresh();
+          if (account !== owner || ticket !== saveSeq) return;
+          confirmed = TERRITORY_IDS.includes(saved) ? saved : selected;
+          chooseSkin({ mine: saved }); owner.refresh();
         }).catch(() => {
-          if (account !== owner) return;
-          // The server did not take it. Put the switch back on what is actually stored, and say so:
-          // a chip that silently snaps back reads as "nothing happened".
-          chooseSkin({ mine: previous.mine }); mark();
-          note.textContent = `Not saved — the board stays ${NAMES[previous.mine]}.`;
+          if (account !== owner || ticket !== saveSeq) return;
+          // The server did not take it. Put the switch back on what is actually stored (the account's
+          // last confirmed skin), and say so: a chip that silently snaps back reads as "nothing
+          // happened".
+          const staying = confirmed ?? previous.mine;
+          chooseSkin({ mine: staying });
+          note.textContent = `Not saved — the board stays ${NAMES[staying]}.`;
           note.hidden = false;
-        }).finally(() => { if (account === owner) saving = false; });
+        });
       });
       grid.appendChild(b);
     }

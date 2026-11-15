@@ -119,6 +119,7 @@ import { screenArrival } from './ui/screen-motion.js';
 import type { ScreenName } from './ui/screen-motion.js';
 import { BOARD_MARGIN, HEIGHTS, LIVE_CARD_CEILING, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setFixedBoardOrient, setSlimHud, THUMB } from './logic/layout.js';
 import { mountSkinSwitch } from './online/skin-switch.js';
+import { SKIN_SWITCH } from './ui/skinChoice.js';
 import type { Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
@@ -259,8 +260,10 @@ const brandingLoad = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'fut
   ? import('./player/branding.js') : null;
 // V3 art is archived on this branch; always use the default painted board for Futa04.
 const defaultArtLoad = IS_FUTA04 ? import('./ui/defaultArtBoard.js') : null;
-// /test/ only: the board skin switch in the planet's colour pane (online/skin-switch.ts).
-if (IS_FUTA04) mountSkinSwitch(document.querySelector<HTMLElement>('.world-pane[data-pane="colour"]'));
+// /test/ only (and a localhost dev host): the board skin switch in the planet's colour pane
+// (online/skin-switch.ts). The condition names the SAME gate the switch itself reads — `IS_FUTA04`
+// is true on the live product root too, where this switch must never exist.
+if (IS_FUTA04 && SKIN_SWITCH) mountSkinSwitch(document.querySelector<HTMLElement>('.world-pane[data-pane="colour"]'));
 const branding = brandingLoad ? await brandingLoad : null;
 if (branding && (window.matchMedia('(display-mode: standalone)').matches ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true)) {
