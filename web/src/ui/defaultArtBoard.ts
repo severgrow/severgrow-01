@@ -29,6 +29,7 @@ import { DEFAULT_ART_SPRITES } from './defaultArtSprites.js';
 import { FA_ALL_URLS, FA_ROCKS, faBackgroundUrl, faBaseColour, faRockSprite, faSetUrls, faSides, faTileSprite, faVariants, neighbourToward } from './forestAsh.js';
 import type { FaSprite, FaVariants } from './forestAsh.js';
 import type { TerritoryId } from './forestAsh.js';
+import { warmBoardArt } from './art-warm.js';
 // The replay's canvas pictures paint the same faces; they read this list from the module the board
 // already loaded, so neither the poster nor the video pulls a second copy of the sprite URLs.
 export { DEFAULT_ART_SPRITES };
@@ -381,6 +382,11 @@ export class DefaultArtBoardView extends BoardView {
 
   protected override afterSetup(_terrain: Record<string, Terrain>) {
     this.svg.classList.add('fa-board');
+    // EVERY PICTURE THE BOARD CAN DRAW IS DECODED NOW, AT THE SIZE IT IS DRAWN (ui/art-warm.ts):
+    // a tile that grows onto a variant the page has not rasterised yet would otherwise pay its
+    // image decode (~62-68 ms on a 390x844 profile, measured) in the very frame the player waits
+    // for. Once the board exists — never on the menu — and once per page.
+    void warmBoardArt(this.warmUrls(), this.drawnTileSize());
     // Empty gold frames lie on the ground, under any tile art that spills over them; an occupied
     // gold tile draws its own frame over its art (drawTile).
     this.svg.insertBefore(this.layers.rich, this.layers.tiles);
@@ -470,6 +476,27 @@ export class DefaultArtBoardView extends BoardView {
   }
 
   // ---- spills: the mask and rims that let highlights go around the art ----
+
+  /** Every picture this board may paint: its two sides' sets, the homes, rocks, gold and ground. */
+  private warmUrls(): string[] {
+    const urls = new Set<string>([...FA_ALL_URLS, groundUrl]);
+    const bg = faBackgroundUrl();
+    if (bg) urls.add(bg);
+    for (const side of faSides()) for (const url of faSetUrls(side)) urls.add(url);
+    return [...urls];
+  }
+
+  /**
+   * The box one tile's picture is rasterised into, in CSS px: the cell as the page draws it. Falls
+   * back to the hex geometry when the board has not been laid out yet (a hidden or zero-height
+   * game screen), so a warm pass never asks for a 0x0 canvas.
+   */
+  private drawnTileSize(): { width: number; height: number } {
+    const cell = this.svg.querySelector<SVGGElement>('.hex-cell');
+    const box = cell?.getBoundingClientRect();
+    if (box && box.width > 1 && box.height > 1) return { width: box.width, height: box.height };
+    return { width: S * 2, height: SQ3 * S };
+  }
 
   override render(board: Record<string, Tile | null>, o: Parameters<BoardView['render']>[1]) {
     this.updateSpills(board);

@@ -264,3 +264,60 @@ Planet: `sphere-test` (all four sizes) passes "no idle rendering while the groun
 "at rest only the slow star slide runs" with the levelling turn; the tile atlas (512x512, mipmapped) is
 uploaded once, the first time the world view opens, never for the menu planet and never at rest. The
 ground buffers grow by one 2-byte attribute per vertex (`renderer.bytes` reports it).
+
+## Action latency: tap → grown tile, and throw → the bot (2026-11-15)
+
+Owner report on `/test/` (`17dd1114`), compared with the live root (`f4ba65f5`): "after choosing card
+to grow and taping tile it takes way longer to grow. after throwing it takes a long time for opp bot
+to start". This is INPUT → RESULT latency, not frame rate: the earlier 60 fps/idle-cadence pass could
+not see it, so it was measured again with a real gesture on a real move.
+
+**Probe** (`probe/latency.ts`, kept out of the repo's suites): a 390x844 phone profile, real
+pointer press/release on a hand card, then on a legal empty hex; the throw is the real drag onto the
+Throw pile. Phases are read in the page: the pointer event, the engine state (`__severgrow.state()`),
+the DOM node the board writes, the first frame after that write, plus `longtask`, CDP
+`Performance.getMetrics` deltas and the page's own `renderCosts()`. Medians of 6 moves (8 for the
+frame-cadence probe), 1x and 4x CPU throttle (`Emulation.setCPUThrottlingRate`).
+
+Chromium 142 (bare Chromium, no service worker), ms, p50/p95:
+
+| Phase | live `f4ba65f5` | `/test/` `17dd1114` | ratio |
+| --- | --- | --- | --- |
+| Grow: tap → state | 22.2 / 29.5 | 18.6 / 29.1 | 0.84 |
+| Grow: tap → tile in the DOM | 19.2 / 26.7 | 15.2 / 25.6 | 0.79 |
+| Grow: tap → first frame showing it | 29.4 / 30.0 | 28.5 / 30.1 | 0.97 |
+| Grow: tap → input open again | 408 / 415 | 406 / 413 | 0.99 |
+| Throw: release → state | 3.7 / 5.5 | 3.6 / 5.5 | 0.97 |
+| Throw: release → "opponent's turn" pill | 744 / 746 | 747 / 748 | 1.00 |
+| Throw: release → my reveal ends | 1,010 / 1,012 | 1,013 / 1,015 | 1.00 |
+| Throw: release → bot's first tile | 1,572 / 1,574 | 1,575 / 1,580 | 1.00 |
+
+At 4x CPU throttle the same rows read 114.8/106.9 (grow state), 118.2/108.8 (first frame),
+761.7/771.1 (pill) and 1,611.6/1,633.7 (bot's first tile): the new build is 1-12% faster on the
+move and identical on the bot's start. WebKit 26 (the owner's engine), iPhone DPR 3, tap → state:
+**128 ms old, 113 ms new**; the old build also had a 722 ms outlier that the new one does not.
+
+The bot's start after a Throw is dominated by INTENDED time and is unchanged: the throw animation
+(320 ms x speed) plus the planned "think" beat (`USUAL.first` 550 ms, `logic/emptyturn.ts`), which
+is the 562 ms gap measured between my reveal ending and the bot's first tile — identical on both
+builds (561.5 vs 561.9 ms). No bot strength or pace was touched.
+
+**Bisect** (`2fb65b48`, `4803b9db`, `bc5fdeec`, `6997120f`, `13096336`, `3b8e8459`, `cc072a20`,
+`17dd1114`, each built and served on its own port): no commit shows a step. Hand-arrival, draw-tap
+and render costs are flat across all eight.
+
+**What the new board does cost.** It paints a per-cell ground picture, so a tile that grows onto a
+cell whose variant the page has not rasterised yet pays a GPU image decode inside that move's raster:
+62-68 ms measured in a Chrome trace (the old 14-picture board: 37-39 ms). That is the same extra
+`<image>` work the Beta 0.86 table above already records as +9-10% style recalc. On this machine it
+does not reach the tap→result numbers; on a slower phone it is the one thing in the move path that
+grew, so `ui/art-warm.ts` now rasterises every picture the board can draw once, at its drawn device
+size, when the board is set up (about 25 canvases, ~2 MB, once per page, off the move path).
+Measured after it: WebKit render p95 38 → 29 ms and tap → state 113 → 79 ms in a local-served run
+(a local server flatters both numbers, so only the direction is claimed), and the unit, build and
+browser gates are unchanged. **It is not proven to be the owner's bug**: on this machine the reported
+latency could not be reproduced at all, in either engine, with or without the service worker.
+
+**Not measured:** a physical iPhone (iOS compositing, ProMotion pacing, thermal state), real touch
+coalescing, and the owner's installed PWA cache. If the report stands, the shipped `?debug=timing`
+trace from his phone after two moves names the slow segment directly.
