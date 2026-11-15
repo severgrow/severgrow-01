@@ -1927,6 +1927,20 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   border: 1.5px solid var(--c-line);
   background: var(--c-surface);
 }
+/* IN THE CARD PRESENTATION THE DECK PAINTS NO PLATE OF ITS OWN.
+   The stack's face is the printed card back (`player/cards.ts` gives it the back art at the card's
+   own `5.9% / 4.2%` corner), and the two fanned layers behind it are card backs too. The base rule
+   above still filled the stack with opaque `--c-surface` and drew a `--c-line` hairline: wherever
+   the back art's rounded corner leaves the box uncovered, that fill showed through as a grey
+   rounded rectangle behind the deck — the owner's "weird rectangle from behind the draw pile"
+   (2026-11-15) and the second time this shape reappeared. The fill and the border are removed
+   here, scoped to the card presentation so the plain channels keep their slab look.
+   `web/tests/layering-086.test.ts` pins this rule; `web/e2e/futa04-pile-back.ts` measures the
+   computed background of the stack itself, not only its layers. */
+.futa04-cards .dock #deck .pile-stack {
+  border: 0;
+  background-color: transparent;
+}
 /* The fan's layers live behind the face but in front of the (isolated) card box. */
 .pile-stack::before,
 .pile-stack::after {

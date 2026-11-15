@@ -74,6 +74,11 @@ try {
       const r = stack.getBoundingClientRect();
       return {
         stackBg: cs.backgroundImage, backFile: back.split('/').pop() ?? '', backStatus: status,
+        // THE STACK'S OWN PAINT. `web/tests/layering-086.test.ts` pins the rule, but a source-text
+        // assertion is what let the grey rectangle back in once already (it checked the grouped
+        // `.pile-stack, ::before, ::after` block while a separate `.pile-stack` rule kept the
+        // opaque `--c-surface` fill). These two read what the browser actually paints on the stack.
+        stackFill: cs.backgroundColor, stackBorder: cs.borderTopWidth,
         radius: cs.borderTopLeftRadius, box: { width: r.width, height: r.height },
         pileCardRadius: getComputedStyle(document.querySelector('#deck .pile-card')!).borderTopLeftRadius,
         before: layer('::before'), after: layer('::after'),
@@ -82,6 +87,10 @@ try {
 
     assert(style.backFile.includes('back-'), `${width}px: the draw pile carries the card back ${JSON.stringify(style)}`);
     assert.equal(style.backStatus, 200, `${width}px: the back art is loadable`);
+    // The face itself paints no plate: an opaque fill here shows through the back art's rounded
+    // corners as the grey rectangle the owner reported. Only the back art may paint.
+    assert.equal(style.stackFill, 'rgba(0, 0, 0, 0)', `${width}px: the stack paints no surface fill behind the back art (${style.stackFill})`);
+    assert.equal(style.stackBorder, '0px', `${width}px: the stack draws no hairline of its own (${style.stackBorder})`);
     // EVERY layer is the same printed back, exactly like the ritual's nine `.card.back` layers.
     for (const [name, layer] of [['near', style.after], ['far', style.before]] as const) {
       assert.equal(layer.bg, style.stackBg, `${width}px: the ${name} layer prints the same card back`);
@@ -94,7 +103,7 @@ try {
     for (const [name, layer] of [['near', style.after], ['far', style.before]] as const) {
       assert(layer.radius.startsWith('5.9%'), `${width}px: the ${name} layer keeps the printed card corner (${layer.radius})`);
     }
-    checks += 11;
+    checks += 13;
 
     // THE FAN. Both layers move right and down and tilt counter-clockwise; the far one travels
     // exactly twice the near one (the ritual's `cardStackPose` at depth 1 and 2 of 3). A slab

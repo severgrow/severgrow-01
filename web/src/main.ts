@@ -312,6 +312,7 @@ import { type EndgamePlanet } from './online/endgame-planet.js';
 import { settledSeedsMessage } from './ui/seed-reveal.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { installStaleBuildReload } from './logic/stale-build.js';
+import { installFreshShellReload } from './logic/fresh-shell.js';
 import { mountPlanetLockup } from './player/planet-lockup.js';
 import { holdStars, mountSpaceBackdrop, spaceBackdrop } from './player/space-backdrop.js';
 import { backdropHeld, mountBackdropGate, onBackdropChange, refreshBackdropGate } from './ui/render-gate.js';
@@ -327,6 +328,11 @@ onBackdropChange(() => { if (session && !$('game').hidden) render(); });
 
 // First thing: a page left open across a deploy reloads onto the new build instead of half-breaking.
 installStaleBuildReload();
+// And the launch itself catches up: the offline worker answers the first navigation from the saved
+// page and only refreshes it for the NEXT launch, so a resumed home-screen app can sit on one build
+// for days (owner, 2026-11-15). This checks the deployed entry after paint, on the menu only, and
+// reloads once through `?_fresh=` when they differ.
+installFreshShellReload();
 
 const HUMAN: Player = 0;
 const BOT: Player = 1;

@@ -91,10 +91,17 @@ describe('board and dock layering, 0.86 fixes', () => {
     expect(slabs, 'the layer rule carries z-index: -1').not.toBeNull();
     // The negative layer needs its own stacking context to stay inside the card box.
     expect(rule(css, '.pile-card {')).toContain('isolation: isolate;');
-    // No fill and no hairline of their own: the back art is the only thing they paint.
-    const base = rule(css, '.pile-stack,\n.pile-stack::before,');
-    expect(base).not.toContain('--c-surface');
-    expect(base).not.toContain('--c-line');
+    // THE STACK ITSELF MUST PAINT NO PLATE. This is the assertion that was missing: it used to
+    // check only the grouped `.pile-stack, .pile-stack::before, .pile-stack::after` block, so the
+    // separate `.pile-stack { background: var(--c-surface) }` rule kept filling the deck with an
+    // opaque grey rectangle behind the back art and the test still passed (owner saw it again on
+    // 2026-11-15). The card presentation's own rule must override both the fill and the hairline.
+    const stack = rule(css, '.futa04-cards .dock #deck .pile-stack {');
+    expect(stack, 'the deck stack has its own override rule').not.toBe('');
+    expect(stack, 'the stack paints no surface fill').not.toContain('--c-surface');
+    expect(stack, 'the stack draws no hairline').not.toContain('--c-line');
+    expect(stack).toContain('background-color: transparent');
+    expect(stack).toContain('border: 0');
     // The old 45° hatch that faked a pattern on a blank slab is gone for the same reason.
     expect(rule(css, '.pile-stack::after {\n  content:')).not.toContain('repeating-linear-gradient');
   });
