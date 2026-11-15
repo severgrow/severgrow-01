@@ -7,8 +7,8 @@
 // carries none.
 import { FA_GOLD_ATLAS, FA_GOLD_ATLAS_SIZE, FA_GOLD_BOXES, goldLookId } from './forestAsh.js';
 import type { GoldLook } from './forestAsh.js';
-import { cellScale, el } from './geom.js';
-import { goldFrameSize } from './goldframe-geometry.js';
+import { cellScale, cornerPts, el, hexPath, S } from './geom.js';
+import { goldFrameFit, goldFrameSize } from './goldframe-geometry.js';
 import { getOrient } from '../logic/orient.js';
 
 export { GOLD_FRAME_SCALE, goldFrameSize } from './goldframe-geometry.js';
@@ -85,23 +85,39 @@ export const goldFrameKeys = (boardKeys: Iterable<string>, bonusKeys: Iterable<s
 };
 
 /**
- * The look as one SVG transform about the hex centre, or '' when it is the plain upright frame.
+ * The look as a rigid transform about the HEX CENTRE, as six numbers (SVG's `matrix(a b c d e f)`).
  *
- * The frame is a HEXAGON, so a 60-degree turn (and a reflection about its own vertical axis) maps it
- * onto itself: the box, the silhouette and the closed ring are unchanged, only the lighting and the
- * embossing turn. `pointy` is the board's own -30 degrees, which puts the flat-top atlas art on a
- * pointy cell; it composes with the look because a 60-degree turn commutes with it up to another
- * 60-degree turn.
+ * Both halves are symmetries of the cell's own hexagon, which is why a look can never move the
+ * frame off its hex:
+ *
+ *  - a turn is a multiple of 60 degrees, and a regular hexagon has 60-degree rotational symmetry;
+ *  - the mirror is a reflection about the cell's VERTICAL axis. This board's cell is a flat-top
+ *    hexagon (its corners land on multiples of 60 degrees), which has an axis of symmetry on every
+ *    multiple of 30 degrees, the vertical one included — and a pointy cell's set of corners is the
+ *    same set turned by 30 degrees, so the same axis works there too.
+ *
+ * The translation is chosen so the cell's centre maps onto itself: `t = centre - L·centre`. `pointy`
+ * adds the board's own -30 degrees, which puts the flat-top atlas art on a pointy cell; a 60-degree
+ * turn commutes with it up to another turn, so it composes without ever leaving the hexagon.
+ *
+ * Using the `transform` ATTRIBUTE (a matrix) rather than a CSS `transform` is deliberate: the
+ * attribute has no `transform-origin`/`transform-box` to get wrong, so it cannot pivot about the SVG
+ * origin instead of the hex centre.
  */
-export const goldLookTransform = (look: GoldLook, x: number, y: number, pointy: boolean): string => {
-  if (!pointy && look.rotation === 0 && look.mirror === 0) return '';
+export const goldLookMatrix = (look: GoldLook, x: number, y: number, pointy: boolean) => {
   const deg = look.rotation * 60 + (pointy ? -30 : 0);
   const r = (deg * Math.PI) / 180;
   const c = Math.cos(r), s = Math.sin(r);
-  // Mirror first (about the cell's own vertical axis), then turn: R * M as one matrix. The
-  // translation is chosen so the cell's centre maps onto itself — the turn must not move the frame.
+  // Mirror first (about the cell's own vertical axis), then turn: R * M as one matrix.
   const a = look.mirror ? -c : c, b = look.mirror ? -s : s;
-  return `matrix(${n(a)} ${n(b)} ${n(-s)} ${n(c)} ${n(x - (a * x - s * y))} ${n(y - (b * x + c * y))})`;
+  return { a, b, c: -s, d: c, e: x - (a * x - s * y), f: y - (b * x + c * y) };
+};
+
+/** The look as one SVG transform about the hex centre, or '' when it is the plain upright frame. */
+export const goldLookTransform = (look: GoldLook, x: number, y: number, pointy: boolean): string => {
+  if (!pointy && look.rotation === 0 && look.mirror === 0) return '';
+  const m = goldLookMatrix(look, x, y, pointy);
+  return `matrix(${n(m.a)} ${n(m.b)} ${n(m.c)} ${n(m.d)} ${n(m.e)} ${n(m.f)})`;
 };
 
 /**
@@ -123,6 +139,8 @@ export function drawGoldFrame(
   x: number,
   y: number,
   occupied: boolean,
+  /** A document-unique id for this frame's clip (the board's own `id()` factory). */
+  clipId: string,
 ) {
   const crop = goldFrameCrop(looks, key);
   const pad = 6;
@@ -130,7 +148,16 @@ export function drawGoldFrame(
   // keeps the rim and the hex one shape wherever a bent board draws the hex smaller than S, and the
   // shared GOLD_FRAME_SCALE keeps it just inside the seam like the rocks. The look turns the SAME
   // box (a hexagon is its own 60-degree rotation), so the geometry never moves.
-  const { width, height } = goldFrameSize(cellScale(key));
+  const base = goldFrameSize(cellScale(key));
+  // …AND ITS PAINT MUST FIT THE CELL THE BOARD ACTUALLY DRAWS. `cellScale` is the MEAN of a cell's
+  // six corners, which is exact on the flat product board but a shade too big on the bent 0.5 board
+  // (the bulge moves the corners by up to two degrees and two per cent); `goldFrameFit` trims the
+  // frame to the smallest boundary of its own hexagon, so NO look can paint past the seam. The art's
+  // hexagon sits inside the padded crop at `crop.w / (crop.w + 2*pad)` of the box.
+  const cell = cornerPts(key, S);
+  const painted = (base.width / 2) * (crop.w / (crop.w + pad * 2));
+  const fit = goldFrameFit(cell, x, y, painted);
+  const width = base.width * fit, height = base.height * fit;
   const transform = goldLookTransform(crop, x, y, getOrient() === 'pointy');
   const group = el('g', {
     class: `gold-frame ${occupied ? 'occupied' : 'empty'}`,
@@ -138,15 +165,25 @@ export function drawGoldFrame(
     'data-variant': goldLookId(crop),
     'data-design': crop.design,
     'aria-hidden': 'true',
-    ...(transform ? { transform } : {}),
+    // THE FRAME IS CLIPPED TO ITS OWN HEX (owner, 2026-11-15). The rim's metal is fitted inside the
+    // cell above; this also bounds what the rim's GLOW paints. `.gold-frame`'s drop-shadow is a
+    // filter, and a filter is applied before a clip, so the shadow is cut at the seam too — on the
+    // outer ring half of it used to be painted outside the board's silhouette, which is the gold
+    // the owner saw on /test/. Nothing a frame paints can now leave its hex, at ANY look.
+    'clip-path': `url(#${clipId})`,
   }, parent);
+  const defs = el('defs', {}, group);
+  el('path', { d: hexPath(key, S, 'flat') }, el('clipPath', { id: clipId, clipPathUnits: 'userSpaceOnUse' }, defs));
+  // The look's transform lives on an inner group so that the clip is resolved in BOARD units: a
+  // clipPath on the element that carries the transform would turn with the frame.
+  const turned = el('g', { class: 'gold-frame-look', ...(transform ? { transform } : {}) }, group);
   // A picture that failed to load is never drawn: the browser would paint its own placeholder.
   if (atlasMissing) return group;
   const viewport = el('svg', {
     x: x - width / 2, y: y - height / 2, width, height,
     viewBox: `${crop.x - pad} ${crop.y - pad} ${crop.w + pad * 2} ${crop.h + pad * 2}`,
     preserveAspectRatio: 'none', overflow: 'hidden', class: 'gold-frame-art',
-  }, group);
+  }, turned);
   el('image', { href: FA_GOLD_ATLAS, x: 0, y: 0, width: FA_GOLD_ATLAS_SIZE.w, height: FA_GOLD_ATLAS_SIZE.h }, viewport);
   return group;
 }
