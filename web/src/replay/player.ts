@@ -1204,6 +1204,7 @@ export const mountReplay = (deps: ReplayDeps): ReplayHandle => {
     let view: BoardView = plainBoard;
     if (mod) {
       try {
+        mod.preloadBoardArt();
         await mod.boardArtReady;
         if (seq !== openSeq || model !== next) return;
         artView ??= new mod.DefaultArtBoardView(svg, { tap: () => undefined, inspect: () => undefined });

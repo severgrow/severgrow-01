@@ -2395,6 +2395,7 @@ function warmFirstBoard(): Promise<void> {
       resolve();
     };
     const timer = window.setTimeout(finish, FIRST_WARM_CAP_MS);
+    defaultArt!.preloadBoardArt();
     void defaultArt!.boardArtReady.then(finish);
   });
   return firstWarm;

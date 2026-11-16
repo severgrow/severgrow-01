@@ -80,8 +80,8 @@ const noteArtFailure = (url: string): void => {
   dropArt(url);
 };
 
-// The small sprites start downloading while the menu is visible. Once decoded, every repeat of a
-// variant shares the browser's image cache (one decode per file, however many tiles use it).
+// The small sprites download once the menu is up (see `preloadBoardArt` below). Once decoded, every
+// repeat of a variant shares the browser's image cache (one decode per file, however many tiles use it).
 const artDecodes: Promise<unknown>[] = [];
 
 /** The files this board has already asked the browser for (one request per picture). */
@@ -107,11 +107,48 @@ const requestArt = (url: string | null | undefined): void => {
   artDecodes.push(img.decode().catch(() => undefined));
 };
 
-if (typeof Image !== 'undefined') {
-  // The look the first board draws: both default sides, the rocks, the gold frames, the empty
-  // ground and the ground copy of the background this browser has chosen (its colour strength is
-  // baked in — no filter is drawn on the board).
-  for (const url of [...FA_ALL_URLS, groundUrl, faGroundUrl()]) requestArt(url);
+/**
+ * NOT ON THE MENU'S PATH (2026-11-16 release pass). The 0.86 board asks for ~1 MB of pictures; asked
+ * for when this module loaded, they shared the link with the menu's own files. Measured at a 9 Mbps /
+ * 85 ms phone link, 4x CPU: time to menu 3.4 s on the live build, 3.85 s on 0.86. They now start the
+ * way the card faces do (player/cards.ts `warmCardArtWhenReady`): once the app is ready, at the next
+ * idle moment, with a safety timer. Anything that draws the board sooner calls `preloadBoardArt()`.
+ */
+let startPreload: (() => void) | null = null;
+
+/**
+ * Resolves when every picture the first board composes is decoded (or has failed): the ground,
+ * both homes, the territory faces, the rocks and the gold frames. It waits for the pictures, so it
+ * settles only after they have been asked for (`preloadBoardArt`, or the menu's idle start). Never
+ * rejects.
+ */
+export const boardArtReady: Promise<void> = typeof Image === 'undefined'
+  ? Promise.resolve()
+  : new Promise<void>((resolve) => {
+    startPreload = () => {
+      startPreload = null;
+      // The look the first board draws: both default sides, the rocks, the gold frames, the empty
+      // ground and the ground copy of the background this browser has chosen (its colour strength
+      // is baked in — no filter is drawn on the board).
+      for (const url of [...FA_ALL_URLS, groundUrl, faGroundUrl()]) requestArt(url);
+      void Promise.all(artDecodes).then(() => resolve());
+    };
+  });
+
+/** Ask for the board's pictures now (a board or replay is about to be drawn). Idempotent. */
+export const preloadBoardArt = (): void => { startPreload?.(); };
+
+if (startPreload && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  let scheduled = false;
+  const whenIdle = (): void => {
+    if (scheduled) return;
+    scheduled = true;
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
+    if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(preloadBoardArt, { timeout: 1500 });
+    else window.setTimeout(preloadBoardArt, 120);
+  };
+  window.addEventListener('severor-ready', whenIdle, { once: true });
+  window.setTimeout(whenIdle, 5000);
 }
 
 /**
@@ -192,12 +229,6 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
   sweepFailedPictures();
 }
 
-/**
- * Resolves when every picture the first board composes is decoded (or has failed): the ground,
- * both homes, the territory faces, the rocks and the gold frames. The downloads already started
- * above, so waiting on this is a decode wait, not a second request. Never rejects.
- */
-export const boardArtReady: Promise<void> = Promise.all(artDecodes).then(() => undefined);
 
 const f = (n: number) => n.toFixed(2);
 /**
@@ -286,6 +317,8 @@ export class DefaultArtBoardView extends BoardView {
   }
 
   protected override drawCell(g: SVGGElement, key: string, terrain: Terrain) {
+    // A board being drawn needs its pictures now, whatever the menu's idle start is doing.
+    preloadBoardArt();
     const defs = this.svg.querySelector('defs')!;
     const id = this.id('default-ground');
     // The ground PICTURE (the board background with its colour strength baked in, ui/forestAsh.ts).
