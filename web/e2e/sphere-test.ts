@@ -266,9 +266,26 @@ try {
     const before = (await planet(p))!;
     const ground0 = (await screenOf(p, '0,0'))!;
     const cx = grid.x + grid.width / 2, cy = grid.y + grid.height / 2;
-    await p.mouse.move(cx - 60, cy);
+    // THE GROUND STAYS UNDER THE FINGER (owner, 2026-11-16: on /test "it's like u can't drag it in
+    // whatever direction"; live drags freely). The tile under the finger must travel the finger's way.
+    // Measured before the fix: 30 degrees off in every direction, ending 50% of the drag away from the
+    // finger, because the drag ignored the view's flat-side-up roll. Live: 0-1 degrees and <=9%.
+    let held: { id: string; x: number; y: number } | null = null;
+    for (const id of [...mine, ...rival]) {
+      const at = await screenOf(p, id);
+      if (at && (!held || Math.hypot(at.x - (cx - 60), at.y - cy) < Math.hypot(held.x - (cx - 60), held.y - cy))) held = { id, ...at };
+    }
+    await p.mouse.move(held ? held.x : cx - 60, held ? held.y : cy);
     await p.mouse.down();
-    for (let i = 1; i <= 10; i++) { await p.mouse.move(cx - 60 + i * 12, cy + i * 4); await p.waitForTimeout(16); }
+    const from = held ? { x: held.x, y: held.y } : { x: cx - 60, y: cy };
+    for (let i = 1; i <= 10; i++) { await p.mouse.move(from.x + i * 12, from.y + i * 4); await p.waitForTimeout(16); }
+    if (held) {
+      const end = await screenOf(p, held.id), finger = { x: from.x + 120, y: from.y + 40 };
+      const off = end ? Math.abs(((Math.atan2(end.y - from.y, end.x - from.x) - Math.atan2(40, 120)) * 180 / Math.PI + 540) % 360 - 180) : 180;
+      const miss = end ? Math.hypot(end.x - finger.x, end.y - finger.y) / Math.hypot(120, 40) : 1;
+      check(`[${tag}] the ground under the finger follows it (any roll)`, off < 5 && miss < .2,
+        JSON.stringify({ tile: held.id, offDegrees: +off.toFixed(1), missShare: +miss.toFixed(2), roll: (before as any).roll }));
+    }
     const releasePose=(await planet(p))!;
     // FLAT SIDE UP, NO CAMERA CORRECTION (owner, 2026-11-15: the view "adjusts after landing —
     // wrong ... feel should be the same as before"). Each tile's picture is levelled continuously

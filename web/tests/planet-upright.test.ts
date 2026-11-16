@@ -1,7 +1,8 @@
 import { expect,it } from 'vitest';
 import { arcQuat,inverse,rotate,slerp,type Quat } from '../src/sphere/rotation.js';
 import { unit } from '../src/sphere/geometry.js';
-import { uprightTarget,northUpDrag,NORTH_PITCH_LIMIT,coastGain,coastStep } from '../src/sphere/upright.js';
+import { uprightTarget,northUpDrag,rolledDrag,NORTH_PITCH_LIMIT,coastGain,coastStep } from '../src/sphere/upright.js';
+import { multiply } from '../src/sphere/rotation.js';
 it('removes roll while keeping exactly the same point at the centre',()=>{
  for(let i=1;i<80;i++){
   const q=arcQuat([0,0,1],[Math.sin(i),Math.cos(i),.4]);
@@ -59,4 +60,32 @@ it('a half-zoomed flick keeps gliding; gain is not applied again every frame',()
  // Zoomed in (top clipped) and a flick that has already died both stop.
  expect(coastStep({x:1,y:0},0,16)).toBeNull();
  expect(coastStep({x:0.02,y:0},1,16)).toBeNull();
+});
+
+// THE GROUND STAYS UNDER THE FINGER IN A TURNED VIEW (owner, 2026-11-16: "it's like u can't drag it in
+// whatever direction" on /test, while live drags freely). 0.86 turns the world view by a small roll so
+// the centre tile sits flat side up, and applied the north-up drag BEFORE that turn: the ground then
+// slid off by the roll angle (measured in Chromium: 30 degrees off the finger in every direction, the
+// tile ending 50% of the drag away from it; live 0 degrees and ~7%). The finger's movement must be read
+// in the turned view.
+it('a drag in a turned view moves the ground the way the finger moves, and keeps the turn',()=>{
+ const north:[number,number,number]=[0,1,0],rz=(r:number):Quat=>[0,0,Math.sin(r/2),Math.cos(r/2)];
+ const base=northUpDrag([0,0,0,1],north,40,30,200);
+ for(const roll of [0,-Math.PI/6,-Math.PI/12,Math.PI/18,Math.PI/6]){
+  const q=multiply(rz(roll),base);
+  for(let k=0;k<8;k++){
+   const th=k*Math.PI/4,dx=8*Math.cos(th),dy=8*Math.sin(th);
+   const ground=rotate(inverse(q),[0,0,1]);
+   const next=rolledDrag(q,north,dx,dy,200,roll),p=rotate(next,ground);
+   // screen: x right, y down
+   const moved=Math.atan2(-p[1],p[0]),off=Math.abs(((moved-th)*180/Math.PI+540)%360-180);
+   expect(off,`roll ${(roll*180/Math.PI).toFixed(0)} deg, drag ${k*45} deg`).toBeLessThan(2);
+   const up=rotate(next,north);
+   expect(Math.atan2(-up[0],up[1])).toBeCloseTo(roll,6);
+  }
+ }
+});
+it('with no roll it is exactly the north-up drag live has',()=>{
+ const q=northUpDrag([0,0,0,1],[0,1,0],10,20,150);
+ expect(rolledDrag(q,[0,1,0],12,-7,150,0)).toEqual(northUpDrag(q,[0,1,0],12,-7,150));
 });

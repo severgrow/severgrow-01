@@ -17,7 +17,7 @@ import { interfaceMotionAllowed } from '../ui/interface-motion.js';
 import { backdropHeld, onBackdropChange } from '../ui/render-gate.js';
 import { isDoubleTap, type TapPoint } from '../logic/double-tap.js';
 import { markPlanetPainted } from '../player/startup.js';
-import { uprightTarget,northUpDrag,NORTH_PITCH_LIMIT,coastGain,coastStep } from './upright.js';
+import { uprightTarget,northUpDrag,rolledDrag,NORTH_PITCH_LIMIT,coastGain,coastStep } from './upright.js';
 import { faPlanetAllUrl, faSides } from '../ui/forestAsh.js';
 import { tileFace } from './tile-face.js';
 import { menuDiscRadius } from '../player/planet-lockup.js';
@@ -192,6 +192,8 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   const rz = (r: number): Quat => [0, 0, Math.sin(r / 2), Math.cos(r / 2)];
   /** North-up, then the current roll (world only; the menu's planet keeps north up). */
   const levelled = (r: Quat): Quat => (mode === 'world' && roll ? multiply(rz(roll), r) : r);
+  /** The roll a drag reads the finger in (world only): the ground stays under the finger. */
+  const viewRoll = (): number => (mode === 'world' ? roll : 0);
   let lastPointer={x:0,y:0}, lastMoveAt=0;
   /** Screen-px/ms of the last drag sample; used for release coast. */
   let dragVel={x:0,y:0};
@@ -401,7 +403,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       const next = coastStep(coastVel, gain, dt);
       if (!next) stopCoast();
       else {
-        q = levelled(northUpDrag(q, north, coastVel.x * dt, coastVel.y * dt, disc));
+        q = rolledDrag(q, north, coastVel.x * dt, coastVel.y * dt, disc, viewRoll());
         coastVel = next;
       }
     } else if (!motion()) stopCoast();
@@ -563,7 +565,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     const sample = { x: dx / dtMove, y: dy / dtMove };
     dragVel = { x: dragVel.x * .35 + sample.x * .65, y: dragVel.y * .35 + sample.y * .65 };
     lastMoveAt = now;
-    q=levelled(northUpDrag(q,north,dx,dy,discRadius(frameNow.width,frameNow.height,zoom)));
+    q=rolledDrag(q,north,dx,dy,discRadius(frameNow.width,frameNow.height,zoom),viewRoll());
     lastPointer=p;
     ask();
   }, { signal });
@@ -644,7 +646,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     if(arrows[e.key]){
       e.preventDefault();stop();
       const [x,y]=arrows[e.key]!,step=(.3/zoom+.02)/Math.SQRT1_2;
-      syncRoll();q=levelled(northUpDrag(q,north,x*step,y*step,1));ask();
+      syncRoll();q=rolledDrag(q,north,x*step,y*step,1,viewRoll());ask();
     } else if (['+', '=', '-'].includes(e.key)) {
       e.preventDefault(); stop();
       zoom=targetZoom=clampZoom(zoom*(e.key==='-'?1/1.25:1.25));

@@ -72,3 +72,19 @@ export function coastStep(vel:{x:number;y:number}, gain:number, dt:number):{x:nu
   if(Math.hypot(next.x, next.y) < 0.03) return null;
   return next;
 }
+/**
+ * The north-up drag in a view turned by `roll` (the world view's flat-side-up turn, sphere/planet.ts).
+ * The finger moves on the TURNED screen, so its movement is turned back into the north-up frame
+ * before the drag and the turn is put back after: the ground under the finger follows it exactly as
+ * it does with no roll (owner, 2026-11-16: "it's like u can't drag it in whatever direction" — the
+ * drag was applied unturned, so the ground slid off by the roll, up to 30 degrees). With no roll this
+ * IS `northUpDrag`. The poles and their limits are the ones the north-up drag always had.
+ */
+export function rolledDrag(q:Quat,north:V3,dx:number,dy:number,radius:number,roll:number):Quat {
+  if(!roll)return northUpDrag(q,north,dx,dy,radius);
+  const c=Math.cos(roll),s=Math.sin(roll);
+  // screen (y down) -> view (y up), turned back by the roll, -> screen again
+  const vx=dx,vy=-dy,ux=c*vx+s*vy,uy=-s*vx+c*vy;
+  const r=northUpDrag(q,north,ux,-uy,radius);
+  return multiply([0,0,Math.sin(roll/2),Math.cos(roll/2)],r);
+}
