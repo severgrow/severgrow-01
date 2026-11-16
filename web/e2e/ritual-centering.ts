@@ -34,6 +34,19 @@ try {
       const card=layer!.querySelector('.card')!;const style=getComputedStyle(card);
       (window as any).__geometry={tile:tile.toJSON(),card:deck.toJSON(),anchor:document.getElementById('lottery-deck-anchor')?.getBoundingClientRect().toJSON(),style:{width:style.width,height:style.height,position:style.position,display:style.display,transform:style.transform,translate:style.translate},layer:layer!.getBoundingClientRect().toJSON()};
      }
+     // The emblem lets go of its kanji and its hex turns onto the tile (owner, 2026-11-16).
+     const ring=document.querySelector<HTMLElement>('.ritual-emblem-ring');
+     if(tile&&ring&&ring.getAnimations().length&&ring.getAnimations().every(a=>a.playState==='finished')){
+      const m=new DOMMatrix(getComputedStyle(ring).transform);
+      const box=ring.getBoundingClientRect();
+      const card=ring.closest<HTMLElement>('.ritual-deck-layer')!;
+      const shown=card.getBoundingClientRect().width/card.offsetWidth;
+      const turnedWidth=ring.offsetWidth*shown*997/877*Math.hypot(m.a,m.b);
+      (window as any).__emblem={angle:Math.atan2(m.b,m.a)*180/Math.PI,fitError:turnedWidth-tile.width,
+       dx:box.x+box.width/2-tile.x-tile.width/2,dy:box.y+box.height/2-tile.y-tile.height/2,
+       kanji:Number(getComputedStyle(document.querySelector('.ritual-emblem-kanji')!).opacity),
+       cover:Number(getComputedStyle(document.querySelector('.ritual-emblem')!).opacity)};
+     }
      if(tile&&deck)(window as any).__centering.push({dx:deck.x+deck.width/2-tile.x-tile.width/2,dy:deck.y+deck.height/2-tile.y-tile.height/2});
     }
     requestAnimationFrame(sample);
@@ -52,6 +65,12 @@ try {
   console.log(`${width}x${height}: max centre error ${error.toFixed(3)}px (${samples.length} frames)`);
   if(error>1)console.log(JSON.stringify(await page.evaluate(()=>(window as any).__geometry)));
   assert(error<=1,`ritual emblem must remain centred on the actual middle tile: ${error}px`);
+  const emblem=await page.evaluate(()=>(window as any).__emblem as {angle:number;fitError:number;dx:number;dy:number;kanji:number;cover:number}|undefined);
+  console.log(`${width}x${height}: emblem at the kanji's peak ${JSON.stringify(emblem)}`);
+  assert(emblem,'the emblem cover is drawn while the kanji is up');
+  assert(emblem.cover>.99&&emblem.kanji<.01,'the emblem\'s own kanji is gone while the big one is up');
+  assert(Math.abs(emblem.angle-30)<.5,`the hex turns 30°, flat-top like the board: ${emblem.angle}`);
+  assert(Math.abs(emblem.fitError)<=1.5&&Math.hypot(emblem.dx,emblem.dy)<=1.5,`the turned hex sits on the middle tile's outline: ${JSON.stringify(emblem)}`);
   await page.close();
  }
 } finally {await browser.close();await fixture.close();}

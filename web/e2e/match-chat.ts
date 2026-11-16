@@ -1049,8 +1049,8 @@ try {
     const c = document.querySelector<HTMLElement>('.match-chat-head-keys button:last-child')!.getBoundingClientRect();
     return { shown: b.width > 0, gap: c.top - b.bottom, overlapX: Math.min(b.right, c.right) - Math.max(b.left, c.left) };
   });
-  check('390×844 notched, the logo drawn after the chat opened: the close key still clears it',
-    late.shown && (late.overlapX <= 0 || late.gap >= 8), JSON.stringify(late));
+  check(`390×844 notched, the logo drawn after the chat opened: the close key still clears it ${JSON.stringify(late)}`,
+    late.shown && (late.overlapX <= 0 || late.gap >= 8));
   await visual.evaluate(() => document.getElementById('chat-badge-late-probe')?.remove());
   await visual.keyboard.press('Escape');
   await visual.locator('.match-chat-panel').waitFor({ state: 'hidden' });

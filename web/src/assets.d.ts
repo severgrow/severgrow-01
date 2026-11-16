@@ -4,6 +4,12 @@ declare module '*?url' {
   export default url;
 }
 
+// Vite raw text (import svg from './file.svg?raw')
+declare module '*?raw' {
+  const text: string;
+  export default text;
+}
+
 declare module '*.webp' {
   const url: string;
   export default url;

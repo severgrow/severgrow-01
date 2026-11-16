@@ -26,6 +26,8 @@ import { preloadCardArt } from './cards.js';
 import type { RitualCard, StarterRitualView } from '../logic/starter-ritual.js';
 import { RITUAL_DECK_SIZE } from '../logic/starter-ritual.js';
 import { WORDMARK_URL as plainMarkUrl } from './branding.js';
+import backFrameUrl from '../assets/cards/back-frame.webp?url';
+import { RING_TURN_DEG, emblemParts, ringFitScale } from './ritual-emblem.js';
 
 /**
  * The kanji leaving the card (owner, 2026-11-08: "make it look like it's actually coming from the card
@@ -184,6 +186,10 @@ class StarterRitual {
   private kanji: HTMLImageElement | null = null;
   /** The mark decoding in the background (warmKanji); null until the full timeline starts. */
   private kanjiReady: Promise<boolean> | null = null;
+  /** The emblem-less card back decoding with the mark; the cover is only drawn once it can paint. */
+  private frameReady: Promise<boolean> | null = null;
+  /** The top card's emblem, redrawn in parts while the kanji rises (player/ritual-emblem.ts). */
+  private emblemCover: HTMLElement | null = null;
 
   constructor(options: StarterRitualOptions, refs: Refs) {
     this.options = options;
@@ -936,6 +942,10 @@ class StarterRitual {
     const ready = await Promise.race([this.kanjiReady ?? Promise.resolve(false), this.sleep(120).then(() => false)]);
     if (!ready) return;
     if (this.cancelled || this.finished || this.skipRequested) return;
+    // Settled at once (both decode together), so this never adds a beat; a frame that is not in yet
+    // only means the emblem stays as painted.
+    const frame = await Promise.race([this.frameReady ?? Promise.resolve(false), Promise.resolve(false)]);
+    if (this.cancelled || this.finished || this.skipRequested) return;
     const img = document.createElement('img');
     img.className = 'ritual-kanji';
     img.src = plainMarkUrl;
@@ -948,6 +958,19 @@ class StarterRitual {
     this.kanji = img;
     const wide = img.getBoundingClientRect().width || Math.min(window.innerWidth * 0.92, 640);
     const emblem = this.refs.deckAnchor.getBoundingClientRect().width || this.cardSize().w;
+    // The card's emblem lets go of its kanji, and its hex turns flat-top onto the tile it sits on.
+    const cover = frame ? this.coverEmblem() : null;
+    if (cover) {
+      const tile = this.options.centerTile?.() ?? null;
+      const fit = ringFitScale(cover.card, tile?.width ?? 0);
+      const lift = this.ms(KANJI.liftMs);
+      this.animate(cover.root, [{ opacity: 0 }, { opacity: 1, offset: 0.12 }, { opacity: 1 }], { duration: lift, easing: 'linear' });
+      this.animate(cover.kanji, [{ opacity: 1 }, { opacity: 1, offset: 0.12 }, { opacity: 0, offset: 0.42 }, { opacity: 0 }], { duration: lift, easing: 'ease-out' });
+      this.animate(cover.ring, [
+        { transform: 'rotate(0deg) scale(1)' },
+        { transform: `rotate(${RING_TURN_DEG}deg) scale(${fit.toFixed(4)})` },
+      ], { duration: lift, easing: 'cubic-bezier(.3,.7,.25,1)' });
+    }
     // The emblem's own size, so the first frame reads as the card's mark lighting up.
     const start = clamp((emblem * 0.42) / wide, 0.08, 0.3);
     const lying = `perspective(720px) rotateX(${KANJI.tiltDeg}deg)`;
@@ -975,6 +998,44 @@ class StarterRitual {
       { transform: `${standing} translateY(-9%) scale(${(KANJI.peak * 1.07).toFixed(3)})`, opacity: 0 },
     ], { duration: this.ms(KANJI.leaveMs), easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' });
     leave.finished.then(() => { if (this.kanji === img) this.clearKanji(); }, () => undefined);
+    // The card is a plain card back again before it files into the pile.
+    if (cover) {
+      const back = cover.root.animate([{ opacity: 1 }, { opacity: 0 }], { duration: this.ms(KANJI.leaveMs), easing: 'ease-in', fill: 'forwards' });
+      back.finished.then(() => { if (this.emblemCover === cover.root) this.clearCover(); }, () => undefined);
+    }
+  }
+
+  /**
+   * Cover the top card's painted emblem with the same emblem in parts: the emblem-less back, then the
+   * ring, the tree and the kanji, each its own layer so each can move. Transform and opacity only.
+   */
+  private coverEmblem(): { root: HTMLElement; ring: HTMLElement; kanji: HTMLElement; card: number } | null {
+    const layer = this.refs.layers.at(-1);
+    const parts = emblemParts();
+    if (!layer || !parts) return null;
+    this.clearCover();
+    const root = document.createElement('span');
+    root.className = 'ritual-emblem';
+    root.setAttribute('aria-hidden', 'true');
+    root.style.backgroundImage = `url("${backFrameUrl}")`;
+    const part = (cls: string, svg: string): HTMLElement => {
+      const el = document.createElement('span');
+      el.className = cls;
+      el.innerHTML = svg;
+      root.append(el);
+      return el;
+    };
+    const ring = part('ritual-emblem-ring', parts.ring);
+    part('ritual-emblem-tree', parts.tree);
+    const kanji = part('ritual-emblem-kanji', parts.kanji);
+    layer.append(root);
+    this.emblemCover = root;
+    return { root, ring, kanji, card: layer.getBoundingClientRect().width || this.cardSize().w };
+  }
+
+  private clearCover(): void {
+    this.emblemCover?.remove();
+    this.emblemCover = null;
   }
 
   /** Start decoding the mark once per ritual; resolves true when it can paint at once. */
@@ -984,11 +1045,16 @@ class StarterRitual {
     img.src = plainMarkUrl;
     this.kanjiReady = (typeof img.decode === 'function' ? img.decode() : Promise.resolve())
       .then(() => true, () => img.complete && img.naturalWidth > 0);
+    const frame = new Image();
+    frame.src = backFrameUrl;
+    this.frameReady = (typeof frame.decode === 'function' ? frame.decode() : Promise.resolve())
+      .then(() => true, () => frame.complete && frame.naturalWidth > 0);
   }
 
   private clearKanji(): void {
     this.kanji?.remove();
     this.kanji = null;
+    this.clearCover();
   }
 
   // ---------------------------------------------------------------- helpers
