@@ -111,8 +111,11 @@ const requestArt = (url: string | null | undefined): void => {
  * NOT ON THE MENU'S PATH (2026-11-16 release pass). The 0.86 board asks for ~1 MB of pictures; asked
  * for when this module loaded, they shared the link with the menu's own files. Measured at a 9 Mbps /
  * 85 ms phone link, 4x CPU: time to menu 3.4 s on the live build, 3.85 s on 0.86. They now start the
- * way the card faces do (player/cards.ts `warmCardArtWhenReady`): once the app is ready, at the next
- * idle moment, with a safety timer. Anything that draws the board sooner calls `preloadBoardArt()`.
+ * moment the app reports ready (the menu composed: its own files are in), with a safety timer, and
+ * anything that draws the board sooner calls `preloadBoardArt()`. Not at the next idle moment, as the
+ * card faces do: a board drawn right after the menu appeared (an instant Continue) then met pictures
+ * still on their way, and its moves measured ~5% more main-thread work (motion-cost, four actions,
+ * 3 runs, four sessions); starting on ready keeps them level (-0.8%).
  */
 let startPreload: (() => void) | null = null;
 
@@ -139,16 +142,9 @@ export const boardArtReady: Promise<void> = typeof Image === 'undefined'
 export const preloadBoardArt = (): void => { startPreload?.(); };
 
 if (startPreload && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-  let scheduled = false;
-  const whenIdle = (): void => {
-    if (scheduled) return;
-    scheduled = true;
-    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
-    if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(preloadBoardArt, { timeout: 1500 });
-    else window.setTimeout(preloadBoardArt, 120);
-  };
-  window.addEventListener('severor-ready', whenIdle, { once: true });
-  window.setTimeout(whenIdle, 5000);
+  window.addEventListener('severor-ready', preloadBoardArt, { once: true });
+  // A boot that never reports ready still gets its pictures.
+  window.setTimeout(preloadBoardArt, 5000);
 }
 
 /**
