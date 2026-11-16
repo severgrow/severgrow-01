@@ -1,34 +1,38 @@
-// THE PLANET'S TILES SIT FLAT SIDE UP (owner, 2026-11-14). A tile's picture is a flat-top hex; the
-// planet's hexes lie at every angle. Each tile is turned (at most 30 degrees either way) so its edge
-// nearest geographic north is its top, and its corners are given in that tile's own frame: x right,
-// y up, circumradius 1. The same turn levels the view when the planet comes to rest.
+// THE PLANET'S TILES SIT FLAT SIDE UP, AND EVERY TILE WEARS ITS PICTURE THE SAME WAY UP (owner,
+// 2026-11-14: "always show tiles flat side up"; 2026-11-16: "some of the skins tiles are rotated —
+// use the og rotation").
+//
+// A tile's picture is a flat-top hex; the planet's hexes lie at every angle, and the lattice's own
+// hexagon reads pointy-top in the frame `north` gives. Turning the picture by exactly HALF A HEX STEP
+// is what lays its flat top on one of the lattice's edges — and it is the SAME turn on every tile, so
+// no tile can disagree with its neighbours.
+//
+// It used to be "turn so the edge nearest north is on top". That asks which of six edges is nearest,
+// and the lattice's answer drifts across the sphere: on the board's 127 cells it turns 52 of them 60
+// degrees away from the rest, which read on screen as tiles rotated against each other. A constant
+// turn cannot jump. The reference (`north`) still sets which way the art's up points on the ground,
+// and the view still levels the tile at the centre of the screen by the reported `angle`.
 import { stampCoordinates } from './challenge-stamp.js';
 import type { V3 } from './geometry.js';
 
 export type TileFace = {
   /** Corner coordinates in the levelled tile frame (flat-top hex, circumradius 1). */
   coords: [number, number][];
-  /** The tile's own turn (radians, counter-clockwise from flat-top-north, within +-30 degrees);
-   *  levelling turns it back by this much. */
+  /** The turn between `north`'s frame and that tile frame (radians, counter-clockwise); levelling
+   *  turns it back by this much. A constant half hex step — see the note above. */
   angle: number;
 };
 
+/** Half a hex step: the one turn that sets a flat-top picture on the lattice's hexagon. */
+export const HALF_STEP = Math.PI / 6;
+
 export function tileFace(centre: V3, corners: readonly V3[], north: V3 = [0, 1, 0]): TileFace {
   const uv = stampCoordinates(centre, corners, north);
-  let best = -Infinity, mx = 0, my = 1;
-  for (let i = 0; i < uv.length; i++) {
-    const a = uv[i]!, b = uv[(i + 1) % uv.length]!;
-    const x = (a[0] + b[0]) / 2, y = (a[1] + b[1]) / 2;
-    const facing = y / (Math.hypot(x, y) || 1);
-    if (facing > best) { best = facing; mx = x; my = y; }
-  }
-  // The edge's direction from north (clockwise), then the turn that brings it straight up.
-  const toTop = Math.atan2(mx, my);
-  const c = Math.cos(toTop), s = Math.sin(toTop);
-  const k = (Math.sqrt(3) / 2) / (Math.hypot(mx, my) || 1);
+  const turn = -HALF_STEP;
+  const c = Math.cos(turn), s = Math.sin(turn);
   return {
-    angle: -toTop,
-    coords: uv.map(([x, y]) => [(x * c - y * s) * k, (x * s + y * c) * k] as [number, number]),
+    angle: -turn,
+    coords: uv.map(([x, y]) => [x * c - y * s, x * s + y * c] as [number, number]),
   };
 }
 

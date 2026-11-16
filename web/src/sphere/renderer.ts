@@ -103,7 +103,7 @@ void main(){
   // on tiles and skin on top -- looking ugly", and — about the art — "the rotation of tiles there is
   // also messed up, should be always in default orientation").
   //
-  // Two rules, both here rather than in the data (how a skin is CHOSEN is not this file's business):
+  // Three rules, all here rather than in the data (how a skin is CHOSEN is not this file's business):
   //  1. A skinned tile is the picture ALONE. The owner's colour is not under it and not mixed into it
   //     (that line used to be mix(c, t.rgb, t.a * ...), which left the owner's colour in every soft
   //     edge the atlas has, reading as a coloured margin and a pale halo round the art). The
@@ -111,16 +111,22 @@ void main(){
   //  2. Every tile of a set wears the set's DEFAULT picture (cell 0,0 of its quadrant). The nine plain
   //     pictures are nine different paintings whose wave crests do not agree, so shuffling them
   //     across the planet (owner, 2026-11-14: "all nine plain pictures, never the same one beside
-  //     itself" — a BOARD rule) read on the planet as tiles turned every which way. The frame itself
-  //     was already honest (every tile's picture-up projects to the same direction, tested in
-  //     web/tests/planet-skin.test.ts); the pictures were not. The per-tile tone below still gives
-  //     neighbouring tiles their own light, so a holding never looks stamped out of one cell.
+  //     itself" — a BOARD rule) read on the planet as tiles turned every which way. The per-tile tone
+  //     below still gives neighbouring tiles their own light, so a holding never looks stamped out of
+  //     one cell. The orientation itself is not this file's: sphere/tile-face.ts turns every tile's
+  //     picture by the same half hex step (a per-tile turn snapped some tiles 60 degrees round).
+  //  3. The picture FILLS the tile (owner, 2026-11-16: "it should be replacing the color and fitting
+  //     in the hex nicely"). The atlas cell is masked to the same flat-top hexagon the tile is, so
+  //     sampling it at exactly 1:1 would put the painting's own soft mask edge — and the transparent
+  //     pixels outside it — on the tile's rim, where they read as a pale halo. Sampling the inner 94%
+  //     of the cell instead keeps every rim pixel on painted ground: the art still meets the tile's
+  //     edge (it is magnified by 1/0.94), and the mask never shows.
   // One public set per owner, in a single 2x2 atlas. An owner without a saved set keeps the
   // established colour-only appearance; the local viewer still wears their default set.
   float owned = step(2.5, kind) * step(kind, 4.5);
   float skinned = uTilesOn * step(.5, vSkin) * owned;
   if (skinned > .5) {
-    vec2 uv = clamp(vTile * .5 + .5, .006, .994);
+    vec2 uv = clamp(vTile * .47 + .5, .006, .994);
     float set = floor(vSkin + .5) - 1.0;
     vec2 quadrant = vec2(mod(set, 2.0), floor(set / 2.0)) * .5;
     vec4 t = texture2D(uTiles, quadrant + vec2(uv.x, 1.0 - uv.y) * ${(160 / 1024).toFixed(5)});
@@ -176,20 +182,24 @@ ${derivatives ? `  vec2 grad = vec2(dFdx(e), dFdy(e));
   // The atmosphere seen edge-on.
   float rim = pow(1.0 - max(dot(n, v), 0.0), 3.0);
   colour += vec3(.36, .5, .44) * rim * (.25 + .75 * day) * .55;
-  // OWNER BORDERS: a quiet inner line, and on a skinned tile the ONE place the owner's colour shows
-  // (owner, 2026-11-15: the owners must still be tellable apart, but never by washing the art). On a
-  // plain tile it is the tile's own colour, lifted a little, exactly as before; on a skinned tile it
-  // is the owner's colour. Edge only — two pixels, inside the tile, under the grout.
-  float band = smoothstep(1.0 - w * 4.2, 1.0 - w * 2.6, e) * border * owned;
-  vec3 edge = mix(mix(c, vec3(.94, .91, .82), .3), mix(vColour, vec3(.94, .91, .82), .3), skinned);
-  colour = mix(colour, edge * lit, band * .6);
+  // OWNER BORDERS: a quiet inner line in the tile's own colour, lifted a little (no glowing rim).
+  // IT IS NOT DRAWN ON A SKINNED TILE (owner, 2026-11-16: "theres still pink visible under it — it
+  // should be replacing the color"). A skinned tile is the picture, full stop: no owner-coloured
+  // line, margin or halo at its edge. Ownership is carried there by the owner's own set (exactly as
+  // on the board), the raised slab, and the deeper seam along a territory's edge below.
+  float band = smoothstep(1.0 - w * 4.2, 1.0 - w * 2.6, e) * border * owned * (1.0 - skinned);
+  colour = mix(colour, mix(c, vec3(.94, .91, .82), .3) * lit, band * .6);
   // The selection ring.
   float ring = smoothstep(1.0 - w * 6.0, 1.0 - w * 3.5, e) * selected;
   colour = mix(colour, vec3(.97, .94, .85), ring * (.82 + .18 * uPulse));
   if (selected > .5) colour *= 1.08 + .06 * uPulse;
-  // Grout: a fine dark seam between every pair of tiles, constant in pixels at any zoom.
-  float grout = smoothstep(1.0 - w * 1.7, 1.0 - w * .35, e);
-  colour = mix(colour, vec3(.018, .021, .02), grout * (kind > 4.5 ? .4 : .78));
+  // Grout: a fine dark seam between every pair of tiles, constant in pixels at any zoom. ALONG A
+  // SKINNED TERRITORY'S EDGE IT IS WIDER AND DEEPER — a groove between two plates, not a colour on
+  // anyone's art — which is what keeps two territories tellable apart now that the owner line is off
+  // the skin (owner, 2026-11-16: no colour on the art, ownership still has to read).
+  float frontier = border * owned * skinned;
+  float grout = smoothstep(1.0 - w * mix(1.7, 2.9, frontier), 1.0 - w * .35, e);
+  colour = mix(colour, vec3(.018, .021, .02), grout * (kind > 4.5 ? .4 : mix(.78, .9, frontier)));
   colour += (hash(gl_FragCoord.xy) - .5) * .022;
   gl_FragColor = vec4(colour, 1.0);
 }`;
