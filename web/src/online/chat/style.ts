@@ -34,8 +34,6 @@ export const CHAT_CSS = `
 .match-chat-presence{flex:none;width:5px;height:5px;border-radius:50%;background:#a39e91;}
 .match-chat-presence[data-presence='online']{background:#8fbf6a;}
 .match-chat-presence[data-presence='away']{background:#d47a69;}
-/* Blitz says it with the bolt (owner, 2026-11-16), as the duel header already does (online-css.ts). */
-html[data-blitz-duel='1'] .match-chat-presence{display:none;}
 .match-chat-head-keys{display:flex;flex:none;}
 .match-chat-head h2 {font:inherit;font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin:0;}
 .match-chat button {font:inherit;color:inherit;border:1px solid #e8ddc529;background:transparent;border-radius:7px;min-height:44px;padding:6px 10px;cursor:pointer;touch-action:manipulation;}

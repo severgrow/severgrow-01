@@ -474,30 +474,10 @@ export const ONLINE_CSS = `
    current notice stay readable to the page's own tests and the frame audit. */
 .duel-hud .duel-opp,
 .duel-hud .duel-notice { display: none; }
-/* Presence: a small dot plus a word — never colour alone, never a boxed badge. Nothing is drawn
-   until a real state is reported (presence is not wired yet), so "unknown" is hidden. */
-.duel-hud [data-duel-presence] {
-  order: 3;
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-}
-.duel-hud [data-duel-presence][data-presence="unknown"] { display: none; }
-/* Blitz already communicates opponent availability through its accessible bolt. */
-html[data-blitz-duel='1'] .duel-hud [data-duel-presence] { display: none; }
-.duel-hud [data-duel-presence]::before {
-  content: '';
-  display: inline-block;
-  width: 0.55rem;
-  height: 0.55rem;
-  border-radius: 50%;
-  margin-right: 0.3rem;
-  flex: 0 0 auto;
-  background: currentColor;
-}
-.duel-hud [data-duel-presence][data-presence="online"]::before { background: #8fbf6a; }
-.duel-hud [data-duel-presence][data-presence="away"]::before { background: #c9a35a; }
+/* Presence is NOT painted in the header (owner, 2026-11-16: "'away' and any other text from top should
+   not be shown, lighting and in chat dot next to name is enough"). The element keeps its state
+   (data-presence) for the page's own logic and tests; the bolt and the chat's dot show it. */
+.duel-hud [data-duel-presence] { display: none !important; }
 /* The bolt owns the first 44px beside the menu. A real presence label must clear its hit area. */
 html.slim-hud .game > .hud:has(> .live-pill:not([hidden])) + .duel-hud { padding-inline-start: 48px; }
 

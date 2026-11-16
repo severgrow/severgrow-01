@@ -120,9 +120,12 @@ try {
   for (const p of pages) {
     assert.equal(await p.locator('[data-duel-presence]').getAttribute('data-presence'), 'online', 'header uses server presence without a move');
     assert.equal(await p.locator('.match-chat-presence').getAttribute('data-presence'), 'online', 'chat agrees before any message');
-    const labelBox = await p.locator('[data-duel-presence]').boundingBox();
-    const boltBox = await p.locator('[data-live="pill"]').boundingBox();
-    assert(labelBox && boltBox && labelBox.x >= boltBox.x + boltBox.width + 4, 'presence label clears the Blitz control');
+    // OWNER RULE CHANGE (2026-11-16: "'away' and any other text from top should not be shown, lighting
+    // and in chat dot next to name is enough"). The header keeps the presence STATE (read above) but
+    // paints no word or dot; the bolt and the chat's dot show it. Replaces "presence label clears the
+    // Blitz control".
+    assert(!(await p.locator('[data-duel-presence]').isVisible()), 'the header paints no presence word or dot');
+    assert(await p.locator('[data-live="pill"]').isVisible(), 'the presence-aware bolt is shown');
   }
   // Model a phone returning after its heartbeat expired. No chat or gameplay action may be
   // needed to repair either device's indicators. Only test-local guest presence is altered.
