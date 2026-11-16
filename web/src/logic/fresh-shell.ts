@@ -206,13 +206,23 @@ export const installFreshShellReload = (deps: FreshShellDeps = {}): void => {
   if (typeof win.addEventListener !== 'function') return;
   // THE WORKER TELLS THE PAGE (on activation, and when a navigation replaces the saved page). The page
   // decides, through the same guards: menu only, once per window.
-  win.addEventListener('message', (event: MessageEvent) => {
+  const heard = (event: MessageEvent): void => {
     try {
       onWorkerAnnouncement(event.data as ShellAnnouncement | null, { ...deps, doc, win });
     } catch {
       /* never let this break the page */
     }
-  });
+  };
+  win.addEventListener('message', heard);
+  // A worker's `client.postMessage()` is delivered to the page's ServiceWorkerContainer, never to
+  // `window`: without this listener the announcement was sent and never heard (2026-11-16, a real
+  // two-build upgrade in Chromium). The guards in `onWorkerAnnouncement` are the same either way.
+  try {
+    const container = (win.navigator as Navigator | undefined)?.serviceWorker;
+    if (container && typeof container.addEventListener === 'function') container.addEventListener('message', heard as EventListener);
+  } catch {
+    /* a browser without a usable worker container: nothing to hear */
+  }
   // THE MENU IS BACK: ask for a worker update. If a deploy landed while the player was in a match, the
   // new worker activates, announces its entry, and the message above finishes the job.
   let lastAsked = 0;

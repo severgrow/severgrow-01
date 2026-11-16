@@ -207,6 +207,25 @@ describe('fresh shell: what it spends during a launch and a match', () => {
     expect(timers.length).toBe(1);
   });
 
+  it('hears the worker where the worker speaks: on navigator.serviceWorker, not on window', () => {
+    // Client.postMessage() from a service worker is delivered to the page's ServiceWorkerContainer.
+    // Listening on `window` alone never heard it (found 2026-11-16 in a real two-build upgrade: the
+    // announcement arrived on the container and the menu never moved onto the new build).
+    const { win } = idleWin();
+    const fresh = fakeWin();
+    (win as unknown as { location: unknown }).location = (fresh.win as unknown as { location: unknown }).location;
+    (win as unknown as { sessionStorage: unknown }).sessionStorage = (fresh.win as unknown as { sessionStorage: unknown }).sessionStorage;
+    const heard: Array<(event: unknown) => void> = [];
+    (win.navigator as unknown as { serviceWorker: unknown }).serviceWorker = {
+      controller: {},
+      addEventListener: (type: string, cb: (event: unknown) => void) => { if (type === 'message') heard.push(cb); },
+    };
+    installFreshShellReload({ win, doc: fakeDoc({ running: 'index-OLD.js' }), controlled: () => true, now: () => 50_000 });
+    expect(heard.length, 'a message listener on the service-worker container').toBe(1);
+    heard[0]!({ data: { type: 'futa-shell', entry: 'assets/index-NEW.js' } });
+    expect(fresh.replaced()).toMatch(/_fresh=/);
+  });
+
   it('asks for a worker update on the menu, not a page download every 15 s', async () => {
     const { win, fire } = idleWin();
     let updates = 0;
