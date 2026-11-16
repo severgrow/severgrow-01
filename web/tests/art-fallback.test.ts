@@ -52,6 +52,9 @@ const installDocument = (): void => {
 const importModule = async (fails: (url: string) => boolean) => {
   vi.stubGlobal('Image', class extends FakeImage { constructor() { super(fails); } });
   const mod = await import('../src/ui/defaultArtBoard.js');
+  // The board's pictures are asked for once the app is ready or a board is drawn, no longer at
+  // module load (2026-11-16, web/tests/board-art-deferred.test.ts): start them as a board would.
+  mod.preloadBoardArt();
   return mod;
 };
 

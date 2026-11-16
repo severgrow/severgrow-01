@@ -144,7 +144,7 @@ export const preloadBoardArt = (): void => { startPreload?.(); };
 if (startPreload && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   window.addEventListener('severor-ready', preloadBoardArt, { once: true });
   // A boot that never reports ready still gets its pictures.
-  window.setTimeout(preloadBoardArt, 5000);
+  if (typeof window.setTimeout === 'function') window.setTimeout(preloadBoardArt, 5000);
 }
 
 /**
