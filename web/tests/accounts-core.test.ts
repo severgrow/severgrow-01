@@ -10,6 +10,7 @@ import {
   challengeFor,
   cleanSearch,
   googleEnabled,
+  isAccountStorageEvent,
   identityFromSignIn,
   isCallbackHash,
   newVerifier,
@@ -128,5 +129,28 @@ describe('device records', () => {
     m.set(NICKNAME_KEY, '{nonsense');
     expect(pendingNicknamePrompt(kv)).toBeNull();
     expect(pendingNicknamePrompt(null)).toBeNull();
+  });
+});
+
+// ANOTHER TAB SIGNED IN (owner, 2026-11-16: "i've logged in and the button was still showing 'login'
+// instead of my username, had to refresh"). Every key is stored under the channel prefix
+// (`futa05:`, `futa05-test:` ...), and the menu's account key compared the event's key with the BARE
+// name, so a sign-in finished in another tab or window (how Google's hand-over often comes back on
+// a phone and in the installed app) never repainted it.
+describe('which storage writes are an account change', () => {
+  it('the identity and the account record, under this channel\'s prefix', () => {
+    expect(isAccountStorageEvent('futa05:severgrow.duel.identity.v1', 'futa05:')).toBe(true);
+    expect(isAccountStorageEvent('futa05-test:futasaku.account.v1', 'futa05-test:')).toBe(true);
+  });
+  it('a cleared storage counts (key null)', () => {
+    expect(isAccountStorageEvent(null, 'futa05:')).toBe(true);
+  });
+  it('not another channel, not the bare name on a prefixed channel, not other keys', () => {
+    expect(isAccountStorageEvent('futa05-test:severgrow.duel.identity.v1', 'futa05:')).toBe(false);
+    expect(isAccountStorageEvent('severgrow.duel.identity.v1', 'futa05:')).toBe(false);
+    expect(isAccountStorageEvent('futa05:severgrow.settings.v1', 'futa05:')).toBe(false);
+  });
+  it('an unprefixed channel still matches its bare keys', () => {
+    expect(isAccountStorageEvent('futasaku.account.v1', '')).toBe(true);
   });
 });

@@ -14,7 +14,8 @@ import { DUEL_CLIENT_VERSION, browserStorage } from '../../../server/src/client.
 import type { KeyValue } from '../../../server/src/client.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { duelApiUrl, duelRegion } from '../online/config.js';
-import { IDENTITY_STORAGE_KEY } from '../online/identity.js';
+import { IDENTITY_STORAGE_KEY, subscribeIdentityChanges } from '../online/identity.js';
+import { STORAGE_PREFIX } from '../channel.js';
 import { clearAccountBoundProgress } from './signout-reset.js';
 import { DISPLAY_NAME_MAX } from '../../../server/src/display-name.js';
 import { cachedTerritory, readTerritory } from '../online/territory-cache.js';
@@ -37,6 +38,7 @@ import {
   WELCOME_KEY,
   authorizeUrl,
   challengeFor,
+  isAccountStorageEvent,
   cleanSearch,
   clearAccount,
   googleEnabled,
@@ -1074,10 +1076,13 @@ export const mountAccounts = async (): Promise<void> => {
   // The lobby rewrites identity (first guest, link codes, a 401 reset); keep both views honest.
   for (const id of ['menu-settings', 'gm-settings']) document.getElementById(id)?.addEventListener('click', () => setTimeout(renderSettings, 0));
   document.getElementById('menu-online')?.addEventListener('click', () => setTimeout(refresh, 0));
+  // Another tab's sign-in or sign-out (keys carry the channel prefix: isAccountStorageEvent), and an
+  // identity written in THIS tab (the browser fires no storage event for its own writes).
   window.addEventListener('storage', (e) => {
-    if (e.key === IDENTITY_STORAGE_KEY || e.key === 'futasaku.account.v1') {
+    if (isAccountStorageEvent(e.key, STORAGE_PREFIX)) {
       renderSettings();
       refresh();
     }
   });
+  subscribeIdentityChanges(() => { renderSettings(); refresh(); });
 };

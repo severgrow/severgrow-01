@@ -13,6 +13,16 @@ import { ACCOUNT } from '../../../src/strings.js';
 
 export const PENDING_KEY = 'futasaku.auth.pending.v1';
 export const ACCOUNT_KEY = 'futasaku.account.v1';
+/** The online identity's key (the same string as online/identity.ts IDENTITY_STORAGE_KEY). */
+const IDENTITY_KEY_NAME = 'severgrow.duel.identity.v1';
+/**
+ * Is this `storage` event (another tab's write) a change of account or identity? Keys are stored
+ * under the channel's prefix (channel.ts STORAGE_PREFIX), so the bare name never matches on a
+ * prefixed channel; `null` is a cleared storage. Owner, 2026-11-16: a sign-in finished in another
+ * tab left this tab's menu key on LOG IN until a refresh.
+ */
+export const isAccountStorageEvent = (key: string | null, prefix: string): boolean =>
+  key === null || key === prefix + IDENTITY_KEY_NAME || key === prefix + ACCOUNT_KEY;
 export const WELCOME_KEY = 'futasaku.account.welcome.v1';
 export const FLASH_KEY = 'futasaku.account.flash.v1';
 /** A one-shot invitation to choose a nickname; set by the sign-in that FORMED the account. */
