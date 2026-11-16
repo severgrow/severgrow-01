@@ -185,6 +185,10 @@ type Settle = {
   scenario: Scenario;
   /** Called with the award the stub actually returned (for the report). */
   onPaid?: (awarded: number) => void;
+  /** Ticket requests never answer: the Practice tap must deal at once and pay through its deal. */
+  noTickets?: boolean;
+  /** Called with how the proof named its game ('ticket' / 'deal'). */
+  onProof?: (kind: 'ticket' | 'deal') => void;
 };
 
 type Ticket = { id: string; seed: number; botLevel: number; expiresAt: number };
@@ -209,12 +213,14 @@ const stubSeeds = async (page: Page, settle: Settle): Promise<void> => {
   // that never answered /v1/health made the page hold every proof, correctly, and the card stayed empty.
   // The live server answers with every version it can replay; so does this stub.
   await page.route('**/v1/health*', (route: Route) => route.fulfill({
-    json: { ok: true, serverNow: Date.now(), features: ['sliced-proofs', ...Object.keys(BOT_VERSIONS)].concat(CURRENT_BOT_VERSION) },
+    json: { ok: true, serverNow: Date.now(), features: ['sliced-proofs', 'training-deals', ...Object.keys(BOT_VERSIONS)].concat(CURRENT_BOT_VERSION) },
   }));
   await page.route('**/v1/seeds/**', async (route: Route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (path === '/v1/seeds/training/tickets') {
+      // As the live server did on 2026-11-16: a ticket request that never answers.
+      if (settle.noTickets) return new Promise<void>(() => undefined);
       const asked = JSON.parse(request.postData() ?? '{}') as { botLevel?: number };
       const id = `ticket-e2e-${tickets.size + 1}`;
       const issued: Ticket = { id, seed: TICKET_SEED + tickets.size, botLevel: asked.botLevel ?? 3, expiresAt: Date.now() + 3_600_000 };
@@ -249,8 +255,11 @@ const stubSeeds = async (page: Page, settle: Settle): Promise<void> => {
         json: { ok: false, code: 'INVALID_REQUEST', message: 'That Training result could not be verified.' },
       });
     }
-    const body = JSON.parse(request.postData() ?? '{}') as { ticketId?: string; actions: Action[]; botVersion: string };
-    const ticket = body.ticketId ? tickets.get(body.ticketId) : undefined;
+    const body = JSON.parse(request.postData() ?? '{}') as { ticketId?: string; deal?: { seed: number; botLevel: number }; actions: Action[]; botVersion: string };
+    // A deal (2026-11-16): the server issues the matching ticket and checks it like any other.
+    const ticket = body.ticketId ? tickets.get(body.ticketId)
+      : body.deal ? { id: `deal-${body.deal.seed}`, seed: body.deal.seed, botLevel: body.deal.botLevel, expiresAt: Date.now() + 3_600_000 } : undefined;
+    settle.onProof?.(body.deal ? 'deal' : 'ticket');
     const verified = ticket ? verifyTrainingProof(ticket.seed, ticket.botLevel, body.actions, body.botVersion) : null;
     if (!verified) {
       return route.fulfill({
@@ -315,11 +324,16 @@ const openTrainingGame = async (page: Page, identity: { token: string; playerId:
   }
   await page.click('#menu-new');
   await page.waitForSelector('#levels:not([hidden])', { timeout: 20_000 });
+  const tapped = Date.now();
   await page.click('.difficulty-tile[data-difficulty="easy"]');
+  await page.waitForFunction('(() => !!window.__severgrow.state())()', undefined, { timeout: 60_000 });
+  lastTapToDealMs = Date.now() - tapped;
   await page.waitForFunction('(() => !!window.__severgrow.state() && !window.__severgrow.busy())()', undefined, { timeout: 60_000 });
   await watchSeedLine(page);
   void identity;
 };
+/** How long the last Practice tap took to deal (ms), for the instant-start check. */
+let lastTapToDealMs = 0;
 
 /** Open the level the profile is on (level 10, after seeding levels 1-9 as complete). */
 const openLevelGame = async (page: Page): Promise<void> => {
@@ -409,7 +423,7 @@ const run = async (
   name: string,
   viewport: { width: number; height: number },
   scenario: Scenario,
-  options: { reduceMotion?: boolean; releaseAfterMs?: number; shot: string; lesson?: boolean },
+  options: { reduceMotion?: boolean; releaseAfterMs?: number; shot: string; lesson?: boolean; noTickets?: boolean },
 ): Promise<void> => {
   if (ONLY.length && !ONLY.includes(name)) return;
   tickets.clear();
@@ -421,13 +435,19 @@ const run = async (
   });
   let awarded: number | null = null;
   try {
-    await stubSeeds(page, { scenario, onPaid: (value) => { awarded = value; } });
+    let proofKind: 'ticket' | 'deal' | null = null;
+    await stubSeeds(page, { scenario, onPaid: (value) => { awarded = value; }, ...(options.noTickets ? { noTickets: true } : {}), onProof: (kind) => { proofKind = kind; } });
     if (options.lesson) {
       await openLevelGame(page);
       const ended = await toGameOverLesson(page);
       check(`${name}: the level reached its end`, ended === 'ended', ended);
     } else {
       await openTrainingGame(page, { token: 'e2e-seed-token', playerId: 'e2e-seed-player' });
+      if (options.noTickets) {
+        // INSTANT PRACTICE (owner, 2026-11-16): with no ticket to be had, the tap deals at once. The old
+        // start waited its whole ticket budget here (3 s warm, 8 s cold) before dealing.
+        check(`${name}: the tap deals at once with no ticket to be had`, lastTapToDealMs < 1_500, `${lastTapToDealMs} ms`);
+      }
       const ended = await toGameOver(page);
       check(`${name}: the game reached its end`, ended === 'ended', ended);
     }
@@ -483,6 +503,7 @@ const run = async (
     check(`${name}: every control is inside the viewport`, m.clipped.length === 0, m.clipped.join(','));
     check(`${name}: no page errors`, errors.length === 0, errors.slice(0, 2).join(' | '));
 
+    if (options.noTickets) check(`${name}: the win was sent as its deal and paid`, proofKind === 'deal' && awarded !== null && awarded > 0, `${proofKind} / ${awarded}`);
     if (scenario === 'pay') {
       check(`${name}: the award is the amount the server paid`, m.spoken === `+${awarded} Seeds`, `${m.spoken} vs +${awarded}`);
       check(`${name}: the row is one line, emblem + amount`, m.counted && (m.rowHeight ?? 99) <= 34, `row ${m.rowHeight}px`);
@@ -526,6 +547,7 @@ const run = async (
 try {
   await run('pay/phone', portrait, 'pay', { shot: 'award-390x844' });
   await run('pay/desktop', desktop, 'pay', { shot: 'award-1280x800' });
+  await run('no ticket', portrait, 'pay', { noTickets: true, shot: 'deal-390x844' });
   await run('cap', portrait, 'cap', { shot: 'cap-390x844' });
   await run('reject', portrait, 'reject', { shot: 'reject-390x844' });
   await run('hung', portrait, 'hung', { shot: 'hung-390x844' });

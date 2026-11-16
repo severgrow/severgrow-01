@@ -1,7 +1,7 @@
 import { BOT_VERSIONS, CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { describe, expect, it, vi } from 'vitest';
 import { DuelError, type DuelClient, type KeyValue } from '../../server/src/client.js';
-import { flushSeedProofs, MAX_CONSECUTIVE_TRANSIENT, PENDING_SEED_PROOFS_KEY, pendingSeedProofCount, queueSeedProof } from '../src/online/seed-rewards.js';
+import { flushSeedProofs, MAX_CONSECUTIVE_TRANSIENT, PENDING_SEED_PROOFS_KEY, pendingSeedProofCount, queueSeedProof, seedProofKey, TRAINING_DEALS } from '../src/online/seed-rewards.js';
 import { settlePendingSeeds, settleQueuedProof } from '../src/online/seed-settle.js';
 
 const storage = (): KeyValue => {
@@ -438,5 +438,51 @@ describe('a proof against a newer bot waits for a server that knows it (bots-v0.
     await flushSeedProofs(store, clientWith(['campaign-random-deals', ...Object.keys(BOT_VERSIONS)], submit), 'acct');
     expect(submit).toHaveBeenCalledTimes(1);
     expect(pending(store)).toEqual([]);
+  });
+});
+
+// A PRACTICE GAME THE PHONE DEALT (owner, 2026-11-16: instant Practice, the campaign's random-deal
+// method). Its proof names the deal, not a ticket; it is sent only to a server that accepts deals, and
+// until then it stays queued (never refused by an older server and lost).
+describe('a Practice proof that names its deal', () => {
+  const dealt = (seed: number) => ({ kind: 'training' as const, deal: { seed, botLevel: 4 }, actions: [], botVersion: 'bots-v0.10' });
+  const clientWith = (features: string[], submit: ReturnType<typeof vi.fn>) =>
+    ({ submitSeedProof: submit, serverFeatures: vi.fn(async () => features) }) as unknown as DuelClient;
+
+  it('is queued and keyed by its deal, and a second copy of the same deal replaces the first', () => {
+    const store = storage();
+    queueSeedProof(store, dealt(4242));
+    queueSeedProof(store, dealt(4242));
+    expect(pendingSeedProofCount(store)).toBe(1);
+    expect(seedProofKey(dealt(4242))).toBe('training-deal:4242');
+    expect(seedProofKey({ kind: 'training', ticketId: 't-1', actions: [], botVersion: 'x' })).toBe('training:t-1');
+  });
+
+  it('a malformed deal is never queued', () => {
+    const store = storage();
+    for (const deal of [{ seed: -1, botLevel: 4 }, { seed: 1.5, botLevel: 4 }, { seed: 7, botLevel: 0 }, { seed: 7, botLevel: 13 }]) {
+      store.set(PENDING_SEED_PROOFS_KEY, JSON.stringify([{ kind: 'training', deal, actions: [], botVersion: 'x' }]));
+      expect(pendingSeedProofCount(store), JSON.stringify(deal)).toBe(0);
+    }
+  });
+
+  it('is sent as { deal } to a server that lists training-deals, and paid', async () => {
+    const store = storage();
+    queueSeedProof(store, dealt(4242));
+    const submit = vi.fn(async () => reward(10));
+    const result = await flushSeedProofs(store, clientWith([TRAINING_DEALS], submit), 'acct');
+    expect(submit.mock.calls.map((c) => (c as unknown[])[1])).toEqual([{ deal: { seed: 4242, botLevel: 4 } }]);
+    expect(result.awards.map((a) => a.key)).toEqual(['training-deal:4242']);
+    expect(pendingSeedProofCount(store)).toBe(0);
+  });
+
+  it('waits, queued, for a server that does not accept deals yet; ticket proofs beside it still go', async () => {
+    const store = storage();
+    queueSeedProof(store, dealt(4242));
+    queueSeedProof(store, { kind: 'training', ticketId: 't-1', actions: [], botVersion: 'bots-v0.10' });
+    const submit = vi.fn(async () => reward(10));
+    await flushSeedProofs(store, clientWith(['sliced-proofs'], submit), 'acct');
+    expect(submit.mock.calls.map((c) => (c as unknown[])[1])).toEqual([{ ticketId: 't-1' }]);
+    expect(pendingSeedProofCount(store), 'the deal is kept for later').toBe(1);
   });
 });

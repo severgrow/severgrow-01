@@ -200,7 +200,9 @@ describe('the settle pays the identity that is actually playing', () => {
     const main = readFileSync(fileURLToPath(new URL('../src/main.ts', import.meta.url)), 'utf8');
     // (Name by name, so a later import from the same module never breaks the check.)
     const settleImport = /import \{([^}]*)\} from '\.\/online\/seed-settle\.js';/.exec(main)?.[1] ?? '';
-    for (const name of ['requestTrainingTicket', 'seedIdentityWarm', 'settleQueuedSeedsOnBoot', 'trainingTicketWaitMs', 'warmSeedIdentity', 'settleSeedProof']) {
+    // (OWNER RULE CHANGE 2026-11-16: the Practice tap no longer waits on a ticket, so the wait-budget
+    // helpers seedIdentityWarm / trainingTicketWaitMs are no longer wired into the start.)
+    for (const name of ['requestTrainingTicket', 'settleQueuedSeedsOnBoot', 'warmSeedIdentity', 'settleSeedProof']) {
       expect(settleImport, name).toMatch(new RegExp(`\\b${name}\\b`));
     }
     expect(main).toMatch(/void settleQueuedSeedsOnBoot\(\);/);
@@ -209,16 +211,18 @@ describe('the settle pays the identity that is actually playing', () => {
     expect(main).toMatch(/void warmSeedIdentity\(\)[\s\S]{0,200}warmTicketShelfAtBoot\(\)/);
   });
 
-  it('a Training start waits long enough for a cold guest mint, and warms identity on boot', () => {
-    // Owner report, 2026-11-08: offline guests got no Seeds because the ticket race lost to 1.2 s.
+  // OWNER RULE CHANGE (2026-11-16: Practice "should be nearly instant"; asked, he chose the campaign's
+  // random-deal method). This replaces "a Training start waits long enough for a cold guest mint": the
+  // tap waited up to 3 s (8 s on a new device) for a ticket, measured at 3.3 s / 9.4 s on /test. Now a
+  // tap with no ticket on the shelf deals at once and the proof names its deal; nothing waits.
+  it('a Practice start never waits on the network: with no ticket, the phone deals and the proof names the deal', () => {
     const settle = readFileSync(fileURLToPath(new URL('../src/online/seed-settle.ts', import.meta.url)), 'utf8');
     const main = readFileSync(fileURLToPath(new URL('../src/main.ts', import.meta.url)), 'utf8');
-    expect(settle).toMatch(/export const TRAINING_TICKET_WAIT_MS = 8_000;/);
     expect(settle).toMatch(/export const warmSeedIdentity/);
-    // The budget is read from the SAME predicate, so a cold device still gets the long wait and a warm
-    // one the short wait; the name is the only thing that changed when the identity became part of it.
-    expect(main).toMatch(/const budgetMs = trainingTicketWaitMs\(seedIdentityWarm\(\)\);/);
-    expect(main).not.toMatch(/setTimeout\(\(\) => resolve\(null\), 1200\)/);
+    expect(main, 'no ticket on the shelf: this game is the deal').toMatch(/const deal = !ready && difficulty && onlineBuildEnabled\(\) && !IS_TEST \? \{ seed, botLevel: level \} : null;/);
+    expect(main, 'the tap does not wait for a ticket').not.toMatch(/trainingTicketWaitMs\(|await ticketP|ensureShelfTicket\(/);
+    expect(main, 'the finished game sends its deal').toMatch(/kind: 'training' as const, deal: trainingRewardDeal/);
+    expect(main, 'a resumed dealt game keeps its deal').toMatch(/trainingRewardDeal = gameDifficulty && !trainingRewardTicketId && ticket\?\.seed === saved\.seed/);
   });
 
   it('only a cold guest mint gets the long wait; a warm identity starts Practice within 3 s (review, 0.84)', async () => {

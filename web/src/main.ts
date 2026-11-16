@@ -305,9 +305,9 @@ import { onlineBuildEnabled } from './online/config.js';
 import { accountsConfiguredInThisBuild, paintEarlyAccountKey, signedInNickname } from './accounts/menu-key.js';
 import { paintBetaLine } from './feedback/beta-line.js';
 import { paintBuildTag } from './feedback/build-tag.js';
-import { queueSeedProof } from './online/seed-rewards.js';
-import { ensureShelfTicket, fillTicketShelf, takeShelfTicket } from './online/ticket-shelf.js';
-import { requestTrainingTicket, seedIdentityReady, seedIdentityWarm, seedPlayerId, settleQueuedSeedsOnBoot, trainingTicketWaitMs, warmSeedIdentity, settleSeedProof, warmSeedServer, WARM_SEED_SERVER_AT_DECK } from './online/seed-settle.js';
+import { queueSeedProof, seedProofKey } from './online/seed-rewards.js';
+import { fillTicketShelf, takeShelfTicket } from './online/ticket-shelf.js';
+import { requestTrainingTicket, seedPlayerId, settleQueuedSeedsOnBoot, warmSeedIdentity, settleSeedProof, warmSeedServer, WARM_SEED_SERVER_AT_DECK } from './online/seed-settle.js';
 import { SEEDS_IDENTITY_UNVERIFIED, SEEDS_NOT_VERIFIED } from './online/seed-icon.js';
 // THE PLANET ON THE FINISH CARD (owner brief, 2026-11-11): the pane itself is built by the lobby
 // (it owns the client and the identity), and this module only paints its one-off teaching band.
@@ -799,6 +799,8 @@ let shownScreen: 'menu' | 'levels' | 'campaign' | 'game' | null = null;
 let route: ScreenName | null = null;
 const TRAINING_REWARD_TICKET_KEY = 'severgrow.seeds.training-ticket.v1';
 let trainingRewardTicketId: string | null = null;
+/** A Practice game dealt without a ticket: its proof names this deal (seed + bot level). */
+let trainingRewardDeal: { seed: number; botLevel: number } | null = null;
 let seedRewardMessage = '';
 /** The head of each full screen: the row that lands one short beat after the screen's body. */
 const SCREEN_HEAD: Record<'menu' | 'levels' | 'campaign', string> = {
@@ -2481,58 +2483,25 @@ async function startGame(
     seed = ready.seed;
     ticketId = ready.id;
   } else if (!campaign && (difficulty !== null || blitzStart !== null)) level = opponentFor(level, seed);
-  // Started HERE, beside the card faces and the first board above: it is a network round trip and
-  // nothing else in the start depends on it. Still awaited, with the same cap, before the state is
-  // built — the ticket names the seed the match is played from, so it can never be applied late.
-  const ticketP = !ready && difficulty && onlineBuildEnabled() && !IS_TEST
-    ? (async () => {
-        // Read before the request starts: 8 s only for a cold guest mint, 3 s once an identity is here.
-        const budgetMs = trainingTicketWaitMs(seedIdentityWarm());
-        const began = Date.now();
-        // A device with no identity yet cannot hold a ticket — and a start that gave up here would
-        // deal an UNPAID match, the 2026-11-08 silent loss. So minting the guest is part of the same
-        // budget, and the ticket gets whatever is left of it.
-        const playerIdNow = seedPlayerId() ?? await seedIdentityReady(budgetMs);
-        const left = Math.max(0, budgetMs - (Date.now() - began));
-        // Issued through the seed module, not the online lobby: a training game started before the
-        // hub had mounted (or after its chunk failed to load) used to begin with no ticket at all,
-        // which meant no proof and no payment for a game the player had already played.
-        const shelved = await ensureShelfTicket(
-          store, playerIdNow, { tier: difficulty, tierLevel: shelfTierLevel },
-          (tierLevel) => opponentFor(tierLevel as Level, randomSeed()),
-          (botLevel) => requestTrainingTicket(botLevel),
-          left,
-        );
-        if (shelved) return shelved;
-        // NO SHELF AND NO ACCOUNT (a blocked store, or a mint that did not answer in time): this is
-        // exactly the start the ticket wait always made, so make it — bounded, and never worse than
-        // before. A ticket is still worth its wait here: without one the win cannot be paid at all.
-        if (playerIdNow) return null;
-        return await Promise.race([
-          requestTrainingTicket(level),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), Math.max(1_000, left))),
-        ]).catch(() => null);
-      })()
-    : null;
+  // NO TICKET ON THE SHELF: THE PHONE DEALS AT ONCE (owner, 2026-11-16: Practice "should be nearly
+  // instant"; asked, he chose the campaign's random-deal method). The tap used to wait for a ticket
+  // here: measured on /test against the live server, 3.3 s for a returning player and up to 9.4 s for a
+  // new one. Now this game is dealt from its own seed, and its proof names that deal; the server issues
+  // the matching ticket when the proof arrives and checks it like any other (server/src/seeds/service.ts
+  // dealTicket). Nothing in the tap waits on the network. The shelf is restocked in the background, so
+  // the next game takes a ticket as before.
+  const deal = !ready && difficulty && onlineBuildEnabled() && !IS_TEST ? { seed, botLevel: level } : null;
+  if (deal) refillTicketShelf();
   await firstBoard;
   if (generation !== startGameGeneration) return;
   await cardsReady;
   if (generation !== startGameGeneration) return;
-  if (ticketP) {
-    const ticket = await ticketP;
-    if (generation !== startGameGeneration) return;
-    if (ticket) {
-      seed = ticket.seed;
-      ticketId = ticket.id;
-      // A shelf ticket already names its bot (the Hard rotation was chosen when it was fetched); the
-      // direct request does not, so the level the start chose stands, exactly as before.
-      if ('botLevel' in ticket && typeof ticket.botLevel === 'number') level = ticket.botLevel as BotLevel;
-    }
-  }
   trainingRewardTicketId = ticketId;
+  trainingRewardDeal = ticketId ? null : deal;
   if (ticketId) store.set(TRAINING_REWARD_TICKET_KEY, JSON.stringify({ seed, id: ticketId }));
+  else if (deal) store.set(TRAINING_REWARD_TICKET_KEY, JSON.stringify({ seed, deal }));
   else store.remove(TRAINING_REWARD_TICKET_KEY);
-  seedRewardMessage = difficulty && onlineBuildEnabled() && !ticketId
+  seedRewardMessage = difficulty && onlineBuildEnabled() && !ticketId && !deal
     ? 'Seed rewards unavailable for this match' : '';
   drawPileAnchorKey = '';
   watching = IS_TEST ? watch : null;
@@ -3255,9 +3224,13 @@ function continueGame() {
   blitzMatch = FEATURES.blitz && !!saved.blitz;
   blitzMap = blitzMatch ? saved.map ?? null : null;
   try {
-    const ticket = JSON.parse(store.get(TRAINING_REWARD_TICKET_KEY) ?? 'null') as { seed?: number; id?: string } | null;
+    const ticket = JSON.parse(store.get(TRAINING_REWARD_TICKET_KEY) ?? 'null') as { seed?: number; id?: string; deal?: { seed?: unknown; botLevel?: unknown } } | null;
     trainingRewardTicketId = gameDifficulty && ticket?.seed === saved.seed && typeof ticket.id === 'string' ? ticket.id : null;
-  } catch { trainingRewardTicketId = null; }
+    // A resumed game dealt without a ticket keeps its deal, so its win is still paid.
+    const d = ticket?.deal;
+    trainingRewardDeal = gameDifficulty && !trainingRewardTicketId && ticket?.seed === saved.seed && d
+      && typeof d.seed === 'number' && typeof d.botLevel === 'number' ? { seed: d.seed, botLevel: d.botLevel } : null;
+  } catch { trainingRewardTicketId = null; trainingRewardDeal = null; }
   campaignLevel = null; // a resumed classic match is never a campaign match
   tutorialReplay = false;
   campaignReplay = false;
@@ -3352,7 +3325,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   // The last turns of a game that can pay Seeds: wake the server now, so the finish card's Seeds land
   // at once instead of after a cold start (online/seed-settle.ts warmSeedServer). Once per game.
   if (!seedServerWarmed && onlineBuildEnabled() && p.after.phase !== 'GAME_OVER' && p.after.deck.length <= WARM_SEED_SERVER_AT_DECK
-    && ((campaignLevel && campaignLevel.number >= 11 && !tutorialReplay) || (gameDifficulty && trainingRewardTicketId) || lessonActive()?.level === FINAL_LESSON.level)) {
+    && ((campaignLevel && campaignLevel.number >= 11 && !tutorialReplay) || (gameDifficulty && (trainingRewardTicketId || trainingRewardDeal)) || lessonActive()?.level === FINAL_LESSON.level)) {
     seedServerWarmed = true;
     void warmSeedServer();
     // ...and read the wallet now, so the finish window's balance is fresh before the payout lands.
@@ -3432,7 +3405,9 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
           ? { kind: 'campaign' as const, levelId: campaignLevel.id, ...campaignDealProof(campaignLevel, session.state), actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
           : gameDifficulty && trainingRewardTicketId
             ? { kind: 'training' as const, ticketId: trainingRewardTicketId, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
-            : null;
+            : gameDifficulty && trainingRewardDeal
+              ? { kind: 'training' as const, deal: trainingRewardDeal, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
+              : null;
         if (proof) {
           queueSeedProof(store, proof);
           // NOTHING is claimed until the server has answered. The card used to be handed a line
@@ -3441,7 +3416,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
           // refused with 400). Owner report, 2026-10-25: a card must never rest on a claim nobody
           // has written a receipt for.
           seedRewardMessage = '';
-          const key = proof.kind === 'campaign' ? `campaign:${proof.levelId}` : `training:${proof.ticketId}`;
+          const key = seedProofKey(proof);
           settleSeedsForCard(key);
         }
       }

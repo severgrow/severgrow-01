@@ -8,7 +8,16 @@ export const PENDING_SEED_PROOFS_KEY = 'severgrow.seeds.pending.v1';
 export type PendingSeedProof =
   /** `dealSeed`: the random deal the win was played on (levels 11+, owner 2026-11-01); absent = the fixed deal. */
   | { kind: 'campaign'; levelId: string; dealSeed?: number; actions: readonly Action[]; botVersion: string }
-  | { kind: 'training'; ticketId: string; actions: readonly Action[]; botVersion: string };
+  | { kind: 'training'; ticketId: string; actions: readonly Action[]; botVersion: string }
+  /**
+   * A Practice game the phone dealt with no ticket in hand (owner, 2026-11-16: instant Practice). The
+   * server issues the matching ticket when this arrives (`deal`, server/src/seeds/service.ts
+   * dealTicket); it is sent only to a server that lists TRAINING_DEALS in its health features.
+   */
+  | { kind: 'training'; deal: { seed: number; botLevel: number }; actions: readonly Action[]; botVersion: string };
+
+/** The health feature a server lists when it accepts `deal` proofs (server/src/fetch-app.ts). */
+export const TRAINING_DEALS = 'training-deals';
 
 /**
  * How long ONE settle attempt may take before it is treated as a retryable failure.
@@ -31,14 +40,20 @@ const isDealSeed = (value: unknown): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 0xffffffff;
 
 const proofKey = (p: PendingSeedProof) =>
-  p.kind === 'campaign' ? `campaign:${p.levelId}` : `training:${p.ticketId}`;
+  p.kind === 'campaign' ? `campaign:${p.levelId}`
+    : 'ticketId' in p ? `training:${p.ticketId}` : `training-deal:${p.deal.seed}`;
+/** The key a finished game's proof is settled under (the finish card asks for its own). */
+export const seedProofKey = proofKey;
+const isBotLevelNumber = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 12;
 const isPendingProof = (value: unknown): value is PendingSeedProof => {
   if (!value || typeof value !== 'object') return false;
   const proof = value as Record<string, unknown>;
   if (!Array.isArray(proof.actions)) return false;
   return (proof.kind === 'campaign' && typeof proof.levelId === 'string' && proof.levelId.length > 0
       && (proof.dealSeed === undefined || isDealSeed(proof.dealSeed)))
-    || (proof.kind === 'training' && typeof proof.ticketId === 'string' && proof.ticketId.length > 0);
+    || (proof.kind === 'training' && typeof proof.ticketId === 'string' && proof.ticketId.length > 0)
+    || (proof.kind === 'training' && proof.ticketId === undefined && !!proof.deal && typeof proof.deal === 'object'
+      && isDealSeed((proof.deal as Record<string, unknown>).seed) && isBotLevelNumber((proof.deal as Record<string, unknown>).botLevel));
 };
 const read = (storage: KeyValue): PendingSeedProof[] => {
   try {
@@ -124,7 +139,7 @@ const submitWithDeadline = async (
 ): Promise<RewardResult> => {
   const source = proof.kind === 'campaign'
     ? (proof.dealSeed === undefined ? { levelId: proof.levelId } : { levelId: proof.levelId, dealSeed: proof.dealSeed })
-    : { ticketId: proof.ticketId };
+    : 'ticketId' in proof ? { ticketId: proof.ticketId } : { deal: { seed: proof.deal.seed, botLevel: proof.deal.botLevel } };
   // SLICED CHECKS (owner report, 2026-11-12: Seeds for levels 80 and 81 never arrived). The server
   // replays every bot move, and a long or rival game can take longer than one Edge request may run.
   // So the proof is sent `resumable`: the server answers with a resume token until it is done, and
@@ -253,12 +268,24 @@ export const flushSeedProofs = (
       })();
       return (await features).includes(version);
     };
+    /** A deal proof goes only to a server that accepts deals; until then it stays queued, unpaid, unlost. */
+    const serverTakesDeals = async (): Promise<boolean> => {
+      features ??= (async () => {
+        try {
+          const ask = client.serverFeatures();
+          const timeout = new Promise<readonly string[]>((resolve) => setTimeout(() => resolve([]), Math.min(timeoutMs, 5_000)));
+          return await Promise.race([ask, timeout]);
+        } catch { return []; }
+      })();
+      return (await features).includes(TRAINING_DEALS);
+    };
     for (;;) {
       const next = read(storage).find((proof) => !attempted.has(JSON.stringify(proof)));
       if (!next) break;
       const sent = JSON.stringify(next);
       attempted.add(sent);
       if (!(await serverKnows(next.botVersion))) continue;
+      if (next.kind === 'training' && !('ticketId' in next) && !(await serverTakesDeals())) continue;
       const key = proofKey(next);
       try {
         const reward = await submitWithDeadline(client, token, next, timeoutMs);

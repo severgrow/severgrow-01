@@ -120,6 +120,10 @@ describe('the Hard top rotates the rivals in (owner, 2026-11-12)', () => {
     const body = main.slice(start, after === Number.MAX_SAFE_INTEGER ? undefined : after);
     const rotate = body.indexOf('opponentFor(level, seed)');
     expect(rotate, 'startGame rotates the top of Hard').toBeGreaterThan(0);
-    expect(rotate, 'before the ticket names the bot').toBeLessThan(body.indexOf('requestTrainingTicket(level)'));
+    // Since 2026-11-16 (instant Practice) a start with no shelf ticket names its bot in its DEAL, not in
+    // a ticket request made at the tap; the rule is the same: the rotation is decided first.
+    const names = body.indexOf('{ seed, botLevel: level }');
+    expect(names, 'startGame names the bot in its deal').toBeGreaterThan(0);
+    expect(rotate, 'before the deal names the bot').toBeLessThan(names);
   });
 });

@@ -641,7 +641,7 @@ export class DuelClient {
    */
   async submitSeedProof(
     token: string,
-    source: { levelId: string; dealSeed?: number } | { ticketId: string },
+    source: { levelId: string; dealSeed?: number } | { ticketId: string } | { deal: { seed: number; botLevel: number } },
     actions: readonly Action[],
     botVersion: string,
     options: { signal?: AbortSignal; resumable?: boolean; resume?: string } = {},
