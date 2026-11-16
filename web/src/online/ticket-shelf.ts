@@ -50,17 +50,56 @@ export const takeShelfTicket = (kv: KeyValue | null, playerId: string | null, ti
   return taken;
 };
 
+/**
+ * TAKE A TICKET NOW, OR SHORTLY (owner, 2026-11-15: "find a way for it to be instant ... its just
+ * offline practice match, shouldnt me loading long").
+ *
+ * The deal is played from a ticket's seed — the server replays the proof from `ticket.seed`
+ * (`server/src/seeds/service.ts`, `verifyTrainingProof`) — so a ticket must be in hand BEFORE the
+ * board is dealt, or the win cannot be paid. This is the one call the tap makes: the ticket if the
+ * shelf has it (no network at all), otherwise the remainder of the fill that already started at
+ * boot / when the Practice picker opened. `fillTicketShelf` is single-flight per (account, tier,
+ * level), so this never posts a second request for a ticket already on its way — the tap waits on
+ * the EARLIEST request, not a fresh one.
+ *
+ * Never throws, never waits longer than `deadlineMs`. A fill that loses the race keeps running and
+ * leaves its ticket on the shelf for the next match, so a slow network wastes nothing.
+ */
+export const ensureShelfTicket = async (
+  kv: KeyValue | null,
+  playerId: string | null,
+  want: ShelfWant,
+  pick: (tierLevel: number) => number,
+  request: (botLevel: number) => Promise<{ id: string; seed: number; playerId: string; expiresAt?: number } | null>,
+  deadlineMs: number,
+  now = Date.now(),
+): Promise<ShelfTicket | null> => {
+  const ready = takeShelfTicket(kv, playerId, want.tier, want.tierLevel, now);
+  if (ready || !playerId) return ready;
+  const fill = fillTicketShelf(kv, playerId, [want], pick, request, now).catch(() => undefined);
+  await Promise.race([
+    fill,
+    new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, deadlineMs))),
+  ]);
+  return takeShelfTicket(kv, playerId, want.tier, want.tierLevel, now);
+};
+
 /** The wanted (tier, level) pairs this player has no usable ticket for. */
 export const shelfNeeds = (kv: KeyValue | null, playerId: string, wanted: readonly ShelfWant[], now = Date.now()): ShelfWant[] => {
   const mine = usable(kv, playerId, now);
   return wanted.filter((w) => !mine.some((t) => t.tier === w.tier && t.tierLevel === w.tierLevel));
 };
 
-const inFlight = new Set<string>();
+/** Fills already on their way, by `${playerId}:${tier}:${tierLevel}` — shared, never duplicated. */
+const inFlight = new Map<string, Promise<void>>();
 /**
  * Fetch a ticket for each wanted (tier, level) this player has none for, one request per pair at a
  * time, never throwing. `request` issues a ticket for a bot level and says whose it is; `pick` chooses
  * the bot for the tier's level (Hard rotates the rivals in, logic/difficulty.ts opponentFor).
+ *
+ * A pair already being fetched is AWAITED, not skipped: the tap joins the request that the boot or the
+ * Practice picker started (`ensureShelfTicket`), and a caller that only started the fill ignores the
+ * wait. Skipping it instead made that caller resolve with no ticket at all — an unpaid match.
  */
 export const fillTicketShelf = async (
   kv: KeyValue | null,
@@ -73,17 +112,21 @@ export const fillTicketShelf = async (
   if (!playerId) return;
   await Promise.all(shelfNeeds(kv, playerId, wanted, now).map(async (need) => {
     const key = `${playerId}:${need.tier}:${need.tierLevel}`;
-    if (inFlight.has(key)) return;
-    inFlight.add(key);
-    try {
-      const botLevel = pick(need.tierLevel);
-      const ticket = await request(botLevel).catch(() => null);
-      // Issued to someone else (the account changed while it was on its way): not this shelf's.
-      if (!ticket || ticket.playerId !== playerId) return;
-      const kept = read(kv).filter((t) => !(t.playerId === playerId && t.tier === need.tier && t.tierLevel === need.tierLevel));
-      write(kv, [...kept, { playerId, ...need, botLevel, id: ticket.id, seed: ticket.seed, expiresAt: ticket.expiresAt ?? now + 6 * 86_400_000 }]);
-    } finally {
-      inFlight.delete(key);
-    }
+    const running = inFlight.get(key);
+    if (running) return running;
+    const started = (async () => {
+      try {
+        const botLevel = pick(need.tierLevel);
+        const ticket = await request(botLevel).catch(() => null);
+        // Issued to someone else (the account changed while it was on its way): not this shelf's.
+        if (!ticket || ticket.playerId !== playerId) return;
+        const kept = read(kv).filter((t) => !(t.playerId === playerId && t.tier === need.tier && t.tierLevel === need.tierLevel));
+        write(kv, [...kept, { playerId, ...need, botLevel, id: ticket.id, seed: ticket.seed, expiresAt: ticket.expiresAt ?? now + 6 * 86_400_000 }]);
+      } finally {
+        inFlight.delete(key);
+      }
+    })();
+    inFlight.set(key, started);
+    return started;
   }));
 };

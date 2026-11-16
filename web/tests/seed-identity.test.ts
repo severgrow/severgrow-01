@@ -204,7 +204,9 @@ describe('the settle pays the identity that is actually playing', () => {
       expect(settleImport, name).toMatch(new RegExp(`\\b${name}\\b`));
     }
     expect(main).toMatch(/void settleQueuedSeedsOnBoot\(\);/);
-    expect(main).toMatch(/void warmSeedIdentity\(\);/);
+    // The boot warm-up, and the tier's ticket chained behind it: an identity is warmed for the NEXT
+    // Practice match, and the shelf fill is requested only once that identity exists.
+    expect(main).toMatch(/void warmSeedIdentity\(\)[\s\S]{0,200}warmTicketShelfAtBoot\(\)/);
   });
 
   it('a Training start waits long enough for a cold guest mint, and warms identity on boot', () => {
@@ -213,7 +215,9 @@ describe('the settle pays the identity that is actually playing', () => {
     const main = readFileSync(fileURLToPath(new URL('../src/main.ts', import.meta.url)), 'utf8');
     expect(settle).toMatch(/export const TRAINING_TICKET_WAIT_MS = 8_000;/);
     expect(settle).toMatch(/export const warmSeedIdentity/);
-    expect(main).toContain('const ticketWaitMs = trainingTicketWaitMs(seedIdentityWarm());');
+    // The budget is read from the SAME predicate, so a cold device still gets the long wait and a warm
+    // one the short wait; the name is the only thing that changed when the identity became part of it.
+    expect(main).toMatch(/const budgetMs = trainingTicketWaitMs\(seedIdentityWarm\(\)\);/);
     expect(main).not.toMatch(/setTimeout\(\(\) => resolve\(null\), 1200\)/);
   });
 

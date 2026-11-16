@@ -109,7 +109,15 @@ describe('the Hard top rotates the rivals in (owner, 2026-11-12)', () => {
     const { readFileSync } = await import('node:fs');
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
     const start = main.indexOf('async function startGame(');
-    const body = main.slice(start, start + 6000);
+    // THE FUNCTION's own body: it ends at the next top-level function, so the check below reads the
+    // start path itself rather than a character budget that a longer comment could run past.
+    const after = Math.min(
+      ...['\nfunction ', '\nasync function '].map((marker) => {
+        const at = main.indexOf(marker, start + 1);
+        return at > start ? at : Number.MAX_SAFE_INTEGER;
+      }),
+    );
+    const body = main.slice(start, after === Number.MAX_SAFE_INTEGER ? undefined : after);
     const rotate = body.indexOf('opponentFor(level, seed)');
     expect(rotate, 'startGame rotates the top of Hard').toBeGreaterThan(0);
     expect(rotate, 'before the ticket names the bot').toBeLessThan(body.indexOf('requestTrainingTicket(level)'));
