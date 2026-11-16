@@ -135,6 +135,9 @@ const easeOut = (t: number) => 1 - (1 - t) ** 3;
 export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
   const sphere: Sphere = buildSphere();
   const map = latticeMap(sphere);
+  // THE VIEW'S UP: the home cell's own north, so a drag feels aligned with the map's rows. It is also
+  // the direction the tiles' ART points on the ground (sphere/tile-face.ts turns every tile's picture
+  // by the same half hex step off this frame, so no tile can end up at a different angle).
   const north=unit(rotate(inverse(homeQuat(sphere,map,'0,0')),[0,1,0]));
   const canvas = document.createElement('canvas');
   canvas.className = 'planet-canvas';
