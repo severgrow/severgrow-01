@@ -3,7 +3,7 @@
 // relevant level changes"). One ticket per (tier, level), per account, fetched ahead, taken at the tap.
 import { describe, expect, it, vi } from 'vitest';
 import type { KeyValue } from '../../server/src/client.js';
-import { fillTicketShelf, shelfNeeds, takeShelfTicket } from '../src/online/ticket-shelf.js';
+import { ensureShelfTicket, fillTicketShelf, shelfNeeds, takeShelfTicket } from '../src/online/ticket-shelf.js';
 import { ACCOUNT_BOUND_KEYS } from '../src/accounts/signout-reset.js';
 import { TICKET_SHELF_KEY } from '../src/online/ticket-shelf.js';
 
@@ -58,5 +58,61 @@ describe('the ticket shelf is bounded and reusable', () => {
 
   it('sign-out clears the shelf', () => {
     expect(ACCOUNT_BOUND_KEYS).toContain(TICKET_SHELF_KEY);
+  });
+});
+
+describe('the tap takes the ticket, or the remainder of the fill already on its way', () => {
+  it('a ticket already on the shelf is returned with NO request at all', async () => {
+    const store = kv();
+    const request = issuer('p1');
+    await fillTicketShelf(store, 'p1', [{ tier: 'easy', tierLevel: 3 }], (l) => l, request, NOW);
+    request.mockClear();
+    const taken = await ensureShelfTicket(store, 'p1', { tier: 'easy', tierLevel: 3 }, (l) => l, request, 8_000, NOW);
+    expect(taken).toMatchObject({ seed: 1003 });
+    expect(request).not.toHaveBeenCalled();
+    // ...and it is single-use, exactly like `takeShelfTicket`.
+    expect(await ensureShelfTicket(store, 'p1', { tier: 'easy', tierLevel: 3 }, (l) => l, request, 0, NOW)).toMatchObject({ seed: 1003 });
+  });
+
+  it('an empty shelf is filled once and the ticket is returned', async () => {
+    const store = kv();
+    const request = issuer('p1');
+    const taken = await ensureShelfTicket(store, 'p1', { tier: 'medium', tierLevel: 5 }, (l) => l, request, 8_000, NOW);
+    expect(taken).toMatchObject({ tier: 'medium', tierLevel: 5, seed: 1005 });
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('a second call for the same tier shares the request already in flight (never two tickets)', async () => {
+    const store = kv();
+    let release: (v: { id: string; seed: number; playerId: string; expiresAt: number }) => void = () => undefined;
+    const request = vi.fn(() => new Promise<{ id: string; seed: number; playerId: string; expiresAt: number }>((resolve) => { release = resolve; }));
+    const first = ensureShelfTicket(store, 'p1', { tier: 'hard', tierLevel: 9 }, (l) => l, request, 8_000, NOW);
+    const second = ensureShelfTicket(store, 'p1', { tier: 'hard', tierLevel: 9 }, (l) => l, request, 8_000, NOW);
+    release({ id: 'one', seed: 2222, playerId: 'p1', expiresAt: NOW + 7 * DAY });
+    const [a, b] = await Promise.all([first, second]);
+    expect(request).toHaveBeenCalledTimes(1);
+    // The one ticket goes to one of them; the other is told so instead of waiting for a second.
+    expect([a?.seed, b?.seed].filter((s) => s === 2222)).toHaveLength(1);
+  });
+
+  it('a deadline gives up without throwing, and the fill still lands on the shelf for the next match', async () => {
+    const store = kv();
+    const request = vi.fn(async () => {
+      await new Promise((r) => setTimeout(r, 40));
+      return { id: 'late', seed: 3333, playerId: 'p1', expiresAt: NOW + 7 * DAY };
+    });
+    const taken = await ensureShelfTicket(store, 'p1', { tier: 'easy', tierLevel: 3 }, (l) => l, request, 1, NOW);
+    expect(taken).toBeNull();
+    await new Promise((r) => setTimeout(r, 80));
+    // Nothing was posted twice, and the ticket is waiting for the next game rather than wasted.
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(takeShelfTicket(store, 'p1', 'easy', 3, NOW)).toMatchObject({ seed: 3333 });
+  });
+
+  it('no account means no ticket and no request', async () => {
+    const store = kv();
+    const request = issuer('p1');
+    expect(await ensureShelfTicket(store, null, { tier: 'easy', tierLevel: 3 }, (l) => l, request, 8_000, NOW)).toBeNull();
+    expect(request).not.toHaveBeenCalled();
   });
 });

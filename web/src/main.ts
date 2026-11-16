@@ -306,8 +306,8 @@ import { accountsConfiguredInThisBuild, paintEarlyAccountKey, signedInNickname }
 import { paintBetaLine } from './feedback/beta-line.js';
 import { paintBuildTag } from './feedback/build-tag.js';
 import { queueSeedProof } from './online/seed-rewards.js';
-import { fillTicketShelf, takeShelfTicket } from './online/ticket-shelf.js';
-import { requestTrainingTicket, seedIdentityWarm, seedPlayerId, settleQueuedSeedsOnBoot, trainingTicketWaitMs, warmSeedIdentity, settleSeedProof, warmSeedServer, WARM_SEED_SERVER_AT_DECK } from './online/seed-settle.js';
+import { ensureShelfTicket, fillTicketShelf, takeShelfTicket } from './online/ticket-shelf.js';
+import { requestTrainingTicket, seedIdentityReady, seedIdentityWarm, seedPlayerId, settleQueuedSeedsOnBoot, trainingTicketWaitMs, warmSeedIdentity, settleSeedProof, warmSeedServer, WARM_SEED_SERVER_AT_DECK } from './online/seed-settle.js';
 import { SEEDS_IDENTITY_UNVERIFIED, SEEDS_NOT_VERIFIED } from './online/seed-icon.js';
 // THE PLANET ON THE FINISH CARD (owner brief, 2026-11-11): the pane itself is built by the lobby
 // (it owns the client and the identity), and this module only paints its one-off teaching band.
@@ -1423,6 +1423,31 @@ function refillTicketShelf(): void {
   ).catch(() => undefined);
 }
 
+/**
+ * THE TAP'S TICKET IS FETCHED LONG BEFORE THE TAP (owner, 2026-11-15: "find a way for it to be
+ * instant ... its just offline practice match, shouldnt me loading long").
+ *
+ * A practice win is only payable if the match was dealt from a ticket's seed — the server replays the
+ * proof from `ticket.seed` (server/src/seeds/service.ts, `verifyTrainingProof`) — so the ticket has to
+ * be in hand before the deal, which is why the start used to sit on the guest mint and the ticket.
+ * None of that has to happen at the tap: the picker already fetches every tier when it opens, and this
+ * fetches the tier the player is on as soon as the app is up, so the whole menu session is spent
+ * getting it ready. The shelf is a cache, not a spend: a ticket already held is never re-requested and
+ * expires in seven days, so a boot on which nothing changed costs no request at all.
+ */
+function warmTicketShelfAtBoot(): void {
+  if (!onlineBuildEnabled() || IS_TEST) return;
+  const selected = store.get('severgrow.difficulty') ?? defaultDifficultyForLevel(settings.level);
+  const tier = DIFFICULTIES.find((t) => t.id === selected) ?? DIFFICULTIES[0]!;
+  void fillTicketShelf(
+    store,
+    seedPlayerId(),
+    [{ tier: tier.id, tierLevel: tierLevelOf(tier) }],
+    (tierLevel) => opponentFor(tierLevel as Level, randomSeed()),
+    (botLevel) => requestTrainingTicket(botLevel),
+  ).catch(() => undefined);
+}
+
 function renderLevelGrid() {
   // The Practice menu is open: get each tier's ticket ready before the tap.
   refillTicketShelf();
@@ -2438,26 +2463,53 @@ async function startGame(
   // A READY TICKET (online/ticket-shelf.ts, owner 2026-11-13: "should be way quicker and snappy"): one
   // fetched ahead for this tier at this level starts the deal at once. It already names its bot (the
   // Hard rotation was chosen when it was fetched).
-  const ready = difficulty && onlineBuildEnabled() && !IS_TEST ? takeShelfTicket(store, seedPlayerId(), difficulty, level) : null;
+  //
+  // WHY THIS IS THE ONLY THING THE TAP CAN EVER WAIT ON (owner, 2026-11-15: "find a way for it to be
+  // instant ... seeds can load at the end of game"). The deal is played from the TICKET's seed: the
+  // server replays the proof from it (`verifyTrainingProof(ticket.seed, …)`, server/src/seeds/
+  // service.ts), so a ticket must be in hand before the hand is dealt or the win cannot be paid at
+  // all. The ticket is therefore fetched at BOOT and when the Practice picker opens
+  // (`warmTicketShelfAtBoot` / `refillTicketShelf`), never at the tap: the tap takes it off the shelf
+  // with no network. Only a device whose first practice tap beats the very first guest mint waits at
+  // all, and then for the REMAINDER of a request already in flight, capped as before so its payout
+  // can never regress.
+  const shelfTierLevel = level;   // the tier's own level, before the Hard rotation moves the bot
+  const ready = difficulty && onlineBuildEnabled() && !IS_TEST ? takeShelfTicket(store, seedPlayerId(), difficulty, shelfTierLevel) : null;
   if (ready) {
     level = ready.botLevel as BotLevel;
     seed = ready.seed;
     ticketId = ready.id;
   } else if (!campaign && (difficulty !== null || blitzStart !== null)) level = opponentFor(level, seed);
-  // The ticket request starts HERE, beside the card faces and the first board above: it is a network
-  // round trip and nothing else in the start depends on it. Still awaited, with the same cap, before
-  // the state is built — the ticket names the seed the match is played from, so it can never be
-  // applied late.
+  // Started HERE, beside the card faces and the first board above: it is a network round trip and
+  // nothing else in the start depends on it. Still awaited, with the same cap, before the state is
+  // built — the ticket names the seed the match is played from, so it can never be applied late.
   const ticketP = !ready && difficulty && onlineBuildEnabled() && !IS_TEST
-    ? (() => {
+    ? (async () => {
         // Read before the request starts: 8 s only for a cold guest mint, 3 s once an identity is here.
-        const ticketWaitMs = trainingTicketWaitMs(seedIdentityWarm());
-        return Promise.race([
-          // Issued through the seed module, not the online lobby: a training game started before the
-          // hub had mounted (or after its chunk failed to load) used to begin with no ticket at all,
-          // which meant no proof and no payment for a game the player had already played.
+        const budgetMs = trainingTicketWaitMs(seedIdentityWarm());
+        const began = Date.now();
+        // A device with no identity yet cannot hold a ticket — and a start that gave up here would
+        // deal an UNPAID match, the 2026-11-08 silent loss. So minting the guest is part of the same
+        // budget, and the ticket gets whatever is left of it.
+        const playerIdNow = seedPlayerId() ?? await seedIdentityReady(budgetMs);
+        const left = Math.max(0, budgetMs - (Date.now() - began));
+        // Issued through the seed module, not the online lobby: a training game started before the
+        // hub had mounted (or after its chunk failed to load) used to begin with no ticket at all,
+        // which meant no proof and no payment for a game the player had already played.
+        const shelved = await ensureShelfTicket(
+          store, playerIdNow, { tier: difficulty, tierLevel: shelfTierLevel },
+          (tierLevel) => opponentFor(tierLevel as Level, randomSeed()),
+          (botLevel) => requestTrainingTicket(botLevel),
+          left,
+        );
+        if (shelved) return shelved;
+        // NO SHELF AND NO ACCOUNT (a blocked store, or a mint that did not answer in time): this is
+        // exactly the start the ticket wait always made, so make it — bounded, and never worse than
+        // before. A ticket is still worth its wait here: without one the win cannot be paid at all.
+        if (playerIdNow) return null;
+        return await Promise.race([
           requestTrainingTicket(level),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), ticketWaitMs)),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), Math.max(1_000, left))),
         ]).catch(() => null);
       })()
     : null;
@@ -2468,7 +2520,13 @@ async function startGame(
   if (ticketP) {
     const ticket = await ticketP;
     if (generation !== startGameGeneration) return;
-    if (ticket) { seed = ticket.seed; ticketId = ticket.id; }
+    if (ticket) {
+      seed = ticket.seed;
+      ticketId = ticket.id;
+      // A shelf ticket already names its bot (the Hard rotation was chosen when it was fetched); the
+      // direct request does not, so the level the start chose stands, exactly as before.
+      if ('botLevel' in ticket && typeof ticket.botLevel === 'number') level = ticket.botLevel as BotLevel;
+    }
   }
   trainingRewardTicketId = ticketId;
   if (ticketId) store.set(TRAINING_REWARD_TICKET_KEY, JSON.stringify({ seed, id: ticketId }));
@@ -12238,7 +12296,14 @@ void import('./accounts/mount.js').then((a) => a.mountAccounts()).catch(() => un
 void settleQueuedSeedsOnBoot();
 // Warm a guest identity early so the next Practice match can get a Seeds ticket without racing a
 // cold guest mint (owner, 2026-11-08: offline guests must be paid so they are encouraged to sign in).
-void warmSeedIdentity();
+// ...and the tier's ticket with it, so the Practice tap takes it off the shelf with no network at all
+// (owner, 2026-11-15: "find a way for it to be instant"). The ticket is requested only once the
+// identity exists — `fillTicketShelf` needs a player id, and a cold device has none until the mint
+// answers — and the tap's own `ensureShelfTicket` joins this very fill rather than posting a second
+// request. Silent; a device that already holds the ticket makes no request.
+void warmSeedIdentity()
+  .catch(() => undefined)
+  .then(() => warmTicketShelfAtBoot());
 mountStartupReveal();
 // The main menu does not zoom (owner, 2026-11-08); every other screen keeps the browser's zoom.
 mountMenuZoomLock();

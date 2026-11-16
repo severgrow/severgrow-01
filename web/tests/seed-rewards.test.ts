@@ -25,6 +25,19 @@ describe('unpaid Seeds proofs', () => {
     expect(pending(store)[0]!.levelId).toBe('lesson-10');
   });
 
+  it('a practice proof queued twice for the same ticket is ONE proof (a deferred settle cannot pay twice)', () => {
+    // The finish path can run again — a rematch, a resume, a reload after the game ended. The queue is
+    // keyed by `training:<ticketId>`, and the server settles per ticket, so the win is paid once.
+    const store = storage();
+    const training = { kind: 'training' as const, ticketId: 'ticket-1', actions: [], botVersion: 'audit' };
+    queueSeedProof(store, training);
+    queueSeedProof(store, training);
+    expect(pending(store)).toHaveLength(1);
+    // A genuinely NEW ticket (the rematch's own) is its own proof, so the next win still pays.
+    queueSeedProof(store, { ...training, ticketId: 'ticket-2' });
+    expect(pending(store)).toHaveLength(2);
+  });
+
   it('isolates overlapping accounts and coalesces retries for the same account', async () => {
     const a = storage(), b = storage();
     queueSeedProof(a, proof('lesson-10')); queueSeedProof(b, proof('c1-1'));

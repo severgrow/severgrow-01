@@ -227,6 +227,35 @@ export const seedIdentityWarm = (connect: SeedConnector = seedConnection): boole
 };
 
 /**
+ * The device's Seeds player id, minting the guest first if there is none — BOUNDED.
+ *
+ * A cold device has no identity, and a Training ticket cannot exist without one; a start that took
+ * the shelf's answer only would find `null` and deal an unpaid match, which is exactly the silent
+ * loss `TRAINING_TICKET_WAIT_MS` was introduced to end (2026-11-08). So the identity is part of the
+ * ticket's own budget, never a separate unbounded wait, and a caller that already has an id passes
+ * it and waits for nothing.
+ */
+export const seedIdentityReady = async (
+  deadlineMs: number,
+  connect: SeedConnector = seedConnection,
+): Promise<string | null> => {
+  try {
+    const seeds = connect();
+    if (!seeds) return null;
+    const existing = seeds.identity.peek();
+    if (existing) return existing.playerId;
+    if (!(deadlineMs > 0)) return null;
+    const status = await Promise.race([
+      seeds.identity.ensure().catch(() => null),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), deadlineMs)),
+    ]);
+    return status?.ok ? status.identity.playerId : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
  * Mint (or confirm) a guest identity as soon as the app is up, so the next Practice match can get a
  * training ticket without waiting on guest creation. Silent, fire-and-forget, never blocks paint.
  * Guests are paid Seeds so they are encouraged to sign in and keep them (owner, 2026-11-08).
