@@ -726,9 +726,27 @@ export const mountMatchChat = (o: {
     // lower (desktop dock, landscape), and skipped when the badge is standing down (width 0). The
     // panel keeps its bottom edge: it gives up exactly the height the badge takes.
     const offset = v?.offsetTop ?? 0;
-    const brand = document.getElementById('hud-brand')?.getBoundingClientRect();
-    if (brand && brand.width > 0) {
-      const clear = brand.bottom + 8 - offset;
+    // WHICHEVER MARK IS UP, OR WHERE IT WILL BE (owner screenshot, 2026-11-16: the mute and close keys
+    // sat on the logo). The panel measured only #hud-brand, and only when it had a box; a logo not yet
+    // drawn at that instant (the page adds `brand-mark` later, or the mark stands down for a moment)
+    // measured 0 and the clearance was skipped, so the panel started under the status bar, on the
+    // logo. Now: the game's mark or the online layer's copy, whichever has a box, else the place the
+    // mark is laid out at (--futasaku-logo-top/-height, set by player/branding.ts).
+    const markBottom = (): number | null => {
+      let bottom: number | null = null;
+      for (const id of ['hud-brand', 'online-brand']) {
+        const r = document.getElementById(id)?.getBoundingClientRect();
+        if (r && r.width > 0 && r.height > 0 && r.top < window.innerHeight / 3) bottom = Math.max(bottom ?? 0, r.bottom);
+      }
+      if (bottom !== null) return bottom;
+      const css = getComputedStyle(document.documentElement);
+      const markTop = parseFloat(css.getPropertyValue('--futasaku-logo-top'));
+      const markHeight = parseFloat(css.getPropertyValue('--futasaku-logo-height'));
+      return Number.isFinite(markTop) && Number.isFinite(markHeight) && markHeight > 0 ? markTop + markHeight : null;
+    };
+    const brandBottom = markBottom();
+    if (brandBottom !== null) {
+      const clear = brandBottom + 8 - offset;
       if (clear > top) {
         available -= clear - top;
         top = clear;

@@ -1024,6 +1024,36 @@ try {
   await visual.evaluate(() =>
     document.getElementById('chat-badge-probe')?.remove(),
   );
+  // THE MARK IS NOT DRAWN YET WHEN THE CHAT OPENS (owner screenshot, 2026-11-16, iPhone: the mute and
+  // close keys sat on the logo). The page adds `brand-mark` (which shows #hud-brand) after its first
+  // layout; a panel laid out before that measured a 0-wide logo and skipped the clearance. Open with the
+  // mark not yet drawn, then draw it: the close key must already clear where the mark appears.
+  await visual.setViewportSize({ width: 390, height: 844 });
+  await visual.waitForTimeout(150);
+  await visual.evaluate(() => {
+    // A notched phone (as the cases above): the safe area puts the mark's top at ~75px.
+    const style = document.createElement('style');
+    style.id = 'chat-badge-late-probe';
+    style.textContent = 'html{--futasaku-logo-top:75px !important;}';
+    document.head.append(style);
+    document.documentElement.classList.remove('brand-mark');
+    window.dispatchEvent(new Event('resize'));
+  });
+  await visual.locator('#match-chat-toggle').click();
+  await visual.locator('.match-chat-panel').waitFor({ state: 'visible' });
+  await visual.waitForTimeout(180);
+  await visual.evaluate(() => document.documentElement.classList.add('brand-mark'));
+  await visual.waitForTimeout(120);
+  const late = await visual.evaluate(() => {
+    const b = document.querySelector<HTMLElement>('#hud-brand')!.getBoundingClientRect();
+    const c = document.querySelector<HTMLElement>('.match-chat-head-keys button:last-child')!.getBoundingClientRect();
+    return { shown: b.width > 0, gap: c.top - b.bottom, overlapX: Math.min(b.right, c.right) - Math.max(b.left, c.left) };
+  });
+  check('390×844 notched, the logo drawn after the chat opened: the close key still clears it',
+    late.shown && (late.overlapX <= 0 || late.gap >= 8), JSON.stringify(late));
+  await visual.evaluate(() => document.getElementById('chat-badge-late-probe')?.remove());
+  await visual.keyboard.press('Escape');
+  await visual.locator('.match-chat-panel').waitFor({ state: 'hidden' });
   check(
     "chat panel's own blur is 18% weaker than the shared dark-glass and nothing else moves",
     panelBlurs.every((value) => value === 'blur(7.4px) saturate(1.05)') &&
