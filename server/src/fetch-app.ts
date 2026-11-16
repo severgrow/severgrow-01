@@ -19,10 +19,16 @@ import { ACCOUNT_GUIDE_FEATURE } from './account-guide.js';
  * a newer bot queued until the server it talks to names that version (web/src/online/seed-rewards.ts).
  * `account-campaign-progress` (owner, 2026-11-08) is the further-ahead campaign snapshot route.
  */
+/** The health feature that says Practice deals are accepted (web/src/online/seed-rewards.ts reads it). */
+export const TRAINING_DEALS_FEATURE = 'training-deals';
+
 export const SERVER_FEATURES: readonly string[] = Object.freeze([
   'campaign-random-deals',
   // A proof check in slices with a signed resume token (seeds/verify.ts stepOfflineMatch, 2026-11-12).
   'sliced-proofs',
+  // A Practice game the phone dealt is accepted as `deal: { seed, botLevel }` (seeds/service.ts
+  // dealTicket, 2026-11-16). A page sends such a proof only once this server lists it.
+  TRAINING_DEALS_FEATURE,
   ACCOUNT_CAMPAIGN_PROGRESS_FEATURE,
   ACCOUNT_GUIDE_FEATURE,
   ...Object.keys(BOT_VERSIONS),

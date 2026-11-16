@@ -52,6 +52,16 @@ export type SendChallengeOutcome =
   | { ok: true; challenge: WorldChallengeWire; replayed: boolean }
   | { ok: false; code: ChallengeSendFailure };
 
+/** One deal = one ticket: a uuid (v5 layout) from SHA-256 of player + seed. */
+const dealTicketId = async (playerId: string, seed: number): Promise<string> => {
+  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(`training-deal:${playerId}:${seed}`)));
+  const b = digest.slice(0, 16);
+  b[6] = (b[6]! & 0x0f) | 0x50;
+  b[8] = (b[8]! & 0x3f) | 0x80;
+  const hex = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
+
 export class WorldEconomyService {
   constructor(
     readonly store: WorldEconomyStore,
@@ -602,6 +612,43 @@ export class WorldEconomyService {
       expiresAt: now + 7 * 86_400_000, usedAt: null };
     await this.store.issueTrainingTicket(ticket);
     return { id: ticket.id, seed: ticket.seed, botLevel: ticket.botLevel, expiresAt: ticket.expiresAt };
+  }
+
+  /**
+   * A PRACTICE GAME THE PHONE DEALT (owner, 2026-11-16: "should be nearly instant"; he chose the
+   * campaign's random-deal method). With no ticket on the shelf the tap used to wait for one: measured
+   * on /test against this server, 3.3 s for a returning player and up to 9.4 s for a new one. Now the
+   * phone deals at once from its own seed, and when its proof arrives this issues the matching Training
+   * ticket and the proof is checked and paid exactly like any other (`training` / `trainingStep`).
+   *
+   * The ticket id is derived from player + seed, so one deal is one ticket and one receipt: it can never
+   * pay twice, and a second claim with another bot level gets the FIRST ticket (and its level) back.
+   * Making it spends the same hourly Training ticket budget as `issueTraining`; finding it again spends
+   * nothing. The player chooses the seed, as in the campaign's random deals; the replay is still checked
+   * move by move against the real bot, and the daily Seeds caps still apply.
+   */
+  async dealTicket(player: PlayerRecord, seed: number, botLevel: number): Promise<string> {
+    if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new ApiError('INVALID_REQUEST', 'That deal is not valid.');
+    if (!Number.isInteger(botLevel) || botLevel < 1 || botLevel > MAX_TRAINING_BOT) throw new ApiError('INVALID_REQUEST', 'Invalid Training level.');
+    const id = await dealTicketId(player.id, seed);
+    const existing = await this.store.trainingTicket(id);
+    if (existing) {
+      if (existing.playerId !== player.id) throw new ApiError('INVALID_REQUEST', 'That deal is not valid.');
+      return id;
+    }
+    const now = this.now();
+    const hour = Math.floor(now / 3_600_000) * 3_600_000;
+    const limit = await this.matches.hitRateLimit(`seeds:ticket:${player.id}`, hour, 12);
+    if (!limit.ok) throw new ApiError('RATE_LIMITED', 'Training rewards are temporarily unavailable.');
+    try {
+      await this.store.issueTrainingTicket({ id, playerId: player.id, seed, botLevel, createdAt: now,
+        expiresAt: now + 7 * 86_400_000, usedAt: null });
+    } catch (error) {
+      // The same deal sent twice at once: the other request made it, which is the same ticket.
+      if (await this.store.trainingTicket(id)) return id;
+      throw error;
+    }
+    return id;
   }
 
   /** A Training proof in slices (see `campaignStep`). */

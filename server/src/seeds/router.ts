@@ -135,6 +135,18 @@ export const createWorldEconomyRouter = (deps: {
       if (!Number.isInteger(body.botLevel)) throw new ApiError('INVALID_REQUEST', 'Invalid Training level.');
       return ok(201, { ticket: await economy.issueTraining(player, body.botLevel as number) });
     }
+    /**
+     * A Training proof names its ticket, or (since 2026-11-16) the deal the phone made without one:
+     * `deal: { seed, botLevel }`, for which the server issues the matching ticket (service.dealTicket).
+     */
+    const trainingTicketOf = async (body: Record<string, unknown>): Promise<string> => {
+      if (typeof body.ticketId === 'string') return body.ticketId;
+      const deal = body.deal as { seed?: unknown; botLevel?: unknown } | null | undefined;
+      if (deal && typeof deal === 'object' && typeof deal.seed === 'number' && typeof deal.botLevel === 'number') {
+        return economy.dealTicket(player, deal.seed, deal.botLevel);
+      }
+      throw new ApiError('INVALID_REQUEST', 'A Training ticket is required.');
+    };
     if (req.method === 'POST' && (path === '/v1/seeds/campaign' || path === '/v1/seeds/training')) {
       const body = await bodyOf(req);
       if (!Array.isArray(body.actions) || typeof body.botVersion !== 'string') throw new ApiError('INVALID_REQUEST', 'A match replay is required.');
@@ -152,8 +164,7 @@ export const createWorldEconomyRouter = (deps: {
           step = await economy.campaignStep(player, body.levelId, actions, body.botVersion,
             body.dealSeed === undefined ? undefined : body.dealSeed, token);
         } else {
-          if (typeof body.ticketId !== 'string') throw new ApiError('INVALID_REQUEST', 'A Training ticket is required.');
-          step = await economy.trainingStep(player, body.ticketId, actions, body.botVersion, token);
+          step = await economy.trainingStep(player, await trainingTicketOf(body), actions, body.botVersion, token);
         }
         if (step.kind === 'resume') return { status: 202, body: { ok: true, resume: step.resume } };
         return ok(200, { reward: step.reward });
@@ -165,8 +176,7 @@ export const createWorldEconomyRouter = (deps: {
         return ok(200, { reward: await economy.campaign(player, body.levelId, actions, body.botVersion,
           body.dealSeed === undefined ? undefined : body.dealSeed) });
       }
-      if (typeof body.ticketId !== 'string') throw new ApiError('INVALID_REQUEST', 'A Training ticket is required.');
-      return ok(200, { reward: await economy.training(player, body.ticketId, actions, body.botVersion) });
+      return ok(200, { reward: await economy.training(player, await trainingTicketOf(body), actions, body.botVersion) });
     }
     return null;
   };
