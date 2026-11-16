@@ -422,3 +422,36 @@ times slow or hang. Now a tap with no ticket deals at once and its proof names t
 `replayed: true`. seeds-settle's 'no ticket' scenario holds the line (ticket requests that never answer:
 old 3,334 ms and unpaid, new 431 ms and paid). Budget for future work: a Practice tap deals in under
 1.5 s with no ticket to be had.
+
+### Opening a match from Your matches, and the Seeds answer (2026-11-16, night)
+
+Opening a match where it is my turn (local server, 390x844, 4x CPU, 250 ms added network delay, three
+rounds each). Tap on the row -> board on screen with Draw legal and nothing busy:
+
+| | before (`485bc963`) | after (`79c8e68a`) |
+| --- | --- | --- |
+| tap -> playable board | 790-890 ms | 570-610 ms |
+| requests at the tap | 1 (`/view`, ~330 ms) | 0 |
+
+The list now reads the matches waiting for my move while it is on screen (at most 3, once per new move,
+`online/view-prefetch.ts`). What is left is building the board (`openDuel` ~435 ms of CPU at 4x, ~110 ms
+unthrottled: the whole-page `render()`, board setup and layout reads). Not changed here.
+
+The Seeds answer for a Practice win, live server, measured from the server's Europe region (the
+database is in eu-west-1; from the US region every query crosses the Atlantic and a wallet read takes
+1.1 s instead of 0.17 s):
+
+| Bot | first answer | rounds |
+| --- | --- | --- |
+| 1 | 0.45 s | 1 |
+| 6 | 0.90 s | 1 |
+| 10 | 3.3-5.1 s | 2-3, one `546 WORKER_RESOURCE_LIMIT` |
+| 12 | 4.3 s | 3, a resend hit 546 |
+
+The server replays the whole game to verify it; the rival bots (10-12) need several 1.2 s slices and a
+slice can overrun the Edge CPU limit (the page retries, so the payout still lands). Open, for the owner:
+show the award at once and correct it only if the server disagrees, and/or smaller slices server side.
+
+The ritual's emblem cover (`ef84de7f`) is four DOM nodes for one kanji rise (~0.6 s), transform and
+opacity only, removed as the kanji leaves; `ritual-centering` measures the turned hex on the tile at six
+screen sizes (fit within 0.3-0.9 px).
