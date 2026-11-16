@@ -26,6 +26,7 @@ import { legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { verifyLessonProof, verifyTrainingProof } from '../../server/src/seeds/verify.js';
 import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
+import { BOT_VERSIONS, CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 
 const OUT = '/tmp/seeds-settle';
 const PORT = Number(process.env.PORT ?? 4317);
@@ -34,7 +35,6 @@ const CHROME = process.env.PW_CHROMIUM
   ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const IDENTITY_KEY = 'futa05:severgrow.duel.identity.v1';
 const SETTINGS_KEY = 'futa05:severgrow.settings.v1';
-const BOT_LEVEL = 3;
 const TICKET_SEED = 424242;
 const PROGRESS_KEY = 'futa05:severgrow.campaign.progress.v3';
 /** Everything before the final lesson, so the campaign entry opens level 10 — the level that pays. */
@@ -187,7 +187,15 @@ type Settle = {
   onPaid?: (awarded: number) => void;
 };
 
-let ticket: { id: string; seed: number; botLevel: number; expiresAt: number } | null = null;
+type Ticket = { id: string; seed: number; botLevel: number; expiresAt: number };
+/**
+ * Every ticket this stub issued, by id. LIKE THE REAL SERVER (2026-11-16 repair): each request gets its
+ * own ticket, at the bot level the page asked for, and a proof is checked against the ticket it NAMES.
+ * The page now keeps one ticket per Practice tier on a shelf (online/ticket-shelf.ts) and plays each
+ * tier's ticket at that tier's level; the old single fixed ticket at bot 3 replayed every game against
+ * the wrong bot.
+ */
+const tickets = new Map<string, Ticket>();
 /** Held by the `hung` scenario: the Seeds answer that has not been given yet. */
 const hold: { release: (() => void) | null } = { release: null };
 /** Give the held answer (the `hung` scenario). A function, so the closure below is not narrowed. */
@@ -196,12 +204,22 @@ const releaseHeld = (): void => { const fn = hold.release; if (typeof fn === 'fu
 /** The stub API: real verification, real amounts, and every answer shape the card must handle. */
 const stubSeeds = async (page: Page, settle: Settle): Promise<void> => {
   let held = false;
+  // THE SERVER'S FEATURE LIST (2026-11-16 repair). Since bots-v0.11 a proof made with the newest bot is
+  // only sent once the server's health lists that version (online/seed-rewards.ts `serverKnows`); a stub
+  // that never answered /v1/health made the page hold every proof, correctly, and the card stayed empty.
+  // The live server answers with every version it can replay; so does this stub.
+  await page.route('**/v1/health*', (route: Route) => route.fulfill({
+    json: { ok: true, serverNow: Date.now(), features: ['sliced-proofs', ...Object.keys(BOT_VERSIONS)].concat(CURRENT_BOT_VERSION) },
+  }));
   await page.route('**/v1/seeds/**', async (route: Route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (path === '/v1/seeds/training/tickets') {
-      ticket = { id: 'ticket-e2e-1', seed: TICKET_SEED, botLevel: BOT_LEVEL, expiresAt: Date.now() + 3_600_000 };
-      return route.fulfill({ json: { ticket } });
+      const asked = JSON.parse(request.postData() ?? '{}') as { botLevel?: number };
+      const id = `ticket-e2e-${tickets.size + 1}`;
+      const issued: Ticket = { id, seed: TICKET_SEED + tickets.size, botLevel: asked.botLevel ?? 3, expiresAt: Date.now() + 3_600_000 };
+      tickets.set(id, issued);
+      return route.fulfill({ status: 201, json: { ticket: issued } });
     }
     if (path === '/v1/seeds/campaign') {
       if (settle.scenario === 'reject') {
@@ -231,7 +249,8 @@ const stubSeeds = async (page: Page, settle: Settle): Promise<void> => {
         json: { ok: false, code: 'INVALID_REQUEST', message: 'That Training result could not be verified.' },
       });
     }
-    const body = JSON.parse(request.postData() ?? '{}') as { actions: Action[]; botVersion: string };
+    const body = JSON.parse(request.postData() ?? '{}') as { ticketId?: string; actions: Action[]; botVersion: string };
+    const ticket = body.ticketId ? tickets.get(body.ticketId) : undefined;
     const verified = ticket ? verifyTrainingProof(ticket.seed, ticket.botLevel, body.actions, body.botVersion) : null;
     if (!verified) {
       return route.fulfill({
@@ -393,7 +412,7 @@ const run = async (
   options: { reduceMotion?: boolean; releaseAfterMs?: number; shot: string; lesson?: boolean },
 ): Promise<void> => {
   if (ONLY.length && !ONLY.includes(name)) return;
-  ticket = null;
+  tickets.clear();
   hold.release = null;
   const { context, page, errors } = await boot(browser, {
     ...viewport,
