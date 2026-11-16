@@ -321,3 +321,82 @@ latency could not be reproduced at all, in either engine, with or without the se
 **Not measured:** a physical iPhone (iOS compositing, ProMotion pacing, thermal state), real touch
 coalescing, and the owner's installed PWA cache. If the report stands, the shipped `?debug=timing`
 trace from his phone after two moves names the slow segment directly.
+
+## Beta 0.86 release pass: the new baseline (2026-11-16)
+
+Live `f4ba65f5` (Beta 0.85) against `/test/` `69e69422` (Beta 0.86) before and after this pass
+(`4800deac`..`1ed337d6`). All three built from source on one machine (4 cores, software GPU
+SwiftShader), runs serial, never two measurements at once. **This table is the baseline future work
+must not regress.** Medians unless stated.
+
+| Measure | live 0.85 | 0.86 before | 0.86 after |
+| --- | --- | --- | --- |
+| perf-phone idle style recalcs (futa05, 390x844 DPR 3, 4x CPU, 3 runs) | 60 /s | 60 /s | **0.3 /s** |
+| perf-phone idle recalc time | 266 ms/s | 419 ms/s | **2.7 ms/s** |
+| perf-phone idle main-thread work | 421 ms/s | 576 ms/s | **10 ms/s** |
+| perf-phone idle main frames | 182 /s | 181 /s | **1 /s** |
+| perf-phone idle heat gates (4 gates) | 2 fail | 2 fail | **all pass** |
+| performance-lifecycle board idle, 390 / 1440 (4 s window) | 355 / 157 ms, 44 / 14 recalcs | 344 / 174 ms, 43 / 14 | **10 / 11 ms, 0 / 0** |
+| performance-lifecycle menu, planet, hidden, pagehide, 10 navigations | level | level | level |
+| performance-offline-soak heap after game 1 / 6 (MiB) | 11.35 / 12.79 | 11.67 / 13.17 | 11.69 / 13.14 |
+| motion-cost main-thread, Blast+Bomb+Huge Cut+Bloom (3 runs each) | 5,408 ms | 5,398 ms | -0.8% vs 0.86 before (same session) |
+| Cold load to menu, 9 Mbps / 85 ms, 4x CPU (3 runs) | 3.40-3.48 s | 3.87-4.00 s | **3.45-3.53 s** |
+| Requests / KB before the menu is ready | 105 / 2,593 | 105 / 3,141 | **84 / 2,407** |
+| Total KB by 6 s after the menu (board art included) | 2,997 | 3,518 | 3,518 (same bytes, after the menu) |
+| Tap Easy -> game dealt (same link) | 2.1-2.3 s | 2.5-2.6 s | 2.0-2.5 s |
+| Board `<image>` nodes at start / game end | 13 / 60 | 49 / 103 | 49 / 103 |
+| Planet drag: ground off the finger's direction / miss (8 directions, both engines) | 0-1 deg / 6-9% | **30 deg / 50%** | 0-1 deg / 6-9% |
+| Legal-target outline visible, worst of 190 (5 games x 2 sizes) | 100% | 90% | 90% |
+
+What changed (each commit carries its own measurement):
+
+- **Idle heat** (`4800deac`): in game the near star canvas is `display:none`, yet its 20 s slide kept
+  running. Chromium cannot composite an animation on a hidden element and ticked it on the main
+  thread, a style recalculation every frame. Live had the same cost. `planet-matte` asserts it.
+- **Move** (`15a34195`): the veil gate re-read every veil's boxes on every `hidden` toggle in the
+  page, forcing a layout mid-move. It now reads only when a veil or its wrapper was toggled
+  (-49 ms forced layout in a Draw at 4x CPU; part of it moves to the next reader, ~5% net).
+- **Load** (`8b04e4e9`, `d45d70b8`, `1ed337d6`): the board's ~1 MB of pictures were requested at
+  module load, competing with the menu's own files. They start on `severor-ready` (not at the next
+  idle moment: a board drawn at once then measured ~5% more move work), or at once when a board or
+  replay is drawn. `boardArtReady` still means decoded.
+- **Shell** (`5d01d20e`): 0.86's worker announces a new build with `client.postMessage()`, which is
+  delivered to `navigator.serviceWorker`, never to `window`; the page listened on `window` only. Real
+  two-build upgrade (HTTPS, real worker, 404s like production): with the fix an app left on the menu
+  moves onto the new build with exactly one reload, never over a game.
+- **Planet drag** (`488e450a`, owner report): the flat-side-up roll was applied after the north-up
+  drag, so the finger's movement was read in the unturned frame. `rolledDrag` reads it in the turned
+  view; sphere-test asserts the ground follows the finger at four sizes, both engines.
+
+Checked, no change needed:
+
+- **"GPU stall due to ReadPixels"**: the page makes zero `readPixels` / `getImageData` /
+  `toDataURL` / WebGL-to-canvas copies in normal play (instrumented). A bare WebGL canvas that only
+  draws and is shown logs the identical warning on this machine: it is SwiftShader presenting WebGL,
+  not the app. Chrome mutes it after four per GPU process.
+- **`paint-wordmark.svg` (516 KB)**: never requested by any page (`PAINT_URL` has no reader) and the
+  worker has no precache list, so no player downloads it. It is the brand build's source and pinned by
+  branding tests. **`futasaku-stone-atlas` (515 KB)**: used (every tile's strength stone).
+- **Upgrade 0.85 -> 0.86** (served 0.85, installed its worker, left a game unfinished, replaced the
+  site with 0.86): first relaunch is still 0.85 (the old worker answers, as always), the second runs
+  0.86; one navigation each, no loop; every saved key unchanged; the v4 cache dropped; the unfinished
+  game resumes on 0.86 with the same turn, hand and board. Open mid-game: never reloaded.
+- **Console errors** (menu, settings, campaign, tutorial, planet, online lobby, a practice game with
+  fast taps, offline mid-game, hide/show, rotation, storage blocked, two tabs) in Chromium and WebKit:
+  identical on live and 0.86; the only messages are the absent local game server of the fixture.
+- **Visual**: before/after captures at 390x844 and 1440x900 (menu, play menu, game start, mid-game,
+  card selected) are pixel-identical apart from capture noise and the LED's own score/prompt cycle.
+- **WebKit** now runs here (the network allows `cdn.playwright.dev`): art-lab-ios, blast-input-ios,
+  planet-login-ios, sphere-test-ios, territory-gestures-ios, living-territory-ios pass.
+
+Still open (not small; see the release report):
+
+- perf-phone's move gate (p95 of one Draw move <= 34 ms at 4x CPU) flips between 33 and 150 ms on
+  every build, live included: each Draw has one 100-150 ms frame, the whole-page `render()` in
+  `main.ts` (no partial path for a hand-only change) plus `feedCamera`'s layout read after writes.
+- 25 infinite compositor-only pulses keep the compositor drawing at idle (~180 draws/s here, every
+  build). Main-thread cost is ~0; GPU/battery cost on a phone is not measured.
+- 0.86 holds ~0.35 MiB more heap than live at every game end (bigger art set); no growth per game.
+- The painted ground is 37 `<image>`s (one per cell, each its own patch of the painting); one picture
+  for the whole board would not be pixel-identical (outer cells reuse inner patches) and needs owner
+  sign-off.
