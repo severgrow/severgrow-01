@@ -1,5 +1,9 @@
 // The public Planet paints each owner's chosen set; the local picker saves only the signed-in
 // owner's preference. An older map response with no skin field still opens normally.
+//
+// THE ADMIN GATE (owner, 2026-11-16): the picker is the admin account "RYK"'s alone, so this suite
+// signs in as that account. A non-admin viewer's planet defaults are covered by the unit guard
+// (web/tests/skin-picker-gate.test.ts), not by this browser suite.
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { productFixture } from './helpers/product-fixture.js';
@@ -42,7 +46,7 @@ try {
     headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ ok: true, world }) }));
   await page.addInitScript(({ world, me }) => {
     localStorage.setItem('futa05-test:severgrow.settings.v1', JSON.stringify({ sound: false, music: false, reduceMotion: true }));
-    localStorage.setItem('futa05-test:severgrow.duel.identity.v1', JSON.stringify({ token: 'skin-token', playerId: me, displayName: 'Cedar', kind: 'guest' }));
+    localStorage.setItem('futa05-test:severgrow.duel.identity.v1', JSON.stringify({ token: 'skin-token', playerId: me, displayName: 'RYK', kind: 'account' }));
     localStorage.setItem('futa05-test:futasaku.world.last.v1', JSON.stringify(world));
   }, { world, me });
   await page.goto(fixture.origin + '/test/');

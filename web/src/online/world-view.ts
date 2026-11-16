@@ -2,6 +2,7 @@ import type { DuelClient } from '../../../server/src/client.js';
 import { shouldReportFailure } from './blips.js';
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
 import { connectSkinSwitch, disconnectSkinSwitch } from './skin-switch.js';
+import { planetSkinFor } from '../ui/skinChoice.js';
 import type { SeedWallet, WorldChallengeWire, WorldChallengesPayload, WorldDispute } from '../../../server/src/seeds/types.js';
 import { worldNeighbours } from '../../../server/src/world.js';
 import { planetTileCount } from '../../../src/planet/geometry.js';
@@ -2347,7 +2348,13 @@ export class WorldView {
       if (opened) this.planet.home(threat);
     } else if (this.planetMode === 'world' && this.threatFlown === undefined) this.threatFlown = threat;
     this.planet.update({
-      cells: world.cells, claims: world.claims, me, selected: this.selected,
+      cells: world.cells,
+      // THE ONE PLACE THE PLANET LEARNS WHICH SET EACH OWNER WEARS. The admin keeps every stored
+      // per-owner skin; everyone else sees the product defaults (own tiles Forest, others Ash), so
+      // an account that picked a set before the admin gate existed still sees the new defaults
+      // (ui/skinChoice.ts: planetSkinFor). Nothing is deleted: the stored row is simply not shown.
+      claims: world.claims.map((claim) => ({ ...claim, skin: planetSkinFor(claim.ownerId, me, claim.skin) })),
+      me, selected: this.selected,
       fog: this.fogCells ? [...this.fogCells.keys()] : [],
       disputes: this.disputes.map((dispute) => dispute.cellId),
       // A tile of mine under challenge outranks my biggest land: the opening flight lands on it.

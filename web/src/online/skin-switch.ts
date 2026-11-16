@@ -1,12 +1,21 @@
-// THE BOARD SKIN SWITCH (owner, 2026-11-14), on /test/ only: inside the planet's colour pane, under
-// the twenty colours. Three rows of named chips with a real thumbnail each: your tiles, their tiles
-// and the board background. A tap stores the choice (ui/skinChoice.ts); the next match wears it.
+// THE BOARD SKIN SWITCH (owner, 2026-11-14): inside the planet's colour pane, under the twenty
+// colours. Three rows of named chips with a real thumbnail each: your tiles, their tiles and the
+// board background. A tap stores the choice (ui/skinChoice.ts); the next match wears it.
+//
+// THE ADMIN GATE (owner, 2026-11-16): "hide the skins in the planet for now ... don't show the
+// selection of skins or background in the planet for any players except for the admin account RYK."
+// The whole switch is this ONE section, so one predicate covers the skins AND the background:
+// `skinPickerVisible()` (ui/skinChoice.ts). A player who is not the admin gets no section, no gap and
+// nothing announced. (The old header here said "/test/ only": that was already untrue — the mount
+// condition also let a local dev host through, and the live root is built from the same futa05
+// source. The route is no longer what decides; the account is.)
+//
 // Static DOM, no timers; built once and re-marked by the ONE change notification in ui/skinChoice.ts
 // (a tap here, the account's own answer, or another tab), so a chip never marks a skin the board is
 // not wearing.
 import { BACKGROUNDS, TERRITORIES, TERRITORY_IDS } from '../ui/forestAsh.js';
 import type { BackgroundId, TerritoryId } from '../ui/forestAsh.js';
-import { SKIN_SWITCH, adoptServerSkin, chooseSkin, onSkinChoice, skinChoice, skinRevision } from '../ui/skinChoice.js';
+import { SKIN_SWITCH, adoptServerSkin, chooseSkin, onSkinChoice, skinChoice, skinPickerVisible, skinRevision } from '../ui/skinChoice.js';
 import type { SkinChoice } from '../ui/skinChoice.js';
 import type { DuelClient } from '../../../server/src/client.js';
 
@@ -40,7 +49,9 @@ let confirmed: TerritoryId | null = null;
 
 /** The token comes from the signed-in Planet view, never from a tile or a browser-supplied owner. */
 export async function connectSkinSwitch(client: DuelClient, token: string, refresh: () => void): Promise<void> {
-  if (!SKIN_SWITCH) return;
+  // Only the admin's account is synced at all: a non-admin has no use for the stored skin (the
+  // product defaults are theirs, ui/skinChoice.ts) and must not spend a request on it.
+  if (!SKIN_SWITCH || !skinPickerVisible()) return;
   if (account?.token === token) { account.refresh = refresh; return; }
   const current = account = { client, token, refresh };
   saveSeq++;  // a save from the previous account (or session) can no longer own this switch
@@ -69,7 +80,10 @@ export async function connectSkinSwitch(client: DuelClient, token: string, refre
 export function disconnectSkinSwitch(): void { account = null; saveSeq++; }
 
 export function mountSkinSwitch(pane: HTMLElement | null): void {
-  if (!SKIN_SWITCH || !pane || pane.querySelector('#world-skin-switch')) return;
+  // THE ADMIN GATE (owner, 2026-11-16, "for now"): one predicate hides the skins AND the background.
+  // Checked before anything is created, so a non-admin's pane gets no section, no style, no gap and
+  // nothing for a screen reader to announce.
+  if (!SKIN_SWITCH || !skinPickerVisible() || !pane || pane.querySelector('#world-skin-switch')) return;
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);

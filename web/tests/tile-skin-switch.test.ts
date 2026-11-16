@@ -7,6 +7,10 @@
 // The /test/ path is the surface this switch lives on (it is also live on a localhost dev host);
 // `SKIN_SWITCH` is decided once, when the modules load, so the globals are stubbed before the
 // dynamic imports below.
+//
+// THE ADMIN GATE (owner, 2026-11-16): the picker and its server sync now belong to the account
+// "RYK" alone (ui/skinChoice.ts). These tests are about the switch's ordering rules, which only
+// exist for that account now, so every test signs in as it — the assertions are unchanged.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.stubGlobal('location', {
@@ -44,6 +48,11 @@ const connect = (client: unknown) => connectSkinSwitch(
   () => undefined,
 );
 
+/** The signed-in account these tests run as: the one the 2026-11-16 gate allows (ui/skinChoice.ts). */
+const signInAsRyk = () => data.set('severgrow.duel.identity.v1', JSON.stringify({
+  token: 'ryk-token', playerId: '11111111-1111-4111-8111-111111111111', displayName: 'RYK', kind: 'account',
+}));
+
 /** The two facts the owner compares: what the switch marks, and what the board draws. */
 const drawn = () => faSides()[0];
 const chosen = () => skinChoice().mine;
@@ -51,6 +60,7 @@ const chosen = () => skinChoice().mine;
 beforeEach(() => {
   disconnectSkinSwitch();
   data.clear();
+  signInAsRyk();
   chooseSkin({ mine: 'water', theirs: 'ash', background: 'slate' });
 });
 
