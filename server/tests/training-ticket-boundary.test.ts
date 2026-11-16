@@ -36,3 +36,23 @@ describe('the Training ticket bot-level boundary', () => {
     }
   });
 });
+
+// THE DATABASE MUST ACCEPT EVERY LEVEL THE CODE ISSUES (found 2026-11-16 against the live server:
+// a Training ticket for bot 9 was issued, for bots 10 and 12 the server answered 500). Migration 0011
+// created `training_seed_tickets.bot_level` with `check (bot_level between 1 and 9)`; the rivals 10-12
+// joined the code on 2026-11-12 (MAX_TRAINING_BOT) but no migration widened the column, so a Hard or
+// Blitz Practice whose rotation picked a rival could not get a ticket: the tap waited out its budget and
+// the game paid no Seeds. This pins the LAST word the migrations say about that check to the code's top.
+describe('the database accepts every Training bot level the code issues', () => {
+  it('the newest bot_level check on training_seed_tickets allows up to MAX_TRAINING_BOT', async () => {
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const dir = new URL('../migrations/', import.meta.url);
+    let top: number | null = null;
+    for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()) {
+      const sql = readFileSync(new URL(file, dir), 'utf8');
+      const table = /training_seed_tickets[\s\S]*?bot_level[^;]*?between\s+1\s+and\s+(\d+)/gi;
+      for (const m of sql.matchAll(table)) top = Number(m[1]);
+    }
+    expect(top).toBe(MAX_TRAINING_BOT);
+  });
+});
