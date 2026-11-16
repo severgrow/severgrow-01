@@ -8155,7 +8155,7 @@ body.result .corner-tools {
 /* THE FINAL BOARD'S LOOK (owner, 2026-11-16: "off brand ... cooler, more FUTASAKU, minimal and
    elegant"; logic/harvest.ts harvestSvg). Tiles set slightly apart, as on the board itself: each hex
    is drawn at the lattice's size and drawn in a little here, with a stroke of its own fill to round
-   its corners. Static: no filter, no animation, no picture. */
+   its corners. Static and flat: nothing moves, nothing is blurred, no picture. */
 #gameover .go-harvest-svg .hv-plate path,
 #gameover .go-harvest-svg .hv-them path,
 #gameover .go-harvest-svg .hv-you path,
@@ -8188,7 +8188,7 @@ body.result .corner-tools {
 }
 #gameover .go-harvest-svg .hv-them-edge path {
   fill: none;
-  stroke: color-mix(in srgb, var(--c-bot) 85%, #fff);
+  stroke: color-mix(in srgb, var(--c-bot) 70%, var(--fu-cream));
   stroke-opacity: .32;
   stroke-width: .7;
   stroke-linejoin: round;

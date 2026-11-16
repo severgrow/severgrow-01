@@ -392,36 +392,9 @@ try {
   await page.screenshot({ path: `${OUT}finish-verdict-pruned-1280x800.png` });
   console.log('    shot: docs/screens/finish/finish-verdict-pruned-1280x800.png');
 
-  // ---------- the Territory key, through the product's own route ----------
-  // This practice card has no payout line (a plain ?seed game asks for no reward), so the key is
-  // correctly absent. Give the card the award through the app's own reveal path (the same hook the
-  // seeds-fit suite uses): a visible Seeds line must grow the key, on the card that is already up.
-  const noPayout = await page.evaluate(`(() => !document.getElementById('go-seeds') || document.getElementById('go-seeds').hidden)()`);
-  if (noPayout) {
-    await page.evaluate(`(() => window.__severgrow.seedReveal(50))()`);
-    await page.waitForSelector('#go-territory-grow:not([hidden])', { timeout: 10_000 });
-  }
-  const territory = (await page.evaluate(`(() => {
-    const btn = document.getElementById('go-territory-grow');
-    const seeds = document.getElementById('go-seeds');
-    const shown = (el) => !!el && el.getClientRects().length > 0;
-    const r = btn ? btn.getBoundingClientRect() : null;
-    return { control: shown(btn), seeds: shown(seeds), label: btn ? (btn.textContent || '').trim() : null, height: r ? Math.round(r.height) : 0 };
-  })()`)) as { control: boolean; seeds: boolean; label: string | null; height: number };
-  check('the Territory key is on the card with the payout', (territory.control) === territory.seeds, `key ${territory.control} · payout ${territory.seeds}`);
-  if (territory.control) {
-    check('the Territory key is a real 44px target', territory.height >= 44, `${territory.height}px`);
-    check('the Territory key reads the product sentence', territory.label === 'Grow tiles on the planet', territory.label ?? '');
-    await page.click('#go-territory-grow');
-    const world = await page
-      .waitForSelector('#online-world-screen:not([hidden])', { timeout: 15_000 })
-      .then(() => true)
-      .catch(() => false);
-    check('the Territory key opens the Territory screen', world);
-    await page.screenshot({ path: `${OUT}finish-territory-key-world-1280x800.png` });
-  } else {
-    check('the Territory key opens the Territory screen', false, 'the key was not on the card to press');
-  }
+  // THE TERRITORY KEY IS GONE (owner brief, 2026-11-11): the finish card shows the planet itself,
+  // with the Planet page's own grow key inside it, so the old "Grow tiles on the planet" key was
+  // removed (main.ts syncEndgameWallet). Its checks went with it; the planet window has its own suites.
 
   await context.close();
 } finally {
