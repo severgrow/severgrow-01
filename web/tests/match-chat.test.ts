@@ -507,3 +507,17 @@ describe('shared live-button opponent status', () => {
     expect(listener).not.toHaveBeenCalled();
   });
 });
+
+// BLITZ SAYS IT WITH THE BOLT (owner, 2026-11-16: "blitz mode shouldn't show green / red dot when opp
+// online - lightning itself is indicating that already"). The duel header's dot was already hidden in
+// a Blitz duel (online-css.ts); the chat header's green/red dot was not.
+describe('the chat\'s presence dot in a Blitz duel', () => {
+  it('is hidden while a Blitz duel runs, by the same flag the duel header uses', async () => {
+    const { CHAT_CSS } = await import('../src/online/chat/style.js');
+    expect(CHAT_CSS).toMatch(/html\[data-blitz-duel='1'\]\s+\.match-chat-presence\s*\{\s*display:\s*none/);
+  });
+  it('is still drawn in an ordinary (async) duel', async () => {
+    const { CHAT_CSS } = await import('../src/online/chat/style.js');
+    expect(CHAT_CSS).toMatch(/\.match-chat-presence\[data-presence='online'\]\{background:#8fbf6a;\}/);
+  });
+});
