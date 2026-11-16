@@ -138,12 +138,17 @@ describe('the figure is the position this game ended on', () => {
     expect(fig.label).toContain(`${byOwner[1]}`);
   });
 
-  it('gives the two seats different weight and a pattern, not colour alone', () => {
+  // Owner, 2026-11-16: the hatched look was "off brand" — the other network is now a deep ember with
+  // an engraved inner edge. The rule this test guards stays: the two seats differ by more than ink.
+  it('gives the two seats different weight and a mark of their own, not colour alone', () => {
     const st = playOut(42);
-    const svg = harvestSvg(harvestFigure(st.board, st.config, 0, st.terrain)!);
+    const fig = harvestFigure(st.board, st.config, 0, st.terrain)!;
+    const svg = harvestSvg(fig);
     expect(svg).toContain('hv-you');
-    expect(svg).toContain('hv-hatch');
-    expect(svg).toContain('pattern id="go-harvest-hatch"');
+    // every tile of the other network carries its engraved edge; the reader's carry none
+    const edges = /<g class="hv-them-edge">(.*?)<\/g>/.exec(svg)?.[1] ?? '';
+    expect((edges.match(/<path /g) ?? []).length).toBe(fig.cells.filter((c) => c.owner === 1 && c.joined).length);
+    expect(svg).not.toContain('pattern id="go-harvest-hatch"');
     // One sentence, on the image itself.
     expect(svg).toContain('role="img"');
     expect(svg).toContain('aria-label="Your network,');

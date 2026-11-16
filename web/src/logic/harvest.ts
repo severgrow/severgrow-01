@@ -408,43 +408,55 @@ export const joinedMass = (board: Record<string, Tile | null>, config: RulesConf
   };
 };
 
-/** The SVG for one figure: static, no animation, colours from the theme. */
+/**
+ * The SVG for one figure: static, no animation, colours from the theme.
+ *
+ * THE LOOK (owner, 2026-11-16: "the end board drawing is off brand - make it cooler, more FUTASAKU,
+ * keep it minimal and elegant"). The board as tiles, not a diagram: every hex is a tile set slightly
+ * apart from its neighbours (the gap is CSS, so the geometry stays the lattice's own), the reader's
+ * network solid in its ink, the other network a deep ember with an engraved inner edge (told apart by
+ * lightness and that edge, never by colour alone), the line where the two networks meet a gold seam
+ * in the gaps, and each home a small hex seal — gold when it ended sealed.
+ */
 export const harvestSvg = (f: HarvestFigure): string => {
   const n = (v: number) => v.toFixed(1);
+  const tile = (x: number, y: number, cls = '') => `<path${cls ? ` class="${cls}"` : ''} d="${cellPath(x, y, S, f.tilt)}"/>`;
   const cells = (owner: Player) =>
     f.cells
       .filter((c) => c.owner === owner && c.joined)
-      .map((c) => `<path d="${cellPath(c.x, c.y, S, f.tilt)}"/>`)
+      .map((c) => tile(c.x, c.y))
       .join('');
+  const rings = f.cells
+    .filter((c) => c.owner === 1 && c.joined)
+    .map((c) => `<path d="${cellPath(c.x, c.y, S * 0.62, f.tilt)}"/>`)
+    .join('');
   const cutOff = f.cells
     .filter((c) => !c.joined)
-    .map((c) => `<path class="hv-cutoff" d="${cellPath(c.x, c.y, S, f.tilt)}"/>`)
+    .map((c) => tile(c.x, c.y, 'hv-cutoff'))
     .join('');
   const homes = f.cells
     .filter((c) => c.home)
     .map((c) => {
       const sealed = f.sealed.includes(c.owner);
       const who = c.owner === 0 ? 'hv-home-you' : 'hv-home-them';
-      return `<g class="hv-home ${who}${sealed ? ' hv-sealed' : ''}"><circle cx="${n(c.x)}" cy="${n(c.y)}" r="4.6"/><circle class="hv-home-dot" cx="${n(c.x)}" cy="${n(c.y)}" r="1.5"/></g>`;
+      return `<g class="hv-home ${who}${sealed ? ' hv-sealed' : ''}"><path d="${cellPath(c.x, c.y, S * 0.44, f.tilt)}"/><circle class="hv-home-dot" cx="${n(c.x)}" cy="${n(c.y)}" r="1.5"/></g>`;
     })
     .join('');
   const frontier = f.frontier.map((e) => `<line x1="${n(e.x1)}" y1="${n(e.y1)}" x2="${n(e.x2)}" y2="${n(e.y2)}"/>`).join('');
   const outline = f.outline.map((e) => `<line x1="${n(e.x1)}" y1="${n(e.y1)}" x2="${n(e.x2)}" y2="${n(e.y2)}"/>`).join('');
   return [
     `<svg class="go-harvest-svg" viewBox="0 0 ${n(f.width)} ${n(f.height)}" role="img" aria-label="${f.label}" focusable="false" xmlns="http://www.w3.org/2000/svg">`,
-    `<defs><pattern id="go-harvest-hatch" width="2.6" height="2.6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="2.6"/></pattern></defs>`,
+    `<g class="hv-outline">${outline}</g>`,
     `<g class="hv-plate">${f.hexes
       .filter((h) => !h.occupied)
-      .map((h) => `<path d="${cellPath(h.x, h.y, S, f.tilt)}"/>`)
+      .map((h) => tile(h.x, h.y, h.rock ? 'hv-rock' : ''))
       .join('')}</g>`,
     `<g class="hv-them">${cells(1)}</g>`,
-    `<g class="hv-hatch">${cells(1)}</g>`,
+    `<g class="hv-them-edge">${rings}</g>`,
     `<g class="hv-you">${cells(0)}</g>`,
     cutOff,
     `<g class="hv-frontier">${frontier}</g>`,
-    `<g class="hv-outline">${outline}</g>`,
     `<g class="hv-homes">${homes}</g>`,
     `</svg>`,
   ].join('');
 };
-
