@@ -40,6 +40,7 @@ import type { SeedFlushResult } from './seed-rewards.js';
 import { settlePendingSeeds } from './seed-settle.js';
 import { SWORD_PATH } from './swords-glyph.js';
 import { askRematch } from './rematch-confirm.js';
+import { createViewPrefetch } from './view-prefetch.js';
 import type { SeedWallet } from '../../../server/src/seeds/types.js';
 
 import {
@@ -237,6 +238,17 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   /** A waiting-screen request that is still out; a 2 s tick must not stack another (poll-gate.ts). */
   let waitingInFlight = false;
   let serverOffset = 0;
+  /** The matches waiting for my move, read while the list is on screen, so a tap opens at once. */
+  const viewPrefetch = createViewPrefetch({
+    fetch: async (matchId: string) => {
+      const status = await identity.ensure();
+      if (!status.ok) throw new Error('no identity');
+      const res = await client.openView(status.identity.token, matchId);
+      return { res, receivedAt: now() };
+    },
+    seen: (matchId) => client.seenRevision(matchId),
+    now,
+  });
   let worldView: WorldView | null = null;
   const worldSource = mountWorldSource((poll) => client.worldMap(null, poll), lastWorld(browserStorage()), world => rememberWorld(browserStorage(), world));
   let living: ReturnType<typeof mountLivingTerritory> | null = null;
@@ -667,6 +679,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     const list = $('online-matches');
     const empty = $('online-matches-empty');
     const shown = trimLobbyList(matches);
+    if (!hub.hidden) viewPrefetch.warm(shown);
     const rows = shown.map((entry) => ({ entry, row: toLobbyRow(entry, now(), serverOffset) }));
     const waiting = countNeedingResponse(shown);
     paintMatchesDisclosure(rows.length, waiting);
@@ -1281,8 +1294,12 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     try {
       // Only the turns this device has not seen (owner report, 2026-10-27: reopening a match
       // replayed the whole game and flickered, not just the opponent's move made meanwhile).
-      const res = await client.openView(id.token, matchId);
-      serverOffset = res.serverNow - now();
+      // A read the list already made (online/view-prefetch.ts) is used at once; otherwise read now.
+      const ready = viewPrefetch.take(matchId);
+      const { res, receivedAt } = ready
+        ? await ready.catch(async () => ({ res: await client.openView(id.token, matchId), receivedAt: now() }))
+        : { res: await client.openView(id.token, matchId), receivedAt: now() };
+      serverOffset = res.serverNow - receivedAt;
       if (res.player.status === 'waiting') {
         try {
           const summary = await client.getMatch(id.token, matchId);
