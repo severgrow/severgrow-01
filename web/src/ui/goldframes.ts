@@ -1,10 +1,10 @@
 // A gold rim for bonus terrain: the Forest & Ash skin's two supplied frames (owner, 2026-11-13),
-// both in one transparent atlas. WHICH bonus hexes wear one is `goldFrameKeys` below — the board's
-// outer ring only. Which LOOK a bonus hex wears — design, 60-degree turn, mirror — is decided per
-// BOARD (`faGoldLooks`, ui/forestAsh.ts), so neighbours never repeat one when the board allows, and
-// both frames are used. Every painter (the live board, the replay canvas and the poster) hands the
-// same map in; the glow is the board's own (`.gold-frame` drop-shadow in style.css) and the art
-// carries none.
+// both in one transparent atlas. WHICH bonus hexes wear one is `goldFrameKeys` below — EVERY bonus
+// hex on the board (owner, 2026-11-16). Which LOOK a bonus hex wears — design, 60-degree turn,
+// mirror — is decided per BOARD (`faGoldLooks`, ui/forestAsh.ts), so neighbours never repeat one
+// when the board allows, and both frames are used. Every painter (the live board, the replay canvas
+// and the poster) hands the same map in; the glow is the board's own (`.gold-frame` drop-shadow in
+// style.css) and the art carries none.
 import { FA_GOLD_ATLAS, FA_GOLD_ATLAS_SIZE, FA_GOLD_BOXES, goldLookId } from './forestAsh.js';
 import type { GoldLook } from './forestAsh.js';
 import { cellScale, cornerPts, el, hexPath, S } from './geom.js';
@@ -60,28 +60,28 @@ export const ringOf = (key: string): number => {
 };
 
 /**
- * WHICH HEXES MAY WEAR A GOLD FRAME: the board's OUTER RING, and nothing else.
+ * WHICH HEXES WEAR A GOLD FRAME: EVERY bonus ("rich") hex on the board.
  *
- * Owner, 2026-11-14: "the bug with gold tile in middle - should never happen". A bonus ("rich")
- * hex is engine terrain and can be anywhere the point-symmetric roll puts it — the centre is
- * ALWAYS one of them (spec 4.4), and two mirrored pairs follow it. Painting a frame on all of them
- * put metal in the middle of the board, which is what he saw. The frame is a rim: a rim reads as
- * the board's edge, so it belongs there, on the outermost ring only.
+ * Owner, 2026-11-16: "i don't get what the issue is. every 'gold tile' is getting one of the gold
+ * tile frames we prepared and that's it". A bonus hex is engine terrain (`src/engine/terrain.ts`:
+ * the centre plus two mirrored pairs, `richCount: 5`) and every one of them scores 2
+ * (`src/engine/scoring.ts`), so a bonus hex with no frame is a double-scoring tile with no mark —
+ * the defect. The frame is the ONLY thing that says "this tile is worth 2".
  *
- * This is the ONE resolver for that decision, and every painter calls it with the board's own
+ * HISTORY, so the rule is not read backwards again: on 2026-11-14 the owner said "the bug with gold
+ * tile in middle - should never happen". That was about a frame painted at the WRONG PLACE — loose
+ * metal floating in the middle of the board — and the repo answered it by restricting frames to the
+ * board's outermost ring. He has now corrected that reading: the "middle" complaint was never a
+ * reason to leave interior bonus hexes bare. The outer-ring rule is gone; every bonus hex wears one.
+ *
+ * This is still the ONE resolver for the decision, and every painter calls it with the board's own
  * cells and its own bonus keys: the live board (`ui/board.ts`), the replay canvas and the poster
- * (`replay/board-canvas.ts`). Interior bonus hexes keep their terrain (they still score 2) but
- * wear no metal, so no painter can put a frame there.
- *
- * `outermost` is read from the BOARD, not assumed: the product board is radius 3, but the Lab's
- * shapes and any future board stay correct without this module knowing their radius.
+ * (`replay/board-canvas.ts`). `boardKeys` keeps the list to cells this board actually has (a Lab
+ * shape, or a future board, need not be a radius-3 hexagon), and keeps the order deterministic.
  */
 export const goldFrameKeys = (boardKeys: Iterable<string>, bonusKeys: Iterable<string>): string[] => {
-  const all = [...boardKeys];
-  if (all.length === 0) return [];
-  let outermost = 0;
-  for (const key of all) outermost = Math.max(outermost, ringOf(key));
-  return [...bonusKeys].filter((key) => ringOf(key) === outermost);
+  const onBoard = new Set(boardKeys);
+  return [...bonusKeys].filter((key) => onBoard.has(key));
 };
 
 /**
@@ -167,9 +167,15 @@ export function drawGoldFrame(
     'aria-hidden': 'true',
     // THE FRAME IS CLIPPED TO ITS OWN HEX (owner, 2026-11-15). The rim's metal is fitted inside the
     // cell above; this also bounds what the rim's GLOW paints. `.gold-frame`'s drop-shadow is a
-    // filter, and a filter is applied before a clip, so the shadow is cut at the seam too — on the
-    // outer ring half of it used to be painted outside the board's silhouette, which is the gold
-    // the owner saw on /test/. Nothing a frame paints can now leave its hex, at ANY look.
+    // filter, and a filter is applied before a clip, so the shadow is cut at the seam too — half of
+    // it used to be painted outside the board's silhouette, which is the gold the owner saw on
+    // /test/. Nothing a frame paints can now leave its hex, at ANY look, on the rim or inside.
+    //
+    // …AND NOTHING MAY PAINT OVER IT (owner, 2026-11-16: "gold tiles still an issue"): the single
+    // frame layer (`l-rich-frames`) is placed ABOVE the ground treatments — the planet skin's limb
+    // shade, the rocks, the tile art — and below the homes. Painted below the limb shade, an
+    // outer-ring frame lost up to three quarters of its metal to the board-edge darkening (measured
+    // 175 -> 32 warmth on /test/), so the rim read as a broken arc exactly at the board's edge.
     'clip-path': `url(#${clipId})`,
   }, parent);
   const defs = el('defs', {}, group);

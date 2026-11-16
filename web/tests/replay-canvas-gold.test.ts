@@ -3,9 +3,10 @@
 // the canvas painter behind the poster and the video drew none, so a shared picture showed a
 // different board from the game. These pin the canvas frames to the live board's own geometry.
 //
-// Since 2026-11-14 a frame is a RIM, so only the OUTER RING wears one ("the bug with gold tile in
-// middle - should never happen"); interior bonus hexes keep their terrain and lose the metal. Both
-// painters ask the same resolver (`goldFrameKeys`, ui/goldframes.ts), which is what these pin.
+// Since 2026-11-16 EVERY bonus hex wears one (owner: "every 'gold tile' is getting one of the gold
+// tile frames we prepared"), the centre included; the 2026-11-14 outer-ring restriction was a
+// misreading and is gone. Both painters ask the same resolver (`goldFrameKeys`, ui/goldframes.ts),
+// which is what these pin.
 import { describe, expect, it } from 'vitest';
 import { CURRENT_RULES_VERSION, rulesConfig } from '../../src/engine/versions.js';
 import { boardCoords, coordKey } from '../../src/engine/index.js';
@@ -34,22 +35,22 @@ describe('the canvas board\'s gold frames', () => {
   });
   const layout: BoardLayout = posterLayout(posterFor(model)).board;
   const rich = layout.cells.filter((c) => c.terrain === 'rich');
-  /** The cells the live board draws a frame on: the bonus hexes on the board's OUTER ring. */
+  /** The cells the live board draws a frame on: every bonus hex on this board. */
   const framed = goldFrameKeys(layout.cells.map((c) => c.key), rich.map((c) => c.key));
 
-  it('places one frame on every OUTER-RING bonus hex, and on nothing else', () => {
+  it('places one frame on every bonus hex, the centre included, and on nothing else', () => {
     expect(screenCoordsOf(model).length).toBe(layout.cells.length);
     expect(rich.length).toBeGreaterThan(0);
-    expect(framed.length).toBeGreaterThan(0);
+    expect(framed.length).toBe(rich.length);
     const frames = goldFramePlacements(layout);
     expect(frames.map((f) => f.key).sort()).toEqual([...framed].sort());
-    // And the point of the rule: no interior hex is ever among them (the centre is bonus terrain
-    // on every board and must never wear metal).
+    // The point of the rule (owner, 2026-11-16): the centre is bonus terrain on every board and it
+    // MUST wear a frame, like the interior pairs — a bonus hex scores 2, so it must be marked.
     const frameset = new Set(framed);
-    for (const cell of rich) {
-      const ring = (() => { const [q, r] = cell.key.split(',').map(Number) as [number, number]; return (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2; })();
-      if (ring < 3) expect(frameset.has(cell.key), cell.key).toBe(false);
-    }
+    const centre = rich.find((cell) => cell.key === '0,0');
+    expect(centre, 'the centre is bonus terrain').toBeTruthy();
+    expect(frameset.has('0,0')).toBe(true);
+    for (const cell of rich) expect(frameset.has(cell.key), cell.key).toBe(true);
   });
 
   it('is the live board\'s frame: same size around the hex, same atlas crop for that hex', () => {
@@ -82,9 +83,9 @@ describe('the canvas board\'s gold frames', () => {
 
   it('wears the same look as the live board, key for key, and turns it the same way', () => {
     // The live board builds `faGoldLooks` from `boardCoords(config)` filtered to the framed cells —
-    // the bonus hexes on the outer ring (ui/board.ts `setup`); the poster builds `goldVariantsOf`
-    // from the layout's own cells. If these ever disagree, a replay would show a different frame
-    // from the game it replays.
+    // every bonus hex (ui/board.ts `setup`); the poster builds `goldVariantsOf` from the layout's
+    // own cells. If these ever disagree, a replay would show a different frame from the game it
+    // replays.
     const liveBoard = newMatch(SEED);
     const liveBoardKeys = boardCoords(liveBoard.config).map(coordKey);
     const liveKeys = goldFrameKeys(liveBoardKeys, liveBoardKeys.filter((k) => liveBoard.terrain[k] === 'rich'));

@@ -92,8 +92,10 @@ const rayHit = (
  * moves — but the 0.5 line (FEATURES.space) bends every cell on the globe's curve, which moves a
  * cell's corners by up to two degrees and two per cent. Measured on that board (Chromium and
  * WebKit agree) the art's outer bevel crossed its own seam for 12 of the 24 looks, worst 0.40% of
- * the hex radius, and a frame is a RIM on the outer ring, so those were painted over the board's
- * edge. The fit is the size half of the answer; `drawGoldFrame`'s clip-path is the guarantee.
+ * the hex radius, so those frames were painted over the seam — and every frame on the board's outer
+ * ring was therefore painted over the board's edge. The fit is the size half of the answer;
+ * `drawGoldFrame`'s clip-path is the guarantee. Both hold for EVERY bonus hex (owner, 2026-11-16),
+ * on the rim and inside the board alike.
  */
 export const goldFrameFit = (
   cell: readonly (readonly [number, number])[],

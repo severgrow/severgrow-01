@@ -24,7 +24,7 @@ import { drawLandmark } from './landmarks.js';
 import { getOrient } from '../logic/orient.js';
 import { materialsOf } from '../logic/materials.js';
 import { drawSeedStone } from './seedstone.js';
-import { drawGoldFrame, noteGoldFrameArtFailure } from './goldframes.js';
+import { noteGoldFrameArtFailure } from './goldframes.js';
 import { DEFAULT_ART_SPRITES } from './defaultArtSprites.js';
 import { FA_ALL_URLS, FA_ROCKS, faBaseColour, faGroundUrl, faRockSprite, faSetUrls, faSides, faTileSprite, faVariants, neighbourToward } from './forestAsh.js';
 import type { FaSprite, FaVariants } from './forestAsh.js';
@@ -396,9 +396,8 @@ export class DefaultArtBoardView extends BoardView {
     // image decode (~62-68 ms on a 390x844 profile, measured) in the very frame the player waits
     // for. Once the board exists — never on the menu — and once per page.
     void warmBoardArt(this.warmUrls(), this.drawnTileSize());
-    // Empty gold frames lie on the ground, under any tile art that spills over them; an occupied
-    // gold tile draws its own frame over its art (drawTile).
-    this.svg.insertBefore(this.layers.rich, this.layers.tiles);
+    // The gold frames' place is decided at the end of this method, once every layer that must sit
+    // under them has been placed (see "THE GOLD FRAME ABOVE THE GROUND" below).
     // The territory's outline runs under the homes: the canopy and the smoke cover it.
     this.svg.insertBefore(this.layers.contour, this.layers.homes);
     // Keep the fine network line beneath every visible art fringe, including grass and rocks.
@@ -423,6 +422,22 @@ export class DefaultArtBoardView extends BoardView {
     // and blur are untouched: this is layering only.
     const turnRim = this.svg.querySelector<SVGGElement>('.planet-turn-rim');
     if (turnRim) this.svg.insertBefore(turnRim, this.layers.homes);
+    // THE GOLD FRAME SITS ABOVE THE GROUND, UNDER THE HOMES (owner, 2026-11-16: "gold tiles still an
+    // issue"; "every 'gold tile' is getting one of the gold tile frames ... and that's it").
+    //
+    // Every bonus hex wears its frame, the centre included, so a frame can never again be a rare
+    // object on the rim: it is part of the board's furniture. It used to be drawn under the tile art
+    // and, on the bent 0.5 board, under the planet skin's limb shade and the rocks — all of which
+    // paint OVER it. Measured on the /test/ build (per-side metal warmth, 1280x800, seed 11), an
+    // outer-ring frame read 32-68 as shipped and 165-181 with the planet skin hidden: the limb shade
+    // alone cost the metal three quarters of its strength, most of it at the board's edge, which is
+    // exactly where he saw the rim "broken". The rock pass cost more on the sides a rock leans over.
+    //
+    // So the single frame layer is placed above every ground treatment (tiles, glow, veins, planet
+    // skin, territory contour and the opaque rock pieces) and just under the turn rim and the homes:
+    // the board's edge still reads as the board's edge, and the canopy and smoke still stand in front
+    // of the metal, as he asked for the rim. One layer, one frame per gold tile, nothing to double.
+    this.svg.insertBefore(this.layers.rich, turnRim ?? this.layers.homes);
     // THE ONE EXCEPTION (owner, 2026-11-14: "the tile below the home tile still covers the home
     // tile with its top fringe"): a tile below a home lays its grass fringe over the home's lower
     // edge. Its picture is drawn again just above the homes, clipped to the home's hex, so only the
@@ -472,14 +487,12 @@ export class DefaultArtBoardView extends BoardView {
     // The territory colour under the art fills its softened corners; the art itself is unclipped.
     el('path', { d: hexPath(key, S, 'flat'), fill: faBaseColour(owner), class: 'fa-tile-base' }, group);
     this.art(group, faTileSprite(this.fa, key, owner, false), x, y, cellScale(key), 'default-art-sprite');
-    // A gold tile keeps its frame over its own art (and under the stone) — but only on the outer
-    // ring (`frameKeys`, ui/goldframes.ts). NO `fa-spill` MASK (owner, 2026-11-14: "gold frames look
-    // like open arcs"): the traced spill outline is deliberately a little OUTSIDE the tree and the
-    // smoke, so masking with it deleted a band of the rim that no art covers — a rim with a bite out
-    // of it wherever a bonus hex touches a home. The home's own picture already stands above this
-    // layer (`l-homes` is drawn after `l-tiles`), so the canopy covers the rim by itself, exactly as
-    // it covers every other tile's art.
-    if (this.frameKeys.has(key)) drawGoldFrame(group, this.goldLooks, key, x, y, true, this.id(`gold-clip-tile-${key}`));
+    // NO GOLD FRAME HERE. There is exactly ONE frame per bonus hex, in the single `l-rich-frames`
+    // layer above every ground treatment (`afterSetup`), whether the hex is empty or occupied
+    // (owner, 2026-11-16). A second copy inside the tile used to be the "occupied" half of a
+    // two-layer scheme: it sat under the limb shade and the rocks, so an occupied gold hex wore a
+    // dimmer rim than an empty one, and any future offset between the two copies read as doubled
+    // metal. The stone is drawn last and the rim is a ring, so the two cannot collide.
     drawSeedStone(group, key, x, y, tile.strength, owner);
     return group;
   }

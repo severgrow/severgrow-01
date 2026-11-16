@@ -1,8 +1,11 @@
 // THE GOLD FRAME'S PAINT MUST STAY INSIDE ITS OWN HEX, WHATEVER LOOK IT WEARS (owner, 2026-11-15:
 // "before pushing test every gold tile rotation option - some of them are landing literally outside
-// the board"). A look is (design, 60-degree turn, mirror) = 24 of them, and because a frame is a
-// RIM that only ever sits on the board's outer ring, anything that leaves its hex also leaves the
-// board — that is what he saw.
+// the board"). A look is (design, 60-degree turn, mirror) = 24 of them.
+//
+// Every bonus hex wears a frame (owner, 2026-11-16), so this guard walks EVERY cell of the board,
+// the centre and the interior rings included — not just the rim. An interior frame is contained by
+// the same rule as an edge one: a frame that painted over a seam would cut into a neighbour's land
+// just as badly as one that painted past the board's silhouette.
 //
 // This is the guard for the GEOMETRY, measured the way the browser paints it: the frame's painted
 // outline (its atlas hexagon, plus the hand-painted art's measured overhang) is mapped through the
@@ -20,13 +23,11 @@ import { cornerPts, setBoardBulge } from '../src/ui/geom.js';
 import { setOrient, setRotation } from '../src/logic/orient.js';
 import { cellScale } from '../src/ui/geom.js';
 import { goldFrameFit, goldFrameSize, goldPaintedReach } from '../src/ui/goldframe-geometry.js';
-import { goldFrameCrop, goldLookMatrix, ringOf } from '../src/ui/goldframes.js';
+import { goldFrameCrop, goldLookMatrix } from '../src/ui/goldframes.js';
 import { GOLD_LOOK_COUNT, goldLookOfId } from '../src/ui/forestAsh.js';
 import type { GoldLook } from '../src/ui/forestAsh.js';
 
 const KEYS = boardCoords(DEFAULT_CONFIG).map(coordKey);
-/** The outer ring of the product board: the ONLY cells a frame may sit on (`goldFrameKeys`). */
-const OUTER = KEYS.filter((k) => ringOf(k) === 3);
 /** The frame's padded crop holds the art's hexagon at this fraction of its box (`drawGoldFrame`). */
 const PAD = 6;
 
@@ -80,7 +81,7 @@ const paintedOutline = (look: GoldLook, key: string, x: number, y: number, point
 /** The worst escape over all 24 looks, as a fraction of that cell's hex radius. */
 const worstEscape = (pointy: boolean): { over: number; key: string; look: number } => {
   let over = -Infinity, worstKey = '', worstLook = -1;
-  for (const key of OUTER) {
+  for (const key of KEYS) {
     const cell = cornerPts(key, 30) as Point[];
     const centre = cell.reduce((a, p) => [a[0] + p[0] / cell.length, a[1] + p[1] / cell.length] as Point, [0, 0] as Point);
     const radius = Math.max(...cell.map((p) => Math.hypot(p[0] - centre[0], p[1] - centre[1])));
@@ -95,7 +96,7 @@ const worstEscape = (pointy: boolean): { over: number; key: string; look: number
   return { over, key: worstKey, look: worstLook };
 };
 
-describe('a gold frame\'s paint, every look, every outer-ring cell', () => {
+describe('a gold frame\'s paint, every look, every cell of the board', () => {
   it('stays inside the cell on the flat board the 0.4 product draws', () => {
     setBoardBulge(null);
     setOrient('flat');
@@ -133,7 +134,7 @@ describe('a gold frame\'s paint, every look, every outer-ring cell', () => {
     setRotation(0);
     // The fit may only ever TRIM: on the flat product board the frame already fits (its paint
     // reaches ~84% of the hex radius along an edge against the cell's 87%), so nothing shrinks.
-    for (const key of OUTER) {
+    for (const key of KEYS) {
       const cell = cornerPts(key, 30) as Point[];
       const centre = cell.reduce((a, p) => [a[0] + p[0] / cell.length, a[1] + p[1] / cell.length] as Point, [0, 0] as Point);
       expect(goldFrameFit(cell, centre[0], centre[1], paintedRadius(key, 600))).toBe(1);

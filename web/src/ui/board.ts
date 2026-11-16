@@ -145,10 +145,11 @@ export class BoardView {
   /** Bonus terrain stays in engine state; this set only controls its visual crystals. */
   protected richKeys = new Set<string>();
   /**
-   * THE HEXES THAT MAY WEAR A GOLD FRAME: the board's outer ring only (`goldFrameKeys`,
-   * ui/goldframes.ts). Owner, 2026-11-14: "the bug with gold tile in middle - should never happen".
-   * `richKeys` is the engine terrain (the centre is always rich — spec 4.4) and stays the source
-   * for everything else; this set is the frame's own, and it can never contain an interior hex.
+   * THE HEXES THAT WEAR A GOLD FRAME: every bonus ("rich") hex on the board (`goldFrameKeys`,
+   * ui/goldframes.ts — owner, 2026-11-16: "every 'gold tile' is getting one of the gold tile
+   * frames"). `richKeys` is the engine terrain; this set is the frame's own, and on the product
+   * board the two are the same keys. The 2026-11-14 outer-ring restriction was a misreading of
+   * "the bug with gold tile in middle" and is gone.
    */
   protected frameKeys = new Set<string>();
   /**
@@ -324,8 +325,8 @@ export class BoardView {
     // THE BOARD AS A SMALL PLANET (0.75): the live game's board bends on the Territory globe's curve.
     setBoardBulge(FEATURES.space ? this.keys : null);
     this.richKeys = new Set(this.keys.filter(key => terrain[key] === 'rich'));
-    // A frame is a rim, so only the outer ring wears one — an interior bonus hex keeps its terrain
-    // and scores its 2, but never gets metal in the middle of the board (`goldFrameKeys`).
+    // EVERY bonus hex wears a frame (owner, 2026-11-16) — the centre included. A bonus hex scores
+    // 2, and the frame is the only mark that says so (`goldFrameKeys`).
     this.frameKeys = new Set(goldFrameKeys(this.keys, this.richKeys));
     // The board's own framed keys decide the frame looks (design, turn, mirror; neighbours never
     // repeat one). Built with the board, so every render of this board shows the same frames — and

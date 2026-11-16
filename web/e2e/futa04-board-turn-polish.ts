@@ -1077,11 +1077,17 @@ async function goldFrameVisuals() {
           hiddenUnderTile:!document.querySelector('#board .l-rich-frames .gold-frame.empty[data-key="0,0"]'),
           owners:owned.length,forest:!!forest,volcano:!!volcano,
           oldMarkers:document.querySelectorAll('#board .gold-crystals, #board .gold-crystal-bed, #board .gold-badge, #board .skin-gold').length,
-          // NEW ORDER (owner, 2026-11-14): the empty ground frames sit under the tile art, so a
-          // neighbour's spill covers them; the connected territory contour runs above those frames
-          // (and is itself cut by the spill mask). This is the intended paint order on this head.
-          goldUnderTiles:!!(document.querySelector('#board .l-rich-frames')!.compareDocumentPosition(document.querySelector('#board .l-tiles')!)&Node.DOCUMENT_POSITION_FOLLOWING),
-          contourAboveGold:!!(document.querySelector('#board .l-rich-frames')!.compareDocumentPosition(document.querySelector('#board .l-territory-contour')!)&Node.DOCUMENT_POSITION_FOLLOWING),
+          // NEW ORDER (owner, 2026-11-16: "every 'gold tile' is getting one of the gold tile frames"):
+          // ONE frame layer, placed ABOVE every ground treatment — the tile art, the connected
+          // territory contour, the planet skin's limb shade and the opaque rocks — and still below the
+          // homes, so the canopy covers a rim exactly as it always did. (It used to sit under the
+          // tiles; the contour and the rocks were above it, which is what dimmed and cut the rims the
+          // owner reported.)
+          goldAboveGround:['l-tiles','l-territory-contour','l-fa-rocks','l-planet-skin'].every(cls=>{
+            const other=document.querySelector('#board .'+cls);
+            return !other || !!(document.querySelector('#board .l-rich-frames')!.compareDocumentPosition(other)&Node.DOCUMENT_POSITION_PRECEDING);
+          }),
+          goldUnderHomes:!!(document.querySelector('#board .l-rich-frames')!.compareDocumentPosition(document.querySelector('#board .l-homes')!)&Node.DOCUMENT_POSITION_FOLLOWING),
           contourMasked:!!document.querySelector('#board .l-territory-contour')!.getAttribute('mask'),
           imageReady:atlas.naturalWidth===atlasW&&atlas.naturalHeight===atlasH,
           frameWidth:Number(art.getAttribute('width')),centers,
@@ -1092,14 +1098,14 @@ async function goldFrameVisuals() {
       check(visual.rich===rich.length && visual.empty===rich.length-2 && visual.hiddenUnderTile && visual.owners===2 &&
         visual.forest && visual.volcano && visual.oldMarkers===0 && visual.noInterception,
         `standard ${width}: frames mark empty and both occupied bonus tiles without old markers (${JSON.stringify(visual)})`);
-      check(visual.goldUnderTiles && visual.contourAboveGold && visual.contourMasked && visual.imageReady
+      check(visual.goldAboveGround && visual.goldUnderHomes && visual.contourMasked && visual.imageReady
         && Math.abs(visual.frameWidth-goldFrameSize().width)<.01 &&
         visual.centers.every(distance=>distance<4) && visual.strongerEmptyGlow &&
         // A look is (design, 60-degree turn, mirror): 24 of them over the atlas's two designs, so the
         // frame's number is now bounded by the look vocabulary, not by the two atlas boxes. The
         // designs, the frame box and the rim are unchanged (checked just above and below).
         visual.variants.every(variant=>variant>=0 && variant<GOLD_LOOK_COUNT),
-        `standard ${width}: the 5% trimmed deterministic rims sit under spills, inside their hexes (${JSON.stringify(visual)})`);
+        `standard ${width}: the 5% trimmed deterministic rims sit above the ground, inside their hexes (${JSON.stringify(visual)})`);
       await page.screenshot({path:`${dir}/${width}x${height}-gold-frame-standard.png`});
       await page.reload(); await resumeSavedGame(page); await idle(page);
       const reloaded = await page.locator('#board .l-rich-frames .gold-frame').evaluateAll(frames=>frames.map(frame=>Number(frame.getAttribute('data-variant'))));
