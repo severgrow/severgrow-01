@@ -147,15 +147,20 @@ export const adoptServerSkin = (saved: TerritoryId | null, issued: number): bool
 };
 
 /**
- * The territory set a claimed tile wears ON THE PLANET for THIS viewer (web/src/sphere/ground.ts
- * reads it as `claim.skin`, and `ownSkin` only fills a claim that has none). The admin sees every
- * owner's stored set, exactly as before. Every other player sees the product defaults, whatever any
- * account stored before the gate existed: their own tiles Forest (grass + tree), everyone else's Ash
- * (ash + volcano) — the same pair the board is pinned to above. `null` means "leave it to ground.ts"
- * and is what an admin with no stored set already got; a signed-out visitor's planet is untouched.
+ * The territory set a claimed tile wears ON THE PLANET, for every viewer (web/src/sphere/ground.ts
+ * reads it as `claim.skin`). OWNER RULE, 2026-11-16 ("random skins on all players tiles - should
+ * never happen"; asked, he chose "everyone sees chosen skins"): each player's land wears the skin THAT
+ * player chose, and plain colour when they chose none. The same for the admin, a signed-in player and
+ * a signed-out visitor. It replaces the 2026-11-15 rule (non-admins painted their own land Forest and
+ * everyone else's Ash). Applied inside the shared planet (sphere/planet.ts), so the Planet screen,
+ * the menu's planet, the finish card and challenges all follow it.
  */
-export const planetSkinFor = (ownerId: string, me: string | null, stored: TerritoryId | null | undefined): TerritoryId | null => {
-  if (isSkinPickerAdmin()) return stored ?? null;
-  if (!me) return stored ?? null;
-  return ownerId === me ? DEFAULT_SKIN.mine : DEFAULT_SKIN.theirs;
-};
+export const planetSkinFor = (_ownerId: string, _me: string | null, stored: TerritoryId | null | undefined): TerritoryId | null =>
+  stored && TERRITORY_IDS.includes(stored) ? stored : null;
+
+/**
+ * The viewer's OWN land, filled from this device when the server has no choice for it yet: only for the
+ * admin (the one who can pick), so a pick shows at once before it is saved. Everyone else's own land is
+ * never filled with the board's default: unchosen land is plain colour, exactly as on the live site.
+ */
+export const planetOwnSkin = (): TerritoryId | undefined => (isSkinPickerAdmin() ? current.mine : undefined);

@@ -71,7 +71,7 @@ const doc = { head: makeEl('head'), createElement: makeEl };
 vi.stubGlobal('document', doc);
 
 const { mountSkinSwitch, connectSkinSwitch } = await import('../src/online/skin-switch.js');
-const { DEFAULT_SKIN, planetSkinFor, skinChoice, skinPickerVisible } = await import('../src/ui/skinChoice.js');
+const { DEFAULT_SKIN, planetOwnSkin, planetSkinFor, skinChoice, skinPickerVisible } = await import('../src/ui/skinChoice.js');
 const { faSides } = await import('../src/ui/forestAsh.js');
 
 const ME = '11111111-1111-4111-8111-111111111111';
@@ -126,10 +126,38 @@ describe('the skin picker belongs to the admin account alone', () => {
     expect(skinChoice().mine, 'the stored server skin can never pull the board off Forest').toBe('forest');
   });
 
-  it('paints a non-admin\'s planet with Forest on their own tiles and Ash on everyone else\'s', () => {
+  // OWNER CHANGED THE RULE (2026-11-16: "random skins on all players tiles - should never happen";
+  // asked, he chose "everyone sees chosen skins"). The planet shows each player's CHOSEN skin to every
+  // viewer, and plain colour for a player who chose none. No Forest/Ash defaults on anyone's land.
+  // This replaces the 2026-11-15 rule (non-admins: own Forest, everyone else Ash).
+  it('paints every player\'s land in the skin THAT player chose, for every viewer', () => {
     signInAs('Cedar');
-    expect(planetSkinFor(ME, ME, 'water'), 'my own stored Water is ignored').toBe('forest');
-    expect(planetSkinFor('other-owner', ME, 'toxic'), 'their stored Toxic is ignored').toBe('ash');
-    expect(planetSkinFor('other-owner', ME, undefined), 'an owner with no stored set is Ash too').toBe('ash');
+    expect(planetSkinFor(ME, ME, 'water'), 'my own chosen Water').toBe('water');
+    expect(planetSkinFor('other-owner', ME, 'toxic'), 'their chosen Toxic').toBe('toxic');
+    expect(planetSkinFor('other-owner', ME, undefined), 'nobody chose: plain colour').toBeNull();
+    expect(planetSkinFor('other-owner', ME, null)).toBeNull();
+    signInAs('RYK');
+    expect(planetSkinFor('other-owner', ME, 'water'), 'the admin sees the same').toBe('water');
+    expect(planetSkinFor('other-owner', ME, undefined)).toBeNull();
+    signOut();
+    expect(planetSkinFor('other-owner', null, 'ash'), 'a signed-out visitor sees the same').toBe('ash');
+    expect(planetSkinFor('other-owner', null, undefined)).toBeNull();
+  });
+
+  it('fills only the ADMIN\'s own unchosen land from this device (a choice not yet saved); never anyone else\'s', () => {
+    signInAs('Cedar');
+    expect(planetOwnSkin(), 'a non-admin\'s own land is never filled with the board default').toBeUndefined();
+    signOut();
+    expect(planetOwnSkin()).toBeUndefined();
+    signInAs('RYK');
+    expect(planetOwnSkin(), 'the admin sees the pick he just made').toBe(skinChoice().mine);
+  });
+
+  it('is applied by the shared planet itself, so every planet view follows it', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../src/sphere/planet.ts', import.meta.url), 'utf8');
+    expect(src, 'claims pass through the rule inside the planet').toMatch(/planetSkinFor\(/);
+    expect(src, 'the own-land fill comes from the rule').toMatch(/planetOwnSkin\(\)/);
+    expect(src, 'no unconditional board-default fill').not.toMatch(/ownSkin:\s*faSides\(\)\[0\]/);
   });
 });
