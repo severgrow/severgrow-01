@@ -303,9 +303,9 @@ export type GoldFramePlacement = {
 };
 
 /**
- * The layout's bonus hexes that may wear a frame: the OUTER RING only (`goldFrameKeys`,
- * ui/goldframes.ts — owner, 2026-11-14: "the bug with gold tile in middle - should never happen").
- * The live board asks the same resolver with its own cells, so a replay and the game agree.
+ * The layout's bonus hexes: EVERY one of them wears a frame (`goldFrameKeys`, ui/goldframes.ts —
+ * owner, 2026-11-16: "every 'gold tile' is getting one of the gold tile frames"). The live board
+ * asks the same resolver with its own cells, so a replay and the game agree, the centre included.
  */
 export const goldFrameCells = (L: BoardLayout): typeof L.cells =>
   goldFrameKeys(L.cells.map((c) => c.key), L.cells.filter((c) => c.terrain === 'rich').map((c) => c.key))
@@ -326,9 +326,9 @@ export const goldVariantsOf = (L: BoardLayout): ReadonlyMap<string, GoldLook> =>
 };
 
 /**
- * Where the metal frames go: one per FRAMED cell (an outer-ring bonus hex), with the same size,
- * crop and turn as `ui/goldframes.ts` draws on the live board. Pure, so a test can hold it to the
- * board's geometry. The look only turns or mirrors the same hex-shaped box, so this placement never
+ * Where the metal frames go: one per framed cell (every bonus hex), with the same size, crop and
+ * turn as `ui/goldframes.ts` draws on the live board. Pure, so a test can hold it to the board's
+ * geometry. The look only turns or mirrors the same hex-shaped box, so this placement never
  * depends on it.
  */
 export const goldFramePlacements = (L: BoardLayout): GoldFramePlacement[] => {
@@ -434,7 +434,10 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
     }
   }
 
-  // 2. Empty gold frames lie on the ground, under any art that spills over them.
+  // 2. The gold frames are prepared here but PAINTED LAST but for the homes (step 4b): one frame per
+  //    bonus hex, over the ground, the tile art and the rocks, exactly as the live board's
+  //    `l-rich-frames` layer is placed (ui/defaultArtBoard.ts `afterSetup`). Under the rocks they
+  //    lost the sides a rock leans over, which read as an open arc (owner, 2026-11-16).
   const gold = picture(source?.gold ?? GOLD_FRAME_ATLAS);
   const frames = new Map(goldFramePlacements(L).map((f) => [f.key, f] as const));
   const frame = (key: string) => {
@@ -460,7 +463,6 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
     g.drawImage(gold, f.crop.x, f.crop.y, f.crop.w, f.crop.h, -f.w / 2, -f.h / 2, f.w, f.h);
     g.restore();
   };
-  for (const cell of rows) if ((!near || near.has(cell.key)) && cell.owner === null) frame(cell.key);
 
   // One upright sprite on a cell, overhang and all; a missing picture leaves the colour beneath.
   const sprite = (cell: BoardCell, s: FaSprite) => {
@@ -479,7 +481,9 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
     return true;
   };
 
-  // 3. Forest and Ash tiles, row by row, each with its gold frame (if any) and its stone.
+  // 3. Forest and Ash tiles, row by row, each with its stone. The frame is NOT drawn here: there is
+  //    one frame per bonus hex, painted after the rocks (step 4b), so an occupied gold tile and an
+  //    empty one wear the same rim in the same place.
   for (const cell of rows) {
     if ((near && !near.has(cell.key)) || cell.owner === null || cell.root) continue;
     const m = moving(cell);
@@ -489,7 +493,6 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
     g.fill();
     g.restore();
     sprite(cell, faTileSprite(fa, cell.key, cell.owner, false));
-    frame(cell.key);
     if (cell.strength > 0) {
       if (atlas) {
         // The same carved counter the board places, cropped from the same atlas, at the board's
@@ -515,6 +518,10 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
 
   // 4. Rocks cover everything but a home (owner, 2026-11-14).
   for (const cell of rows) if ((!near || near.has(cell.key)) && cell.terrain === 'rock') sprite(cell, faRockSprite(fa, cell.key));
+
+  // 4b. GOLD FRAMES last but for the homes: one per bonus hex, whatever its owner — the live
+  //     board's own order (ui/defaultArtBoard.ts `afterSetup`). Over the rocks, under the canopy.
+  for (const cell of rows) if (!near || near.has(cell.key)) frame(cell.key);
 
   // 5. The homes cover everything: the tree's canopy and the volcano's smoke reach over their
   //    neighbours. A ring, never a disc over the home: the root stays identifiable on the picture.

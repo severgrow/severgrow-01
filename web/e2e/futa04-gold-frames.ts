@@ -5,8 +5,20 @@
 // 24, not a sample, and it means measuring the RENDERED shape rather than re-checking the transform
 // maths on paper: for each look this suite maps the frame's own painted outline (read out of the
 // atlas's alpha channel, which is what actually gets painted) through the live CTM and holds it
-// inside the cell's own hexagon, on real OUTER-RING bonus hexes (the only cells a frame sits on, so
-// a frame that leaves its hex also leaves the board).
+// inside the cell's own hexagon.
+//
+// EVERY BONUS HEX WEARS ONE (owner, 2026-11-16: "every 'gold tile' is getting one of the gold tile
+// frames we prepared"), so the walk covers the board's interior as well as its rim: the centre and
+// the ring-2 pairs, whose frames are just as able to paint past a seam as an edge frame is.
+//
+// THE OUTLINE MUST BE CLOSED ALL THE WAY ROUND. A frame that is inside its hex can still READ as a
+// broken arc, because something painted ABOVE it covers part of the ring: on /test/ the planet
+// skin's limb shade (a 34% black radial on the board's edge) sat over the frame layer and cost the
+// metal about three quarters of its warmth, most of it on the side facing the board's silhouette —
+// which is the "gold tiles still an issue, see top right of the board" the owner reported. So for
+// every framed hex this suite measures the metal on each of the ring's six sides twice: as shipped,
+// and with every layer that is painted above the frame layer hidden. Every side must keep at least
+// KEPT of the metal it has with those layers gone. Nothing above the rim, no covered side, no arc.
 //
 // Two shapes of board matter and both are covered by the geometry: the 0.4 product draws a flat
 // lattice, and the 0.5 line (`CHANNEL=futa05`, what /test/ serves — `FEATURES.space`) bends every
@@ -21,6 +33,7 @@ import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { servePreview, closePreview } from './helpers/preview-port.js';
+import { decodePng, sideMetal } from './helpers/png.js';
 
 const DIR = process.env.SHOT_DIR ?? '/tmp/gold-frames';
 mkdirSync(DIR, { recursive: true });
@@ -32,6 +45,9 @@ const browser = await chromium.launch({
 });
 let checks = 0;
 const check = (value: unknown, name: string) => { assert(value, name); checks++; };
+
+/** The layers that must sit UNDER the gold frames (ui/defaultArtBoard.ts `afterSetup`). */
+const NEVER_ABOVE_THE_FRAMES = ['l-tiles', 'l-planet-skin', 'l-territory-contour', 'l-fa-rocks'];
 
 /** One page's worth of frame measurements: where each framed hex's frame sits, and its cell. */
 const measure = async (page: Page) => page.evaluate(() => {
@@ -46,6 +62,7 @@ const measure = async (page: Page) => page.evaluate(() => {
   return {
     href: frames[0]?.querySelector('image')?.getAttribute('href') ?? '',
     cells,
+    rich: [...document.querySelectorAll('#board .hex-cell.rich')].map((c) => c.getAttribute('data-key')!),
     frames: frames.map((f) => {
       const art = f.querySelector<SVGSVGElement>('.gold-frame-art')!;
       // the clip path is the cell's own hexagon (`hexPath(key, S)`), in BOARD units: map it through
@@ -62,6 +79,10 @@ const measure = async (page: Page) => page.evaluate(() => {
         x: Number(art.getAttribute('x')), y: Number(art.getAttribute('y')),
         w: Number(art.getAttribute('width')), h: Number(art.getAttribute('height')),
         viewBox: art.getAttribute('viewBox'),
+        // The look as the board drew it, so the 24-look walk can put it back afterwards: it rewrites
+        // the transform and the viewBox on the live nodes, and the pixel pass below must measure the
+        // frames as the game paints them, not as the last look left them.
+        transform: art.parentElement!.getAttribute('transform'),
       };
     }),
   };
@@ -131,7 +152,7 @@ const BOXES = [[10.21, 10.28, 600, 519.62], [630.16, 10.1, 600, 519.62]] as cons
 
 try {
   for (const [w, h] of [[320, 568], [390, 844], [430, 932], [1280, 800]] as const) {
-    for (const seed of [1, 5]) {
+    for (const seed of [1, 5, 10]) {
       const phone = w <= 600;
       const page = await browser.newPage({ viewport: { width: w, height: h }, hasTouch: phone, isMobile: phone });
       try {
@@ -143,7 +164,26 @@ try {
         await page.waitForFunction(() => document.querySelectorAll('#board .l-rich-frames .gold-frame').length >= 2, undefined, { timeout: 60_000 });
         await page.waitForTimeout(900);
         const world = await measure(page) as any;
-        check(world.frames.length >= 2, `${w}x${h} seed ${seed}: outer-ring bonus hexes wear frames`);
+        check(world.frames.length >= 2, `${w}x${h} seed ${seed}: bonus hexes wear frames`);
+        // EVERY bonus hex wears one (owner, 2026-11-16): the framed set IS the rich terrain, the
+        // centre and the interior pairs included — nothing double-scoring is left bare.
+        const richKeys = Object.keys(world.cells).filter((key) => world.rich?.includes(key));
+        check(richKeys.length >= 5, `${w}x${h} seed ${seed}: the board has its five bonus hexes (${richKeys.length})`);
+        check(richKeys.length === world.frames.length,
+          `${w}x${h} seed ${seed}: one frame per bonus hex (${world.frames.length} of ${richKeys.length})`);
+        const ring = (key: string) => {
+          const [q, r] = key.split(',').map(Number) as [number, number];
+          return (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
+        };
+        check(world.frames.some((f: any) => ring(f.key) === 0), `${w}x${h} seed ${seed}: the CENTRE bonus hex wears a frame`);
+        // Seed 10's board carries a mirrored bonus pair on ring 2 (see `gold-every-bonus.test.ts`);
+        // these are the interior hexes the old outer-ring rule left bare while they scored 2.
+        const hasRing2 = Object.keys(world.cells).some((k) => ring(k) === 2 && world.rich.includes(k));
+        if (hasRing2) check(world.frames.some((f: any) => ring(f.key) === 2), `${w}x${h} seed ${seed}: an INTERIOR (ring 2) bonus hex wears a frame`);
+
+        // (THE LAYER ORDER IS CHECKED after the pixel pass below: a covered side is the symptom,
+        // the DOM order is the cause.)
+
         const outlines = await atlasOutlines(page, world.href);
         const cellOf = world.cells as Record<string, number[][]>;
         const firstCell = cellOf[world.frames[0]!.key]!;
@@ -204,13 +244,72 @@ try {
           }
         }
         console.log(`${w}x${h} seed ${seed}: ${world.frames.length} framed hexes, 24 looks each, worst ${(worstLook * 100).toFixed(2)}% (negative = inside the hex)`);
+
+        // Put every frame back the way the board drew it (the look walk rewrote transform/viewBox).
+        await page.evaluate((frames) => {
+          for (const f of frames) {
+            const art = document.querySelector<SVGSVGElement>(`#board .l-rich-frames .gold-frame[data-key="${f.key}"] .gold-frame-art`)!;
+            const turned = art.parentElement as unknown as SVGGElement;
+            if (f.transform) turned.setAttribute('transform', f.transform); else turned.removeAttribute('transform');
+            art.setAttribute('viewBox', f.viewBox!);
+          }
+        }, world.frames);
+        await page.waitForTimeout(150);
+
+        // ---- THE OUTLINE IS CLOSED ALL THE WAY ROUND -------------------------------------------------
+        // Six sides to a rim, and every one of them has to carry its metal. A rim whose art is
+        // complete reads the same on all six sides (the atlas lights each bevel, and a side's
+        // strongest warm pixel is what survives any tilt); a side that something has covered or cut
+        // away drops out. Measured on a real screenshot, per side, against the frame's OWN median
+        // side — so the check needs no reference render and survives palette and art changes.
+        const geometry = world.frames.map((f: any) => {
+          const pts = f.cellPts as number[][];
+          const cx = pts.reduce((a, p) => a + p[0]!, 0) / 6;
+          const cy = pts.reduce((a, p) => a + p[1]!, 0) / 6;
+          const radius = Math.min(...pts.map(([x, y]) => Math.hypot(x! - cx, y! - cy)));
+          return { key: f.key as string, cx, cy, radius };
+        });
+        const shipped = decodePng(await page.screenshot({ path: `${DIR}/${w}x${h}-seed${seed}-sides.png` }));
+        let worstSide = Infinity;
+        for (const hex of geometry) {
+          const sides = Array.from({ length: 6 }, (_, side) =>
+            sideMetal(shipped, hex.cx, hex.cy, hex.radius, side * 60, side * 60 + 60));
+          const sorted = [...sides].sort((a, b) => a - b);
+          const median = (sorted[2]! + sorted[3]!) / 2;
+          sides.forEach((metal, side) => {
+            const kept = metal / Math.max(1, median);
+            check(metal >= 18 && kept >= 0.55,
+              `${w}x${h} seed ${seed} ${hex.key}: side ${side} (${side * 60}-${side * 60 + 60} deg) carries ${metal} warmth, ${(kept * 100).toFixed(0)}% of this rim's median ${median.toFixed(0)} — the outline must be closed all the way round`);
+            worstSide = Math.min(worstSide, kept);
+          });
+        }
+        console.log(`${w}x${h} seed ${seed}: every side of every rim carries its metal (worst ${(worstSide * 100).toFixed(0)}% of that rim's median)`);
+
+        // THE CAUSE: nothing that paints over a frame may sit above the frame layer (the planet
+        // skin's limb shade, the tile art and the opaque rocks all used to, and each of them eats a
+        // rim). This is the check that holds the layering itself, so it cannot drift back.
+        const order = await page.evaluate((under) => {
+          const board = document.querySelector('#board')!;
+          const frames = board.querySelector('.l-rich-frames');
+          if (!frames) return { ok: false, seen: 'no l-rich-frames' };
+          const seen: string[] = [];
+          for (const cls of under) {
+            const other = board.querySelector('.' + cls);
+            if (!other) continue;
+            // FOLLOWING means `other` is painted after the frames — that would cover them.
+            if (frames.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING) seen.push(cls);
+          }
+          return { ok: seen.length === 0, seen: seen.join(',') };
+        }, NEVER_ABOVE_THE_FRAMES);
+        check(order.ok, `${w}x${h} seed ${seed}: nothing paints over the frames (${order.seen})`);
+
         await page.screenshot({ path: `${DIR}/${w}x${h}-seed${seed}.png` });
       } finally {
         await page.close();
       }
     }
   }
-  console.log(`${checks} gold-frame checks passed (24 looks x ${4} viewports x 2 seeds, every framed hex)`);
+  console.log(`${checks} gold-frame checks passed (24 looks x 4 viewports x 3 seeds, every framed hex, every side of every rim)`);
 } finally {
   await browser.close();
   if (served) await closePreview(served.server);
