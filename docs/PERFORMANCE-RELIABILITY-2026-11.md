@@ -400,3 +400,25 @@ Still open (not small; see the release report):
 - The painted ground is 37 `<image>`s (one per cell, each its own patch of the painting); one picture
   for the whole board would not be pixel-identical (outer cells reuse inner patches) and needs owner
   sign-off.
+
+### Practice start against the live server (2026-11-16, evening)
+
+Real taps on futasaku.com/test/ against the live game server (Chromium, 390x844, a fresh profile per
+"new visitor"). Tap on a Practice difficulty -> game dealt:
+
+| Case | before (`9ea27c2e`) | after (`212b476f`) |
+| --- | --- | --- |
+| Easy, new visitor, taps at once | 0.4-9.4 s | 0.36 s |
+| Easy, returning, taps at once | 3.3 s | 0.37 s |
+| Easy, returning, 3 s on the menu | 3.4 s | 0.38 s |
+| Hard, new visitor, taps at once | 9.4 s | 0.35 s |
+| Hard, returning (either way) | 3.3-3.4 s | 0.36 s |
+
+Causes, each fixed: the live database refused Practice tickets for the rival bots 10-12 (migration 0027,
+applied 2026-11-16 and recorded in schema_migrations); a fresh device minted two guests at once
+(`bf8c3dca`); and the tap waited up to 3 s / 8 s for a ticket from a server whose write requests are at
+times slow or hang. Now a tap with no ticket deals at once and its proof names the deal
+(`513140b6`, `212b476f`): proved live, a dealt win paid 20 Seeds once and a resend answered
+`replayed: true`. seeds-settle's 'no ticket' scenario holds the line (ticket requests that never answer:
+old 3,334 ms and unpaid, new 431 ms and paid). Budget for future work: a Practice tap deals in under
+1.5 s with no ticket to be had.
