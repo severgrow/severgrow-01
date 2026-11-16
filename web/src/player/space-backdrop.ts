@@ -146,12 +146,19 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
     for (const a of anims) a.cancel();
     anims = [];
     if (!interfaceMotionAllowed()) { started = 0; return; }
-    anims = [[far, FAR], [near, 1]].map(([canvas, share]) => (canvas as HTMLCanvasElement).animate(
+    // Only the layers on screen slide. In game the near canvas is hidden (display:none); a slide on it
+    // shows nothing, yet Chromium cannot composite it and ticks it on the main thread: a style
+    // recalculation every frame while the player thinks (measured 2026-11-16, 4x CPU phone probe:
+    // 60 recalcs/s at idle, 1/s without it). Leaving the game repaints and restarts both layers.
+    const layers = ([[far, FAR], [near, 1]] as const).filter(([canvas]) => !canvas.hidden);
+    anims = layers.map(([canvas, share]) => (canvas as HTMLCanvasElement).animate(
       [0,.25,.5,.75,1].map(t => { const p = spacePath(t); return { offset: t, translate: `${-mx * (inGame ? 1 : share as number) * p.x}px ${my * (inGame ? 1 : share as number) * p.y}px` }; }),
       { duration: SLIDE_MS, easing: 'linear', fill: 'forwards' }));
     started = performance.now();
     if (held) for (const a of anims) a.pause();
-    anims[1]!.onfinish = () => {
+    const last = anims.at(-1);
+    if (!last) { started = 0; return; }
+    last.onfinish = () => {
       // One slide done: the next drawing is exactly one slide further on, so nothing jumps.
       base = { x: base.x + mx, y: base.y + my };
       pendingDraw = window.setTimeout(() => { pendingDraw = 0; if (seen() && !document.hidden) { paint(); slideOnce(); } }, 0);

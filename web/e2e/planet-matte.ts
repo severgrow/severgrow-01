@@ -247,6 +247,10 @@ try{
     return sky && (window as any).__severgrow.space()?.sliding && getComputedStyle(sky).translate!==before;
    },before,{timeout:10000});
    assert.equal(await p.locator('#space-backdrop > canvas:visible').count(),1,'gameplay composites one cached star layer');
+   // A slide on a hidden (display:none) star layer shows nothing but cannot go to the compositor:
+   // Chromium ticks it on the main thread, a style recalc every frame while the player thinks
+   // (measured 2026-11-16: 60 recalcs/s at idle, 1/s without it).
+   assert.equal(await p.evaluate(()=>[...document.querySelectorAll<HTMLCanvasElement>('#space-backdrop > canvas')].filter(c=>c.hidden).reduce((n,c)=>n+c.getAnimations().length,0)),0,'no slide runs on a hidden star layer');
    const rim=await p.locator('#board .planet-turn-line').getAttribute('d');
    await p.screenshot({path:`${shots}/duel-${width}.png`});
    console.log('Board contour',JSON.stringify({starts:(rim?.match(/M/g)||[]).length,closed:(rim?.match(/Z/g)||[]).length}));
