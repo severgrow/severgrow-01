@@ -247,6 +247,15 @@ try {
   console.log(`Planet skin orientation: ${patches.length} tiles, worst pair ${worstTurn} degrees, pictures correlate >= ${centreWorst.toFixed(2)}`);
   assert.deepEqual(failures, [], failures.join('; '));
 
+  // THE PICK REACHES THE PLANET (owner, 2026-11-16: "changing tile skin should change it on the planet
+  // too"). The world read here keeps answering Forest for my land, as a server does until it is read
+  // again, so only the pick itself can repaint it. Sampled from the drawn buffer at my tiles' centres.
+  const myPatch = async () => page.evaluate((ids: string[]) => {
+    const store = (window as any).__planetPixels;
+    const pts = ids.map((id) => store.cells[id]).filter(Boolean) as { x: number; y: number }[];
+    return (window as any).__planetSample(pts) as [number, number, number][];
+  }, mine);
+  const before = await myPatch();
   await page.locator('#online-world-menu').click();
   await page.locator('#world-key-colour').click();
   const picker = page.locator('#world-skin-switch');
@@ -256,6 +265,15 @@ try {
   await page.waitForFunction(() => document.querySelector('#world-skin-switch button[data-field="mine"][data-value="water"]')?.getAttribute('aria-pressed') === 'true');
   await page.waitForTimeout(150);
   assert.deepEqual(posts, ['water']);
+  const frames = await page.evaluate(() => (window as any).__severgrow.planet().frames as number);
+  await page.keyboard.press('Escape');
+  await page.waitForFunction((n) => (window as any).__severgrow.planet().frames > n, frames, { timeout: 10000 });
+  await page.waitForTimeout(300);
+  const after = await myPatch();
+  const moved = after.map((c, i) => Math.abs(c[0] - before[i]![0]) + Math.abs(c[1] - before[i]![1]) + Math.abs(c[2] - before[i]![2]));
+  const repainted = moved.filter((d) => d > 60).length;
+  console.log(`Planet skins: after picking Water, ${repainted} of ${moved.length} of my tiles repainted (${moved.join(',')})`);
+  assert.ok(repainted >= Math.ceil(moved.length * 0.7), `picking Water must repaint my land on the planet at once: ${moved.join(',')}`);
   assert.deepEqual(errors, []);
   console.log('Planet skins: four public sets, older plain claim, authenticated picker POST, no page errors');
 } finally {

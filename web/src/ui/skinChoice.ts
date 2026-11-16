@@ -164,3 +164,13 @@ export const planetSkinFor = (_ownerId: string, _me: string | null, stored: Terr
  * never filled with the board's default: unchosen land is plain colour, exactly as on the live site.
  */
 export const planetOwnSkin = (): TerritoryId | undefined => (isSkinPickerAdmin() ? current.mine : undefined);
+
+/**
+ * The set one claimed tile wears on the planet. The admin's OWN land wears the pick on this device, so a
+ * tap on the planet's skin pane shows on the planet at once (owner, 2026-11-16), not after the save has
+ * gone round the server and the world has been read again; every other tile follows `planetSkinFor`.
+ */
+export const planetClaimSkin = (ownerId: string, me: string | null, stored: TerritoryId | null | undefined): TerritoryId | null => {
+  const own = me !== null && ownerId === me ? planetOwnSkin() : undefined;
+  return own ?? planetSkinFor(ownerId, me, stored);
+};

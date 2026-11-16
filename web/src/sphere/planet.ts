@@ -19,7 +19,7 @@ import { isDoubleTap, type TapPoint } from '../logic/double-tap.js';
 import { markPlanetPainted } from '../player/startup.js';
 import { uprightTarget,northUpDrag,rolledDrag,NORTH_PITCH_LIMIT,coastGain,coastStep } from './upright.js';
 import { faPlanetAllUrl } from '../ui/forestAsh.js';
-import { planetOwnSkin, planetSkinFor } from '../ui/skinChoice.js';
+import { onSkinChoice, planetClaimSkin, planetOwnSkin } from '../ui/skinChoice.js';
 import { tileFace } from './tile-face.js';
 import { menuDiscRadius } from '../player/planet-lockup.js';
 import { claimSpace, DRIFT_PX_PER_MS, DRIFT_Y_SHARE, freeSpace, spaceDrift } from './space.js';
@@ -688,7 +688,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
 
   initialise();
 
-  return {
+  const handle = {
     /** Fresh Territory data. Re-uploads tile looks only when something drawn actually changed. */
     update(next: PlanetInput) {
       input = next;
@@ -696,7 +696,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       const disputes = [...(next.disputes ?? [])];
       // ONE SKIN RULE FOR EVERY PLANET VIEW (ui/skinChoice.ts): each player's chosen skin, else plain.
       const ownSkin = planetOwnSkin();
-      const claims = next.claims.map((c) => ({ ...c, skin: planetSkinFor(c.ownerId, next.me ?? null, c.skin) }));
+      const claims = next.claims.map((c) => ({ ...c, skin: planetClaimSkin(c.ownerId, next.me ?? null, c.skin) }));
       const sig = `${next.me}|${ownSkin ?? ''}|${next.growAnywhere ? 1 : 0}|${next.cells.length}|${claims.map((c) => `${c.cellId}:${c.ownerId}:${c.colour}:${c.skin ?? ''}`).join(',')}|${fog.length}|${disputes.join(',')}`;
       const index = next.selected ? map.cellOf.get(next.selected) ?? null : null;
       // A REFRESH THAT CHANGES NOTHING DRAWS NOTHING: Territory re-sends the same world on every
@@ -778,7 +778,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     dispose() {
       if (disposed) return;
       disposed = true;
-      offGate();
+      offGate(); offSkin();
       abort.abort(); observer.disconnect(); cancelDrift();cancelAnimationFrame(raf); raf = 0;
       if (renderer) renderer.dispose(true);
       // The sky goes back to the space backdrop, which carries on from the planet's last stars.
@@ -805,4 +805,9 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       },
     }),
   };
+  // A PICK IS ON THE PLANET AT ONCE (owner, 2026-11-16: "changing tile skin should change it on the
+  // planet too"). The skin pane announces each pick; the planet redraws its own land from the input it
+  // already has. Nothing is fetched and nothing runs between picks; the signature skips a repeat.
+  const offSkin = onSkinChoice(() => { if (input && !disposed) handle.update(input); });
+  return handle;
 };

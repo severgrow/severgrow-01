@@ -71,7 +71,7 @@ const doc = { head: makeEl('head'), createElement: makeEl };
 vi.stubGlobal('document', doc);
 
 const { mountSkinSwitch, connectSkinSwitch } = await import('../src/online/skin-switch.js');
-const { DEFAULT_SKIN, planetOwnSkin, planetSkinFor, skinChoice, skinPickerVisible } = await import('../src/ui/skinChoice.js');
+const { DEFAULT_SKIN, chooseSkin, planetClaimSkin, planetOwnSkin, planetSkinFor, skinChoice, skinPickerVisible } = await import('../src/ui/skinChoice.js');
 const { faSides } = await import('../src/ui/forestAsh.js');
 
 const ME = '11111111-1111-4111-8111-111111111111';
@@ -153,10 +153,23 @@ describe('the skin picker belongs to the admin account alone', () => {
     expect(planetOwnSkin(), 'the admin sees the pick he just made').toBe(skinChoice().mine);
   });
 
+  it('the admin\'s pick wins over the skin stored for his own land, so the planet shows it at once', () => {
+    signInAs('RYK');
+    chooseSkin({ mine: 'toxic' });
+    expect(planetClaimSkin(ME, ME, 'water'), 'his own tile wears the pick, not the stored Water').toBe('toxic');
+    expect(planetClaimSkin('other-owner', ME, 'water'), 'someone else\'s tile keeps their own').toBe('water');
+    expect(planetClaimSkin('other-owner', ME, undefined)).toBeNull();
+    signInAs('Cedar');
+    expect(planetClaimSkin(ME, ME, 'water'), 'a non-admin\'s own land shows what is stored').toBe('water');
+    expect(planetClaimSkin(ME, ME, undefined), 'and plain colour when nothing is').toBeNull();
+    signOut();
+  });
+
   it('is applied by the shared planet itself, so every planet view follows it', async () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync(new URL('../src/sphere/planet.ts', import.meta.url), 'utf8');
-    expect(src, 'claims pass through the rule inside the planet').toMatch(/planetSkinFor\(/);
+    expect(src, 'claims pass through the rule inside the planet').toMatch(/planetClaimSkin\(/);
+    expect(src, 'a pick repaints the planet').toMatch(/onSkinChoice\(/);
     expect(src, 'the own-land fill comes from the rule').toMatch(/planetOwnSkin\(\)/);
     expect(src, 'no unconditional board-default fill').not.toMatch(/ownSkin:\s*faSides\(\)\[0\]/);
   });
