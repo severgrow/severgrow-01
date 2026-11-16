@@ -267,3 +267,31 @@ describe('a stranded proof drains on the next app start', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 });
+
+// ONE GUEST PER DEVICE, EVEN WITH TWO IDENTITY STORES (2026-11-16, measured on /test against the live
+// server: a fresh device sent TWO `POST /v1/guests` within 250 ms at boot, the Seeds settle's store and
+// the lobby's store each minting its own; the second overwrote the first, and while the server held
+// those requests the first Practice tap waited 9.3 s). A second store waits for the mint already on its
+// way and takes the identity it stored.
+describe('two identity stores on one device', () => {
+  it('mint ONE guest between them, and both get it', async () => {
+    const store = storage();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const slowFetch: FetchLike = async (url, init) => { await gate; return fetchImpl(url, init); };
+    const a = createIdentityStore({ client: new DuelClient({ baseUrl: API, storage: store, fetch: slowFetch, testTraffic: false }), storage: store });
+    const b = createIdentityStore({ client: new DuelClient({ baseUrl: API, storage: store, fetch: slowFetch, testTraffic: false }), storage: store });
+    const first = a.ensure(), second = b.ensure();
+    release();
+    const [ra, rb] = await Promise.all([first, second]);
+    expect(calls.filter((c) => c.path.endsWith('/v1/guests')), 'one guest request for the device').toHaveLength(1);
+    expect(ra.ok && rb.ok).toBe(true);
+    if (ra.ok && rb.ok) expect(rb.identity.playerId).toBe(ra.identity.playerId);
+  });
+  it('a store on ANOTHER storage still mints its own (separate devices are not merged)', async () => {
+    const a = createIdentityStore({ client: new DuelClient({ baseUrl: API, storage: storage(), fetch: fetchImpl, testTraffic: false }), storage: storage() });
+    const b = createIdentityStore({ client: new DuelClient({ baseUrl: API, storage: storage(), fetch: fetchImpl, testTraffic: false }), storage: storage() });
+    await Promise.all([a.ensure(), b.ensure()]);
+    expect(calls.filter((c) => c.path.endsWith('/v1/guests'))).toHaveLength(2);
+  });
+});

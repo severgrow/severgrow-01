@@ -94,6 +94,10 @@ export const storedDisplayName = (playerId: string): string | null => {
   }
 };
 
+/** Guest mints in flight, per device storage (shared by every identity store on it). */
+const deviceMints = new Map<unknown, Promise<IdentityStatus>>();
+const deviceSlot = (storage: KeyValue | null): unknown => (storage ? storage.backing ?? storage : null);
+
 export const createIdentityStore = (options: {
   client: DuelClient;
   storage?: KeyValue | null;
@@ -180,10 +184,22 @@ export const createIdentityStore = (options: {
   let minting: Promise<IdentityStatus> | null = null;
   const mintGuest = (): Promise<IdentityStatus> => {
     if (minting) return minting;
-    const inFlight = createGuest();
+    // ANOTHER STORE ON THE SAME DEVICE STORAGE may already be minting (the Seeds settle and the lobby
+    // each keep a store; measured 2026-11-16: two guests POSTed within 250 ms on a fresh device, the
+    // second overwriting the first). Wait for that one and take what it stored.
+    const slot = deviceSlot(storage);
+    const other = slot ? deviceMints.get(slot) : undefined;
+    const inFlight = other
+      ? other.then(() => {
+        const stored = peek();
+        return stored ? { ok: true as const, identity: stored } : createGuest();
+      })
+      : createGuest();
     minting = inFlight;
+    if (slot && !other) deviceMints.set(slot, inFlight);
     void inFlight.finally(() => {
       if (minting === inFlight) minting = null;
+      if (slot && deviceMints.get(slot) === inFlight) deviceMints.delete(slot);
     });
     return inFlight;
   };

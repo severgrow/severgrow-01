@@ -71,6 +71,8 @@ export type KeyValue = {
   get(key: string): string | null;
   set(key: string, value: string): void;
   remove(key: string): void;
+  /** The storage this adapter wraps, when several adapters share one (each `browserStorage()` call). */
+  readonly backing?: unknown;
 };
 
 /** The browser's localStorage, adapted to `KeyValue`, or null when unavailable. */
@@ -86,7 +88,7 @@ export const browserStorage = (): KeyValue | null => {
   } catch {
     return null;
   }
-  return { get: (k) => ls.getItem(k), set: (k, v) => ls.setItem(k, v), remove: (k) => ls.removeItem(k) };
+  return { get: (k) => ls.getItem(k), set: (k, v) => ls.setItem(k, v), remove: (k) => ls.removeItem(k), backing: ls };
 };
 
 export class DuelError extends Error {
