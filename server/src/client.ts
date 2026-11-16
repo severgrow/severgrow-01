@@ -75,18 +75,27 @@ export type KeyValue = {
   readonly backing?: unknown;
 };
 
+/** The localStorage that passed the write probe (see browserStorage). */
+let probedStorage: unknown = null;
+
 /** The browser's localStorage, adapted to `KeyValue`, or null when unavailable. */
 export const browserStorage = (): KeyValue | null => {
   const ls = (globalThis as {
     localStorage?: { getItem(k: string): string | null; setItem(k: string, v: string): void; removeItem(k: string): void };
   }).localStorage;
   if (!ls) return null;
-  try {
-    const probe = '__severgrow_probe__';
-    ls.setItem(probe, '1');
-    ls.removeItem(probe);
-  } catch {
-    return null;
+  // ONCE PER PAGE (2026-11-16): every probe write fires a `storage` event in each other open tab of the
+  // game, and this is called all over the app. Whether this page may write does not change call to
+  // call, so a storage that passed is remembered; a blocked one is asked again (it costs no event).
+  if (probedStorage !== ls) {
+    try {
+      const probe = '__severgrow_probe__';
+      ls.setItem(probe, '1');
+      ls.removeItem(probe);
+    } catch {
+      return null;
+    }
+    probedStorage = ls;
   }
   return { get: (k) => ls.getItem(k), set: (k, v) => ls.setItem(k, v), remove: (k) => ls.removeItem(k), backing: ls };
 };
