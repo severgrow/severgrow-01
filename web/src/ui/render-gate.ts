@@ -23,6 +23,22 @@ export const VEIL_SELECTORS = [
 ] as const;
 
 const QUERY = VEIL_SELECTORS.join(',');
+/** The same surfaces whether hidden or not: what a `hidden` toggle must touch to move a veil. */
+const ANY_VEIL = VEIL_SELECTORS.map((s) => s.replace(':not([hidden])', '')).join(',');
+
+/**
+ * Can these `hidden` toggles have shown or hidden a veil? Only if one of them is a veil or holds one:
+ * toggling something inside a veil, or beside it, cannot change whether the veil has a box. Pure, so
+ * the rule is tested without a browser. Selector matching only; it never reads layout.
+ */
+export const hiddenChangeMayMoveVeil = (targets: Iterable<Node>): boolean => {
+  for (const t of targets) {
+    if (t.nodeType !== 1) continue;
+    const el = t as Element;
+    try { if (el.matches(ANY_VEIL) || el.querySelector(ANY_VEIL)) return true; } catch { return true; }
+  }
+  return false;
+};
 
 type Doc = Pick<Document, 'querySelectorAll'> & { documentElement?: { classList: { toggle: (c: string, on: boolean) => unknown } } };
 
@@ -82,9 +98,13 @@ export const mountBackdropGate = (): void => {
   addEventListener('pageshow', () => refreshBackdropGate());
   // Every veil in this app is shown and hidden with the `hidden` attribute, so one observer covers
   // surfaces that do not go through main.ts's `syncVeil` (the install invitation, the lobby's own
-  // windows). Attribute-only, `hidden`-only: a cheap, rare event, never a per-frame cost.
+  // windows). Attribute-only, `hidden`-only. A move toggles `hidden` on many small things in the
+  // game; only a toggle on or around a veil re-reads the veils' boxes, which forces a layout
+  // (measured 2026-11-16: 49 ms of a Draw move at 4x CPU went to those reads).
   if (document.body) {
-    new MutationObserver(() => refreshBackdropGate()).observe(document.body, {
+    new MutationObserver((records) => {
+      if (hiddenChangeMayMoveVeil(records.map((r) => r.target))) refreshBackdropGate();
+    }).observe(document.body, {
       attributes: true, attributeFilter: ['hidden'], subtree: true,
     });
   }

@@ -15,7 +15,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { VEIL_SELECTORS, backdropHeld, refreshBackdropGate, veilCovering } from '../src/ui/render-gate.js';
+import { VEIL_SELECTORS, backdropHeld, hiddenChangeMayMoveVeil, refreshBackdropGate, veilCovering } from '../src/ui/render-gate.js';
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 
@@ -61,6 +61,34 @@ describe('the veil gate', () => {
       documentElement: { classList: { toggle: () => undefined } },
     } as unknown as Document);
     expect(backdropHeld()).toBe(false);
+  });
+});
+
+describe('the gate re-reads layout only when a veil can have moved', () => {
+  // Every veil is shown and hidden with the `hidden` attribute, so a veil's visibility changes only
+  // when the veil itself, or an element around it, is toggled. A move toggles `hidden` on many small
+  // things inside the game; re-reading the veils' boxes for each forced a layout mid-move (measured
+  // 2026-11-16: 49 ms of a Draw move at 4x CPU). Those toggles must not reach the layout read.
+  const el = (self: boolean, inside: boolean) => ({
+    nodeType: 1,
+    matches: () => self,
+    querySelector: () => (inside ? {} : null),
+  }) as unknown as Node;
+  it('a veil toggled itself counts', () => {
+    expect(hiddenChangeMayMoveVeil([el(true, false)])).toBe(true);
+  });
+  it('a wrapper around a veil counts (the install invitation hides its wrapper)', () => {
+    expect(hiddenChangeMayMoveVeil([el(false, true)])).toBe(true);
+  });
+  it('a toggle with no veil in or around it does not', () => {
+    expect(hiddenChangeMayMoveVeil([el(false, false), el(false, false)])).toBe(false);
+    expect(hiddenChangeMayMoveVeil([{ nodeType: 3 } as Node])).toBe(false);
+  });
+  it('matches every veil the gate reads, unhidden or not', () => {
+    const seen: string[] = [];
+    hiddenChangeMayMoveVeil([{ nodeType: 1, matches: (q: string) => { seen.push(q); return false; }, querySelector: () => null } as unknown as Node]);
+    for (const sel of VEIL_SELECTORS) expect(seen[0]).toContain(sel.replace(':not([hidden])', ''));
+    expect(seen[0]).not.toContain(':not([hidden])');
   });
 });
 
