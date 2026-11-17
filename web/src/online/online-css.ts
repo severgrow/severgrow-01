@@ -705,6 +705,8 @@ html.slim-hud .game > .hud:has(> .live-pill:not([hidden])) + .duel-hud { padding
 .world-signin-prompt { min-height:44px; padding:0 8px; border:0; background:transparent; color:inherit; font:inherit; letter-spacing:inherit; text-transform:inherit; cursor:pointer; pointer-events:auto; touch-action:manipulation; }
 .world-signin-prompt:focus-visible { outline:2px solid var(--instrument-selection,#f2e5c5); outline-offset:2px; border-radius:8px; }
 .world-selection .world-claim-button.world-signin-prompt { flex:1; width:auto; min-width:0; padding:0 8px; background:none; box-shadow:none; }
+/* The words ARE the key (owner, 2026-11-17: "sign in to grow broken"): no square icon frame in the middle of them. */
+.world-key.world-signin-prompt::before { content:none; }
 .world-selection-line[hidden] { display:none; }
 @keyframes world-bar-in { from { opacity: 0; translate: -50% 4px; } to { opacity: 1; translate: -50% 0; } }
 /* THE TILE BAR'S KEYS (owner, 2026-11-01: "grow a tile/challenge/sell a tile/see profile etc in

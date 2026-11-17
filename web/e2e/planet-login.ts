@@ -40,6 +40,8 @@ try{
   const key=p.locator('#online-world-selection .world-signin-prompt');
   await key.waitFor({state:'visible'});assert.equal(await key.textContent(),ONLINE.worldSignInToGrow);
   assert.equal(await key.evaluate(e=>e.tagName),'BUTTON');assert((await key.boundingBox())!.height>=44);
+  // no square icon frame drawn over the words (owner, 2026-11-17: "sign in to grow broken")
+  assert.equal(await key.evaluate(e=>getComputedStyle(e,'::before').content),'none','the sign-in key draws no icon frame over its words');
   await p.waitForTimeout(220);
   await p.screenshot({path:`${out}/prompt-${width}.png`});
   await key.click();await p.locator('#acct-email:not([hidden])').waitFor({state:'visible'});
