@@ -120,8 +120,11 @@ describe('the real-time bolt (owner, 2026-10-15): one icon, no words on screen',
     expect(uiSource).not.toContain("el('span', 'cancel'");
   });
 
-  it('outline when not possible, filled and glowing when the opponent is here', () => {
-    expect(uiSource).toMatch(/\.live-pill:is\(\[data-state='away'\], \[data-state='disabled'\]\)/);
-    expect(uiSource).toMatch(/\[data-state='ready'\][^{]*\{[^}]*fill:#f2dfb0;[^}]*drop-shadow/s);
+  // OWNER RULE CHANGE (2026-11-17): the bolt is the presence signal in every online game — filled and
+  // glowing when the opponent is here, empty when they are offline (online/live/bolt.ts). It used to be
+  // "outline when a live duel is not possible", which emptied it for an opponent who was online.
+  it('empty when the opponent is offline, filled and glowing when the opponent is here', () => {
+    expect(uiSource).toMatch(/\.live-pill\[data-presence='offline'\] \{ opacity:\.6; \}/);
+    expect(uiSource).toMatch(/\[data-presence='online'\] svg path \{[^}]*fill:#f2dfb0;[^}]*drop-shadow/s);
   });
 });

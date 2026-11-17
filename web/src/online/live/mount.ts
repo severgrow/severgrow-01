@@ -1,3 +1,4 @@
+import { boltLook } from './bolt.js';
 import { publishOpponentStatus } from './opponent-status.js';
 // Live duels — the client controller, mounted once from main.ts (only when online is enabled and an
 // identity exists on this device). It reads the page through `window.__severgrow` (read-only test
@@ -345,6 +346,8 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     return { kind: 'ready', name, secs: Math.round(s.limitMs / 1000) };
   };
 
+  /** The open match whose status could not be read (the bolt still shows, empty). */
+  let statusFailedFor: string | null = null;
   const presentation: {at:number;kind:PillModel['kind'];matchId:string|null}[] = [];
   const paint = () => {
     const s = status && status.matchId === currentMatchId() ? status : null;
@@ -353,7 +356,8 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     // The opponent may leave, the invite may be started elsewhere, or their own invitation may
     // arrive: the confirmation stands down rather than showing a decision that is no longer real.
     if (model.kind !== 'ready' && confirm?.isOpen()) confirm.hide();
-    pill.render(model);
+    const m = currentMatchId();
+    pill.render(model, m ? boltLook(s, statusFailedFor === m) : 'hidden');
     const last = presentation.at(-1);
     if (last?.kind !== model.kind || last?.matchId !== (s?.matchId ?? null)) {
       presentation.push({at:Date.now(),kind:model.kind,matchId:s?.matchId??null});
@@ -438,6 +442,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
           const next = await api.status(m);
           if (currentMatchId() !== m || readIdentity()?.token !== token) { refreshAgain = true; continue; }
           publishOpponentStatus(m, next);
+          if (statusFailedFor === m) statusFailedFor = null;
           offset = next.serverNow - Date.now();
           status = next;
           statusFor = m;
@@ -458,7 +463,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
             center?.noteLive(m);
           }
         } catch {
-          if (currentMatchId() === m && readIdentity()?.token === token) publishOpponentStatus(m, null);
+          if (currentMatchId() === m && readIdentity()?.token === token) { publishOpponentStatus(m, null); statusFailedFor = m; }
           /* quiet: the next poll tries again */
         }
         paint();

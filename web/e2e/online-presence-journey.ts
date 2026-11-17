@@ -126,6 +126,8 @@ try {
     // Blitz control".
     assert(!(await p.locator('[data-duel-presence]').isVisible()), 'the header paints no presence word or dot');
     assert(await p.locator('[data-live="pill"]').isVisible(), 'the presence-aware bolt is shown');
+    // The bolt IS the presence signal (owner, 2026-11-17): filled while the opponent is here.
+    assert.equal(await p.locator('[data-live="pill"]').getAttribute('data-presence'), 'online', 'the bolt is filled for an online opponent');
   }
   // Model a phone returning after its heartbeat expired. No chat or gameplay action may be
   // needed to repair either device's indicators. Only test-local guest presence is altered.
@@ -136,6 +138,9 @@ try {
   await liveStore.setPresence(phoneId, 'in_match', matchId, Date.now() - 120000);
   send(`player:${desktopId}`, 'challenge', { kind: 'presence' });
   await desktop.waitForFunction(() => (window as any).__futasakuLive?.().status?.opponent.presence === 'offline', undefined, { polling: 100 });
+  // ...and empty (still shown) while the opponent is away.
+  await desktop.waitForFunction(() => document.querySelector('[data-live="pill"]')?.getAttribute('data-presence') === 'offline', undefined, { polling: 100, timeout: 5000 });
+  assert(await desktop.locator('[data-live="pill"]').isVisible(), 'the bolt stays on screen, empty, for an offline opponent');
   await phone.context().setOffline(false);
   await Promise.all([waitOnline(desktop), waitOnline(phone)]);
   for (const p of pages) {

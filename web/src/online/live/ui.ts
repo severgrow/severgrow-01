@@ -1,5 +1,6 @@
 // Live duels — the DOM pieces. Same dark glass, moss and lava, same fonts; no new visual language.
 // Everything is created here and appended to existing containers; no shared markup is edited.
+import type { BoltLook } from './bolt.js';
 import { LIVE } from '../../../../src/strings.js';
 import { glassBaseCss } from '../../player/glass-surface.js';
 import type { ChallengeWire } from './api.js';
@@ -97,8 +98,10 @@ ${WAIT_DOTS_CSS}
 html.slim-hud .game > .hud > .live-pill { grid-column:2; grid-row:1; justify-self:start; align-self:center; z-index:1; }
 .live-pill svg { width:24px; height:24px; overflow:visible; }
 .live-pill svg path { fill:transparent; stroke:currentColor; stroke-width:1.5; stroke-linejoin:round; transition:fill .3s ease, filter .3s ease, opacity .3s ease; }
-.live-pill:is([data-state='away'], [data-state='disabled']) { opacity:.6; cursor:default; }
-.live-pill:is([data-state='ready'], [data-state='waiting'], [data-state='live']) svg path {
+/* The look is the opponent's presence (online/live/bolt.ts): filled = here, empty and dimmed = offline. */
+.live-pill:is([data-state='away'], [data-state='disabled'], [data-state='hidden']) { cursor:default; }
+.live-pill[data-presence='offline'] { opacity:.6; }
+.live-pill[data-presence='online'] svg path {
   fill:#f2dfb0; stroke:#f6e6bd; filter:drop-shadow(0 0 3px rgba(242,214,140,.55)) drop-shadow(0 0 8px rgba(242,200,110,.28)); }
 .live-pill[data-state='live'] { cursor:default; }
 .live-pill[data-state='waiting'] svg { animation:live-bolt-wait 1.4s ease-in-out infinite; }
@@ -573,11 +576,13 @@ export const createPill = (onTap: () => void, onCancel: () => void) => {
   };
   return {
     element: pill,
-    render(m: PillModel) {
+    render(m: PillModel, look: BoltLook) {
       attach();
       state = m.kind;
       pill.dataset.state = m.kind;
-      pill.hidden = m.kind === 'hidden';
+      pill.hidden = look === 'hidden';
+      if (look === 'hidden') delete pill.dataset.presence;
+      else pill.dataset.presence = look;
       pill.setAttribute('aria-disabled', String(!(m.kind === 'ready' || m.kind === 'waiting')));
       label.textContent = '';
       if (m.kind === 'ready') {
