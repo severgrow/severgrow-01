@@ -38,12 +38,11 @@ describe('a skinned planet tile wears the picture alone', () => {
     expect(skin).not.toMatch(/mix\(\s*c\s*,\s*t\.rgb/);
     expect(skin).not.toContain('vColour');
   });
-  it('draws the same default picture on every tile of a set', () => {
-    // No pick from the seed: the nine plain pictures are nine different paintings, and shuffling them
-    // across the planet made one holding read as tiles turned every which way.
-    expect(skin).not.toMatch(/float pick/);
-    expect(skin).not.toContain('vSeed');
-    expect(skin).toContain('quadrant + vec2(uv.x, 1.0 - uv.y)');
+  // OWNER RULE CHANGE (2026-11-17: "use all the skins tiles we have ... try not to put 2 the same next
+  // to each other"). Replaces "draws the same default picture on every tile of a set" (2026-11-15).
+  it('draws one of its set\'s nine pictures, picked by the tile\'s own variant', () => {
+    expect(skin).toContain('float pick = floor(floor(vSeed * 4096.0 + .5) / 455.0);');
+    expect(skin).toContain('quadrant + cell + vec2(uv.x, 1.0 - uv.y)');
   });
   it('fills the tile: the sample stays inside the atlas hexagon, never on its mask edge', () => {
     // The atlas cell is masked to the same hexagon the tile is, and the transparent pixels outside it

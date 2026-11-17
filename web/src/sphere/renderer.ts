@@ -108,13 +108,12 @@ void main(){
   //     (that line used to be mix(c, t.rgb, t.a * ...), which left the owner's colour in every soft
   //     edge the atlas has, reading as a coloured margin and a pale halo round the art). The
   //     picture's own colour is used even where its alpha is soft.
-  //  2. Every tile of a set wears the set's DEFAULT picture (cell 0,0 of its quadrant). The nine plain
-  //     pictures are nine different paintings whose wave crests do not agree, so shuffling them
-  //     across the planet (owner, 2026-11-14: "all nine plain pictures, never the same one beside
-  //     itself" — a BOARD rule) read on the planet as tiles turned every which way. The per-tile tone
-  //     below still gives neighbouring tiles their own light, so a holding never looks stamped out of
-  //     one cell. The orientation itself is not this file's: sphere/tile-face.ts turns every tile's
-  //     picture by the same half hex step (a per-tile turn snapped some tiles 60 degrees round).
+  //  2. Every tile wears one of its set's NINE pictures, and never the same one as a neighbour (owner,
+  //     2026-11-17: "the skins should use all the skins tiles we have ... and try not to put 2 the same
+  //     next to each other ... so grass should use all 9 tiles"). The pick is the tile's variant
+  //     (tileVariants, no two neighbours alike), carried in the seed's hundreds. This replaces the
+  //     2026-11-15 rule "every tile the set's default picture". The orientation is not this file's:
+  //     sphere/tile-face.ts turns every tile's picture by the same half hex step.
   //  3. The picture FILLS the tile (owner, 2026-11-16: "it should be replacing the color and fitting
   //     in the hex nicely"). The atlas cell is masked to the same flat-top hexagon the tile is, so
   //     sampling it at exactly 1:1 would put the painting's own soft mask edge — and the transparent
@@ -129,7 +128,9 @@ void main(){
     vec2 uv = clamp(vTile * .47 + .5, .006, .994);
     float set = floor(vSkin + .5) - 1.0;
     vec2 quadrant = vec2(mod(set, 2.0), floor(set / 2.0)) * .5;
-    vec4 t = texture2D(uTiles, quadrant + vec2(uv.x, 1.0 - uv.y) * ${(160 / 1024).toFixed(5)});
+    float pick = floor(floor(vSeed * 4096.0 + .5) / 455.0);
+    vec2 cell = vec2(mod(pick, 3.0), floor(pick / 3.0)) * ${(160 / 1024).toFixed(5)};
+    vec4 t = texture2D(uTiles, quadrant + cell + vec2(uv.x, 1.0 - uv.y) * ${(160 / 1024).toFixed(5)});
     c = t.rgb;
   }
   // THE TILE'S MATERIAL (owner, 2026-11-04: the tiles "stand out as too baloony or plasticky ...
@@ -287,11 +288,9 @@ export class PlanetRenderer {
     const tiles = new Int8Array(vertices * 2);
     const skins = new Uint8Array(vertices);
     this.skinLook = skins;
-    // EACH TILE ITS OWN LIGHT (owner, 2026-11-15, after "always in default orientation" made every
-    // tile of a set wear the same picture): the seed still carries a tone of its own (0..454, i.e. the
-    // low three figures below 4096), and the variant only feeds that tone now — the picture a skinned
-    // tile samples is the set's DEFAULT cell, chosen in the shader. `tileVariants` keeps its own rule
-    // (no two neighbours share an index) so neighbouring tiles never share a tone.
+    // EACH TILE ITS OWN PICTURE AND LIGHT: the seed is variant * 455 + a tone (0..454). The shader reads
+    // the variant (seed / 455) as the skinned tile's picture, 0..8 of its set (owner, 2026-11-17), and
+    // the remainder as its tone. `tileVariants` gives no two neighbours the same index.
     const variant = tileVariants(cells);
     this.turn = new Float32Array(cells.length);
     let to = 0;
@@ -299,7 +298,7 @@ export class PlanetRenderer {
     for (const c of cells) {
       const face = tileFace(c.centre, c.corners.map(i => sphere.corners[i]!), north);
       this.turn[c.index] = face.angle;
-      // The seed carries the tile's tone (below 4096; the picture is fixed per set in the shader).
+      // The seed carries the tile's picture (hundreds of 455) and its tone (below 4096).
       const seed = variant[c.index]! * 455 + Math.floor((Math.sin(c.index * 12.9898) * 43758.5453 % 1 + 1) % 1 * 455);
       for (let i = 0; i < c.corners.length; i++) {
         const a = sphere.corners[c.corners[i]!]!, b = sphere.corners[c.corners[(i + 1) % c.corners.length]!]!;

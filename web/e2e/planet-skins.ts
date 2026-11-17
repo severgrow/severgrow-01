@@ -188,7 +188,11 @@ try {
   // owner's own water holding: 12% owner-hued, closest distance 75).
   const failures: string[] = [];
   if (rimTinted > 0) failures.push(`${rimTinted} of ${rimCount} rim pixels carried the owner's hue (${rimWorst.tile} nearest ${rimWorst.rgb.join(',')})`);
-  if (rimWorst.dist <= 100) failures.push(`a rim pixel sat only ${rimWorst.dist.toFixed(0)} from the owner colour (${rimWorst.rgb.join(',')})`);
+  // The paintings' OWN nearest colour to the owner's magenta sets the floor: since every tile wears one
+  // of its set's nine pictures (2026-11-17), forest-07 and -08 carry pink-violet flowers measured 82.7
+  // and 60.3 from #c0247e in the atlas itself. An owner tint would sit far closer (the old owner line:
+  // 78 on the default picture, and owner-HUED, which the check above counts at zero).
+  if (rimWorst.dist <= 55) failures.push(`a rim pixel sat only ${rimWorst.dist.toFixed(0)} from the owner colour (${rimWorst.rgb.join(',')})`);
   console.log(`Planet skin rim: ${rimCount} pixels round ${hexes.length} boundaries, ${rimTinted} owner-hued, nearest owner-colour distance ${rimWorst.dist.toFixed(0)}`);
 
   // ---- ORIENTATION: every tile's art the same way up, measured on screen ---------------------
@@ -225,26 +229,28 @@ try {
     }
     return out;
   };
-  let worstTurn = 0, centreWorst = 1;
-  for (let i = 0; i < patches.length; i++) for (let j = i + 1; j < patches.length; j++) {
-    const a = patches[i]!, b = patches[j]!;
-    let bestTurn = 0, bestCorr = -2;
-    for (let deg = -90; deg <= 90; deg += 3) {
-      const t = turned(b, deg);
-      const keep: [number, number][] = [];
-      for (let k = 0; k < t.length; k++) if (!Number.isNaN(t[k]!) && !Number.isNaN(a.lum[k]!)) keep.push([a.lum[k]!, t[k]!]);
-      const c = corr(keep.map(p => p[0]), keep.map(p => p[1]));
-      if (c > bestCorr) { bestCorr = c; bestTurn = deg; }
-    }
-    centreWorst = Math.min(centreWorst, bestCorr);
-    // A tile a hex edge round shows up as a best turn of 60; one picture, one orientation is ~0.
-    if (Math.abs(bestTurn) > Math.abs(worstTurn)) worstTurn = bestTurn;
+  // OWNER RULE CHANGE (2026-11-17: "use all the skins tiles we have ... try not to put 2 the same next
+  // to each other"). This used to require ONE picture on every tile (correlation >= .95 at 0 degrees).
+  // Now: the same picture correlates >= .95 with itself unturned; touching tiles must not, and the
+  // holding must show several of the set's nine. (Every tile's picture is turned by the same half
+  // step — web/tests/tile-face.test.ts — so 'unturned' is the only comparison that means 'same'.)
+  const same = (a: { lum: number[] }, b: { lum: number[] }) => {
+    const keep: [number, number][] = [];
+    for (let k = 0; k < a.lum.length; k++) if (!Number.isNaN(a.lum[k]!) && !Number.isNaN(b.lum[k]!)) keep.push([a.lum[k]!, b.lum[k]!]);
+    return corr(keep.map(p => p[0]), keep.map(p => p[1])) >= .93;
+  };
+  void turned;
+  const touching = (i: number, j: number) => Math.hypot(hexes[i]!.centre.x - hexes[j]!.centre.x, hexes[i]!.centre.y - hexes[j]!.centre.y) < (hexes[i]!.r + hexes[j]!.r) * 1.05;
+  const groups: number[] = [];
+  let neighboursAlike = 0, neighbourPairs = 0;
+  for (let i = 0; i < patches.length; i++) {
+    const g = groups.findIndex((rep) => same(patches[rep]!, patches[i]!));
+    if (g < 0) groups.push(i);
+    for (let j = i + 1; j < patches.length; j++) if (touching(i, j)) { neighbourPairs++; if (same(patches[i]!, patches[j]!)) neighboursAlike++; }
   }
-  // Measured on the shipped renderer: every pair at 0 degrees, correlation >= .95. WITH the old
-  // per-tile levelling every pair involving '-1,0' came out at 60 degrees.
-  if (centreWorst < .8) failures.push(`two skinned tiles showed different pictures (correlation ${centreWorst.toFixed(2)})`);
-  if (Math.abs(worstTurn) > 6) failures.push(`two skinned tiles sat ${worstTurn} degrees apart on screen`);
-  console.log(`Planet skin orientation: ${patches.length} tiles, worst pair ${worstTurn} degrees, pictures correlate >= ${centreWorst.toFixed(2)}`);
+  if (neighboursAlike > 0) failures.push(`${neighboursAlike} of ${neighbourPairs} touching skinned tiles showed the same picture`);
+  if (groups.length < Math.min(5, patches.length)) failures.push(`only ${groups.length} different pictures across ${patches.length} skinned tiles`);
+  console.log(`Planet skin variety: ${patches.length} tiles, ${groups.length} different pictures, ${neighboursAlike} of ${neighbourPairs} touching pairs alike`);
   assert.deepEqual(failures, [], failures.join('; '));
 
   // THE PICK REACHES THE PLANET (owner, 2026-11-16: "changing tile skin should change it on the planet
