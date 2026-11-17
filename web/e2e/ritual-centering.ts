@@ -26,17 +26,19 @@ try {
     // The pile deliberately files away during the kanji's final fade. Measure its landing
     // while the mark emerges and holds, before that separate departure begins.
     const leaving=kanji?.getAnimations().some(a=>Number((a.effect as KeyframeEffect).getKeyframes().at(-1)?.opacity)===0);
-    if(kanji&&!leaving&&Number(getComputedStyle(kanji).opacity)>.1) {
+    // The ring's landing is read the first frame its turn has finished (which is also when the kanji
+    // starts to leave, so this sits outside the hold-only window below).
+    {
      const tile=document.querySelector('#board .hex-cell[data-key="0,0"] .hex')?.getBoundingClientRect();
-     const layer=[...document.querySelectorAll<HTMLElement>('#lottery-deck .ritual-deck-layer')].reverse().find(el=>getComputedStyle(el).opacity!=='0');
-     const deck=layer?.querySelector('.card')?.getBoundingClientRect();
-     if(tile&&deck&&!(window as any).__geometry) {
-      const card=layer!.querySelector('.card')!;const style=getComputedStyle(card);
-      (window as any).__geometry={tile:tile.toJSON(),card:deck.toJSON(),anchor:document.getElementById('lottery-deck-anchor')?.getBoundingClientRect().toJSON(),style:{width:style.width,height:style.height,position:style.position,display:style.display,transform:style.transform,translate:style.translate},layer:layer!.getBoundingClientRect().toJSON()};
-     }
      // The emblem lets go of its kanji and its hex turns onto the tile (owner, 2026-11-16).
      const ring=document.querySelector<HTMLElement>('.ritual-emblem-ring:not(.ritual-emblem-ripple)');
-     if(tile&&ring&&ring.getAnimations().length&&ring.getAnimations().every(a=>a.playState==='finished')){
+     // ONE frame turns (owner, 2026-11-17): the unlock ghost is invisible until the ring locks.
+     const ghost=document.querySelector<HTMLElement>('.ritual-emblem-ripple');
+     const turning=ring?.getAnimations().find(a=>a.playState==='running');
+     if(ghost&&turning&&Number(turning.effect?.getComputedTiming().progress??1)<.8){
+      (window as any).__ghostMax=Math.max((window as any).__ghostMax??0,Number(getComputedStyle(ghost).opacity));
+     }
+     if(tile&&ring&&!(window as any).__emblem&&ring.getAnimations().length&&ring.getAnimations().every(a=>a.playState==='finished')){
       const m=new DOMMatrix(getComputedStyle(ring).transform);
       const box=ring.getBoundingClientRect();
       const card=ring.closest<HTMLElement>('.ritual-deck-layer')!;
@@ -46,6 +48,15 @@ try {
        dx:box.x+box.width/2-tile.x-tile.width/2,dy:box.y+box.height/2-tile.y-tile.height/2,
        kanji:Number(getComputedStyle(document.querySelector('.ritual-emblem-kanji')!).opacity),
        cover:Number(getComputedStyle(document.querySelector('.ritual-emblem')!).opacity)};
+     }
+    }
+    if(kanji&&!leaving&&Number(getComputedStyle(kanji).opacity)>.1) {
+     const tile=document.querySelector('#board .hex-cell[data-key="0,0"] .hex')?.getBoundingClientRect();
+     const layer=[...document.querySelectorAll<HTMLElement>('#lottery-deck .ritual-deck-layer')].reverse().find(el=>getComputedStyle(el).opacity!=='0');
+     const deck=layer?.querySelector('.card')?.getBoundingClientRect();
+     if(tile&&deck&&!(window as any).__geometry) {
+      const card=layer!.querySelector('.card')!;const style=getComputedStyle(card);
+      (window as any).__geometry={tile:tile.toJSON(),card:deck.toJSON(),anchor:document.getElementById('lottery-deck-anchor')?.getBoundingClientRect().toJSON(),style:{width:style.width,height:style.height,position:style.position,display:style.display,transform:style.transform,translate:style.translate},layer:layer!.getBoundingClientRect().toJSON()};
      }
      if(tile&&deck)(window as any).__centering.push({dx:deck.x+deck.width/2-tile.x-tile.width/2,dy:deck.y+deck.height/2-tile.y-tile.height/2});
     }
@@ -68,7 +79,9 @@ try {
   const emblem=await page.evaluate(()=>(window as any).__emblem as {angle:number;fitError:number;dx:number;dy:number;kanji:number;cover:number}|undefined);
   console.log(`${width}x${height}: emblem at the kanji's peak ${JSON.stringify(emblem)}`);
   assert(emblem,'the emblem cover is drawn while the kanji is up');
-  assert(emblem.cover>.99&&emblem.kanji<.01,'the emblem\'s own kanji is gone while the big one is up');
+  const ghostMax=await page.evaluate(()=>(window as any).__ghostMax as number|undefined);
+  assert(ghostMax!==undefined&&ghostMax<.01,`only one hex is seen while it turns (the unlock ghost stays hidden): ${ghostMax}`);
+  assert(emblem.cover>.9&&emblem.kanji<.01,'the emblem\'s own kanji is gone while the big one is up');
   assert(Math.abs(emblem.angle-30)<.5,`the hex turns 30°, flat-top like the board: ${emblem.angle}`);
   assert(Math.abs(emblem.fitError)<=1.5&&Math.hypot(emblem.dx,emblem.dy)<=1.5,`the turned hex sits on the middle tile's outline: ${JSON.stringify(emblem)}`);
   await page.close();

@@ -976,7 +976,9 @@ class StarterRitual {
       // then the click: a ghost ring ripples off the tile and the page may tick the haptics.
       const turn = lift + this.ms(KANJI.holdMs);
       this.animate(cover.ring, ringTurnFrames(fit), { duration: turn });
-      this.animate(cover.ripple, ringRippleFrames(fit), { duration: this.ms(320), delay: turn * RING_LOCK_AT, easing: 'cubic-bezier(.2,.7,.3,1)' });
+      // fill 'forwards' only: before the lock the ghost stays invisible (a backwards fill showed it at the
+      // landing position for the whole turn: owner, 2026-11-17, "like 2 hex frames at once").
+      this.animate(cover.ripple, ringRippleFrames(fit), { duration: this.ms(320), delay: turn * RING_LOCK_AT, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'forwards' });
       const unlock = this.options.onUnlock;
       if (unlock) {
         // A tracked timer: a ritual that is skipped or torn down never ticks afterwards.
