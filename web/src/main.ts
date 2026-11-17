@@ -7316,6 +7316,13 @@ function layoutSoon() {
     const before = layoutKey;
     applyLayout();
     if (layoutKey !== before && session) render();
+    // THE DESKTOP QUARTERS ARE PLACED AGAIN ONCE THE SIZE HAS SETTLED (owner, 2026-11-17: "on desktop if
+    // you minimise the window and then open in full again - the whole layout breaks"). They are relative
+    // nudges measured from where the board and cockpit sit; a measurement taken while the board was still
+    // fitted to the passing size (a minimised window, a fullscreen change) was never corrected, leaving
+    // the board up to 215 px right and the cockpit 240 px high. Measured once per settle step, only
+    // after a resize.
+    if (IS_FUTA04 && session && !$('game').hidden) requestAnimationFrame(() => centreSideDock());
   }, ms));
 }
 window.addEventListener('resize', layoutSoon);
