@@ -116,6 +116,14 @@ export const startLocalDuel = async (options: LocalDuelOptions): Promise<LocalDu
   });
   const service = new MatchService({ storage: live.storage, config: server });
   const apiServer = createHttpServer({ service, config: server, live: live.router(service) });
+  if (options.rejectRealtimeLocally) {
+    // Node's HTTP server can leave an unhandled Upgrade socket CONNECTING until the product's
+    // 12 s deadline. Reject it explicitly, so this fixture tests five failed Realtime attempts
+    // rather than the runner's variable TCP/HTTP-upgrade timeout.
+    apiServer.on('upgrade', (_request, socket) => {
+      socket.end('HTTP/1.1 426 Upgrade Required\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+    });
+  }
   await new Promise<void>((resolve) => apiServer.listen(0, '127.0.0.1', resolve));
   const apiBase = `http://127.0.0.1:${(apiServer.address() as AddressInfo).port}`;
 

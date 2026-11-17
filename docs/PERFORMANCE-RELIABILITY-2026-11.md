@@ -513,13 +513,15 @@ its lazy challenge settlement and expiry preserve authoritative territory state.
 latency breakdown or physical phone battery/thermal measurement was available in this pass.
 
 The reported `online-soak-teardown` CI failure occurred at the app-level retry convergence
-check on matches 8 and 15. A local 15-match baseline run passed those checks, so the exact CI
-host failure was not reproduced here. The fixture previously targeted a closed TCP port for
-Realtime; a connect timeout can consume its 12-second product bound on several attempts before
-the fixed 60-second quiet-state check. The final fixture points only this suite's Realtime URL
-at its local HTTP server, which promptly rejects WebSocket upgrades. It retains the same
+check on matches 8 and 15. A local 15-match baseline run passed those checks. An initial
+fixture change pointed Realtime at its local HTTP server, but GitHub still failed at match 12:
+Node left some unhandled WebSocket Upgrade connections pending until the product's 12-second
+deadline. The socket trace showed retry gaps of up to 18 seconds. The fixture now explicitly
+answers each Upgrade with HTTP 426 and closes it; a direct local handshake probe failed in
+16 ms rather than waiting for the product's 12-second deadline. It retains the same
 60-second convergence condition, zero-socket/interval/frame assertions and real product retry
-logic. The final candidate passed all 15 matches, including 8 and 15. Both builds had zero
+logic. The pre-426 candidate passed all 15 matches locally, including 8 and 15; the final
+post-426 GitHub result is the release check. Both local builds had zero
 requests during each five-second hidden-tab sample and zero sockets/intervals/frame callbacks
 after every exit route. The candidate's last-ten-match retained-heap slopes were 152 and
 245 KiB/match for the two seats, versus 271 and 134 KiB/match on the baseline; all four are
