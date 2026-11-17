@@ -313,6 +313,7 @@ import { SEEDS_IDENTITY_UNVERIFIED, SEEDS_NOT_VERIFIED } from './online/seed-ico
 // (it owns the client and the identity), and this module only paints its one-off teaching band.
 import { type EndgamePlanet } from './online/endgame-planet.js';
 import { settledSeedsMessage } from './ui/seed-reveal.js';
+import { forecastSeeds, noteSeedsPaid } from './logic/seed-forecast.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { installStaleBuildReload } from './logic/stale-build.js';
 import { installFreshShellReload } from './logic/fresh-shell.js';
@@ -3372,6 +3373,8 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
       // removes nothing. Its own record — the classic stats above are never reshaped by it.
       // A TUTORIAL replay returns the SAME record (progressAfterMatch), so a replay can never
       // mark a level, unlock anything, or rewrite the record on its way through.
+      /** This game cleared its campaign level for the first time on this device (the Seeds forecast). */
+      let firstClear = false;
       if (campaignLevel) {
         const kind: CampaignMatchKind = tutorialReplay ? 'tutorial' : 'campaign';
         const after = progressAfterMatch(campaignProgress, kind, campaignLevel, {
@@ -3384,6 +3387,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
           // open asks once more; this session keeps the device half, which already contains this win,
           // so the suggestion stays correct without a second request.
           const advanced = after.completed.length > campaignProgress.completed.length;
+          firstClear = advanced;
           campaignProgress = after;
           saveCampaignProgress();
           if (advanced) {
@@ -3410,14 +3414,20 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
               : null;
         if (proof) {
           queueSeedProof(store, proof);
-          // NOTHING is claimed until the server has answered. The card used to be handed a line
-          // saying the Seeds were "pending verification", and it stayed there for the whole session
-          // when the settle could not run (a hung request, a lobby that never mounted, or a proof
-          // refused with 400). Owner report, 2026-10-25: a card must never rest on a claim nobody
-          // has written a receipt for.
-          seedRewardMessage = '';
+          // THE AWARD AT ONCE (owner, 2026-11-17; logic/seed-forecast.ts): the server's own rule and
+          // today's tally say what this game pays, so the card shows it the moment the game ends and
+          // the receipt confirms or corrects it. The level-10 lesson keeps waiting for its receipt.
+          // Never a "pending" line (owner report, 2026-10-25): a forecast is a number, and the
+          // receipt replaces it.
+          const winner = p.after.result.winner;
+          const forecast = proof.kind === 'training'
+            ? forecastSeeds(store, { kind: 'training', outcome: winner === HUMAN ? 'win' : winner === null ? 'draw' : 'loss' })
+            : campaignLevel && proof.levelId === campaignLevel.id && firstClear
+              ? forecastSeeds(store, { kind: 'campaign', level: campaignLevel.number })
+              : 0;
+          seedRewardMessage = forecast > 0 ? `+${forecast} Seeds` : '';
           const key = seedProofKey(proof);
-          settleSeedsForCard(key);
+          settleSeedsForCard(key, forecast);
         }
       }
     }
@@ -8619,15 +8629,20 @@ function paintGoSeeds(): void {
  * the card: an award with its one moment, the calm limit line, an honest refusal, or NOTHING while
  * it is still unknown. It never writes "pending", and it never guesses a number.
  */
-function settleSeedsForCard(key: string): void {
+function settleSeedsForCard(key: string, forecast = 0): void {
   const run = ++goSeedsSettleRun;
   // The award's line gets its SLOT now, while the result is still animating in, so the number can
   // land without pushing the score and the keys down (the jump the owner saw). The slot is empty
   // until a receipt exists — it never says "pending".
   goSeedSlot = true;
   const settling = settleSeedProof(key);
-  // The finish window chooses itself from the balance AFTER this payout (syncFinishWindow).
-  finishPayout = settling.then((report) => (report.kind === 'settled' ? report.reward.wallet.balance : null), () => null);
+  // The finish window chooses itself from the balance AFTER this payout (syncFinishWindow). With a
+  // forecast and a balance this device already knew, that balance is known now: the planet (a win
+  // with a tile's price) or the board appears at once instead of after the server's replay check.
+  const known = parseBalance(store.get(SEED_BALANCE_KEY));
+  finishPayout = forecast > 0 && known !== null
+    ? Promise.resolve(known + forecast)
+    : settling.then((report) => (report.kind === 'settled' ? report.reward.wallet.balance : null), () => null);
   void settling.then((report) => {
     // A newer game has started: its card is not this one's to paint.
     if (run !== goSeedsSettleRun) return;
@@ -8635,6 +8650,9 @@ function settleSeedsForCard(key: string): void {
       // `replayed` means this receipt existed already: the line stays empty rather than counting a
       // second "+N" the wallet never received.
       seedRewardMessage = settledSeedsMessage(report.reward);
+      // Today's tally for the next forecast; the wallet's real balance for the next card.
+      if (!report.reward.replayed) noteSeedsPaid(store, key, key.startsWith('campaign:') ? 'campaign' : 'training', report.reward.awarded);
+      rememberBalance(report.reward.wallet.balance);
     } else if (report.kind === 'refused') {
       // The server will never accept this replay, so those Seeds are gone. Say so, and log why.
       console.warn('[FUTASAKU] Seeds refused for this game:', key, report.message);
@@ -8646,9 +8664,9 @@ function settleSeedsForCard(key: string): void {
       console.warn('[FUTASAKU] Seeds could not be settled: no usable identity:', report.message);
       seedRewardMessage = SEEDS_IDENTITY_UNVERIFIED;
     } else {
-      // Still unconfirmed and still queued. The card shows NOTHING: the next menu visit (or the
-      // next time this device is online) settles it, and the wallet is the one place it is claimed.
-      seedRewardMessage = '';
+      // Still unconfirmed and still queued: the next menu visit (or the next time this device is
+      // online) settles it. The forecast stays (it is what that settle will pay); without one, nothing.
+      seedRewardMessage = forecast > 0 ? `+${forecast} Seeds` : '';
     }
     // The reward can land while the finish card is already up: the SAME line repaints in place (no
     // reflow), and the award gets its one moment here rather than a silent swap.
@@ -9276,6 +9294,8 @@ function renderGameOver() {
     clearGoSeeds();
     const snapshot = os.driver.snapshot();
     seedRewardMessage = duelSeedsMessage(snapshot.seeds ?? null);
+    // A paid duel counts toward today's ceiling in the Seeds forecast (logic/seed-forecast.ts).
+    if (snapshot.seeds) noteSeedsPaid(store, `duel:${snapshot.matchId}`, 'queue', snapshot.seeds.awarded);
     paintGoSeeds();
     // The match's whole public history is one fetch; when it lands, re-render so the highlights are
     // the real ones (offline's are computed from the same event list). Fetched at most once.

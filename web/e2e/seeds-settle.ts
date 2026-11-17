@@ -455,10 +455,12 @@ const run = async (
     await dismissInstall(page);
 
     if (scenario === 'hung') {
-      // Past any "settle within a second" hope, with nothing back yet: the line must be EMPTY.
+      // OWNER RULE CHANGE (2026-11-17, Seeds "as instant as possible"): with nothing back yet the line
+      // shows the FORECAST — the server's own rule run on this device — never an empty slot and never
+      // "pending". The receipt that lands after the release must agree (checked below).
       await page.waitForTimeout(1_400);
       const waiting = await measure(page);
-      check(`${name}: nothing is claimed while the request is unanswered`, waiting.line === '', `"${waiting.line}"`);
+      check(`${name}: the forecast is on the card while the request is unanswered`, /\+\s*\d+\s*Seeds/i.test(waiting.line) && !/pending/i.test(waiting.line), `"${waiting.line}"`);
       await page.screenshot({ path: `${OUT}/${options.shot}-waiting.png` });
       releaseHeld();
     }

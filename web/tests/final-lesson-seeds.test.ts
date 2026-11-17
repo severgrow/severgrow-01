@@ -37,15 +37,16 @@ describe('the final lesson pays Seeds', () => {
 });
 
 describe('the card never rests on "Seeds pending verification" (owner report, 2026-10-25)', () => {
-  it('the string is gone from the product, and a queued proof paints nothing until it is answered', () => {
-    // The lie was the resting state: a claim on screen while no receipt existed. Nothing may write it.
+  // OWNER RULE CHANGE (2026-11-17: Seeds "as instant as possible"): a queued proof no longer paints
+  // nothing until it is answered. It paints the FORECAST — the server's own rule run on this device
+  // (logic/seed-forecast.ts) — and the receipt confirms or corrects it. "Pending" stays banned.
+  it('the string is gone from the product, and a queued proof paints its forecast, never "pending"', () => {
     expect(main).not.toContain('Seeds pending verification');
     expect(reveals()).not.toContain('Seeds pending verification');
-    // A win queues its proof, clears the line, and only then asks the server.
-    const queued = main.slice(main.indexOf('if (proof) {'), main.indexOf('if (proof) {') + 900);
+    const queued = main.slice(main.indexOf('if (proof) {'), main.indexOf('if (proof) {') + 1400);
     expect(queued).toContain('queueSeedProof(store, proof);');
-    expect(queued).toMatch(/seedRewardMessage = '';/);
-    expect(queued).toContain('settleSeedsForCard(key);');
+    expect(queued).toMatch(/seedRewardMessage = forecast > 0 \? `\+\$\{forecast\} Seeds` : '';/);
+    expect(queued).toContain('settleSeedsForCard(key, forecast);');
   });
 
   it('the settle does not depend on the online lobby having mounted', () => {
