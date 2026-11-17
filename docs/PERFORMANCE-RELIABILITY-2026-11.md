@@ -455,3 +455,21 @@ show the award at once and correct it only if the server disagrees, and/or small
 The ritual's emblem cover (`ef84de7f`) is four DOM nodes for one kanji rise (~0.6 s), transform and
 opacity only, removed as the kanji leaves; `ritual-centering` measures the turned hex on the tile at six
 screen sizes (fit within 0.3-0.9 px).
+
+### Seeds on the card, and the rival-bot proof slices (2026-11-17, on the real /test)
+
+A fresh visitor plays one Practice game to its end on futasaku.com/test against the live server
+(`probe/real-finish.ts`, local only). Game end -> the finish card; -> "+N Seeds" on it:
+
+| | before (`987b7034`) | after (`94d7494a`) |
+| --- | --- | --- |
+| Chromium 390x844: card / Seeds | card ~1.25 s, Seeds 1.36 s | 1.25 s / 1.25 s (same frame) |
+| iPhone 13 (WebKit): card / Seeds | card ~1.25 s, Seeds 1.84 s | 1.26 s / 1.26 s (same frame) |
+
+The ~1.25 s is the finish card's own entrance after the last move; the Seeds line now arrives with it
+(`logic/seed-forecast.ts`), and on one iPhone run it was on the card while the server had not yet
+answered. Both runs: the ritual's emblem cover ran, no page errors.
+
+Rival-bot proofs after `c2d129c2` (700 ms slices), live server: 6 wins against bots 10 and 12, all
+paid 20, 5-6 rounds, 5-7 s from this machine's region, no `546 WORKER_RESOURCE_LIMIT` (before: 2 of 8
+hit it). Promoted live 2026-11-17 (`live` f4ba65f5 -> 94d7494a).
