@@ -2098,14 +2098,14 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   border-color: color-mix(in srgb, var(--c-accent) 70%, var(--c-line));
 }
 .hand .card.dim {
-  opacity: 0.5;
+  opacity: 0.58;
 }
 /* thrown while my move still played (main.ts throwHeld): it waits, untouchable, for its flight */
 .hand .card.throw-held {
   pointer-events: none;
 }
 .hand.waiting .card {
-  opacity: 0.85;
+  opacity: 0.93;
   translate: 0 2px;
 }
 .c-num {
@@ -5465,7 +5465,7 @@ html[data-layout='side'] .dock-overlays {
   transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - var(--lift, 18px))) scale(1.04);
 }
 .dock .hand-row > .hand .card.dim {
-  opacity: 0.62;
+  opacity: 0.7;
 }
 @media (hover: hover) and (pointer: fine) {
   .dock .hand-row > .hand .card:not(.lifted):hover {

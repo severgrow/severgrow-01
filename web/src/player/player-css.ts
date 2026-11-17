@@ -343,7 +343,7 @@ html[data-thumb] .dock {
 }
 /* a fan lying over the map is see-through (55%) until I touch the fan or a card */
 html[data-thumb][data-fan-over] .dock .hand-row > .hand .card {
-  opacity: 0.55;
+  opacity: 0.63;
   transition: opacity 120ms ease-out;
 }
 html[data-thumb][data-fan-over].fan-awake .dock .hand-row > .hand .card,
@@ -578,8 +578,11 @@ html[data-thumb] .dock .table-row > .piles > .pile,
 html[data-thumb] .dock .hand-row > .hand-slot {
   transition: opacity 220ms ease-out;
 }
+/* The hand's cards: +8 points over the piles' 0.6 (owner, 2026-11-17: hand opacity +8% everywhere). */
 html.cam-under[data-focus='map']:not(.fan-awake) .dock .hand-row > .hand .card:not(.lifted),
-html.cam-under.cam-touch:not(.fan-awake) .dock .hand-row > .hand .card:not(.lifted),
+html.cam-under.cam-touch:not(.fan-awake) .dock .hand-row > .hand .card:not(.lifted) {
+  opacity: 0.68;
+}
 html.cam-under[data-focus='map']:not(.fan-awake) .dock .table-row > .piles > .pile,
 html.cam-under[data-focus='map']:not(.fan-awake) .dock .hand-row > .hand-slot {
   opacity: 0.6;
@@ -926,7 +929,7 @@ html[data-step='draw']:not([data-guide='off']) .pile.ready .gd-ring {
 }
 html[data-step='draw']:not([data-guide='off']) .hand .card,
 html[data-step='draw']:not([data-guide='off']) .dock .hand-row > .hand .card.dim {
-  opacity: 0.75;
+  opacity: 0.83;
 }
 @keyframes gd-halo {
   0%,
@@ -982,7 +985,7 @@ html[data-step='throw']:not([data-guide='off']) #deck {
 /* the opponent's turn: calm; piles and hand at 70%, nothing pulses */
 html[data-step='opp']:not([data-guide='off']) .dock .pile,
 html[data-step='opp']:not([data-guide='off']) .hand .card {
-  opacity: 0.7;
+  opacity: 0.78;
 }
 html[data-step='opp']:not([data-guide='off']) .pile .pile-card {
   animation: none;

@@ -88,7 +88,8 @@ const DRAG_CSS = `
 .drag-ghost.drag-recipe .c-num:empty { display:none; }
 .drag-ghost.drag-recipe :is(.c-fruit,.c-suit) svg { width:17px; height:17px; }
 /* The source keeps its dim through a re-render: the attribute is not touched by renderHand. */
-#hand .card[data-drag-dim], #deck[data-drag-dim], #discard[data-drag-dim] { opacity: .45 !important; }
+#hand .card[data-drag-dim] { opacity: .53 !important; }
+#deck[data-drag-dim], #discard[data-drag-dim] { opacity: .45 !important; }
 /* Legal / pile / flick: soft lift, no white frame on the discard pile. */
 .drag-ghost.drag-legal { opacity: 1; box-shadow: 0 12px 24px rgba(0,0,0,.45); }
 .drag-ghost.drag-illegal { opacity: .6; }

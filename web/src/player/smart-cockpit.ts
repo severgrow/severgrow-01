@@ -568,7 +568,7 @@ html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not
    next two rules are the hand-off: the picked card gives up its glow, then the rest of the hand
    drops to a trace, so the light lands on the Throw pile. Mirrored in information.ts (either
    sheet may be injected last). */
-html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) { opacity:.92; box-shadow:0 0 5px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 29%, transparent),0 0 14px 2px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 18%, transparent),0 0 24px 5px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 6%, transparent),0 5px 14px rgba(16,10,9,.34); }
+html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) { opacity:1; box-shadow:0 0 5px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 29%, transparent),0 0 14px 2px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 18%, transparent),0 0 24px 5px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 6%, transparent),0 5px 14px rgba(16,10,9,.34); }
 /* Selected for the Throw: this card's light is gone (depth only), because the discard halo is now
    the lit target (information.ts, .futa04-throw-target). */
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked { opacity:1; box-shadow:0 4px 11px rgba(16,10,9,.30) !important; }
@@ -577,7 +577,7 @@ html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-thro
    ("keep it like that everywhere"), so the yield reads as light only, not as a second dimming.
    .dock #hand.hand is load-bearing: the product's own fan recede (ui/instrument.css) sets .82 on
    every card while one is lifted, and this rule must outrank it, or the chosen value never applies. */
-html.futa04-information[data-step='throw'] .dock #hand.hand:not(.waiting):has(.futa04-throw-picked) .card:not(.futa04-throw-picked) { opacity:.92; box-shadow:0 0 4px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 8%, transparent),0 0 10px 1px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 4%, transparent),0 4px 11px rgba(16,10,9,.30); }
+html.futa04-information[data-step='throw'] .dock #hand.hand:not(.waiting):has(.futa04-throw-picked) .card:not(.futa04-throw-picked) { opacity:1; box-shadow:0 0 4px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 8%, transparent),0 0 10px 1px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 4%, transparent),0 4px 11px rgba(16,10,9,.30); }
 html.futa04-information :is(#deck,#discard) :is(.gd-halo,.gd-ring) { inset:0; border-radius:5.9% / 4.2%; }
 /* Both legal draw choices glow softly: a near-white light around the actual card, no outline box
    (owner, 2026-10-22: "remove the contour thing, make the glow a tiny bit brighter and make it

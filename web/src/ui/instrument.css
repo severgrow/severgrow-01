@@ -18,7 +18,7 @@ html.futasaku-product :is(.world-chat-who,.match-chat-meta,.match-chat-status,.w
   color: var(--instrument-muted);
 }
 /* Preserve the fan, lift and tutorial cues; selected cards already carry .lifted. */
-html.futasaku-product #hand:has(.card.lifted) .card:not(.lifted):not(.dim):not(.tutorial-target-card) { opacity: .82; }
+html.futasaku-product #hand:has(.card.lifted) .card:not(.lifted):not(.dim):not(.tutorial-target-card) { opacity: .9; }
 /* NO CONTOUR ON A CARD, SELECTED OR NOT (owner, 2026-11-14: "never do the contour frame when
    selected - and especially never double"). The 2026-11-14 cards print their own frame; a CSS
    border or outline beside it doubled it. The lift (and the playable glow) says "selected"; the

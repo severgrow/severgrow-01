@@ -132,9 +132,11 @@ describe('a hand card never wears a contour in any guide/step state', () => {
     const throwUp = SOURCES.flatMap(([name, src]) => rules(src).map((rule) => ({ name, ...rule })))
       .filter((rule) => /data-step='throw'/.test(rule.selector) && rule.selector.includes('#hand')
         && rule.body.includes('opacity') && !rule.selector.includes('.card.futa04-throw-picked'));
+    // OWNER RULE CHANGE (2026-11-17: "increase the hand cards opacity by 8% in all scenarios"):
+    // .92 + .08 = 1. Both states still carry ONE value.
     expect(throwUp.length).toBeGreaterThan(0);
     for (const rule of throwUp) {
-      expect(rule.body, `${rule.name}: ${rule.selector}`).toMatch(/(^|;)\s*opacity:\s*\.92\s*(;|$)/);
+      expect(rule.body, `${rule.name}: ${rule.selector}`).toMatch(/(^|;)\s*opacity:\s*1\s*(;|$)/);
     }
     // The picked card keeps its own .92-free opacity: it is fully solid while it leaves, and it is
     // already stepped away from the grayscale treatment in player/information.ts.

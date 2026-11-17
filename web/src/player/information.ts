@@ -51,7 +51,7 @@ html.futa04-information #hand .card.futa04-bloom-pick {
   box-shadow: 0 0 3px rgba(143, 211, 201, 0.48), 0 0 12px 2px rgba(143, 211, 201, 0.28);
 }
 .futa04-information .dock .hand.waiting .card {
-  opacity: .38 !important;
+  opacity: .46 !important;
   filter: grayscale(.85) brightness(.72) !important;
   box-shadow: none !important;
   transition: opacity calc(var(--dur-quick) * var(--anim,1)) ease-out, filter calc(var(--dur-quick) * var(--anim,1)) ease-out, translate var(--dur-quick) var(--ease-settle) !important;
@@ -449,7 +449,7 @@ html.futa04-information[data-step='grow'][data-futa04-waiting='true'] #moves > :
    everywhere", so the card sits at .92 in the idle AND yielded states (.82 x 1.12 = .92).
    Mirrors the live rule in smart-cockpit.ts. */
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) {
-  opacity: .92;
+  opacity: 1;
   box-shadow: 0 0 5px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 29%, transparent),
     0 0 14px 2px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 18%, transparent),
     0 0 24px 5px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 6%, transparent),
@@ -478,7 +478,7 @@ html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-thro
    dimming. The .dock #hand.hand part is load-bearing: the product's fan recede (ui/instrument.css)
    pins .82 on every card while one is lifted, and this rule has to outrank it. */
 html.futa04-information[data-step='throw'] .dock #hand.hand:not(.waiting):has(.futa04-throw-picked) .card:not(.futa04-throw-picked) {
-  opacity: .92;
+  opacity: 1;
   box-shadow: 0 0 4px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 8%, transparent),
     0 0 10px 1px color-mix(in srgb, color-mix(in srgb, var(--fa-light, #f2ede4) 65%, #8b8882) 4%, transparent),
     0 4px 11px rgba(16,10,9,.30);
