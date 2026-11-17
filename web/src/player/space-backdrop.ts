@@ -22,8 +22,6 @@ import { DRIFT_PX_PER_MS, DRIFT_Y_SHARE, onSpaceClaim, onSpaceFree, spaceDrift, 
 
 /** One slide of the stars between two redraws (ms): ~20 s at the menu's own pace. */
 export const SLIDE_MS = 20_000;
-/** A screen change redraws the stars once the page is idle, at the latest after this (ms). */
-export const SETTLE_MAX_MS = 1500;
 /** The far star layer moves this share of the near one (the shader's own parallax). */
 const FAR = .35;
 
@@ -127,25 +125,6 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
     for (const a of anims) a.cancel();
     anims = []; started = 0;
     if (pendingDraw) { window.clearTimeout(pendingDraw); pendingDraw = 0; }
-    cancelSettled();
-  };
-  // OUT OF THE WAY OF A SCREEN CHANGE (measured 2026-11-10). Opening a game used to redraw the stars
-  // in the same moment the board was built: the shader at a canvas larger than the screen and a copy
-  // that waits for the graphics card. On a phone or computer without a fast GPU that froze the page
-  // for seconds right as the game appeared. The previous stars stay up (35% behind the board), and
-  // the game's own layer is drawn once the page has gone quiet.
-  let settled = 0;
-  const cancelSettled = () => {
-    if (!settled) return;
-    const w = window as Window & { cancelIdleCallback?: (id: number) => void };
-    if (typeof w.cancelIdleCallback === 'function') w.cancelIdleCallback(settled); else window.clearTimeout(settled);
-    settled = 0;
-  };
-  const whenSettled = (fn: () => void) => {
-    cancelSettled();
-    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
-    const run = () => { settled = 0; fn(); };
-    settled = typeof w.requestIdleCallback === 'function' ? w.requestIdleCallback(run, { timeout: SETTLE_MAX_MS }) : window.setTimeout(run, 400);
   };
   const slideOnce = () => {
     for (const a of anims) a.cancel();
@@ -185,13 +164,14 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
     const key = `${innerWidth}x${innerHeight}x${devicePixelRatio}`;
     const screenChanged = inGame !== (!!game && !game.hidden);
     const sizeChanged = key !== size;
-    if (sizeChanged || !redraws || screenChanged) {
+    // A SCREEN CHANGE DRAWS NOTHING (2026-11-17). The game now wears the same two layers at the same
+    // speeds as the menu, so the stars already on the canvases are the game's stars: only the class
+    // changes. Redrawing both layers as the game opened was a 110-120 ms task in the middle of the
+    // board's entrance, which the compositor showed as the board flashing in, out and in again (owner,
+    // on the ritual video: "the board flashes shortly after opening the game").
+    if (screenChanged && redraws && !sizeChanged) inGame = !!game && !game.hidden;
+    if (sizeChanged || !redraws) {
       halt(); size = key;
-      // The first drawing and a new window size draw now; a screen change waits for a quiet moment.
-      if (screenChanged && redraws && !sizeChanged) {
-        whenSettled(() => { if (seen() && !document.hidden && !renderer.lost) { halt(); paint(); slideOnce(); } });
-        return;
-      }
       paint(); slideOnce(); return;
     }
     if (!anims.length) slideOnce();
