@@ -305,6 +305,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
    * parks a second queue entry.
    */
   let searchQueue: Promise<unknown> = Promise.resolve();
+  /** Back was pressed on the search screen: its cancel is finishing in the background. */
+  let leavingSearch = false;
   const enqueueSearch = <T>(task: () => Promise<T>): Promise<T> => {
     const run = searchQueue.then(task, task);
     searchQueue = run.then(() => undefined, () => undefined);
@@ -890,8 +892,9 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     closeMatchedPrompt();
     computerGameActive = false;
     syncLooking();
-    // A search may still be running in the background: say so, but never block the hub.
-    notice('online-hub-notice', search ? ONLINE.searchStatusSr : '');
+    // A search may still be running in the background: say so, but never block the hub (and not for
+    // the one the player just left with Back, which is being cancelled).
+    notice('online-hub-notice', search && !leavingSearch ? ONLINE.searchStatusSr : '');
     const linkBlock = document.getElementById('online-link-block');
     if (linkBlock) linkBlock.hidden = false;
     await reloadMatches();
@@ -1538,17 +1541,29 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     hooks.showMenu();
     refreshTitle();
   });
+  // BACK NEVER WAITS ON THE NETWORK (owner, 2026-11-17: "the back button doesn't do anything - it should
+  // cancel the search and take you back to the play online submenu"). It waited for the cancel, which
+  // queues behind a Find still in flight and, when a request failed, kept the player on this screen.
+  // Now the hub comes back at once and the cancel finishes behind it, retrying a failed request a few
+  // times. If an opponent pairs in that same moment, the match is real and opens as any pairing does.
   $('online-waiting-back').addEventListener('click', () => {
-    void (async () => {
-      if (search && waitingEl.dataset.mode === 'search') {
-        const stopped = await cancelSearchAndStop();
-        if (stopped !== 'cleared') {
-          if (stopped === 'kept') notice('online-waiting-notice', ONLINE.errGeneric);
-          return;
+    if (search && waitingEl.dataset.mode === 'search') {
+      leavingSearch = true;
+      void openHub();
+      void (async () => {
+        try {
+          for (let attempt = 0; attempt < 5; attempt++) {
+            const stopped = await cancelSearchAndStop();
+            if (stopped !== 'kept') return;
+            await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+          }
+        } finally {
+          leavingSearch = false;
         }
-      }
-      await openHub();
-    })();
+      })();
+      return;
+    }
+    void openHub();
   });
   $('online-join-back').addEventListener('click', () => void openHub());
   /**

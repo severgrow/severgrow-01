@@ -117,6 +117,34 @@ try {
   await cancelled.locator('#online-waiting-back').click();
   await cancelled.waitForSelector('#online-hub:not([hidden])');
   check('Back removes the server queue entry', !await storage.openQueueMatchOfPlayer(identity.playerId));
+  // BACK NEVER WAITS ON THE NETWORK (owner, 2026-11-17: "the back button doesn't do anything - it
+  // should cancel the search and take you back to the play online submenu"). On the real server a cancel
+  // can take seconds (or fail and be retried); the screen must not. The cancel answer is held for 3 s:
+  // the hub is up at once, the queue entry is still removed, and the search is not resumed.
+  await cancelled.locator('#online-find').click();
+  await cancelled.waitForSelector('#online-waiting:not([hidden])');
+  let releaseCancel!: () => void;
+  const held = new Promise<void>((r) => { releaseCancel = r; });
+  let failOnce = true;
+  await cancelled.route('**/v1/matchmaking/cancel', async (route) => {
+    if (route.request().method() === 'OPTIONS') return route.continue();
+    // the first cancel fails outright (a dropped request): Back must still leave, and retry
+    if (failOnce) { failOnce = false; return route.abort('failed'); }
+    await held;
+    await route.continue();
+  });
+  const tapped = Date.now();
+  await cancelled.locator('#online-waiting-back').click();
+  await cancelled.waitForSelector('#online-hub:not([hidden])', { timeout: 5000 });
+  const backMs = Date.now() - tapped;
+  check(`Back leaves the search screen at once, whatever the network does (${backMs} ms)`, backMs < 600);
+  check('the hub does not say a search is still running', !/search/i.test(await cancelled.locator('#online-hub-notice').textContent() ?? ''));
+  releaseCancel();
+  await cancelled.waitForFunction(async () => true);
+  for (let i = 0; i < 40 && await storage.openQueueMatchOfPlayer(identity.playerId); i++) await new Promise((r) => setTimeout(r, 250));
+  check('the slow, once-failed cancel still removes the queue entry', !await storage.openQueueMatchOfPlayer(identity.playerId));
+  check('the hub stays: the search is not resumed', await visible(cancelled, 'online-hub') && !await visible(cancelled, 'online-waiting'));
+  await cancelled.unroute('**/v1/matchmaking/cancel');
   await cancelled.locator('#online-find').click();
   await cancelled.waitForSelector('#online-waiting:not([hidden])');
   await service.cancelSearch(await service.authenticate(identity.token));
