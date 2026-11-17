@@ -314,6 +314,7 @@ import { SEEDS_IDENTITY_UNVERIFIED, SEEDS_NOT_VERIFIED } from './online/seed-ico
 import { type EndgamePlanet } from './online/endgame-planet.js';
 import { settledSeedsMessage } from './ui/seed-reveal.js';
 import { forecastSeeds, noteSeedsPaid } from './logic/seed-forecast.js';
+import { openAsCompanionWindow } from './logic/companion-window.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { installStaleBuildReload } from './logic/stale-build.js';
 import { installFreshShellReload } from './logic/fresh-shell.js';
@@ -11612,6 +11613,10 @@ if (!IS_TEST && 'serviceWorker' in navigator && location.protocol === 'https:') 
   if (document.readyState === 'complete') registerOffline();
   else window.addEventListener('load', registerOffline, { once: true });
 }
+
+// The installed desktop app's first launch: a portrait column at the screen's right edge, so the game
+// sits beside whatever else is open (logic/companion-window.ts). Once; a browser tab is never touched.
+openAsCompanionWindow(store);
 
 // Rotation or resize: just redraw (the game itself is untouched).
 let resizeTimer: ReturnType<typeof setTimeout> | undefined;
