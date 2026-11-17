@@ -110,6 +110,7 @@ export class TerritoryChat {
     this.picked = null;
     this.blockArmed = false;
     this.cancelPoll();
+    if (!open) this.feed.abort();
     // Focus goes back to the key that opened it, or to MENU when the row of keys has folded away.
     if (!open) { (this.key && !this.key.closest('[inert]') ? this.key : document.getElementById('online-world-menu'))?.focus({ preventScroll: true }); return; }
     this.onOpen();
@@ -140,7 +141,8 @@ export class TerritoryChat {
         if (generation !== this.generation) return;
         this.failures++;
         // One blip says nothing: the messages stay and the next poll retries (online/blips.ts).
-        if (shouldReportFailure(this.failures)) this.say(ONLINE.worldChatOffline);
+        // With no cached page, the first failed request must not leave LOADING on screen.
+        if (!this.feed.snapshot(token).loaded || shouldReportFailure(this.failures)) this.say(ONLINE.worldChatOffline);
       }
     }
     if (this.open && generation === this.generation && !document.hidden) this.timer = setTimeout(() => void this.poll(), Math.min(60_000, TERRITORY_CHAT_POLL_MS * 2 ** Math.min(4, this.failures)));

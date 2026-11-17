@@ -67,9 +67,11 @@ export type LocalDuelOptions = {
   turnTimeoutMs?: number;
   /** Live-duel settings to override (e.g. a short `turnMs` to reach the low-time state quickly). */
   liveConfig?: Partial<import('../../../server/src/live/config.js').LiveConfig>;
+  /** The teardown soak uses the local HTTP server to reject Realtime handshakes promptly. */
+  rejectRealtimeLocally?: boolean;
 };
 
-const buildWithApi = (apiBase: string): Promise<void> =>
+const buildWithApi = (apiBase: string, rejectRealtimeLocally = false): Promise<void> =>
   new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
@@ -80,7 +82,7 @@ const buildWithApi = (apiBase: string): Promise<void> =>
           PATH: process.env.PATH,
           CHANNEL: 'futa05',
           VITE_DUEL_API_URL: apiBase,
-          VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || 'http://127.0.0.1:9',
+          VITE_SUPABASE_URL: rejectRealtimeLocally ? apiBase : process.env.VITE_SUPABASE_URL || 'http://127.0.0.1:9',
           VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || 'local-e2e-anon-key',
         },
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -117,7 +119,7 @@ export const startLocalDuel = async (options: LocalDuelOptions): Promise<LocalDu
   await new Promise<void>((resolve) => apiServer.listen(0, '127.0.0.1', resolve));
   const apiBase = `http://127.0.0.1:${(apiServer.address() as AddressInfo).port}`;
 
-  await buildWithApi(apiBase);
+  await buildWithApi(apiBase, options.rejectRealtimeLocally);
   const previewServer = await preview({
     configFile: 'web/vite.config.ts',
     preview: { host: '127.0.0.1', port: options.port, strictPort: true },

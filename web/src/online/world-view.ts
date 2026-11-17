@@ -945,13 +945,14 @@ export class WorldView {
     // declaration on the element, so dropping it restores the menu's own box with no re-fit.
     this.releaseCrop();
     this.menuPreview = true;
+    // Chat needs the identity, not the geography. A cold world read must not hold its one warm GET.
+    this.identity = identity;
+    this.chat.prefetch();
     if (!world) { this.openPlanet('menu'); return; }
     const owner = identity?.playerId ?? null;
     const changedWorld = this.world?.version !== world.version;
     const firstOwner = !this.visited && !this.previewRemembered && owner !== this.previewOwner;
-    this.identity = identity;
     this.previewOwner = owner;
-    this.chat.prefetch();
     if (changedWorld || firstOwner || !this.previewCameraRead) {
       this.previewCameraRead = true;
       // ONLY A GESTURE IS A CAMERA (owner, 2026-11-02: the anchor "works once and then stops").
@@ -1291,6 +1292,18 @@ export class WorldView {
   }
   /** Map reads that failed in a row (a blip is retried quietly; see online/blips.ts). */
   private readFailures = 0;
+  /** Polls share a slow private read; a forced mutation starts a new authoritative one. */
+  private privateReadVersion = 0;
+  private appliedPrivateReadVersion = 0;
+  private minimumPrivateReadVersion = 0;
+  private privateFlight: {
+    identity: Identity | null;
+    version: number;
+    reads: Promise<[SeedWallet | null | undefined, WorldChallengesPayload | null]>;
+  } | null = null;
+  /** Same-revision cosmetics can change. The later request wins if responses arrive out of order. */
+  private publicReadVersion = 0;
+  private appliedPublicReadVersion = 0;
   private notice(text: string) { document.getElementById('online-world-notice')!.textContent = text; }
   private schedule() {
     if (this.timer) clearTimeout(this.timer);
@@ -1299,7 +1312,7 @@ export class WorldView {
     // blip lives in the client (server/src/client.ts); this pace only decides the next poll.
     if (this.active) this.timer = setTimeout(() => { if (!document.hidden) void this.refresh(); else this.schedule(); }, 12_000);
   }
-  async refresh(force = false) {
+  async refresh(force = false, waitForPrivate = false) {
     if (!this.active) {
       // A mutation can finish after Back. Revalidate through the existing menu pass after
       // its older read settles; never turn a successful server action into a refresh failure.
@@ -1310,29 +1323,36 @@ export class WorldView {
     }
     try {
       const identityAtRequest = this.identity;
-      const [map, wallet, challenges] = await Promise.all([
-        // A forced refresh follows the player's own move: read it fresh (with the token), never from
-        // the server's short anonymous cache.
-        // A forced refresh follows the player's own move or an opening: fresh. The timed poll may be
-        // answered from the server's short cache (`poll`).
-        force && identityAtRequest ? this.client.worldMap(identityAtRequest.token) : this.readWorld(!force),
-        // A failed wallet read is `undefined`, not null: the last known balance stays on screen.
-        identityAtRequest ? this.client.seedWallet(identityAtRequest.token).catch(() => undefined) : Promise.resolve(null),
-        identityAtRequest ? this.client.worldChallenges(identityAtRequest.token).catch(() => null) : Promise.resolve(null),
-      ]);
-      if (!this.active) return;
-      const sameIdentity = identityAtRequest === this.identity;
-      const walletChanged = sameIdentity && wallet !== undefined && this.wallet?.balance !== wallet?.balance;
-      if (sameIdentity && wallet !== undefined) this.wallet = wallet;
-      if (sameIdentity && challenges) {
-        this.challenges = challenges;
-        this.challengeReceivedAt = Date.now();
-      } else if (!this.identity) {
-        this.challenges = { incoming: [], outgoing: [], serverNow: Date.now() };
+      const publicVersion = ++this.publicReadVersion;
+      let flight = this.privateFlight;
+      if (force || !flight || flight.identity !== identityAtRequest) {
+        const version = ++this.privateReadVersion;
+        const reads = Promise.all([
+          // A failed wallet read is `undefined`, not null: the last known balance stays on screen.
+          identityAtRequest ? this.client.seedWallet(identityAtRequest.token).catch(() => undefined) : Promise.resolve(null),
+          identityAtRequest ? this.client.worldChallenges(identityAtRequest.token).catch(() => null) : Promise.resolve(null),
+        ]);
+        flight = { identity: identityAtRequest, version, reads };
+        this.privateFlight = flight;
+        // A completed public poll may have returned before this private flight. Clear only this
+        // flight, so the next poll can read again and a newer forced refresh cannot be displaced.
+        void reads.then(() => { if (this.privateFlight?.version === version) this.privateFlight = null; });
+        if (force) this.minimumPrivateReadVersion = version;
       }
-      const signature = this.challengeSignatureOf();
-      const challengeChanged = signature !== this.challengeSignature;
-      this.challengeSignature = signature;
+      const privateVersion = flight.version;
+      const privateReads = flight.reads;
+      // A forced refresh after a move uses the authenticated fresh path. Ordinary polls share
+      // the public source; neither waits for private account data before painting land.
+      const map = await (force && identityAtRequest
+        ? this.client.worldMap(identityAtRequest.token)
+        : this.readWorld(!force));
+      if (!this.active) return;
+      // A slower earlier request cannot rewind a freshly painted public world.
+      if (this.world && !this.fromMemory && map.world.version === this.world.version &&
+          map.world.revision < this.world.revision) return;
+      if (this.world && !this.fromMemory && map.world.version === this.world.version &&
+          map.world.revision === this.world.revision && publicVersion < this.appliedPublicReadVersion) return;
+      this.appliedPublicReadVersion = publicVersion;
       // THE PUBLIC DISPUTE LAYER: taken from EVERY read, before the "should the map be replaced"
       // decision below. A dispute appearing or closing does not bump the world's revision, so
       // keeping this on `this.world` would have shown a stale layer for as long as ownership stood
@@ -1357,7 +1377,7 @@ export class WorldView {
       const moved = takeovers(this.world?.claims ?? null, map.world.claims, interfaceMotionAllowed());
       let painted = false;
       if (this.fromMemory || !this.world || map.world.revision > this.world.revision ||
-        (map.world.revision === this.world.revision && (force || walletChanged || ownerChanged || challengeChanged || colourChanged || skinChanged))) {
+        (map.world.revision === this.world.revision && (force || ownerChanged || colourChanged || skinChanged))) {
         if (this.world?.version !== map.world.version) {
           this.box = lastChosenCamera(browserStorage(), map.world.version);
           this.touched = this.box !== null;
@@ -1389,17 +1409,44 @@ export class WorldView {
       // it must receive this metadata even when there is no legacy SVG to repaint.
       if (!painted) this.pushPlanet();
       this.paintStakes();
-      this.paintChallenges();
-      // Achievements are re-read when something they count may have moved, and after any transient
-      // failure (the existing poll is the retry; there is no second timer).
-      if (force || ownerChanged || challengeChanged || walletChanged || this.achievements.retry) {
-        this.achievements = { ...this.achievements, retry: false };
-        void this.loadAchievements();
-      }
-      // LAST: a finished duel is settled by the server on this very read. If this client is the one
-      // that has not seen the resolved row yet (or a read raced the settlement), it posts the same
-      // idempotent confirm in the background — never a key the player must press.
-      this.settleAutomatically();
+      // Private metadata may be slower than the map. It updates its own controls when ready;
+      // it never holds the public ownership/skin paint or an opening transition hostage.
+      const privateWork = privateReads.then(([wallet, challenges]) => {
+        if (!this.active || privateVersion < this.minimumPrivateReadVersion ||
+            privateVersion <= this.appliedPrivateReadVersion ||
+            identityAtRequest !== this.identity) return;
+        this.appliedPrivateReadVersion = privateVersion;
+        const walletChanged = wallet !== undefined && this.wallet?.balance !== wallet?.balance;
+        if (wallet !== undefined) this.wallet = wallet;
+        if (challenges) {
+          this.challenges = challenges;
+          this.challengeReceivedAt = Date.now();
+        } else if (!this.identity) {
+          this.challenges = { incoming: [], outgoing: [], serverNow: Date.now() };
+        }
+        const signature = this.challengeSignatureOf();
+        const challengeChanged = signature !== this.challengeSignature;
+        this.challengeSignature = signature;
+        if ((challengeChanged || walletChanged) && this.paintSignatureOf() !== this.paintSignature) this.paint();
+        this.paintWallet();
+        this.paintPanel();
+        this.paintRings();
+        this.paintSwords();
+        this.paintChallenges();
+        if (force || ownerChanged || challengeChanged || walletChanged || this.achievements.retry) {
+          this.achievements = { ...this.achievements, retry: false };
+          void this.loadAchievements();
+        }
+        // A completed challenge may need the authenticated list from this same read.
+        this.settleAutomatically();
+      }).catch(() => {
+        // A detached private paint must not become an unhandled rejection.
+        if (this.active && privateVersion >= this.minimumPrivateReadVersion &&
+            privateVersion > this.appliedPrivateReadVersion) this.notice(ONLINE.worldError);
+      });
+      // Mutations keep their prior completion contract: the action stays busy until the
+      // authoritative wallet/challenge controls catch up. Opening only waits for public land.
+      if (waitForPrivate) await privateWork;
       this.readFailures = 0;
     } catch {
       // One blip says nothing: the drawn map stays and the next read comes sooner (online/blips.ts).
@@ -2548,13 +2595,13 @@ export class WorldView {
       this.notice('A little place in the world is yours.');
       this.pendingRequest = null;
       if (firstClaim) window.dispatchEvent(new Event('futasaku:first-claim'));
-      await this.refresh(true);
+      await this.refresh(true, true);
       this.ripple(cellId);
       this.planet?.grown(cellId);
     } catch {
       this.notice('That tile may have changed. The map has refreshed; no Seeds were taken.');
       this.pendingRequest = null;
-      await this.refresh(true);
+      await this.refresh(true, true);
     } finally { this.busy = false; this.working = null; this.paintSelection(); }
   }
   /** THE GROW RIPPLE: the new tile sends two soft rings out over the land around it. */
@@ -2740,7 +2787,7 @@ export class WorldView {
     } finally {
       this.busy = false;
       this.working = null;
-      await this.refresh(true);
+      await this.refresh(true, true);
       this.markSelection();
     }
   }
@@ -3064,7 +3111,7 @@ export class WorldView {
       this.paintColourPane();
       this.paintKeyColour();
       // Also refresh a menu returned to while the colour request was on its way.
-      await this.refresh(true);
+      await this.refresh(true, true);
     }
   }
 
@@ -3189,7 +3236,7 @@ export class WorldView {
     } finally {
       this.claimingAchievement = null;
       this.paintPanel();
-      if (!this.active && this.menuPreview) await this.refresh(true);
+      if (!this.active && this.menuPreview) await this.refresh(true, true);
     }
   }
 
@@ -4231,7 +4278,7 @@ export class WorldView {
       const stake = sent.challenge.stakeCellId;
       this.notice(stake ? CHALLENGE.sent(stakeName(stake)) : CHALLENGE.sendFailed);
       this.closeSheet();
-      await this.refresh(true);
+      await this.refresh(true, true);
     }, CHALLENGE.sendFailed);
   }
 
@@ -4242,7 +4289,7 @@ export class WorldView {
     await this.runSheet(async () => {
       const result = await this.client.respondWorldChallenge(me.token, challenge.id, accept, this.sheetRequestId ?? undefined);
       this.closeSheet();
-      await this.refresh(true);
+      await this.refresh(true, true);
       if (accept && result.matchId) this.matchOpener?.(result.matchId);
     }, CHALLENGE.answerFailed);
   }
@@ -4262,7 +4309,7 @@ export class WorldView {
         ? (mine ? CHALLENGE.settled : CHALLENGE.resultSettled)
         : CHALLENGE.alreadySettled);
       this.closeSheet();
-      await this.refresh(true);
+      await this.refresh(true, true);
     }, CHALLENGE.confirmFailed);
   }
 

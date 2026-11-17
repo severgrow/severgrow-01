@@ -197,7 +197,9 @@ try {
   await page.waitForTimeout(200);
   check('CHALLENGES swaps the page in place', (await page.getAttribute('#online-world-panel', 'data-pane')) === 'challenges' && await page.isVisible('#world-challenges-empty'));
   await page.click('#world-key-challenges');
-  await page.waitForTimeout(200);
+  // The panel leaves through its existing motion; wait for that state rather than sampling
+  // a fixed 200 ms frame that can land mid-exit on a busy browser runner.
+  await page.waitForSelector('#online-world-panel', { state: 'hidden', timeout: 2000 });
   const pressed = await iconOffsets(page);
   check('icons stay centred after a key has been pressed (the press layer is not a grid row)', pressed.every((o) => Math.abs(o.dx) <= .75 && Math.abs(o.dy) <= .75), JSON.stringify(pressed));
   check('pressing the lit key again shuts its page', await page.isHidden('#online-world-panel') && await keysOut(page));

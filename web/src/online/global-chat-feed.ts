@@ -3,6 +3,7 @@ export function createChatFeed<T>(
   fetchPage:(scope:string,signal:AbortSignal)=>Promise<{messages:T[]}>,
   onUpdate:(messages:readonly T[])=>void,
   now:()=>number=Date.now,
+  deadlineMs=10_000,
 ) {
   let scope:string|null=null,rows:readonly T[]=[],loaded=false,updated=-Infinity,version=0;
   let pending:{controller:AbortController;promise:Promise<void>}|null=null;
@@ -18,10 +19,15 @@ export function createChatFeed<T>(
       if(!next||(loaded&&now()-updated<maxAge))return Promise.resolve();
       if(pending)return pending.promise;
       const at=version,controller=new AbortController();
-      const promise=fetchPage(next,controller.signal).then(page=>{
+      let timeout:ReturnType<typeof setTimeout>|null=null;
+      const bounded=new Promise<{messages:T[]}>((resolve,reject)=>{
+        timeout=setTimeout(()=>{controller.abort();reject(new Error('Chat read timed out'));},deadlineMs);
+        fetchPage(next,controller.signal).then(resolve,reject);
+      });
+      const promise=bounded.then(page=>{
         if(at!==version||scope!==next)return;
         rows=page.messages.slice(-30);loaded=true;updated=now();onUpdate(rows);
-      }).finally(()=>{if(pending?.promise===promise)pending=null;});
+      }).finally(()=>{if(timeout)clearTimeout(timeout);if(pending?.promise===promise)pending=null;});
       pending={controller,promise};return promise;
     },
     replace(next:string,messages:readonly T[]){

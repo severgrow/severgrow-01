@@ -473,3 +473,55 @@ answered. Both runs: the ritual's emblem cover ran, no page errors.
 Rival-bot proofs after `c2d129c2` (700 ms slices), live server: 6 wins against bots 10 and 12, all
 paid 20, 5-6 rounds, 5-7 s from this machine's region, no `546 WORKER_RESOURCE_LIMIT` (before: 2 of 8
 hit it). Promoted live 2026-11-17 (`live` f4ba65f5 -> 94d7494a).
+
+### Public Planet and global chat readiness (2026-11-17)
+
+Baseline for this focused foundation pass: `bc855ad7` on `futa0.5-online` and `live`. The
+client already paints a versioned cached world and shares public reads. The remaining critical
+path was `WorldView.refresh()` awaiting the public map, wallet and challenges together before
+painting fresh ownership. The chat's one-page prefetch was called after a null-world early return,
+so a new visitor could not warm chat until the world arrived. These paths were changed without
+altering the engine, public map protocol, read cadence, artwork or settled Planet renderer.
+
+Controlled mobile Chromium probe (`web/e2e/foundation-loading.ts`, 390 × 844, local mocked API,
+80 ms public map and 800 ms private wallet/challenges):
+
+| Observation | Baseline | Candidate |
+| --- | ---: | ---: |
+| Fresh connected ownership visible in Planet ranking after the request gate opens | 899 ms | 184 ms |
+| Chat GET starts relative to a 900 ms public world request | 961 ms after world start | 1 ms before world start |
+
+Three further serial runs with the same build variables produced fresh-ownership times of
+902/844/852 ms on the baseline and 190/187/184 ms on the candidate (medians 852 → 187 ms).
+The chat request started 939/966 ms after the world started in two baseline runs; one baseline
+run did not start chat within the probe's observation window. It started 1/7/6 ms before the
+world request in all three candidate runs. Software-rendered boot/menu timings varied by
+seconds in both builds, so this probe does not establish a general cold-start speedup.
+
+The ranking is a visible UI proxy for public ownership paint, not a GPU frame timestamp. A
+separate five-run unit-level deferred-read probe measured a median 802 → 80 ms to the public
+paint callback with the same 80/800 ms delays. A cached world remains on screen before release
+of the fresh response. The candidate's one warm chat GET still shares an open-panel read; no
+extra polling was added. A failed cold chat read now leaves `LOADING` for a truthful offline
+status; a 10-second read deadline aborts a stalled request and permits a retry. Closing chat
+aborts its pending GET.
+
+The real public world endpoint, read twice from this execution region without writes or load
+testing, took 2.43 s and 1.39 s for 22,639 bytes. Those are network/server samples, not the
+controlled client comparison. First visitors without a cached world still depend on that path;
+its lazy challenge settlement and expiry preserve authoritative territory state. No database
+latency breakdown or physical phone battery/thermal measurement was available in this pass.
+
+The reported `online-soak-teardown` CI failure occurred at the app-level retry convergence
+check on matches 8 and 15. A local 15-match baseline run passed those checks, so the exact CI
+host failure was not reproduced here. The fixture previously targeted a closed TCP port for
+Realtime; a connect timeout can consume its 12-second product bound on several attempts before
+the fixed 60-second quiet-state check. The final fixture points only this suite's Realtime URL
+at its local HTTP server, which promptly rejects WebSocket upgrades. It retains the same
+60-second convergence condition, zero-socket/interval/frame assertions and real product retry
+logic. The final candidate passed all 15 matches, including 8 and 15. Both builds had zero
+requests during each five-second hidden-tab sample and zero sockets/intervals/frame callbacks
+after every exit route. The candidate's last-ten-match retained-heap slopes were 152 and
+245 KiB/match for the two seats, versus 271 and 134 KiB/match on the baseline; all four are
+below the existing 1,024 KiB/match guard. These short-run slopes are not proof of a permanent
+plateau, and the change is not claimed as a general memory-speed improvement.

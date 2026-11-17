@@ -26,3 +26,18 @@ it('a send/block result supersedes an older page and failed refresh keeps readab
  fail.snapshot('a');fail.replace('a',['kept']);await expect(fail.read('a',0)).rejects.toThrow('offline');
  expect(fail.snapshot('a').messages).toEqual(['kept']);
 });
+it('bounds a stalled cold read and permits an immediate retry',async()=>{
+ vi.useFakeTimers();
+ try {
+  const calls:AbortSignal[]=[];
+  const feed=createChatFeed<string>((_,signal)=>{calls.push(signal);return new Promise(()=>{});},()=>{},Date.now,50);
+  const first=feed.read('a');
+  const failed=expect(first).rejects.toThrow('timed out');
+  await vi.advanceTimersByTimeAsync(50);
+  await failed;
+  expect(calls[0]!.aborted).toBe(true);
+  void feed.read('a').catch(()=>{});
+  expect(calls).toHaveLength(2);
+  feed.abort();
+ } finally { vi.useRealTimers(); }
+});

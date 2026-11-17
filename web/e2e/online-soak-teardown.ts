@@ -498,7 +498,10 @@ const settleRealtime = async (seats: readonly SeatSession[]): Promise<boolean> =
   return false;
 };
 
-const duel = await startLocalDuel({ port: PORT });
+// Use this fixture's own HTTP listener as a fast, deterministic rejected WebSocket handshake.
+// The product's 12 s connect timeout is tested separately; a platform-dependent TCP timeout here
+// can make its five bounded retries exceed this suite's 60 s quiet-state window without a leak.
+const duel = await startLocalDuel({ port: PORT, rejectRealtimeLocally: true });
 try {
   const g0 = await duel.api.createGuest();
   const g1 = await duel.api.createGuest();
@@ -518,8 +521,8 @@ try {
   // inbox poll are part of "boot" rather than looking like a per-duel leak later.
   const liveUp = [await waitLiveListener(seat0), await waitLiveListener(seat1)];
   console.log(`live listener mounted at boot: seat0=${liveUp[0]} seat1=${liveUp[1]}`);
-  // The app-level listener's Realtime socket retries with backoff (up to ~30 s) and then gives up,
-  // since this harness has no Realtime server. Its last attempt can be mid-connect at any later
+  // The app-level listener's Realtime socket retries with backoff (about 30 s with this fixture's
+  // immediate rejected handshake) and then gives up. Its last attempt can be mid-connect at any later
   // check and read as a duel's leftover socket. Wait until neither seat has opened a socket for 16 s
   // (longer than its largest backoff) and none is open, so "boot" includes the settled listener.
   check('app-level Realtime retries settle at boot',await settleRealtime(seats));
