@@ -27,7 +27,7 @@ import type { RitualCard, StarterRitualView } from '../logic/starter-ritual.js';
 import { RITUAL_DECK_SIZE } from '../logic/starter-ritual.js';
 import { WORDMARK_URL as plainMarkUrl } from './branding.js';
 import backFrameUrl from '../assets/cards/back-frame.webp?url';
-import { RING_TURN_DEG, emblemParts, ringFitScale } from './ritual-emblem.js';
+import { emblemParts, ringFitScale, ringTurnFrames } from './ritual-emblem.js';
 
 /**
  * The kanji leaving the card (owner, 2026-11-08: "make it look like it's actually coming from the card
@@ -966,10 +966,8 @@ class StarterRitual {
       const lift = this.ms(KANJI.liftMs);
       this.animate(cover.root, [{ opacity: 0 }, { opacity: 1, offset: 0.12 }, { opacity: 1 }], { duration: lift, easing: 'linear' });
       this.animate(cover.kanji, [{ opacity: 1 }, { opacity: 1, offset: 0.12 }, { opacity: 0, offset: 0.42 }, { opacity: 0 }], { duration: lift, easing: 'ease-out' });
-      this.animate(cover.ring, [
-        { transform: 'rotate(0deg) scale(1)' },
-        { transform: `rotate(${RING_TURN_DEG}deg) scale(${fit.toFixed(4)})` },
-      ], { duration: lift, easing: 'cubic-bezier(.3,.7,.25,1)' });
+      // The key turn: one full spin onto the tile, over the kanji's rise and hold (no added time).
+      this.animate(cover.ring, ringTurnFrames(fit), { duration: lift + this.ms(KANJI.holdMs) });
     }
     // The emblem's own size, so the first frame reads as the card's mark lighting up.
     const start = clamp((emblem * 0.42) / wide, 0.08, 0.3);

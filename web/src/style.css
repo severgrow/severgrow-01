@@ -9440,6 +9440,7 @@ html.futasaku-product #sheet-settings::-webkit-scrollbar-thumb {
   width: 66.016%;
   height: 53.933%;
 }
+.ritual-emblem > .ritual-emblem-ring { color: #D6CBAC; }
 .ritual-emblem > span > svg {
   display: block;
   width: 100%;
