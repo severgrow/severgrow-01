@@ -26,10 +26,10 @@ import { proofDigest, readResume, signResume } from './resume-token.js';
 /**
  * SLICED PROOF CHECKS (2026-11-12). The Edge runtime stops a request after ~2 s of CPU, and a long or
  * rival game can take longer to replay. A page that asks for it is checked in slices of `sliceMs`
- * (default 1200 ms of the request's clock) and gets a signed resume token between them.
+ * (default 700 ms of the request's clock; 1200 until 2026-11-17, which a slow rival move could push past the CPU limit) and gets a signed resume token between them.
  */
 export type ResumeOptions = { resumeSecret?: string | null; sliceMs?: number; clock?: () => number };
-export const PROOF_SLICE_MS = 1200;
+export const PROOF_SLICE_MS = 700;
 /** Rounds per proof are rate-limited apart from the per-proof budget (a slice is not a new proof). */
 const RESUME_ROUNDS_PER_HOUR = 900;
 import { achievementById, achievementFacts, achievementSourceKey, achievementViews } from './achievements.js';
