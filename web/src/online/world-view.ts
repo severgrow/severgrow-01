@@ -1409,6 +1409,7 @@ export class WorldView {
       // it must receive this metadata even when there is no legacy SVG to repaint.
       if (!painted) this.pushPlanet();
       this.paintStakes();
+      this.paintChallenges();
       // Private metadata may be slower than the map. It updates its own controls when ready;
       // it never holds the public ownership/skin paint or an opening transition hostage.
       const privateWork = privateReads.then(([wallet, challenges]) => {
@@ -1427,12 +1428,17 @@ export class WorldView {
         const signature = this.challengeSignatureOf();
         const challengeChanged = signature !== this.challengeSignature;
         this.challengeSignature = signature;
-        if ((challengeChanged || walletChanged) && this.paintSignatureOf() !== this.paintSignature) this.paint();
-        this.paintWallet();
-        this.paintPanel();
-        this.paintRings();
-        this.paintSwords();
-        this.paintChallenges();
+        if (challengeChanged || walletChanged) {
+          if (this.paintSignatureOf() !== this.paintSignature) this.paint();
+          if (walletChanged) this.paintWallet();
+          this.paintPanel();
+          this.paintSelection();
+          if (challengeChanged) {
+            this.paintRings();
+            this.paintSwords();
+            this.paintChallenges();
+          }
+        }
         if (force || ownerChanged || challengeChanged || walletChanged || this.achievements.retry) {
           this.achievements = { ...this.achievements, retry: false };
           void this.loadAchievements();

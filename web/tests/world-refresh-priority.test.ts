@@ -28,6 +28,7 @@ it('paints a fresh public planet before a slow private wallet or challenge read'
   await refresh;
   await new Promise(resolve => setTimeout(resolve, 0));
   expect(state.wallet.balance).toBe(40);
+  expect(state.paintSelection).toHaveBeenCalledTimes(2);
   let finishMutation!: (value: unknown) => void;
   state.client.seedWallet = () => new Promise(resolve => { finishMutation = resolve; });
   let actionSettled = false;
@@ -108,8 +109,9 @@ it('reuses a slow private read across public polls so the wallet can still settl
   const state: any = Object.create(WorldView.prototype);
   Object.assign(state, {
     active: true, fromMemory: false, privateReadVersion: 0, publicReadVersion: 0, appliedPublicReadVersion: 0,
-    world: { ...world, revision: 1 }, identity: { playerId: 'me', token: 'token' }, wallet: null,
-    challenges: { incoming: [], outgoing: [], serverNow: 0 }, achievements: { retry: false }, paintSignature: 'old',
+    world: { ...world, revision: 1 }, identity: { playerId: 'me', token: 'token' }, wallet: { balance: 55 },
+    challenges: { incoming: [], outgoing: [], serverNow: 0 }, challengeSignature: '',
+    achievements: { retry: false }, paintSignature: 'old',
     client: { seedWallet: vi.fn(() => wallet), worldChallenges: vi.fn(async () => null) },
     readWorld: vi.fn(async () => ({ world })), challengeSignatureOf: () => '', paintSignatureOf: () => 'new',
     paint: vi.fn(() => { state.paintSignature = 'new'; }), notice: vi.fn(), paintWallet: vi.fn(), paintPanel: vi.fn(),
@@ -123,4 +125,5 @@ it('reuses a slow private read across public polls so the wallet can still settl
   await new Promise(resolve => setTimeout(resolve, 0));
   expect(state.client.seedWallet).toHaveBeenCalledOnce();
   expect(state.wallet.balance).toBe(55);
+  expect(state.paintPanel).toHaveBeenCalledTimes(2);
 });

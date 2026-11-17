@@ -525,3 +525,36 @@ after every exit route. The candidate's last-ten-match retained-heap slopes were
 245 KiB/match for the two seats, versus 271 and 134 KiB/match on the baseline; all four are
 below the existing 1,024 KiB/match guard. These short-run slopes are not proof of a permanent
 plateau, and the change is not claimed as a general memory-speed improvement.
+
+The first split-read candidate needlessly repainted wallet, panel, rings, swords and challenge
+controls when an unchanged private response followed the public paint. A focused mobile drag
+repeat exposed this extra work, and the final implementation only repaints private controls when
+wallet balance or challenge state changes. It also refreshes the selected tile when a late wallet
+read changes affordability. The regular public challenge paint remains in place so countdowns
+still update on a normal poll. This was verified with a regression test and a repeat of the
+same software-browser probe:
+
+| 390 × 844, 4× CPU, Chromium SwiftShader | Baseline repeat | Split-read before cleanup | Final |
+| --- | ---: | ---: | ---: |
+| Planet drag main-thread task duration (ms/s) | 194 | 297 | 190 |
+| Planet drag application frame callbacks | 77 | 77 | 77 |
+| 3,000-tile drag main-thread task duration (ms/s) | 174 | 239 | 184 |
+| 3,000-tile drag application frame callbacks | 26 | 26 | 26 |
+
+These are single action windows, not battery or real display-frame measurements. The full
+baseline and candidate lifecycle runs differed widely in short idle samples even before the
+cleanup (for example the baseline 3,000-tile idle sample read 400 then 95 ms/s), so no general
+frame-rate gain is inferred from the drag table. The two full runs had zero board rAF callbacks
+in the sampled game-idle windows and zero menu callbacks after the 45-second rest. The candidate
+desktop Planet drag and ten-navigation costs were 64 and 165 ms/s versus 87 and 186 ms/s on the
+baseline. The final mobile repeat is the relevant guard for the code added in this pass.
+
+Three complete offline games in one document, normal motion, 390 × 844, software WebGL, and the
+real bot worker finished after 38, 34 and 35 automated player actions. There were no page errors,
+and all three four-second postgame idle captures recorded zero application rAF callbacks. The
+garbage-collected result-screen heap was 11.67, 12.35 and 12.63 MiB; this is consistent with the
+earlier documented six-game pattern (11.69 to 13.14 MiB), although that earlier run was on a
+different commit and is not an exact A/B comparison. The 15-match online soak is the stricter
+teardown and request-rate check. No new images, packages, render loop or polling cadence were
+introduced. Physical iPhone/Android battery draw and temperature remain unmeasured; these CDP
+numbers only describe a throttled desktop software renderer.
