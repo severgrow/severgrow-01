@@ -47,13 +47,15 @@ try{
   assert.equal(await p.evaluate(()=>(window as any).__severgrow.planet().selected),at.id);
   await p.screenshot({path:`${out}/login-${width}.png`});
   console.log('PASS',width,'the complete sign-in prompt opens the existing login and retains the selected tile');
-  // The bolt is the visible presence indicator in Blitz, while ordinary matches retain their line.
+  // OWNER RULE CHANGE (2026-11-16: '"away" and any other text from top should not be shown'): the
+  // top bar shows no presence line in ANY match; the bolt and the chat dot say it. This used to pin
+  // "Blitz hides it, ordinary matches keep it".
   const visible=await p.evaluate(()=>{
    const probe=document.createElement('div');probe.className='duel-hud';probe.innerHTML='<span data-duel-presence data-presence="online">Online</span>';document.body.append(probe);
    const e=probe.firstElementChild!;document.documentElement.dataset.blitzDuel='1';const blitz=getComputedStyle(e).display;
    delete document.documentElement.dataset.blitzDuel;const ordinary=getComputedStyle(e).display;probe.remove();return {blitz,ordinary};
   });
-  assert.equal(visible.blitz,'none');assert.notEqual(visible.ordinary,'none');
+  assert.equal(visible.blitz,'none');assert.equal(visible.ordinary,'none');
   await p.close();
  }
 }finally{await browser.close();await fixture.close();}

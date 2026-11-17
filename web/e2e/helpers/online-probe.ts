@@ -35,6 +35,8 @@ export type ResourceSnapshot = {
   topLive: [string, number][];
   socketsCreated: number;
   socketsLive: number;
+  /** The last few sockets opened: when, whether the page was hidden, and the opening call stack. */
+  socketRecent?: { at: number; hidden: boolean; stack: string[] }[];
   socketUrls: Record<string, number>;
   workers: number;
   nodes: number;
@@ -72,7 +74,7 @@ export const PROBE_SCRIPT = `(() => {
   };
   var live = { intervals: new Set(), timeouts: new Set(), rafs: new Set() };
   var entries = [];
-  var sockets = { created: 0, live: 0, urls: {} };
+  var sockets = { created: 0, live: 0, urls: {}, recent: [] };
   var workers = { created: 0, live: 0 };
   // The channel patches Storage.prototype, so capture the un-prefixed accessors now (the probe runs
   // before any app script) — otherwise reading a raw prefixed key would double-prefix it.
@@ -185,6 +187,8 @@ export const PROBE_SCRIPT = `(() => {
       sockets.live++;
       var short = String(url).slice(0, 48);
       sockets.urls[short] = (sockets.urls[short] || 0) + 1;
+      // Who opened it, and when: printed by a suite when its sockets do not settle.
+      try { sockets.recent.push({ at: Math.round(performance.now()), hidden: document.hidden, stack: String(new Error().stack || '').split('\\n').slice(2, 7).map(function (l) { return l.trim().slice(0, 90); }) }); if (sockets.recent.length > 12) sockets.recent.shift(); } catch (e) {}
       try { ws.addEventListener('close', function () { sockets.live--; }); } catch (e) {}
       return ws;
     }
@@ -265,6 +269,7 @@ export const PROBE_SCRIPT = `(() => {
         socketsCreated: sockets.created,
         socketsLive: sockets.live,
         socketUrls: sockets.urls,
+        socketRecent: sockets.recent.slice(),
         workers: workers.live,
         nodes: document.getElementsByTagName('*').length,
         heap: (mem && mem.usedJSHeapSize) || 0,

@@ -490,6 +490,11 @@ const settleRealtime = async (seats: readonly SeatSession[]): Promise<boolean> =
     if(Date.now()-quietSince>=16_000)return true;
     await sleep(1000);
   }
+  // Not quiet: say who keeps opening sockets, so the failure names its cause.
+  for (const [i, s] of seats.entries()) {
+    const r = await readResources(s.page);
+    console.log(`    seat${i} sockets created ${r.socketsCreated}, live ${r.socketsLive}; last: ${JSON.stringify(r.socketRecent?.slice(-4))}`);
+  }
   return false;
 };
 
