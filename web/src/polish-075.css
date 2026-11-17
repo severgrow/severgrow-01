@@ -147,13 +147,15 @@ html.v075.reduce-motion #game #board-wrap { transition: none; }
 }
 /* Existing seven motes: varied depth, a small lateral drift and invisible loop boundaries.
    Their cached compositor layers stay; no extra particles, filters or render loop. */
+/* Brighter (owner, 2026-11-17: "2 layers of stars/flying lights - but I can't see the bigger ones"):
+   the motes were 4.5-10.5% ink, too faint to read behind the board. Same seven, same drift. */
 html.v075 #spores i {
-  --dust-size: 5px; --dust-ink: .075;
+  --dust-size: 5px; --dust-ink: .12;
   width: var(--dust-size); height: var(--dust-size); margin: -2.5px 0 0 -2.5px;
   animation-name: v075-dust;
 }
-html.v075 #spores i:nth-child(3n + 1) { --dust-size: 3px; --dust-ink: .045; }
-html.v075 #spores i:nth-child(3n + 2) { --dust-size: 7px; --dust-ink: .105; }
+html.v075 #spores i:nth-child(3n + 1) { --dust-size: 3px; --dust-ink: .08; }
+html.v075 #spores i:nth-child(3n + 2) { --dust-size: 7px; --dust-ink: .18; }
 @keyframes v075-dust {
   0% { opacity: 0; transform: translate(0,0); }
   15% { opacity: var(--dust-ink); transform: translate(3px,-19.5vh); }

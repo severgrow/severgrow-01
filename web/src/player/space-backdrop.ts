@@ -35,8 +35,16 @@ const CSS = `
 /* IN GAME the game's own background stays; the sky (black) and its stars lie over it at 35% (owner,
    2026-11-04: "still use background we have now, put the black and stars on top of existing one with
    like 35% opacity"). */
-#space-backdrop.in-game { background-color: #0e0f10; }
-#space-backdrop.in-game.lit { opacity: .35; }
+/* (owner, 2026-11-17: "behind the board we should have 2 layers of stars - but I can't see the bigger
+   ones ... make the background 5% brighter, on all screens, mobile and desktop"): the same 35% charcoal
+   over the game's background, lifted 5% toward the cream, edge to edge; the two star layers over it at a
+   strength where the near, bigger stars read. Only the canvases carry the stars' opacity now. */
+#space-backdrop.in-game {
+  background: linear-gradient(rgba(232, 221, 197, .05), rgba(232, 221, 197, .05)), rgba(14, 15, 16, .35);
+}
+#space-backdrop.in-game.lit { opacity: 1; }
+#space-backdrop.in-game > canvas:first-child { opacity: .6; }
+#space-backdrop.in-game > canvas:last-child { opacity: 1; }
 #space-backdrop { position: absolute; inset: 0; overflow: hidden; pointer-events: none; opacity: 0; transition: opacity 260ms ease-out; }
 #space-backdrop.lit { opacity: 1; }
 #space-backdrop[hidden] { display: none; }
@@ -96,21 +104,18 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
   let inGame = false;
   const paint = () => {
     const w = innerWidth, h = innerHeight;
-    inGame = !!game && !game.hidden; near.hidden = inGame;
+    inGame = !!game && !game.hidden;
     root.style.backgroundImage = '';
+    // Both layers on every screen, each on its own canvas at its own parallax speed. In game the near,
+    // bigger stars used to be folded into the far canvas alone and were barely there (2026-11-17).
     for (const [canvas, share, which] of [[far, FAR, 'far'], [near, 1, 'near']] as const) {
-      // A single velocity needs a single field. Baking two parallax speeds into one cache
-      // would jump the distant stars at each renewal. Keep the menu's near field in game.
-      if (inGame && which === 'far') continue;
-      const driftShare = inGame ? 1 : share;
-      const cw = w + mx * driftShare, ch = h + my * driftShare;
+      const cw = w + mx * share, ch = h + my * share;
       const source = renderer.layer(which, cw, ch, [base.x, base.y]);
-      const target = inGame ? far : canvas;
-      if (target.width !== source.width || target.height !== source.height) { target.width = source.width; target.height = source.height; }
-      target.style.width = `${cw}px`; target.style.height = `${ch}px`; target.style.top = `${-my * driftShare}px`;
-      const ctx = target.getContext('2d');
+      if (canvas.width !== source.width || canvas.height !== source.height) { canvas.width = source.width; canvas.height = source.height; }
+      canvas.style.width = `${cw}px`; canvas.style.height = `${ch}px`; canvas.style.top = `${-my * share}px`;
+      const ctx = canvas.getContext('2d');
       if (!ctx) continue;
-      if (!inGame || which === 'near') ctx.clearRect(0, 0, target.width, target.height);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(source, 0, 0);
     }
     redraws++;
@@ -152,7 +157,7 @@ export const mountSpaceBackdrop = (): SpaceBackdrop | null => {
     // 60 recalcs/s at idle, 1/s without it). Leaving the game repaints and restarts both layers.
     const layers = ([[far, FAR], [near, 1]] as const).filter(([canvas]) => !canvas.hidden);
     anims = layers.map(([canvas, share]) => (canvas as HTMLCanvasElement).animate(
-      [0,.25,.5,.75,1].map(t => { const p = spacePath(t); return { offset: t, translate: `${-mx * (inGame ? 1 : share as number) * p.x}px ${my * (inGame ? 1 : share as number) * p.y}px` }; }),
+      [0,.25,.5,.75,1].map(t => { const p = spacePath(t); return { offset: t, translate: `${-mx * (share as number) * p.x}px ${my * (share as number) * p.y}px` }; }),
       { duration: SLIDE_MS, easing: 'linear', fill: 'forwards' }));
     started = performance.now();
     if (held) for (const a of anims) a.pause();
