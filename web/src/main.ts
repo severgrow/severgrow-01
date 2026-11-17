@@ -2356,6 +2356,8 @@ async function runStarterRitual(view: StarterRitualView): Promise<void> {
     // Display seat 0 is always the local player (moss/tree), online and offline alike.
     homeRects: () => ({ you: homeTileRect(HUMAN), opponent: homeTileRect(BOT) }),
     centerTile: centerTileRect,
+    // the emblem's hex locks onto the middle tile: one short tick where the device and the setting allow
+    onUnlock: () => vibrate(settings.vibration, 8),
     // 0.85: the draw pile thuds as the ritual's deck lands on it.
     onFiled: () => thudPile($('deck'), 1, motionOn(), INTERFACE_MOTION.easeOpen),
   });

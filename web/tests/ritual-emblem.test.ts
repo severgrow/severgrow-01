@@ -2,7 +2,7 @@
 // its hex turns to sit on the middle tile. See player/ritual-emblem.ts.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { EMBLEM_BOX, EMBLEM_VIEWBOX, RING_SPIN_DEG, RING_TURN_DEG, emblemParts, ringFitScale, ringTurnFrames } from '../src/player/ritual-emblem.js';
+import { EMBLEM_BOX, EMBLEM_VIEWBOX, RING_LOCK_AT, RING_SPIN_DEG, RING_TURN_DEG, emblemParts, ringFitScale, ringRippleFrames, ringTurnFrames } from '../src/player/ritual-emblem.js';
 
 const source = readFileSync(new URL('../src/assets/brand/hex-emblem.svg', import.meta.url), 'utf8');
 const subpaths = (svg: string) => (svg.match(/M /g) ?? []).length;
@@ -57,25 +57,31 @@ describe('the turned ring lands on the tile', () => {
   });
 });
 
-describe('the key turn (owner, 2026-11-17: one visible spin, landing aligned)', () => {
+describe('the key turn (owner, 2026-11-17: one visible spin, landing aligned, no colour change)', () => {
   const frames = ringTurnFrames(1.2);
   const angle = (f: Keyframe) => Number(/rotate\((-?[\d.]+)deg\)/.exec(String(f.transform))![1]);
+  const scale = (f: Keyframe) => Number(/scale\(([\d.]+)\)/.exec(String(f.transform))![1]);
   it('turns once round and lands flat-top: 390 degrees, the same face as 30', () => {
     expect(RING_SPIN_DEG).toBe(390);
     expect(angle(frames.at(-1)!)).toBe(390);
     expect(angle(frames.at(-1)!) % 60).toBe(RING_TURN_DEG % 60);
   });
-  it('winds back first, overshoots a little, and locks at the tile size', () => {
+  it('winds back first, overshoots a little, locks, clicks, and rests at the tile size', () => {
     expect(angle(frames[1]!)).toBeLessThan(0);
     expect(angle(frames[2]!)).toBeGreaterThan(390);
     expect(angle(frames[2]!) - 390).toBeLessThan(12);
-    expect(String(frames.at(-1)!.transform)).toContain('scale(1.2000)');
+    const lock = frames.find((f) => f.offset === RING_LOCK_AT)!;
+    expect(angle(lock)).toBe(390);
+    expect(Math.min(...frames.slice(3).map(scale))).toBeLessThan(1.2);
+    expect(scale(frames.at(-1)!)).toBe(1.2);
   });
-  it('glows gold while it turns and is back in the card paint when it locks', () => {
-    expect(frames[2]!.color).toBe('#f2c14e');
-    expect(frames.at(-1)!.color).toBe(frames[0]!.color);
+  it('never changes colour (owner: "don\'t change its color"): transform only', () => {
+    for (const f of frames) expect(Object.keys(f).filter((k) => !['transform', 'offset', 'easing'].includes(k))).toEqual([]);
   });
-  it('transform and colour only: no filter, no blur', () => {
-    for (const f of frames) expect(Object.keys(f).filter((k) => !['transform', 'color', 'offset', 'easing'].includes(k))).toEqual([]);
+  it('the unlock ripple grows off the locked ring and fades out: transform and opacity only', () => {
+    const r = ringRippleFrames(1.2);
+    expect(angle(r[0]!)).toBe(390);
+    expect(scale(r.at(-1)!)).toBeGreaterThan(scale(r[0]!));
+    expect(r.at(-1)!.opacity).toBe(0);
   });
 });

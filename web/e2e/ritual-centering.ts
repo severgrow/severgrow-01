@@ -35,7 +35,7 @@ try {
       (window as any).__geometry={tile:tile.toJSON(),card:deck.toJSON(),anchor:document.getElementById('lottery-deck-anchor')?.getBoundingClientRect().toJSON(),style:{width:style.width,height:style.height,position:style.position,display:style.display,transform:style.transform,translate:style.translate},layer:layer!.getBoundingClientRect().toJSON()};
      }
      // The emblem lets go of its kanji and its hex turns onto the tile (owner, 2026-11-16).
-     const ring=document.querySelector<HTMLElement>('.ritual-emblem-ring');
+     const ring=document.querySelector<HTMLElement>('.ritual-emblem-ring:not(.ritual-emblem-ripple)');
      if(tile&&ring&&ring.getAnimations().length&&ring.getAnimations().every(a=>a.playState==='finished')){
       const m=new DOMMatrix(getComputedStyle(ring).transform);
       const box=ring.getBoundingClientRect();

@@ -27,7 +27,7 @@ import type { RitualCard, StarterRitualView } from '../logic/starter-ritual.js';
 import { RITUAL_DECK_SIZE } from '../logic/starter-ritual.js';
 import { WORDMARK_URL as plainMarkUrl } from './branding.js';
 import backFrameUrl from '../assets/cards/back-frame.webp?url';
-import { emblemParts, ringFitScale, ringTurnFrames } from './ritual-emblem.js';
+import { RING_LOCK_AT, emblemParts, ringFitScale, ringRippleFrames, ringTurnFrames } from './ritual-emblem.js';
 
 /**
  * The kanji leaving the card (owner, 2026-11-08: "make it look like it's actually coming from the card
@@ -77,6 +77,8 @@ export type StarterRitualOptions = {
   readonly onPhase?: (phase: StarterRitualPhase) => void;
   /** The deck has landed on the real draw pile (the page thuds the pile). */
   readonly onFiled?: () => void;
+  /** The emblem's hex has locked onto the middle tile (the page may tick the haptics). */
+  readonly onUnlock?: () => void;
 };
 
 const TEMPO_SCALE: Record<StarterRitualTempo, number> = { slow: 1.16, normal: 1, fast: 0.82, skip: 1 };
@@ -965,9 +967,26 @@ class StarterRitual {
       const fit = ringFitScale(cover.card, tile?.width ?? 0);
       const lift = this.ms(KANJI.liftMs);
       this.animate(cover.root, [{ opacity: 0 }, { opacity: 1, offset: 0.12 }, { opacity: 1 }], { duration: lift, easing: 'linear' });
-      this.animate(cover.kanji, [{ opacity: 1 }, { opacity: 1, offset: 0.12 }, { opacity: 0, offset: 0.42 }, { opacity: 0 }], { duration: lift, easing: 'ease-out' });
-      // The key turn: one full spin onto the tile, over the kanji's rise and hold (no added time).
-      this.animate(cover.ring, ringTurnFrames(fit), { duration: lift + this.ms(KANJI.holdMs) });
+      // The emblem's kanji AND its tree go with the rise (owner, 2026-11-17: nothing in the middle):
+      // only the hex is left to turn.
+      for (const part of [cover.kanji, cover.tree]) {
+        this.animate(part, [{ opacity: 1 }, { opacity: 1, offset: 0.12 }, { opacity: 0, offset: 0.42 }, { opacity: 0 }], { duration: lift, easing: 'ease-out' });
+      }
+      // The key turn: one full spin onto the tile, over the kanji's rise and hold (no added time),
+      // then the click: a ghost ring ripples off the tile and the page may tick the haptics.
+      const turn = lift + this.ms(KANJI.holdMs);
+      this.animate(cover.ring, ringTurnFrames(fit), { duration: turn });
+      this.animate(cover.ripple, ringRippleFrames(fit), { duration: this.ms(320), delay: turn * RING_LOCK_AT, easing: 'cubic-bezier(.2,.7,.3,1)' });
+      const unlock = this.options.onUnlock;
+      if (unlock) {
+        // A tracked timer: a ritual that is skipped or torn down never ticks afterwards.
+        const id = setTimeout(() => {
+          this.timers.delete(id);
+          if (this.cancelled || this.finished) return;
+          try { unlock(); } catch { /* a flourish never holds the match */ }
+        }, turn * RING_LOCK_AT);
+        this.timers.add(id);
+      }
     }
     // The emblem's own size, so the first frame reads as the card's mark lighting up.
     const start = clamp((emblem * 0.42) / wide, 0.08, 0.3);
@@ -1007,7 +1026,7 @@ class StarterRitual {
    * Cover the top card's painted emblem with the same emblem in parts: the emblem-less back, then the
    * ring, the tree and the kanji, each its own layer so each can move. Transform and opacity only.
    */
-  private coverEmblem(): { root: HTMLElement; ring: HTMLElement; kanji: HTMLElement; card: number } | null {
+  private coverEmblem(): { root: HTMLElement; ring: HTMLElement; ripple: HTMLElement; tree: HTMLElement; kanji: HTMLElement; card: number } | null {
     const layer = this.refs.layers.at(-1);
     const parts = emblemParts();
     if (!layer || !parts) return null;
@@ -1023,12 +1042,13 @@ class StarterRitual {
       root.append(el);
       return el;
     };
+    const ripple = part('ritual-emblem-ring ritual-emblem-ripple', parts.ring);
     const ring = part('ritual-emblem-ring', parts.ring);
-    part('ritual-emblem-tree', parts.tree);
+    const tree = part('ritual-emblem-tree', parts.tree);
     const kanji = part('ritual-emblem-kanji', parts.kanji);
     layer.append(root);
     this.emblemCover = root;
-    return { root, ring, kanji, card: layer.getBoundingClientRect().width || this.cardSize().w };
+    return { root, ring, ripple, tree, kanji, card: layer.getBoundingClientRect().width || this.cardSize().w };
   }
 
   private clearCover(): void {
