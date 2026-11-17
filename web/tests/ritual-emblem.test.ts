@@ -2,7 +2,7 @@
 // its hex turns to sit on the middle tile. See player/ritual-emblem.ts.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { EMBLEM_BOX, EMBLEM_VIEWBOX, RING_LOCK_AT, RING_SPIN_DEG, RING_TURN_DEG, emblemParts, ringFitScale, ringRippleFrames, ringTurnFrames } from '../src/player/ritual-emblem.js';
+import { EMBLEM_BOX, EMBLEM_VIEWBOX, RING_HOME_DEG, RING_LOCK_AT, RING_SPIN_DEG, RING_TURN_DEG, emblemParts, ringFitScale, ringReturnFrames, ringRippleFrames, ringTurnFrames } from '../src/player/ritual-emblem.js';
 
 const source = readFileSync(new URL('../src/assets/brand/hex-emblem.svg', import.meta.url), 'utf8');
 const subpaths = (svg: string) => (svg.match(/M /g) ?? []).length;
@@ -83,5 +83,21 @@ describe('the key turn (owner, 2026-11-17: one visible spin, landing aligned, no
     expect(angle(r[0]!)).toBe(390);
     expect(scale(r.at(-1)!)).toBeGreaterThan(scale(r[0]!));
     expect(r.at(-1)!.opacity).toBe(0);
+  });
+});
+
+describe('the way home: a full circle back to the emblem (owner, 2026-11-17)', () => {
+  const r = ringReturnFrames(1.2);
+  const angle = (f: Keyframe) => Number(/rotate\((-?[\d.]+)deg\)/.exec(String(f.transform))![1]);
+  it('starts where the lock left it and turns on, never back', () => {
+    expect(angle(r[0]!)).toBe(RING_SPIN_DEG);
+    expect(angle(r.at(-1)!)).toBeGreaterThan(RING_SPIN_DEG);
+  });
+  it('lands pointy side up at the emblem\'s own size, as the painted emblem on the pile', () => {
+    expect(RING_HOME_DEG % 360).toBe(0);
+    expect(String(r.at(-1)!.transform)).toContain('scale(1)');
+  });
+  it('the turn and the way home make two whole turns: a full circle and back', () => {
+    expect(RING_HOME_DEG).toBe(720);
   });
 });

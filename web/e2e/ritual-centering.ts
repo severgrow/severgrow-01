@@ -34,12 +34,23 @@ try {
      const ring=document.querySelector<HTMLElement>('.ritual-emblem-ring:not(.ritual-emblem-ripple)');
      // ONE frame turns (owner, 2026-11-17): the unlock ghost is invisible until the ring locks.
      const ghost=document.querySelector<HTMLElement>('.ritual-emblem-ripple');
-     const turning=ring?.getAnimations().find(a=>a.playState==='running');
+     const turning=ring?.getAnimations().find(a=>a.playState==='running'&&String((a.effect as KeyframeEffect).getKeyframes().at(-1)?.transform??'').includes('rotate(390deg)'));
      if(ghost&&turning&&Number(turning.effect?.getComputedTiming().progress??1)<.8){
       (window as any).__ghostMax=Math.max((window as any).__ghostMax??0,Number(getComputedStyle(ghost).opacity));
      }
-     if(tile&&ring&&!(window as any).__emblem&&ring.getAnimations().length&&ring.getAnimations().every(a=>a.playState==='finished')){
+     // The way home starts the moment the turn ends, so the landing is read from the turn's own
+     // final frame; the ring's centre is measured on screen (the turn and scale are about its centre).
+     const anims=ring?.getAnimations()??[];
+     const ends=(a:Animation)=>String((a.effect as KeyframeEffect).getKeyframes().at(-1)?.transform??'');
+     const turn=anims.find(a=>ends(a).includes('rotate(390deg)'));
+     const home=anims.find(a=>ends(a).includes('rotate(720deg)'));
+     if(ring&&home&&home.playState==='finished'&&!(window as any).__home){
       const m=new DOMMatrix(getComputedStyle(ring).transform);
+      (window as any).__home={angle:Math.atan2(m.b,m.a)*180/Math.PI,scale:Math.hypot(m.a,m.b)};
+     }
+     if(tile&&ring&&turn&&!(window as any).__emblem&&turn.playState==='finished'){
+      const probe=document.createElement('div');probe.style.transform=ends(turn);document.body.append(probe);
+      const m=new DOMMatrix(getComputedStyle(probe).transform);probe.remove();
       const box=ring.getBoundingClientRect();
       const card=ring.closest<HTMLElement>('.ritual-deck-layer')!;
       const shown=card.getBoundingClientRect().width/card.offsetWidth;
@@ -84,6 +95,11 @@ try {
   assert(emblem.cover>.9&&emblem.kanji<.01,'the emblem\'s own kanji is gone while the big one is up');
   assert(Math.abs(emblem.angle-30)<.5,`the hex turns 30°, flat-top like the board: ${emblem.angle}`);
   assert(Math.abs(emblem.fitError)<=1.5&&Math.hypot(emblem.dx,emblem.dy)<=1.5,`the turned hex sits on the middle tile's outline: ${JSON.stringify(emblem)}`);
+  // ...and on the way into the pile it turns on round, home: pointy side up at the emblem's size.
+  await page.waitForFunction(()=>!!(window as any).__home,undefined,{timeout:5000}).catch(()=>undefined);
+  const home=await page.evaluate(()=>(window as any).__home as {angle:number;scale:number}|undefined);
+  console.log(`${width}x${height}: hex home ${JSON.stringify(home)}`);
+  assert(home&&Math.abs(home.angle)<.5&&Math.abs(home.scale-1)<.01,`the hex lands back pointy side up at the emblem's size: ${JSON.stringify(home)}`);
   await page.close();
  }
 } finally {await browser.close();await fixture.close();}

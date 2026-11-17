@@ -84,3 +84,15 @@ export const ringFitScale = (cardWidth: number, tileWidth: number): number => {
   const turnedWidth = cardWidth * EMBLEM_BOX.width * (EMBLEM_VIEWBOX.h / EMBLEM_VIEWBOX.w);
   return Math.min(2.4, Math.max(0.6, tileWidth / turnedWidth));
 };
+
+/**
+ * THE WAY HOME (owner, 2026-11-17: "when it's travelling to the draw pile it has to spin again to land
+ * back in the pointy side up position just like in emblem in the draw pile - so we have a full
+ * circle"). From the lock (390, flat-top, the tile's size) on round to 720: pointy-top again, at the
+ * emblem's own size, while the deck files into the pile. Transform only.
+ */
+export const RING_HOME_DEG = 720;
+export const ringReturnFrames = (fit: number): Keyframe[] => [
+  { transform: `rotate(${RING_SPIN_DEG}deg) scale(${fit.toFixed(4)})` },
+  { transform: `rotate(${RING_HOME_DEG}deg) scale(1)` },
+];

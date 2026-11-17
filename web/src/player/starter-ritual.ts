@@ -27,7 +27,7 @@ import type { RitualCard, StarterRitualView } from '../logic/starter-ritual.js';
 import { RITUAL_DECK_SIZE } from '../logic/starter-ritual.js';
 import { WORDMARK_URL as plainMarkUrl } from './branding.js';
 import backFrameUrl from '../assets/cards/back-frame.webp?url';
-import { RING_LOCK_AT, emblemParts, ringFitScale, ringRippleFrames, ringTurnFrames } from './ritual-emblem.js';
+import { RING_LOCK_AT, emblemParts, ringFitScale, ringReturnFrames, ringRippleFrames, ringTurnFrames } from './ritual-emblem.js';
 
 /**
  * The kanji leaving the card (owner, 2026-11-08: "make it look like it's actually coming from the card
@@ -962,9 +962,8 @@ class StarterRitual {
     const emblem = this.refs.deckAnchor.getBoundingClientRect().width || this.cardSize().w;
     // The card's emblem lets go of its kanji, and its hex turns flat-top onto the tile it sits on.
     const cover = frame ? this.coverEmblem() : null;
+    const fit = cover ? ringFitScale(cover.card, this.options.centerTile?.()?.width ?? 0) : 1;
     if (cover) {
-      const tile = this.options.centerTile?.() ?? null;
-      const fit = ringFitScale(cover.card, tile?.width ?? 0);
       const lift = this.ms(KANJI.liftMs);
       this.animate(cover.root, [{ opacity: 0 }, { opacity: 1, offset: 0.12 }, { opacity: 1 }], { duration: lift, easing: 'linear' });
       // The emblem's kanji AND its tree go with the rise (owner, 2026-11-17: nothing in the middle):
@@ -1016,11 +1015,19 @@ class StarterRitual {
       { transform: `${standing} translateY(-6%) scale(${KANJI.peak})`, opacity: 1 },
       { transform: `${standing} translateY(-9%) scale(${(KANJI.peak * 1.07).toFixed(3)})`, opacity: 0 },
     ], { duration: this.ms(KANJI.leaveMs), easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' });
-    leave.finished.then(() => { if (this.kanji === img) this.clearKanji(); }, () => undefined);
-    // The card is a plain card back again before it files into the pile.
+    // Only the big mark goes here: the emblem's cover rides the deck home and is cleared at the end.
+    leave.finished.then(() => { if (this.kanji === img) { img.remove(); this.kanji = null; } }, () => undefined);
+    // THE WAY HOME (owner, 2026-11-17: "a full circle"): while the deck files into the pile the hex turns
+    // on round to pointy side up at the emblem's own size, and the tree and the kanji come back, so the
+    // card lands as the painted emblem it covers. Not one of the ritual's own animations, so the filing
+    // never waits for it or cancels it.
     if (cover) {
-      const back = cover.root.animate([{ opacity: 1 }, { opacity: 0 }], { duration: this.ms(KANJI.leaveMs), easing: 'ease-in', fill: 'forwards' });
-      back.finished.then(() => { if (this.emblemCover === cover.root) this.clearCover(); }, () => undefined);
+      // Home as the deck lands on the pile (the stream is 440 ms plus its stagger), before the overlay fades.
+      const home = this.ms(500);
+      cover.ring.animate(ringReturnFrames(fit), { duration: home, easing: 'cubic-bezier(.45,0,.25,1)', fill: 'forwards' });
+      for (const part of [cover.tree, cover.kanji]) {
+        part.animate([{ opacity: 0 }, { opacity: 0, offset: 0.5 }, { opacity: 1 }], { duration: home, easing: 'ease-out', fill: 'forwards' });
+      }
     }
   }
 
