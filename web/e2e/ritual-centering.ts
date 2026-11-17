@@ -44,9 +44,12 @@ try {
      const ends=(a:Animation)=>String((a.effect as KeyframeEffect).getKeyframes().at(-1)?.transform??'');
      const turn=anims.find(a=>ends(a).includes('rotate(390deg)'));
      const home=anims.find(a=>ends(a).includes('rotate(720deg)'));
-     if(ring&&home&&home.playState==='finished'&&!(window as any).__home){
-      const m=new DOMMatrix(getComputedStyle(ring).transform);
-      (window as any).__home={angle:Math.atan2(m.b,m.a)*180/Math.PI,scale:Math.hypot(m.a,m.b)};
+     // The way home is read from its own final frame the moment it exists: on a slow machine the ritual
+     // can be put away before a frame lands on its very end (CI, 2026-11-17).
+     if(ring&&home&&!(window as any).__home){
+      const probe=document.createElement('div');probe.style.transform=ends(home);document.body.append(probe);
+      const m=new DOMMatrix(getComputedStyle(probe).transform);probe.remove();
+      (window as any).__home={angle:Math.atan2(m.b,m.a)*180/Math.PI,scale:Math.hypot(m.a,m.b),ms:Number(home.effect?.getTiming().duration??0)};
      }
      if(tile&&ring&&turn&&!(window as any).__emblem&&turn.playState==='finished'){
       const probe=document.createElement('div');probe.style.transform=ends(turn);document.body.append(probe);
@@ -97,9 +100,9 @@ try {
   assert(Math.abs(emblem.fitError)<=1.5&&Math.hypot(emblem.dx,emblem.dy)<=1.5,`the turned hex sits on the middle tile's outline: ${JSON.stringify(emblem)}`);
   // ...and on the way into the pile it turns on round, home: pointy side up at the emblem's size.
   await page.waitForFunction(()=>!!(window as any).__home,undefined,{timeout:5000}).catch(()=>undefined);
-  const home=await page.evaluate(()=>(window as any).__home as {angle:number;scale:number}|undefined);
+  const home=await page.evaluate(()=>(window as any).__home as {angle:number;scale:number;ms:number}|undefined);
   console.log(`${width}x${height}: hex home ${JSON.stringify(home)}`);
-  assert(home&&Math.abs(home.angle)<.5&&Math.abs(home.scale-1)<.01,`the hex lands back pointy side up at the emblem's size: ${JSON.stringify(home)}`);
+  assert(home&&Math.abs(home.angle)<.5&&Math.abs(home.scale-1)<.01&&home.ms>0&&home.ms<=600,`the hex lands back pointy side up at the emblem's size, as the deck lands: ${JSON.stringify(home)}`);
   await page.close();
  }
 } finally {await browser.close();await fixture.close();}

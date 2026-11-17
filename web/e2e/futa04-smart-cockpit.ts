@@ -207,7 +207,9 @@ try {
     // OWNER, 2026-11-15: "opacity is too low on all - increase by 12% and keep it like that
     // everywhere". .82 x 1.12 = .92, and the arrow is asserted both ways: the old .86 fails the
     // floor, and full opacity fails the ceiling (the hand still recedes a little while throwing).
-    check(throwLight.opacity>=.9&&throwLight.opacity<1,`${name}: the hand is solid while throwing, not full (${throwLight.opacity})`);
+    // OWNER RULE CHANGE (2026-11-17: "increase the hand cards opacity by 8% in all scenarios"): .92 + .08
+    // = 1, so the hand is fully solid while throwing; the floor still catches the old lower values.
+    check(throwLight.opacity>=.99,`${name}: the hand is fully solid while throwing (${throwLight.opacity})`);
     // OWNER, 2026-11-15: "use the same on draw pile during draw and on discard pile during throw".
     // The Throw pile's light must be that same near-white, not the old red ember.
     const discardLight=await page.evaluate(()=>{const h=document.querySelector('#futa04-box #discard .gd-halo');return h?getComputedStyle(h).boxShadow:'';});
@@ -467,7 +469,8 @@ try {
   const idleHalo=await halo();
   const idleHaloEff=peakGlow(idleHalo.shadow)*idleHalo.opacity;
   check(idlePeak>idleHaloEff,`Handoff: while choosing, the light is on the hand (${idlePeak} > ${idleHaloEff.toFixed(2)})`);
-  check(idleHand.opacity>=.9&&idleHand.opacity<1,`Handoff: the throwable hand is solid, at the shared .92 (${idleHand.opacity})`);
+  // Owner rule change (2026-11-17): the shared .92 rose 8 points to 1.
+  check(idleHand.opacity>=.99,`Handoff: the throwable hand is fully solid, at the shared 1 (${idleHand.opacity})`);
   await handoff.locator('#hand [data-card]').first().click();
   await handoff.waitForSelector('#hand .futa04-throw-picked'); await handoff.waitForTimeout(500);
   const pickedHand=await handLight(handoff,'#hand .futa04-throw-picked');

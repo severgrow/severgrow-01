@@ -246,7 +246,9 @@ try{
     const sky=document.querySelector('#space-backdrop > canvas');
     return sky && (window as any).__severgrow.space()?.sliding && getComputedStyle(sky).translate!==before;
    },before,{timeout:10000});
-   assert.equal(await p.locator('#space-backdrop > canvas:visible').count(),1,'gameplay composites one cached star layer');
+   // OWNER RULE CHANGE (2026-11-17: "behind the board we should have 2 layers of stars ... I can't see the
+   // bigger ones"): gameplay composites BOTH cached star layers (each its own canvas and slide, drawn once).
+   assert.equal(await p.locator('#space-backdrop > canvas:visible').count(),2,'gameplay composites the two cached star layers');
    // A slide on a hidden (display:none) star layer shows nothing but cannot go to the compositor:
    // Chromium ticks it on the main thread, a style recalc every frame while the player thinks
    // (measured 2026-11-16: 60 recalcs/s at idle, 1/s without it).
