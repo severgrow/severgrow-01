@@ -48,14 +48,21 @@ let saveSeq = 0;
 let confirmed: TerritoryId | null = null;
 
 /** The token comes from the signed-in Planet view, never from a tile or a browser-supplied owner. */
-export async function connectSkinSwitch(client: DuelClient, token: string, refresh: () => void): Promise<void> {
+export async function connectSkinSwitch(client: DuelClient, token: string, refresh?: () => void): Promise<void> {
   // Only the admin's account is synced at all: a non-admin has no use for the stored skin (the
   // product defaults are theirs, ui/skinChoice.ts) and must not spend a request on it.
-  if (!SKIN_SWITCH || !skinPickerVisible()) return;
-  if (account?.token === token) { account.refresh = refresh; return; }
-  const current = account = { client, token, refresh };
-  saveSeq++;  // a save from the previous account (or session) can no longer own this switch
-  confirmed = null;
+  if (!skinPickerVisible()) return;
+  // THE SKIN BELONGS TO THE ACCOUNT (owner, 2026-11-18): read it again on every visit (game start,
+  // sign-in, each Planet open), not once per session, so a choice made on another device arrives.
+  // The same account keeps its switch (a save in flight still owns it); another account resets it.
+  let current = account;
+  // Game start and sign-in pass no `refresh`: the Planet's own (set when it opens) is kept.
+  if (account?.token === token) { if (refresh) account.refresh = refresh; }
+  else {
+    current = account = { client, token, refresh: refresh ?? (() => undefined) };
+    saveSeq++;  // a save from the previous account (or session) can no longer own this switch
+    confirmed = null;
+  }
   // The switch marks, and the board wears, THIS browser's own choice while the account's answer is
   // on its way. It used to preview Forest here, which made the pane claim a skin the board would not
   // draw for the whole length of the read — and on a slow or failing connection the player could
@@ -63,7 +70,7 @@ export async function connectSkinSwitch(client: DuelClient, token: string, refre
   const issued = skinRevision();
   try {
     const saved = await client.worldSkin(token);
-    if (account !== current) return;
+    if (account !== current || !current) return;
     // The account's answer is the truth for "your tiles" — but only when nothing was chosen since
     // this read left. A read that is out of date is dropped, never written back over the tap; a
     // failed or empty answer leaves this browser's choice alone (ui/skinChoice.ts: adoptServerSkin).

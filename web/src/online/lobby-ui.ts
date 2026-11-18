@@ -5,6 +5,7 @@ import type { MatchListEntry, MatchSummary, MatchViewPayload, ReplayPayload, Wor
 import { ONLINE, PLANET, REPLAY } from '../../../src/strings.js';
 import { FEATURES } from '../channel.js';
 import { createIdentityStore, subscribeIdentityChanges } from './identity.js';
+import { connectSkinSwitch } from './skin-switch.js';
 import type { IdentityStore } from './identity.js';
 import { SEARCH_HEARTBEAT_MS, SEARCH_LIVE_MS, duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
 import { createLobbyActionGuard, lobbyActionStillCurrent } from './lobby-action.js';
@@ -786,11 +787,17 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   };
 
   const ensureIdentity = async () => {
+    // A first-time guest can take a few seconds when the server is slow (owner screenshot,
+    // 2026-11-18): say so on the hub instead of leaving the tapped key silent, and clear it after.
+    const minting = !identity.peek();
+    const hubNotice = document.getElementById('online-hub-notice');
+    if (minting && hubNotice && !hubNotice.textContent) noticeWithDots('online-hub-notice', ONLINE.worldChatLoading.replace(/…$/, ''));
     const status = await identity.ensure();
     if (!status.ok) {
       notice('online-hub-notice', status.message || ONLINE.errStorage);
       return null;
     }
+    if (minting && hubNotice?.firstChild?.textContent === ONLINE.worldChatLoading.replace(/…$/, '')) notice('online-hub-notice', '');
     return status.identity;
   };
   // Seeds settle through the ONE path that also serves the finish card (online/seed-settle.ts).
@@ -824,9 +831,14 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   // READY BEFORE THE TAP (owner, 2026-11-18): a new visitor's guest arrives after the menu has
   // painted; the moment it does, the menu gets chat and achievements ready for the Planet.
   subscribeIdentityChanges((record) => {
+    // THE SKIN BELONGS TO THE ACCOUNT (owner, 2026-11-18): a sign-in reads the account's skin at
+    // once, so the next match wears what was chosen on another device. Reading never writes.
+    if (record) void connectSkinSwitch(client, record.token);
     if (menuEl?.hidden !== false || !record) return;
     worldView?.warm({ token: record.token, playerId: record.playerId, kind: record.kind });
   });
+  // ...and so does opening the game: one read, only for the account the skin picker belongs to.
+  { const signedIn = identity.peek(); if (signedIn) void connectSkinSwitch(client, signedIn.token); }
   const syncMenuWorld = (visible: boolean) => living?.menu(visible);
   window.addEventListener('futasaku:screen', event => {
     const name = (event as CustomEvent<string>).detail;

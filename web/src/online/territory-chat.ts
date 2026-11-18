@@ -155,7 +155,11 @@ export class TerritoryChat {
       // that chat is unavailable while retaining the normal four-second retry for recovery.
       this.say(ONLINE.worldChatOffline);
     }
-    if (this.open && generation === this.generation && !document.hidden) this.timer = setTimeout(() => void this.poll(), Math.min(60_000, TERRITORY_CHAT_POLL_MS * 2 ** Math.min(4, this.failures)));
+    // Nothing on screen yet (owner, 2026-11-18: "chat didn't load"): ask again every 2 s while the
+    // panel is open. Once a page is shown, a failure is a blip and the back-off is kept.
+    const empty = !token || !this.feed.snapshot(token).loaded;
+    const wait = empty && this.failures > 0 ? 2_000 : Math.min(60_000, TERRITORY_CHAT_POLL_MS * 2 ** Math.min(4, this.failures));
+    if (this.open && generation === this.generation && !document.hidden) this.timer = setTimeout(() => void this.poll(), wait);
   }
 
   private async send() {

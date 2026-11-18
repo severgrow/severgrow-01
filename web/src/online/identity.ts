@@ -23,8 +23,10 @@ const announceIdentity = (identity: OnlineIdentityRecord | null) => {
 
 const STORAGE_BLOCKED_MESSAGE =
   'This browser blocked storage. Online matches cannot be kept on this device.';
+// Said only after two attempts got no answer at all (owner screenshot, 2026-11-18): the server was
+// silent, not the player's connection, so the line says so and asks for one more tap.
 const CREATE_FAILED_MESSAGE =
-  'Could not create a FUTASAKU guest. Check your connection and try again.';
+  'The FUTASAKU server did not answer just now. Tap again in a moment.';
 
 export type IdentityStatus =
   | {
@@ -139,7 +141,12 @@ export const createIdentityStore = (options: {
 
   const createGuest = async (): Promise<IdentityStatus> => {
     try {
-      const created = await client.createGuest();
+      // A guest creation that got NO answer (the real server sometimes leaves one silent; measured
+      // 2026-11-18) is tried once more before the player hears about it. A real answer is final.
+      const created = await client.createGuest().catch((error: unknown) => {
+        if (error instanceof DuelError) throw error;
+        return client.createGuest();
+      });
       return write({
         token: created.token,
         playerId: created.player.id,

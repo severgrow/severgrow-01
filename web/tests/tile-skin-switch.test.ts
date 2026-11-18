@@ -121,3 +121,29 @@ describe('the tile-skin switch and the skin the board draws', () => {
     expect(drawn(), 'the board follows the other tab at once').toBe('forest');
   });
 });
+
+// THE SKIN BELONGS TO THE ACCOUNT (owner, 2026-11-18: "if i change skin ... on 1 device and then open
+// game on another device, it should read the skin i chose on the 1st device. logging in on another
+// device that had a different skin shouldn't overwrite it ... changed only when player actually
+// changes it"). The account is read again on every visit, not once per session.
+describe('the skin chosen on another device', () => {
+  it('a device already connected reads the account again and wears the newer choice', async () => {
+    let stored = 'water';
+    const client = { worldSkin: async () => stored, chooseWorldSkin: async (_t: string, s: string) => s };
+    const token = 'same-account-token';
+    await connectSkinSwitch(client as never, token, () => undefined);
+    expect(chosen()).toBe('water');
+    stored = 'toxic';                                   // chosen on the other device
+    await connectSkinSwitch(client as never, token, () => undefined);
+    expect(chosen(), 'the account\'s newer choice').toBe('toxic');
+    expect(drawn()).toBe('toxic');
+  });
+  it('signing in on a device that wore something else takes the account\'s skin and never writes its own', async () => {
+    chooseSkin({ mine: 'ash' });                         // this device's old local look
+    const saves: string[] = [];
+    const client = { worldSkin: async () => 'forest', chooseWorldSkin: async (_t: string, s: string) => { saves.push(s); return s; } };
+    await connectSkinSwitch(client as never, `fresh-${++tokens}`, () => undefined);
+    expect(chosen()).toBe('forest');
+    expect(saves, 'nothing is written to the account by signing in').toEqual([]);
+  });
+});
