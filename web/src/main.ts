@@ -1,4 +1,5 @@
 // first: the release channel (the test copy keeps its own storage)
+import { signInGate } from './accounts/sign-in-gate.js';
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
 import { deferEntryButton } from './ui/deferred-entry.js';
 import { confirmedTurn, mountTurnRim } from './player/turn-rim.js';
@@ -11991,7 +11992,9 @@ type OnlineLobbyCtl = {
 let onlineLobbyCtl: OnlineLobbyCtl | null = null;
 /** Set while an online duel is open; the pause menu's Resign calls it (one confirm). */
 let onlineResign: (() => void) | null = null;
-void import('./online/lobby-ui.js').then(async (m) => {
+// SIGN-IN FIRST (owner, 2026-11-18): back from Google, the online start-up waits for the sign-in
+// (accounts/sign-in-gate.ts). Any other visit passes straight through.
+void signInGate.settled.then(() => import('./online/lobby-ui.js')).then(async (m) => {
   const {
     createOnlineDriver,
     OnlineSession,
@@ -12297,23 +12300,26 @@ if (timingEnabled()) {
 // Beta feedback (docs/BETA.md): Report a problem, crash reports, the #beta tester guide. Read-only.
 void import('./feedback/mount.js').then((f) => f.mountFeedback()).catch(() => undefined);
 // Accounts: "Continue with Google" (docs/ACCOUNTS.md); shows nothing until Google is on in Supabase.
-void import('./accounts/mount.js').then((a) => a.mountAccounts()).catch(() => undefined);
+void import('./accounts/mount.js').then((a) => a.mountAccounts()).catch(() => undefined).finally(() => signInGate.settle());
 // Seeds earned while the settle could not run are QUEUED on this device, not lost. Drain them as
 // soon as the app is up (owner ask, 2026-10-25: "every level of campaign and any other game should
 // pay out seeds immediately"): a player whose proofs were stranded by the old wedge sees the balance
 // right on their next visit, without having to win another game first. Silent and fire-and-forget;
 // a device with nothing queued makes no request at all.
-void settleQueuedSeedsOnBoot();
-// Warm a guest identity early so the next Practice match can get a Seeds ticket without racing a
-// cold guest mint (owner, 2026-11-08: offline guests must be paid so they are encouraged to sign in).
-// ...and the tier's ticket with it, so the Practice tap takes it off the shelf with no network at all
-// (owner, 2026-11-15: "find a way for it to be instant"). The ticket is requested only once the
-// identity exists — `fillTicketShelf` needs a player id, and a cold device has none until the mint
-// answers — and the tap's own `ensureShelfTicket` joins this very fill rather than posting a second
-// request. Silent; a device that already holds the ticket makes no request.
-void warmSeedIdentity()
-  .catch(() => undefined)
-  .then(() => warmTicketShelfAtBoot());
+// SIGN-IN FIRST (accounts/sign-in-gate.ts): on a return from Google these wait for the sign-in.
+void signInGate.settled.then(() => {
+  void settleQueuedSeedsOnBoot();
+  // Warm a guest identity early so the next Practice match can get a Seeds ticket without racing a
+  // cold guest mint (owner, 2026-11-08: offline guests must be paid so they are encouraged to sign in).
+  // ...and the tier's ticket with it, so the Practice tap takes it off the shelf with no network at all
+  // (owner, 2026-11-15: "find a way for it to be instant"). The ticket is requested only once the
+  // identity exists — `fillTicketShelf` needs a player id, and a cold device has none until the mint
+  // answers — and the tap's own `ensureShelfTicket` joins this very fill rather than posting a second
+  // request. Silent; a device that already holds the ticket makes no request.
+  void warmSeedIdentity()
+    .catch(() => undefined)
+    .then(() => warmTicketShelfAtBoot());
+});
 mountStartupReveal();
 // The main menu does not zoom (owner, 2026-11-08); every other screen keeps the browser's zoom.
 mountMenuZoomLock();

@@ -1,3 +1,4 @@
+import { SIGN_IN_RESUME_KEY, signInGate } from './sign-in-gate.js';
 import { mountSheetViewport } from '../ui/sheet-viewport.js';
 import { authJson } from './email-auth.js';
 import { mountEmailPanel } from './email-panel.js';
@@ -423,7 +424,7 @@ export const mountAccounts = async (): Promise<void> => {
 
   // The verified session of a sign-in in progress, for THIS tab only (sessionStorage) and only for
   // a few minutes: it is what lets a reload mid-hand-over finish the sign-in on the first try.
-  const RESUME_KEY = 'futasaku.auth.resume.v1';
+  const RESUME_KEY = SIGN_IN_RESUME_KEY;
   const RESUME_MAX_AGE_MS = 5 * 60 * 1000;
   type Resume = { access: string; returnTo: ReturnTo; at: number };
   const saveResume = (r: Resume) => { try { sessionStorage.setItem(RESUME_KEY, JSON.stringify(r)); } catch { /* blocked */ } };
@@ -451,8 +452,9 @@ export const mountAccounts = async (): Promise<void> => {
       if (!identity || !writeIdentity(kv, identity)) throw new Error('account-storage-failed');
       before = identity;
     }
-    const guestHadMatches = before ? await hasMatches(before.token) : null;
-    checkActive();
+    // Only for the wording of the welcome line: asked BESIDE the hand-over, never before it
+    // (2026-11-18: it used to cost a whole round trip on the way to "signed in").
+    const guestHadMatchesRead = before ? hasMatches(before.token) : Promise.resolve(null);
     // FIRST TRY ALWAYS WORKS (owner, 2026-11-11: "sometimes ... I need to log in second time"): a
     // cold server can fail the Google hand-over once (the player is back from Google, with no form
     // to retry from). Retry it one time, a moment later, before giving up.
@@ -469,6 +471,8 @@ export const mountAccounts = async (): Promise<void> => {
     }
     const identity = res.ok ? identityFromSignIn(res.json) : null;
     if (!identity) throw new Error(res.status === 401 ? 'account-session-expired' : 'account-exchange-failed');
+    // The welcome line may wait a moment for its wording; the sign-in itself never does.
+    const guestHadMatches = await Promise.race([guestHadMatchesRead, new Promise<null>((r) => setTimeout(() => r(null), 800))]);
     // Do not reload onto a forgotten identity if browser storage is blocked.
     if (!writeAccount(kv, {provider,email:typeof res.json.email === 'string'?res.json.email:null,playerId:identity.playerId}) || !writeIdentity(kv,identity))
       throw new Error('account-storage-failed');
@@ -479,6 +483,7 @@ export const mountAccounts = async (): Promise<void> => {
     dropResume();
     // Keep the verified session for a failed exchange's retry. Close it only after success.
     void authJson(`${supa.url}/auth/v1/logout?scope=local`,{method:'POST',headers:{apikey:supa.key,authorization:`Bearer ${access}`}}).catch(()=>undefined);
+    signInGate.reloading();
     location.reload();
   };
 
@@ -536,6 +541,9 @@ export const mountAccounts = async (): Promise<void> => {
       }
     }
   }
+
+  // No reload is coming (no return from Google, or it failed): the online start-up may begin.
+  signInGate.settle();
 
   // The main menu's account key (section 4b). Looked up once: the menu's first layout may already have
   // painted it from the device's memory (./menu-key.ts).
