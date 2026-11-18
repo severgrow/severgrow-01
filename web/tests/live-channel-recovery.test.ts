@@ -78,3 +78,21 @@ describe('mobile Realtime transport repair', () => {
     t.join();expect(t.channel.connected?.()).toBe(true);t.stop();
   });
 });
+
+// THE BOUNDED BURST (debug pass, 2026-11-18). The soak's "retries converge" check failed on CI
+// because it waited a fixed 60 s while a burst on a slow runner legitimately ran longer. Its window is
+// now derived from these exported limits, so the limits themselves are pinned here: a refused
+// Realtime transport is tried at most REALTIME_RETRY.maxAttempts times, then polling carries it.
+describe('a refused transport stops after a bounded burst', () => {
+  it('at most REALTIME_RETRY.maxAttempts sockets, then no timer is left armed', async () => {
+    const { REALTIME_RETRY, realtimeBurstBoundMs } = await import('../src/online/live/channel.js');
+    const t = setup();
+    // every attempt is refused at once
+    for (let i = 0; i < 20; i++) { t.sockets.at(-1)?.emit('error'); await vi.advanceTimersByTimeAsync(16_000); }
+    expect(t.sockets.length).toBe(REALTIME_RETRY.maxAttempts);
+    expect(vi.getTimerCount()).toBe(0);
+    // ...and the documented worst case covers delays plus every attempt hanging to its deadline.
+    expect(realtimeBurstBoundMs()).toBe(1000 + 2000 + 4000 + 8000 + 15000 + REALTIME_RETRY.maxAttempts * 12_000);
+    t.stop();
+  });
+});

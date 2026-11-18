@@ -10,6 +10,21 @@ type Socket = {
   addEventListener(type: string, cb: (ev: { data?: unknown }) => void): void;
 };
 
+/**
+ * The transport's retry limits, named so the soak's convergence window can be derived from them
+ * (debug pass, 2026-11-18) instead of guessed. After a failure the next attempt waits
+ * min(capMs, baseMs * 2^failures): 1, 2, 4, 8, 15 s; after `maxFailures` failures it stops and
+ * polling carries the outage. A becoming-visible page or an `online` event starts a fresh burst.
+ */
+export const REALTIME_RETRY = Object.freeze({ baseMs: 500, capMs: 15_000, maxFailures: 5, maxAttempts: 6, connectDeadlineMs: 12_000 });
+const retryDelayMs = (failures: number): number => Math.min(REALTIME_RETRY.capMs, REALTIME_RETRY.baseMs * 2 ** failures);
+/** The longest one burst can last: every wait, plus every attempt hanging until its deadline. */
+export const realtimeBurstBoundMs = (): number => {
+  let total = REALTIME_RETRY.maxAttempts * REALTIME_RETRY.connectDeadlineMs;
+  for (let f = 1; f <= REALTIME_RETRY.maxFailures; f++) total += retryDelayMs(f);
+  return total;
+};
+
 /** True when a Realtime frame is a `challenge` broadcast on this topic. */
 export const isChallengeFrame = (frame: unknown, topic: string): boolean => {
   const f = frame as { topic?: unknown; event?: unknown; payload?: { event?: unknown } | null } | null;
@@ -90,11 +105,11 @@ export const createPlayerChannel = (socketCtor?: (url: string) => Socket, config
           if (closed || socket !== attempt) return;
           clearDeadline();
           send(topic, 'phx_join', { config: { broadcast: { ack: false, self: false }, presence: { enabled: false }, private: false } });
-          deadline = setTimeout(down, 12000);
+          deadline = setTimeout(down, REALTIME_RETRY.connectDeadlineMs);
           beat = setInterval(() => {
             if (!isJoined || heartbeatRef) return;
             heartbeatRef = send('phoenix', 'heartbeat', {}) ?? null;
-            deadline = setTimeout(down, 12000);
+            deadline = setTimeout(down, REALTIME_RETRY.connectDeadlineMs);
           }, 25_000);
         });
         socket.addEventListener('message', (ev) => {
@@ -127,14 +142,14 @@ export const createPlayerChannel = (socketCtor?: (url: string) => Socket, config
         socket.addEventListener('close', down);
         socket.addEventListener('error', down);
         // A suspended connection can stay CONNECTING without an open/error event.
-        deadline = setTimeout(down, 12000);
+        deadline = setTimeout(down, REALTIME_RETRY.connectDeadlineMs);
       };
       const schedule = () => {
-        if (closed || !visible() || retry || (failures += 1) > 5) return; // polling carries an outage
+        if (closed || !visible() || retry || (failures += 1) > REALTIME_RETRY.maxFailures) return; // polling carries an outage
         retry = setTimeout(() => {
           retry = null;
           open();
-        }, Math.min(15_000, 500 * 2 ** failures));
+        }, retryDelayMs(failures));
       };
       const wake = () => {
         if (closed) return;

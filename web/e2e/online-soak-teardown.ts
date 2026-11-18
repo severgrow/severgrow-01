@@ -20,6 +20,7 @@
 // The run asserts the teardown-cycle invariant: resource counts return to the SAME baseline after
 // every exit route, with no drift as matches accumulate — the guard that would catch a per-match
 // leak, and the guard that fails this run if one appears.
+import { REALTIME_RETRY, realtimeBurstBoundMs } from '../src/online/live/channel.js';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { onlinePerspective } from '../src/online/perspective.js';
 import { openMenuEntry } from './helpers/menu-nav.js';
@@ -481,10 +482,24 @@ const EXIT_ROUTES = ['pause-main', 'pause-new', 'finish-menu', 'finish-other', '
 /** No Realtime server exists in this fixture. Visible returns legitimately retry the app-level
  * invitation socket. Compare the same bounded quiet state at boot and after suspension. Keep
  * zero-socket assertions; duel polling is checked immediately after exit, before this wait. */
+// ROOT CAUSE OF THE INTERMITTENT "retries converge" FAILURE (debug pass, 2026-11-18). Every match
+// hides and shows both pages (the hidden-tab cadence check); showing a page starts a fresh, BOUNDED
+// Realtime burst (web/src/online/live/channel.ts REALTIME_RETRY: at most 6 attempts, 1-2-4-8-15 s
+// apart). This fixture refuses the handshake, so every burst runs to its end. On CI's busy runner each
+// refusal took 1.5-4.3 s (measured from the failing log: seat 1's attempts 12.3 s and 19.3 s apart
+// where the schedule says 8 and 15; locally a refusal takes 0.01 s and a burst ends at 30 s), so a
+// burst could outlast the old fixed 60 s window plus its 16 s quiet tail. No leak: the counts stayed
+// bounded. The window now comes from the product's own bound, and the bound itself is asserted: a seat
+// may open at most one burst of sockets while this waits, so an unbounded retry loop still fails here.
 const settleRealtime = async (seats: readonly SeatSession[]): Promise<boolean> => {
   const start=Date.now();let last=-1,quietSince=Date.now();
-  while(Date.now()-start<60_000){
+  const firstCreated=(await Promise.all(seats.map(s=>readResources(s.page)))).map(r=>r.socketsCreated);
+  while(Date.now()-start<realtimeBurstBoundMs()+16_000){
     const rows=await Promise.all(seats.map(s=>readResources(s.page)));
+    for(const [i,r] of rows.entries())if(r.socketsCreated-firstCreated[i]!>REALTIME_RETRY.maxAttempts){
+      console.log(`    seat${i} opened ${r.socketsCreated-firstCreated[i]!} sockets in one wait (bound ${REALTIME_RETRY.maxAttempts})`);
+      return false;
+    }
     const created=rows.reduce((n,r)=>n+r.socketsCreated,0),live=rows.reduce((n,r)=>n+r.socketsLive,0);
     if(created!==last||live>0){last=created;quietSince=Date.now();}
     if(Date.now()-quietSince>=16_000)return true;
