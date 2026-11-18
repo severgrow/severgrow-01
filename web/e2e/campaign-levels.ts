@@ -136,7 +136,9 @@ try {
     // /3/ line (owner, 2026-10-18): levels 1-10 are the tutorial and are all played on the 19-hex map
     // as authored lessons; level 11 is the first 37-hex level (checked below). This replaces the /2/
     // expectation (levels 4-10 on 37 hexes) on purpose; see docs/CAMPAIGN.md.
-    const expectedHexes = 19;
+    // OWNER RULE CHANGE (2026-11-04, web/src/lessons/final.ts): level 10 is the player's "Real first
+    // game, big board" — campaign level 10's own deal on the full 37-hex board.
+    const expectedHexes = level.number === 10 ? 37 : 19;
     check(board === expectedHexes, `L${level.number} plays on ${expectedHexes} hexes (${board})`);
 
     const end = await playToEnd(page, level.number);
