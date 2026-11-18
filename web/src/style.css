@@ -9051,6 +9051,12 @@ body.result .corner-tools {
   font-size: 0.55rem;
   letter-spacing: 0.12em;
 }
+/* THE COMPETITIVE NUMBER (owner, 2026-11-18: "make it look more important"): the best online Blitz
+   streak keeps the tile's shape and place, with a brighter fill, a larger value in full ink and a
+   label in full ink. No frame, no badge, no icon (docs/VISUAL-CONVENTIONS.md). */
+#sheet-profile .sp-tile.sp-tile-key { background: color-mix(in srgb, var(--c-text) 9%, transparent); }
+#sheet-profile .sp-tile.sp-tile-key dd { font-size: 1.3rem; font-weight: var(--w-ui-medium, 500); color: var(--c-text); }
+#sheet-profile .sp-tile.sp-tile-key dt { color: var(--c-text); }
 /* The old "Against the computer, on this device" note is gone on the owner's instruction
    (2026-11-01): nothing takes its place, so the record ends on the online row. */
 /* Landscape phones: the identity lines and the record sit side by side, so nothing scrolls. */

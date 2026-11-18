@@ -1,0 +1,86 @@
+// Where the account's streaks live (owner, 2026-11-18). Memory for tests and the local server,
+// Postgres for the Edge function (./postgres.ts). Both follow the same contract, pinned by
+// server/tests/streaks.test.ts.
+import type { Player } from '../../../src/engine/index.js';
+import type { OnlineEndReason } from '../protocol.js';
+import type { PracticeStreaks, PracticeTier, Streak, StreakResult } from './rules.js';
+import { applyGame, emptyPracticeStreaks, emptyStreak } from './rules.js';
+
+/** One finished practice game, as the page reports it. `id` is the game's own id: it counts once. */
+export type PracticeGame = { id: string; tier: PracticeTier; result: StreakResult };
+
+/** One finished online Blitz (live) match, from the server's own result, from this player's seat. */
+export type BlitzResultRow = { matchId: string; finishedAt: number; seat: Player; winner: Player | null; reason: OnlineEndReason };
+
+export type StreakStore = {
+  /** Apply the games not recorded before (by id), in order. Returns the four practice streaks after. */
+  recordPractice(playerId: string, games: readonly PracticeGame[], now: number): Promise<PracticeStreaks>;
+  practice(playerId: string): Promise<PracticeStreaks>;
+  /**
+   * The online Blitz streak, after folding in every finished live match since the last fold. Folded
+   * results are kept, so a match the retention rule later deletes is never forgotten.
+   */
+  onlineBlitz(playerId: string, now: number): Promise<Streak>;
+};
+
+/** A finished live match, from this player's seat, as a streak result. Server results only. */
+export const blitzResult = (row: Pick<BlitzResultRow, 'seat' | 'winner' | 'reason'>): StreakResult =>
+  row.winner === null ? 'draw'
+    : row.winner === row.seat ? 'win'
+      : row.reason === 'timeout' ? 'timeout'
+        : row.reason === 'resigned' ? 'forfeit'
+          : 'loss';
+
+/** The fold's order: finish time, then id, so two matches finishing in the same millisecond still have one order. */
+export const afterCheckpoint = (row: BlitzResultRow, at: number, id: string): boolean =>
+  row.finishedAt > at || (row.finishedAt === at && row.matchId > id);
+
+export const memoryStreakStore = (deps: {
+  /** Every finished live match this player sat in (the memory storage's own view). */
+  blitzResults: (playerId: string) => readonly BlitzResultRow[] | Promise<readonly BlitzResultRow[]>;
+}): StreakStore => {
+  const practice = new Map<string, PracticeStreaks>();
+  const seen = new Map<string, Set<string>>();
+  const blitz = new Map<string, { streak: Streak; at: number; id: string }>();
+  const copy = (p: PracticeStreaks): PracticeStreaks => JSON.parse(JSON.stringify(p)) as PracticeStreaks;
+  return {
+    async recordPractice(playerId, games) {
+      const state = practice.get(playerId) ?? emptyPracticeStreaks();
+      const ids = seen.get(playerId) ?? new Set<string>();
+      for (const game of games) {
+        if (ids.has(game.id)) continue;
+        ids.add(game.id);
+        state[game.tier] = applyGame(state[game.tier], game.result);
+      }
+      practice.set(playerId, state);
+      seen.set(playerId, ids);
+      return copy(state);
+    },
+    async practice(playerId) { return copy(practice.get(playerId) ?? emptyPracticeStreaks()); },
+    async onlineBlitz(playerId) {
+      const held = blitz.get(playerId) ?? { streak: emptyStreak(), at: -1, id: '' };
+      const rows = [...await deps.blitzResults(playerId)]
+        .filter((row) => afterCheckpoint(row, held.at, held.id))
+        .sort((a, b) => a.finishedAt - b.finishedAt || a.matchId.localeCompare(b.matchId));
+      let { streak, at, id } = held;
+      for (const row of rows) { streak = applyGame(streak, blitzResult(row)); at = row.finishedAt; id = row.matchId; }
+      blitz.set(playerId, { streak, at, id });
+      return { ...streak };
+    },
+  };
+};
+
+/** The memory storage's finished live (Blitz) matches for one player, from that player's seat. */
+export const memoryBlitzResults = (storage: {
+  matchesOfPlayer(playerId: string): Promise<readonly { id: string; status: string; liveManaged?: boolean; finishedAt: number | null; result: { winner: Player | null; reason: OnlineEndReason } | null }[]>;
+  participantsOf(matchId: string): Promise<readonly { playerId: string; seat: Player }[]>;
+}) => async (playerId: string): Promise<BlitzResultRow[]> => {
+  const out: BlitzResultRow[] = [];
+  for (const match of await storage.matchesOfPlayer(playerId)) {
+    if (match.status !== 'finished' || !match.liveManaged || !match.result || match.finishedAt === null) continue;
+    const seat = (await storage.participantsOf(match.id)).find((p) => p.playerId === playerId)?.seat;
+    if (seat === undefined) continue;
+    out.push({ matchId: match.id, finishedAt: match.finishedAt, seat, winner: match.result.winner, reason: match.result.reason });
+  }
+  return out;
+};

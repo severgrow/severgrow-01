@@ -47,6 +47,13 @@ export type ProfileFacts = {
   offline: Record3 | null;
   /** The online record, from the server's public aggregate. */
   online: Record3 | null;
+  /**
+   * The best online Blitz streak (owner, 2026-11-18). Present (a number, or null while unknown) only
+   * where the feature is on: it then takes the online row's third tile, shown as the key number.
+   */
+  blitzBest?: number | null;
+  /** Achievements unlocked out of all of them; present only where the feature is on. */
+  achievements?: { done: number; total: number } | null;
 };
 
 export type ProfileRow = Readonly<{ label: string; value: string }>;
@@ -84,6 +91,9 @@ export type VisitorFacts = {
   online: Record3 | null;
   /** Personal head-to-head, when the server knows one (`YOU 4 — 3 NAME`). */
   rivalryLine?: string | null;
+  /** As on the own profile (owner, 2026-11-18: "add to profiles x/x achievements unlocked"). */
+  blitzBest?: number | null;
+  achievements?: { done: number; total: number } | null;
 };
 
 /** A known, sane count, or the honest em dash. A count is a whole, non-negative number. */
@@ -177,11 +187,26 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
   const rivalryLine = doc.getElementById('profile-rivalry');
   const playTitle = doc.getElementById('profile-play-title');
 
-  const fillGrid = (grid: HTMLElement, record: Record3 | null) => {
+  /** The achievements line: shown only where the feature gives it a value field at all. */
+  const achievementsRow = doc.getElementById('profile-achievements')?.closest<HTMLElement>('.sp-row') ?? null;
+  setText('profile-achievements-label', PROFILE.achievements);
+  const fillAchievements = (facts: { achievements?: { done: number; total: number } | null }) => {
+    if (!achievementsRow) return;
+    achievementsRow.hidden = !('achievements' in facts);
+    const a = facts.achievements;
+    setText('profile-achievements', a && a.total > 0 ? PROFILE.achievementsValue(Math.max(0, Math.min(a.done, a.total)), a.total) : PROFILE.unknown);
+  };
+
+  const fillGrid = (grid: HTMLElement, record: Record3 | null, blitz?: { best: number | null }) => {
+    // THE COMPETITIVE NUMBER takes the third tile (owner, 2026-11-18: "replace longest streak, but
+    // make it look more important"): its own label and value, and the key tile's weight.
+    const rows = recordRows(record).map((row, i) => (i === 2 && blitz
+      ? { label: PROFILE.bestBlitzStreak, value: count(blitz.best), key: true }
+      : { ...row, key: false }));
     grid.replaceChildren(
-      ...recordRows(record).map((row) => {
+      ...rows.map((row) => {
         const tile = doc.createElement('div');
-        tile.className = 'sp-tile';
+        tile.className = row.key ? 'sp-tile sp-tile-key' : 'sp-tile';
         const dt = doc.createElement('dt');
         dt.textContent = row.label;
         const dd = doc.createElement('dd');
@@ -227,7 +252,8 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
     paintSwatch(facts.colour);
 
     fillGrid(offlineGrid!, facts.offline);
-    fillGrid(onlineGrid!, facts.online);
+    fillGrid(onlineGrid!, facts.online, 'blitzBest' in facts ? { best: facts.blitzBest ?? null } : undefined);
+    fillAchievements(facts);
     if (rivalryLine) {
       rivalryLine.textContent = '';
       rivalryLine.setAttribute('hidden', '');
@@ -294,7 +320,8 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
     if (seedsValue) seedsValue.textContent = PROFILE.unknown;
     if (winsValue) winsValue.textContent = PROFILE.unknown;
     fillGrid(offlineGrid!, null);
-    fillGrid(onlineGrid!, facts?.online ?? null);
+    fillGrid(onlineGrid!, facts?.online ?? null, facts && 'blitzBest' in facts ? { best: facts.blitzBest ?? null } : undefined);
+    fillAchievements(facts ?? {});
     if (playTitle) playTitle.textContent = PROFILE.theirGames;
     const rivalry = facts?.rivalryLine && facts.rivalryLine.trim() ? facts.rivalryLine.trim() : '';
     if (rivalryLine) {

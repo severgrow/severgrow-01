@@ -53,6 +53,11 @@ export const FEATURES = Object.freeze({
    */
   blitz: CHANNEL === 'futa05',
   /**
+   * PRACTICE STREAKS (owner, 2026-11-18): current and best streak on each Practice key, and the best
+   * online Blitz streak on the profile. The futa05 game only; the locked futa04 line: never.
+   */
+  practiceStreaks: CHANNEL === 'futa05',
+  /**
    * THE PLANET (owner, 2026-11-04): the Territory window shows its ground as a planet in space,
    * called THE PLANET, and the planet is the main menu's backdrop. First on the staging copy; then
    * "When you promote, should THE PLANET go live for everyone?" — "Yes, planet goes live". So it is

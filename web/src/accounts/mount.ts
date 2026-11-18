@@ -1,3 +1,4 @@
+import { FEATURES } from '../channel.js';
 import { SIGN_IN_RESUME_KEY, signInGate } from './sign-in-gate.js';
 import { mountSheetViewport } from '../ui/sheet-viewport.js';
 import { authJson } from './email-auth.js';
@@ -776,7 +777,19 @@ export const mountAccounts = async (): Promise<void> => {
       matchesWon: matchesWonEver(offline, null),
       offline,
       online: null,
+      // The best online Blitz streak and achievements unlocked (owner, 2026-11-18): unknown until read.
+      ...(FEATURES.practiceStreaks ? { blitzBest: null, achievements: null } : {}),
     };
+  };
+  /** A profile's record (best online Blitz streak, achievements x/x); null on any failure (old server). */
+  const readRecord = async (playerId: string, token: string): Promise<{ blitzBest: number | null; achievements: { done: number; total: number } | null } | null> => {
+    if (!FEATURES.practiceStreaks) return null;
+    const body = await apiGet(`/v1/players/${encodeURIComponent(playerId)}/record`, token) as
+      { onlineBlitzBest?: unknown; achievements?: { done?: unknown; total?: unknown } | null } | null;
+    if (!body) return null;
+    const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : null);
+    const done = n(body.achievements?.done); const total = n(body.achievements?.total);
+    return { blitzBest: n(body.onlineBlitzBest), achievements: done !== null && total !== null ? { done, total } : null };
   };
 
   const openProfile = () => {
@@ -797,6 +810,7 @@ export const mountAccounts = async (): Promise<void> => {
     facts.matchesWon = matchesWonEver(facts.offline, facts.online);
     profile.open(facts, menuLogin);
 
+    void readRecord(identity.playerId, token).then((record) => { if (record) paint(record); });
     void apiGet(`/v1/players/${encodeURIComponent(identity.playerId)}/profile`,token).then(body=>{
       const wire=(body as {profile?:PublicPlayerProfile}|null)?.profile;
       if(wire)paint({connectedTiles:wire.connectedTiles ?? null,tiles:wire.tiles,
@@ -843,10 +857,21 @@ export const mountAccounts = async (): Promise<void> => {
     profile.openVisitor(null, opener);
     const identity = readIdentity(kv);
     if (!identity) return;
+    // Two reads, painted as each lands: the public profile, and the record (best online Blitz streak,
+    // achievements x/x). The record alone never paints a sheet whose profile has not arrived.
+    let facts: VisitorFacts | null = null;
+    let record: Awaited<ReturnType<typeof readRecord>> = null;
+    const paintVisitor = () => {
+      if (seq !== visitorRequest || !facts) return;
+      profile.showVisitor(FEATURES.practiceStreaks ? { ...facts, blitzBest: record?.blitzBest ?? null, achievements: record?.achievements ?? null } : facts);
+    };
+    void readRecord(playerId, identity.token).then((r) => { record = r; paintVisitor(); });
     void apiGet(`/v1/players/${encodeURIComponent(playerId)}/profile`, identity.token).then((body) => {
       if (seq !== visitorRequest) return;
       const payload = body as { profile?: PublicPlayerProfile; headToHead?: HeadToHead } | null;
-      profile.showVisitor(visitorFromWire(payload?.profile, payload?.headToHead));
+      facts = visitorFromWire(payload?.profile, payload?.headToHead);
+      if (!facts) { profile.showVisitor(null); return; }
+      paintVisitor();
     });
   };
   window.addEventListener(PLAYER_PROFILE_EVENT, (event) => {

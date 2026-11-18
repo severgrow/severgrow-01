@@ -1507,6 +1507,15 @@ export const PROFILE = Object.freeze({
   winRate: 'Win rate',
   /** The longest winning run ever, not the current one: the tile says what its value means. */
   longestStreak: 'Longest streak',
+  /**
+   * THE COMPETITIVE NUMBER (owner, 2026-11-18): the online row's third tile is the best online Blitz
+   * streak, against real players only, from the server's own results ("replace longest streak, but
+   * make it look more important").
+   */
+  bestBlitzStreak: 'Best Blitz streak',
+  /** "add to profiles x/x achievements unlocked" (owner, 2026-11-18). */
+  achievements: 'Achievements',
+  achievementsValue: (done: number, total: number): string => `${done}/${total}`,
 });
 
 /**
@@ -1516,14 +1525,15 @@ export const PROFILE = Object.freeze({
  */
 export const PRIVACY = Object.freeze({
   title: 'Privacy',
-  updated: 'Last updated 13 November 2026',
+  updated: 'Last updated 18 November 2026',
   intro:
     'FUTASAKU is a small independent game. We collect as little as we can, we never sell data, and there are no ads or tracking.',
   sections: Object.freeze([
     Object.freeze({
       heading: 'Playing against the computer',
       lines: Object.freeze([
-        'Nothing leaves your device. Your settings and saved game are kept in your browser.',
+        'Your settings and saved game are kept in your browser.',
+        'If this device has a player (a guest or an account), the result of each Practice game (win, loss or draw, and which Practice key) is kept with that player, so your Practice streaks show on every device you sign in on.',
       ]),
     }),
     Object.freeze({

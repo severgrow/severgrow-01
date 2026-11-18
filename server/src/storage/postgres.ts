@@ -12,6 +12,7 @@
 // Row Level Security: the migrations enable RLS with no anon/authenticated policies, so only the
 // service role (the API server) can read authoritative state. This adapter must be given a
 // service-role connection; never a client-side key.
+import { foldOnlineBlitz } from '../streaks/postgres.js';
 import type { Action, Event, Player, RulesConfig, State } from '../../../src/engine/index.js';
 import { scores } from '../../../src/engine/index.js';
 import { hasGrace, spendGrace } from '../grace.js';
@@ -188,7 +189,16 @@ const deleteFinishedRows = async (pool: PgPool, ids: readonly string[]): Promise
 const pruneFinishedMatches = async (pool: PgPool, now: number): Promise<number> => {
   const rows = await finishedRows(pool);
   const doomed = prunableMatches(rows, now);
-  return doomed.length ? deleteFinishedRows(pool, doomed) : 0;
+  if (doomed.length === 0) return 0;
+  // THE ONLINE BLITZ STREAK OUTLIVES ITS MATCHES (owner, 2026-11-18): before a finished match is
+  // deleted, its players' streaks fold it in (streaks/postgres.ts). A database without the streak
+  // tables yet (migration 0028 not applied) prunes exactly as before.
+  const doomedSet = new Set(doomed);
+  const players = new Set(rows.filter((row) => doomedSet.has(row.id)).flatMap((row) => row.players));
+  for (const playerId of players) {
+    try { await foldOnlineBlitz(pool, playerId, now); } catch { /* no streak tables yet: prune as before */ }
+  }
+  return deleteFinishedRows(pool, doomed);
 };
 /**
  * True ONLY for a genuine unique violation on `matches.invite_code` — the one failure the service

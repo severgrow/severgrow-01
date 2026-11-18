@@ -26,6 +26,9 @@ import { postgresWorldEconomyStore } from './seeds/postgres.js';
 import { chatNotifier } from './chat/notifier.js';
 import { createChatRouter } from './chat/router.js';
 import { createTerritoryChatRouter, memoryTerritoryChatStore, postgresTerritoryChatStore } from './chat/territory.js';
+import { achievementsCount, createStreakRouter } from './streaks/router.js';
+import { memoryBlitzResults, memoryStreakStore } from './streaks/store.js';
+import { postgresStreakStore } from './streaks/postgres.js';
 import { memoryChatStore } from './chat/memory.js';
 import { postgresChatStore } from './chat/postgres.js';
 import { adminRouterNode } from './admin/node.js';
@@ -82,6 +85,9 @@ export const startServer = async (options: { port?: number } = {}): Promise<{ po
         ? memoryTerritoryChatStore(storage)
         : postgresTerritoryChatStore(poolFromUrl(databaseUrlFromEnv()!)) }),
       createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t), worldReadsPerIpPerHour: config.rateLimits.worldPerIpPerHour }),
+      createStreakRouter({ authenticate: (t) => service.authenticate(t), now: () => service.serverNow(), achievementsOf: achievementsCount(live.storage, economy), store: isMemory
+        ? memoryStreakStore({ blitzResults: memoryBlitzResults(live.storage) })
+        : postgresStreakStore(poolFromUrl(databaseUrlFromEnv()!)) }),
       await feedbackRouterNode(storage, service, databaseUrlFromEnv(), memoryFeedback),
       await accountsRouterNode(storage, service, databaseUrlFromEnv(), process.env, memoryLinks),
       admin.router,

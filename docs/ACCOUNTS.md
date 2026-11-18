@@ -134,7 +134,8 @@ want shown and it will add them. This policy was written to match the code; it i
 
 | Policy says | Code |
 | --- | --- |
-| Offline: nothing leaves the device | no network call outside `web/src/online`, `web/src/feedback`, `web/src/accounts` |
+| Offline: settings and the saved game stay in the browser | no network call outside `web/src/online`, `web/src/feedback`, `web/src/accounts` |
+| Practice results (win/loss/draw, which key) kept with the player, for streaks on every device (2026-11-18) | `web/src/online/practice-streak-sync.ts` (only with an identity already on the device); server `practice_streak_games`, `practice_streaks` (migration 0028), deleted with the player (`on delete cascade`) |
 | Guest data: id, nature name, matches, scrambled keys | `players`, `matches`, `match_moves`, `player_tokens` (sha-256) |
 | IP counters deleted after two days | `0010_accounts.sql` cron `futasaku-rate-limit-cleanup` |
 | Guests with no matches deleted after 30 days | sweeper, `GUEST_MAX_AGE_MS` |

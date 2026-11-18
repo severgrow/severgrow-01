@@ -1,3 +1,4 @@
+import type { PracticeStreaks, Streak } from './streaks/rules.js';
 import type { TerritoryChatPage } from './chat/territory.js';
 import type { ChatContent, ChatResult } from './chat/types.js';
 // A small isomorphic client for the duel API. It depends only on an injected `fetch` and an
@@ -596,6 +597,27 @@ export class DuelClient {
   }
 
   // ---- Territory challenges (docs/TERRITORY-CHALLENGES.md) ----
+
+  // ---- streaks (owner, 2026-11-18: practice streaks + the best online Blitz streak) ----
+
+  /** The account's four practice streaks and its online Blitz streak (server results only). */
+  async streaks(token: string): Promise<{ practice: PracticeStreaks; onlineBlitz: Streak }> {
+    const r = await this.requestWithDeadline<{ practice: PracticeStreaks; onlineBlitz: Streak }>('GET', '/v1/players/me/streaks', { token }, 'Streaks read');
+    return { practice: r.practice, onlineBlitz: r.onlineBlitz };
+  }
+
+  /** Send finished practice games; each game id counts once on the account however often it arrives. */
+  async recordPracticeGames(token: string, games: readonly { id: string; tier: string; result: string }[]): Promise<PracticeStreaks> {
+    const r = await this.requestWithDeadline<{ practice: PracticeStreaks }>('POST', '/v1/players/me/streaks', { token, body: { games } }, 'Streaks write');
+    return r.practice;
+  }
+
+  /** A profile's record: the best online Blitz streak and achievements unlocked (own or a visitor's). */
+  async playerRecord(token: string, playerId: string): Promise<{ onlineBlitzBest: number; achievements: { done: number; total: number } | null }> {
+    const r = await this.requestWithDeadline<{ onlineBlitzBest: number; achievements: { done: number; total: number } | null }>(
+      'GET', `/v1/players/${encodeURIComponent(playerId)}/record`, { token }, 'Record read');
+    return { onlineBlitzBest: r.onlineBlitzBest, achievements: r.achievements };
+  }
 
   async worldChallenges(token: string): Promise<WorldChallengesPayload> {
     const response = await this.requestWithDeadline<WorldChallengesPayload & { ok: true }>('GET', '/v1/world/challenges', { token }, 'Challenges read');

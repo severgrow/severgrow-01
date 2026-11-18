@@ -1,5 +1,7 @@
 // first: the release channel (the test copy keeps its own storage)
 import { signInGate } from './accounts/sign-in-gate.js';
+import { practiceStreaks, syncPracticeStreaks } from './online/practice-streak-sync.js';
+import { paintPracticeStreakKeys } from './menu/practice-streak-keys.js';
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
 import { deferEntryButton } from './ui/deferred-entry.js';
 import { confirmedTurn, mountTurnRim } from './player/turn-rim.js';
@@ -1487,7 +1489,18 @@ function renderLevelGrid() {
   // EXPERIMENTAL Blitz (/test/ only): the fourth Practice tier, appended OUTSIDE DIFFICULTIES so the
   // three training tiers and the menu pinned by their tests are untouched. Off everywhere else.
   blitz?.appendTile(grid);
+  // PRACTICE STREAKS (owner, 2026-11-18): each key's current and best streak, then the account's own
+  // numbers (another device's games) the moment they arrive.
+  if (FEATURES.practiceStreaks) {
+    paintPracticeStreakKeys(grid, practiceStreaks().view());
+    void syncPracticeStreaks();
+  }
 }
+// The keys repaint whenever a streak changes (a finished game, the account's answer), in place.
+if (FEATURES.practiceStreaks) practiceStreaks().onChange(() => {
+  const grid = document.getElementById('level-grid');
+  if (grid?.querySelector('.difficulty-tile')) paintPracticeStreakKeys(grid, practiceStreaks().view());
+});
 
 // ---------- campaign screen ----------
 
@@ -2441,6 +2454,14 @@ async function startGame(
 ) {
   let generation = ++startGameGeneration;
   seedServerWarmed = false;
+  // PRACTICE STREAKS (owner, 2026-11-18): a game that takes the offline save's place abandons the
+  // practice game still unfinished there (reset), and a Practice key's game opens its own streak game.
+  // Campaign, tutorial and watched games never touch a streak (the practice save stays resumable).
+  if (FEATURES.practiceStreaks && !campaign && !tutorial && !watch) {
+    const tier = blitzStart ? 'blitz' : difficulty;
+    if (tier) practiceStreaks().started(tier, seed);
+    else practiceStreaks().abandonOpen();
+  }
   finishPayout = null;
   // One of the player's games (the guide's HOW TO PLAY label shows in the first few). A watched game,
   // a tutorial replay and a Blitz game are not the player's own learning games.
@@ -3356,6 +3377,13 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
       noteFinishedForInstall(p.after.result.winner === HUMAN ? 'won' : p.after.result.winner === null ? 'draw' : 'lost');
       // Player stats in the profile: this game's moves join the record (logic/play-record.ts).
       store.set(PLAY_KEY, JSON.stringify(recordPlay(parsePlay(store.get(PLAY_KEY)), p.after.history ?? [], HUMAN)));
+      // PRACTICE STREAKS: the key's numbers move the moment the game ends, then go to the account.
+      const streakTier = !FEATURES.practiceStreaks ? null : blitzMatch ? 'blitz' : gameDifficulty;
+      if (streakTier) {
+        const w = p.after.result.winner;
+        practiceStreaks().finished(streakTier, w === HUMAN ? 'win' : w === null ? 'draw' : 'loss');
+        void syncPracticeStreaks();
+      }
       // The one-game carry-over, earned by this finished game: a win steps the training tier's next
       // game one bot level UP, a loss one DOWN (and never outside the tier). Anything else clears
       // that tier's pending step. Online duels and campaigns carry a null tier, so they never write.

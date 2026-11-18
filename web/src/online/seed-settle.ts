@@ -321,3 +321,17 @@ export const warmSeedServer = async (connect: SeedConnector = seedConnection): P
 
 /** The draw pile at or below this many cards: the last turns, time to wake the server (main.ts). */
 export const WARM_SEED_SERVER_AT_DECK = 6;
+
+/**
+ * The client and the identity ALREADY stored on this device, for a quiet background read or write
+ * (practice streaks: logic/practice-streaks.ts). Never mints a guest: no identity, no request.
+ */
+export const storedConnection = (connect: SeedConnector = seedConnection): { client: DuelClient; token: string; playerId: string } | null => {
+  try {
+    const c = connect();
+    const id = c?.identity.peek();
+    return c && id ? { client: c.client, token: id.token, playerId: id.playerId } : null;
+  } catch {
+    return null;
+  }
+};

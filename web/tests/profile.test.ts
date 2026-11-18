@@ -72,7 +72,9 @@ describe('the identity block is four lines, in the owner’s order', () => {
   });
 
   it('adds only the connected count, no controls or sign-out in the sheet', () => {
-    expect(profileSection.match(/class="sp-row[ "]/g) ?? []).toHaveLength(5);
+    // OWNER RULE CHANGE (2026-11-18: "add to profiles x/x achievements unlocked"): a sixth line.
+    expect(profileSection.match(/class="sp-row[ "]/g) ?? []).toHaveLength(6);
+    expect(profileSection).toContain('id="profile-achievements"');
     for (const id of ['profile-name', 'profile-seeds', 'profile-tiles', 'profile-wins']) {
       expect(profileSection).toContain(`id="${id}"`);
     }
