@@ -29,7 +29,8 @@ try {
   const firstPaths: string[] = [];
   const gate = new Promise<void>(resolve => { release = resolve; });
   await page.route('**/v1/**', async route => {
-    const path = new URL(route.request().url()).pathname;
+    // The API base may carry the Edge prefix (/functions/v1/duel), as the real server does.
+    const path = new URL(route.request().url()).pathname.replace(/^.*?\/duel(?=\/v1\/)/, "");
     firstPaths.push(path);
     let body: unknown = { ok: false, code: 'UNAVAILABLE', message: 'test fixture' };
     let ms = 0;
@@ -83,7 +84,8 @@ try {
   const chatPage = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   let worldEnded = 0; let chatStarted = 0; let worldStarted = 0;
   await chatPage.route('**/v1/**', async route => {
-    const path = new URL(route.request().url()).pathname;
+    // The API base may carry the Edge prefix (/functions/v1/duel), as the real server does.
+    const path = new URL(route.request().url()).pathname.replace(/^.*?\/duel(?=\/v1\/)/, "");
     let body: unknown = { ok: false, code: 'UNAVAILABLE', message: 'test fixture' };
     if (path === '/v1/world') { worldStarted ||= performance.now(); await delay(900);
       worldEnded = performance.now(); body = { ok: true, world: freshWorld }; }
