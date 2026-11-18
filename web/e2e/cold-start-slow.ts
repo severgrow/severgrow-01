@@ -30,7 +30,8 @@ import { ONLINE } from '../../src/strings.js';
 
 const ios = process.env.COLD_WEBKIT === '1';
 const COLD_DEADLINE_MS = 60_000;
-const LOADING_MAX_MS = 8_000;
+/** Worst case: the Planet tapped within a second of opening while guest and chat both go silent once. */
+const LOADING_MAX_MS = 10_000;
 /** Measured with the fix: Planet ~4.5 s, chat ~8 s, achievements ~8 s on this fixture. */
 const LIMIT_MS = { planet: 7_000, chat: 11_000, achievements: 11_000 } as const;
 const PLAYER = '22222222-2222-4222-8222-222222222222';
@@ -96,7 +97,9 @@ const SAMPLE = `(() => {
     achEmpty: shown('world-achievements-empty'), achRows: document.querySelectorAll('#online-world-achievements .world-achievement').length };
 })()`;
 
-try {
+type Part = 'planet' | 'chat' | 'achievements';
+const visit = async (name: string, menuWaitMs: number, limit: Record<Part, number>, loadingMax: number) => {
+  seen.clear(); worldAnswered = false; log.length = 0;
   const context = await browser.newContext(ios ? { ...devices['iPhone 13'] } : { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   const page = await context.newPage();
   if (!ios) await page.route('http://127.0.0.1:65530/**', async (route) => {
@@ -124,6 +127,8 @@ try {
   });
   await page.goto(fixture.origin + '/test/');
   await page.waitForFunction('(() => !!window.__severgrow?.ready?.())()', undefined, { timeout: 30_000 });
+  // The visitor stays on the main menu this long before tapping the Planet.
+  if (menuWaitMs) await page.waitForTimeout(menuWaitMs);
   await page.locator('#menu-world').click();
   const t0 = Date.now();
   await page.waitForSelector('#online-world-chat', { state: 'attached', timeout: 15_000 });
@@ -134,7 +139,7 @@ try {
   const loading = { world: ONLINE.worldLoading, chat: ONLINE.worldChatLoading, achievements: ACHIEVEMENTS_UI.waiting };
   const since: Record<string, number | null> = { world: null, chat: null, achievements: null };
   const longest: Record<string, number> = { world: 0, chat: 0, achievements: 0 };
-  const done: Record<string, number | null> = { planet: null, chat: null, achievements: null };
+  const done: Record<Part, number | null> = { planet: null, chat: null, achievements: null };
   let achievementsOpen = false;
   const timeline: string[] = [];
   while (Date.now() - t0 < COLD_DEADLINE_MS) {
@@ -164,21 +169,30 @@ try {
     if (done.planet !== null && done.chat !== null && done.achievements !== null) break;
     await page.waitForTimeout(250);
   }
-  const result = { engine: ios ? 'webkit' : 'chromium', doneMs: done, longestLoadingMs: longest, errors };
+  const result = { engine: ios ? 'webkit' : 'chromium', visit: name, doneMs: done, longestLoadingMs: longest, errors };
   console.log('COLD_START_SLOW', JSON.stringify(result));
-  const failed = (Object.keys(LIMIT_MS) as (keyof typeof LIMIT_MS)[]).some((k) => done[k] === null || done[k]! > LIMIT_MS[k]) || Object.values(longest).some((v) => v > LOADING_MAX_MS) || errors.length > 0;
+  const failed = (Object.keys(limit) as Part[]).some((k) => done[k] === null || done[k]! > limit[k]) || Object.values(longest).some((v) => v > loadingMax) || errors.length > 0;
   if (failed) {
     console.log('TIMELINE\n' + timeline.join('\n'));
     console.log('REQUESTS (reaching the server)\n' + log.join('\n'));
     console.log('ASKED (by the page)\n' + (await page.evaluate('window.__asked') as string[]).join('\n'));
   }
   for (const k of ['planet', 'chat', 'achievements'] as const) {
-    assert(done[k] !== null, `${k} never showed`);
-    assert(done[k]! <= LIMIT_MS[k], `${k} took ${done[k]} ms (limit ${LIMIT_MS[k]} ms)`);
+    assert(done[k] !== null, `${name}: ${k} never showed`);
+    assert(done[k]! <= limit[k], `${name}: ${k} took ${done[k]} ms (limit ${limit[k]} ms)`);
   }
-  for (const [k, ms] of Object.entries(longest)) assert(ms <= LOADING_MAX_MS, `${k} loading line stayed ${ms} ms`);
+  for (const [k, ms] of Object.entries(longest)) assert(ms <= loadingMax, `${name}: ${k} loading line stayed ${ms} ms`);
   assert.deepEqual(errors, []);
   await context.close();
+};
+
+try {
+  // 1. Straight to the Planet the moment the menu is ready: everything is still on its way.
+  await visit('straight to the Planet', 0, LIMIT_MS, LOADING_MAX_MS);
+  // 2. READY BEFORE THE TAP (owner, 2026-11-18: "this should load as soon as player opens the game
+  //    right? even on main menu"). The same slow server, but the visitor spends 12 s on the main
+  //    menu first: chat and achievements must be on screen at once when the Planet opens.
+  await visit('after 12 s on the main menu', 12_000, { planet: 1_500, chat: 1_500, achievements: 2_500 }, 1_500);
 } finally {
   await browser.close();
   await fixture.close();

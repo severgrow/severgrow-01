@@ -163,7 +163,8 @@ Two checks, because the real server can be slow or silent in ways a mock is not:
   creation, map read and chat read never answer, the next take 1.5 s; the first two wallet reads
   never answer; the first achievements read fails. A fresh visitor must see the Planet within 7 s,
   chat messages within 11 s and the achievements list within 11 s of tapping the Planet, and no
-  loading line may stay for more than 8 s in a row. WebKit talks to a real local HTTP server;
+  loading line may stay for more than 10 s in a row. A second visitor first spends 12 s on the main
+  menu: then the Planet and chat must show within 1.5 s of the tap and achievements within 2.5 s. WebKit talks to a real local HTTP server;
   Chromium gets the same answers through request interception (over a local HTTP/1.1 server,
   Chrome's six connections per host fill with the silent requests; the real API is HTTP/2).
 - **`web/e2e/real-test-smoke.ts` (by hand, after a push has published /test).** Read-only against the

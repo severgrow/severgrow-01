@@ -616,3 +616,18 @@ pattern (answers in under 3 s or never) and now fails on slow, not only on never
 Chat and achievements still wait for the guest (the server serves chat only to an identity): a
 silent first guest creation costs 3 s plus the second copy's answer. A guest creation answered twice
 leaves one unused guest row on the server; only the first answer is kept on the device.
+
+**Ready before the tap (owner, same day: "this should load as soon as player opens the game right?
+even on main menu").** The menu already read the map; chat was warmed only if an identity existed
+when the menu painted (a new visitor's guest arrives a moment later), and achievements were never
+read before the Planet opened. Now the moment an identity is known on the main menu (a returning
+player at once, a new visitor when the guest is created), the chat page and the achievements are
+read once each (achievements again only when over a minute old). Same slow server, visitor first
+spends 12 s on the menu, then taps the Planet:
+
+| After 12 s on the menu | Planet | Chat messages | Achievements (incl. ~1 s of the check's own taps) |
+| --- | ---: | ---: | ---: |
+| Chromium | 0.35 s | 0.35 s | 1.3 s |
+| WebKit | 0.35 s | 0.35 s | 1.3 s |
+
+No poll, interval or socket was added: one read per identity, and nothing runs while hidden.

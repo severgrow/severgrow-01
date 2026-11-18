@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { WorldView } from '../src/online/world-view.js';
 
 it('reports the first failed public read when a fresh visit has no map to show', async () => {
@@ -236,4 +236,35 @@ it('a failed achievements read is asked again at 2 s, not at the next 12 s poll;
     await vi.advanceTimersByTimeAsync(30_000);
     expect(calls).toBe(1);
   } finally { vi.unstubAllGlobals(); vi.useRealTimers(); }
+});
+
+// READY BEFORE THE TAP (owner, 2026-11-18: "this should load as soon as player opens the game right?
+// even on main menu"). On the main menu, the moment an identity is known, the chat page and the
+// achievements are read, so opening the Planet shows them at once.
+describe('the main menu gets chat and achievements ready', () => {
+  const menuState = (over: Record<string, unknown> = {}) => achievementsState({
+    active: false, identity: null, achievementsReadAt: -Infinity,
+    loadAchievements: vi.fn(async function (this: any) { this.achievementsReadAt = Date.now(); }), ...over });
+  it('reads both as soon as the identity is known', () => {
+    const state = menuState();
+    (state as WorldView).warm({ playerId: 'me', token: 'token', kind: 'guest' } as never);
+    expect(state.chat.prefetch).toHaveBeenCalledOnce();
+    expect(state.loadAchievements).toHaveBeenCalledOnce();
+    expect(state.identity).toMatchObject({ playerId: 'me' });
+  });
+  it('without an identity there is nothing to read yet', () => {
+    const state = menuState();
+    (state as WorldView).warm(null);
+    expect(state.loadAchievements).not.toHaveBeenCalled();
+  });
+  it('a menu that repaints does not ask again for a fresh list', () => {
+    const state = menuState({ achievements: { playerId: 'me', views: [{ id: 'a' }], routeMissing: false, retry: false }, achievementsReadAt: Date.now() });
+    (state as WorldView).warm({ playerId: 'me', token: 'token', kind: 'guest' } as never);
+    expect(state.loadAchievements).not.toHaveBeenCalled();
+  });
+  it('an open Planet runs its own reads; the menu warm-up stays out of its way', () => {
+    const state = menuState({ active: true, identity: { playerId: 'me', token: 'token' } });
+    (state as WorldView).warm({ playerId: 'me', token: 'token', kind: 'guest' } as never);
+    expect(state.loadAchievements).not.toHaveBeenCalled();
+  });
 });

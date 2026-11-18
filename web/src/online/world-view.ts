@@ -942,6 +942,26 @@ export class WorldView {
     this.achievementNoteHook = note;
   }
 
+  /**
+   * READY BEFORE THE TAP (owner, 2026-11-18: "this should load as soon as player opens the game
+   * right? even on main menu"). On the main menu, once an identity is known (a returning player at
+   * once, a new visitor the moment their guest exists), read the chat page and the achievements, so
+   * opening the Planet shows them at once. Both are kept on the device for the next visit too. One
+   * read each, not a poll: a menu that repaints asks again only when the list is over a minute old.
+   */
+  warm(identity: Identity | null): void {
+    if (this.active || !identity) return;
+    const same = this.identity?.playerId === identity.playerId && this.identity?.token === identity.token;
+    if (!same) this.identity = identity;
+    this.chat.prefetch();
+    if (this.achievements?.playerId !== identity.playerId) this.achievements = restoreAchievements(browserStorage(), identity.playerId);
+    const fresh = this.achievements.views !== null && !this.achievements.retry && Date.now() - this.achievementsReadAt < 60_000;
+    // A warm-up never throws into the menu: a failed read is simply asked again when the Planet opens.
+    if (!fresh) void this.loadAchievements().catch(() => undefined);
+  }
+  /** When the last achievements answer arrived (the menu warm-up's freshness check). */
+  private achievementsReadAt = -Infinity;
+
   /** The same renderer at rest. No polling/subscription; chat may warm one authenticated page. */
   preview(world: World | null, identity: Identity | null, fromMemory = false) {
     if (this.active) this.close(true);
@@ -951,7 +971,7 @@ export class WorldView {
     this.menuPreview = true;
     // Chat needs the identity, not the geography. A cold world read must not hold its one warm GET.
     this.identity = identity;
-    this.chat.prefetch();
+    this.warm(identity);
     if (!world) { this.openPlanet('menu'); return; }
     const owner = identity?.playerId ?? null;
     const changedWorld = this.world?.version !== world.version;
@@ -1251,10 +1271,14 @@ export class WorldView {
       this.chat.prefetch();
       // Paint the last good list from this device at once, then replace it with the fresh read. A
       // guest has no key at all, and never inherits another account's remembered list.
-      this.achievements = restoreAchievements(browserStorage(), identity?.playerId ?? null);
+      // A list the main menu already read for this player stays (warm); otherwise the device's own.
+      if (this.achievements.playerId !== (identity?.playerId ?? null) || this.achievements.views === null)
+        this.achievements = restoreAchievements(browserStorage(), identity?.playerId ?? null);
       this.paintPanel();
       // Achievements are their own read (cold start, 2026-11-18): never queued behind the wallet.
-      if (this.identity) void this.loadAchievements();
+      // One the menu read under a minute ago is shown as it is.
+      if (this.identity && !(this.achievements.views !== null && !this.achievements.retry && Date.now() - this.achievementsReadAt < 60_000))
+        void this.loadAchievements();
       if (!changedIdentity) this.paintWallet();
       // ensureIdentity may return a fresh wrapper for the same credentials. Use the retained
       // actor object so loadColour's stale-account guard accepts this still-current response.
@@ -2962,12 +2986,14 @@ export class WorldView {
     let outcome: Parameters<typeof afterAchievementsRead>[1];
     try {
       const views = await this.client.achievements(identity.token);
-      if (identity !== this.identity || !this.active) {
-        // The answer belongs to another identity, or the map closed: keep what is on screen and let
-        // the next refresh recover. A dropped result must never leave the key hidden for ever.
+      if (identity !== this.identity) {
+        // The answer belongs to another identity: keep what is on screen and let the next refresh
+        // recover. A dropped result must never leave the key hidden for ever. (An answer that lands
+        // on the main menu is kept: it is what the Planet shows the moment it opens.)
         outcome = { kind: 'discarded' };
       } else {
         outcome = { kind: 'loaded', playerId: identity.playerId, views };
+        if (views.length > 0) this.achievementsReadAt = Date.now();
         // A real answer carries the full set. An EMPTY body is the server's deadline fallback, not
         // a truthful "you have none": never let it overwrite the list remembered on this device.
         if (views.length > 0) rememberAchievements(browserStorage(), identity.playerId, views);
@@ -2975,7 +3001,7 @@ export class WorldView {
     } catch (error) {
       const status = (error as { status?: number } | null)?.status;
       const missing = status === 404 || (error as { code?: string } | null)?.code === 'NOT_FOUND';
-      if (identity !== this.identity || !this.active) outcome = { kind: 'discarded' };
+      if (identity !== this.identity) outcome = { kind: 'discarded' };
       // A server without the route answers 404: hide the key rather than show a broken page.
       else if (missing) outcome = { kind: 'missing', playerId: identity.playerId };
       // A 5xx, a timeout, an offline device: leave the key exactly as it was and retry on the poll.

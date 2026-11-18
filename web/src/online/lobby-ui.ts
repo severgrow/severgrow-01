@@ -4,7 +4,7 @@ import { DuelClient, DuelError, browserStorage } from '../../../server/src/clien
 import type { MatchListEntry, MatchSummary, MatchViewPayload, ReplayPayload, WorldMapPayload } from '../../../server/src/protocol.js';
 import { ONLINE, PLANET, REPLAY } from '../../../src/strings.js';
 import { FEATURES } from '../channel.js';
-import { createIdentityStore } from './identity.js';
+import { createIdentityStore, subscribeIdentityChanges } from './identity.js';
 import type { IdentityStore } from './identity.js';
 import { SEARCH_HEARTBEAT_MS, SEARCH_LIVE_MS, duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
 import { createLobbyActionGuard, lobbyActionStillCurrent } from './lobby-action.js';
@@ -821,6 +821,12 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     anchor: (box, rect) => worldView?.setMenuFrame(box, rect),
   }) : null;
   worldSource.subscribe(() => living?.update());
+  // READY BEFORE THE TAP (owner, 2026-11-18): a new visitor's guest arrives after the menu has
+  // painted; the moment it does, the menu gets chat and achievements ready for the Planet.
+  subscribeIdentityChanges((record) => {
+    if (menuEl?.hidden !== false || !record) return;
+    worldView?.warm({ token: record.token, playerId: record.playerId, kind: record.kind });
+  });
   const syncMenuWorld = (visible: boolean) => living?.menu(visible);
   window.addEventListener('futasaku:screen', event => {
     const name = (event as CustomEvent<string>).detail;
