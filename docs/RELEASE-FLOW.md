@@ -158,12 +158,14 @@ docs/WORLD-MAP.md: the key stays hidden until the endpoint answers).
 
 Two checks, because the real server can be slow or silent in ways a mock is not:
 
-- **`cold-start-slow` / `cold-start-slow-ios` (CI, every push).** The built page against a local API
-  that behaves like the real server on a bad minute: the first guest creation never answers (the
-  next takes 7 s), the first map read takes 8 s, the first two wallet reads never answer, the first
-  achievements read fails, the first chat read takes 6 s. A fresh visitor must end with the Planet
-  painted, chat messages and the achievements list within 60 s, and no loading line may stay on
-  screen for more than 16 s in a row. Chromium and WebKit.
+- **`cold-start-slow` / `cold-start-slow-ios` (CI, every push).** The built page against an API
+  that behaves like the real server on a bad minute (answers in under 3 s or never): the first guest
+  creation, map read and chat read never answer, the next take 1.5 s; the first two wallet reads
+  never answer; the first achievements read fails. A fresh visitor must see the Planet within 7 s,
+  chat messages within 11 s and the achievements list within 11 s of tapping the Planet, and no
+  loading line may stay for more than 8 s in a row. WebKit talks to a real local HTTP server;
+  Chromium gets the same answers through request interception (over a local HTTP/1.1 server,
+  Chrome's six connections per host fill with the silent requests; the real API is HTTP/2).
 - **`web/e2e/real-test-smoke.ts` (by hand, after a push has published /test).** Read-only against the
   REAL site and server: a fresh phone visitor (no identity, no cache) opens the Planet, Global chat and
   achievements, and each must show content within 45 s. It creates only the guest every fresh visitor

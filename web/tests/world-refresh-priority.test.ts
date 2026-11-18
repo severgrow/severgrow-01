@@ -213,3 +213,27 @@ it('a poll does not re-read achievements that are already on screen', async () =
   await (state as WorldView).refresh();
   expect(state.loadAchievements).not.toHaveBeenCalled();
 });
+
+it('a failed achievements read is asked again at 2 s, not at the next 12 s poll; never while hidden', async () => {
+  vi.useFakeTimers();
+  try {
+    const state = achievementsState({ loadAchievements: WorldView.prototype['loadAchievements' as keyof WorldView], achievementRetryTimer: null, achievementRetries: 0 });
+    let calls = 0;
+    state.client.achievements = vi.fn(async () => { calls++; if (calls === 1) throw Object.assign(new Error('cold'), { status: 503 }); return [{ id: 'a', group: 'territory', done: false, claimed: false }]; });
+    await state.loadAchievements();
+    expect(calls).toBe(1);
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(calls).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(calls).toBe(2);
+    expect(state.achievements.views).toHaveLength(1);
+    // Hidden: the retry waits for the next visible poll instead.
+    calls = 0;
+    const hidden = achievementsState({ loadAchievements: WorldView.prototype['loadAchievements' as keyof WorldView], achievementRetryTimer: null, achievementRetries: 0 });
+    hidden.client.achievements = vi.fn(async () => { calls++; throw Object.assign(new Error('cold'), { status: 503 }); });
+    vi.stubGlobal('document', { hidden: true, getElementById: () => null, querySelector: () => null });
+    await hidden.loadAchievements();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(calls).toBe(1);
+  } finally { vi.unstubAllGlobals(); vi.useRealTimers(); }
+});

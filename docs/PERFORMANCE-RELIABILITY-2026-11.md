@@ -571,7 +571,7 @@ interleaved, every API request marked as test traffic, 30 s watch after the Plan
 **The server answers in under 3 s, or not at all.** Health and auth-methods answered in 0.2–0.6 s
 throughout. Requests that touch the database — guest creation, the map, wallet, challenges, chat,
 presence — were sometimes left open with no answer for 30 s and more, on both sites. In the
-Chromium runs live got no guest within 30 s in 7 of 10 loads, /test in 4 of 10 (/test retries the
+Chromium runs live got no guest within 30 s in 7 of 10 loads, /test in 3 of 10 (/test retries the
 guest every 12 s; live never does). A burst of 20 parallel map reads from one host hung 18 of them
 for 25 s; the map answered in 0.4–2.7 s once single requests resumed. The database was not
 inspected (no access from this pass); the cause of the silences is a server question
@@ -597,3 +597,22 @@ shows the last page this account read (one slot, credential digest, 24 h) on the
 
 Chat and achievements wait on the guest (first creation silent for 12 s, then 7 s). No new
 interval, frame callback or socket: each bound is one timer per request, cleared on answer.
+
+**Second pass, same day (owner: "25 seconds to load the chat?").** The first fix finished, but
+slowly: each silent request cost the full 12 s before a retry, and a failed achievements read
+waited for the next 12 s poll. Now a request still silent after 3 s gets ONE second copy beside it
+(first answer wins, the other is cancelled; the map, guest creation, wallet, challenges,
+achievements, colour and the chat page), and a failed achievements read is asked again at 2, 4
+and 8 s (one-shot timers, none while hidden). The slow-server check was rewritten to the measured
+pattern (answers in under 3 s or never) and now fails on slow, not only on never:
+
+| Same scenario, fresh visitor | Planet | Chat messages | Achievements |
+| --- | ---: | ---: | ---: |
+| 1852a15d, Chromium | 14.8 s | 32.8 s | never |
+| 1852a15d, WebKit | 14.1 s | 32.1 s | never |
+| fix, Chromium | 3.4 s | 7.7 s | 8.7 s |
+| fix, WebKit | 3.7 s | 8.0 s | 9.0 s |
+
+Chat and achievements still wait for the guest (the server serves chat only to an identity): a
+silent first guest creation costs 3 s plus the second copy's answer. A guest creation answered twice
+leaves one unused guest row on the server; only the first answer is kept on the device.

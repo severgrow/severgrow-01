@@ -236,8 +236,11 @@ it('releases a world read when the transport never settles, so a later read can 
     await vi.advanceTimersByTimeAsync(12_000);
     await failed;
     expect(signals[0]?.aborted).toBe(true);
-    const second = client.worldMap();
+    // Two copies of the silent first read (the second at 3 s), both cancelled; the retry is a new one.
     expect(signals).toHaveLength(2);
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+    const second = client.worldMap();
+    expect(signals).toHaveLength(3);
     const failedAgain = expect(second).rejects.toThrow(/timed out/i);
     await vi.advanceTimersByTimeAsync(12_000);
     await failedAgain;
@@ -282,7 +285,8 @@ it('releases every Planet private read when the transport never settles', async 
     const failed = reads.map((read) => expect(read).rejects.toThrow(/timed out/i));
     await vi.advanceTimersByTimeAsync(12_000);
     await Promise.all(failed);
-    expect(signals).toHaveLength(4);
+    // Each silent read is asked twice (the second copy at 3 s); all copies are cancelled.
+    expect(signals).toHaveLength(8);
     expect(signals.every((signal) => signal.aborted)).toBe(true);
   } finally {
     vi.useRealTimers();
@@ -302,4 +306,79 @@ it('a slow read that answers inside the bound is never cut off', async () => {
   } finally {
     vi.useRealTimers();
   }
+});
+
+// A SILENT REQUEST IS ASKED AGAIN AT 3 s (owner, 2026-11-18, on 25 s to chat in the slow-server
+// check: "how is that fixed?"). The real server answers in under 3 s or not at all, so waiting the
+// full 12 s on a silent request wastes 9 s. A second copy goes out beside it; the first answer wins.
+describe('a silent request is asked again after 3 s', () => {
+  const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body }) as never;
+  it('the second copy answers and the read resolves at once, the silent one is cancelled', async () => {
+    vi.useFakeTimers();
+    try {
+      const signals: AbortSignal[] = [];
+      const client = new DuelClient({ baseUrl: 'https://api.example', storage: memoryStore(),
+        fetch: async (_url, init) => { signals.push(init.signal!); return signals.length === 1 ? new Promise(() => {}) : ok({ ok: true, wallet: { balance: 9 } }); } });
+      const read = client.seedWallet('t');
+      await vi.advanceTimersByTimeAsync(2_999);
+      expect(signals).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(read).resolves.toMatchObject({ balance: 9 });
+      expect(signals).toHaveLength(2);
+      expect(signals[0]!.aborted).toBe(true);
+    } finally { vi.useRealTimers(); }
+  });
+  it('an answer inside 3 s sends nothing more', async () => {
+    vi.useFakeTimers();
+    try {
+      let calls = 0;
+      const client = new DuelClient({ baseUrl: 'https://api.example', storage: memoryStore(),
+        fetch: async () => { calls++; return new Promise((resolve) => setTimeout(() => resolve(ok({ ok: true, wallet: { balance: 1 } })), 2_500)); } });
+      const read = client.seedWallet('t');
+      await vi.advanceTimersByTimeAsync(2_500);
+      await expect(read).resolves.toMatchObject({ balance: 1 });
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(calls).toBe(1);
+    } finally { vi.useRealTimers(); }
+  });
+  it('guest creation: one identity comes back even when both copies answer', async () => {
+    vi.useFakeTimers();
+    try {
+      let calls = 0;
+      const client = new DuelClient({ baseUrl: 'https://api.example', storage: memoryStore(),
+        fetch: async () => { const n = ++calls; return new Promise((resolve) => setTimeout(() => resolve({ ok: true, status: 201,
+          json: async () => ({ ok: true, player: { id: `p${n}`, kind: 'guest', displayName: 'G' }, token: `t${n}`, serverNow: 0 }) } as never), n === 1 ? 5_000 : 1_000)); } });
+      const mint = client.createGuest();
+      await vi.advanceTimersByTimeAsync(4_000);
+      await expect(mint).resolves.toMatchObject({ token: 't2' });
+      expect(calls).toBe(2);
+    } finally { vi.useRealTimers(); }
+  });
+  it('a real error from the first copy is not hidden by waiting on the second', async () => {
+    vi.useFakeTimers();
+    try {
+      const client = new DuelClient({ baseUrl: 'https://api.example', storage: memoryStore(),
+        fetch: async () => ({ ok: false, status: 401, json: async () => ({ ok: false, code: 'UNAUTHORIZED', message: 'no' }) }) as never });
+      const read = client.seedWallet('t');
+      const failed = expect(read).rejects.toMatchObject({ status: 401 });
+      await vi.advanceTimersByTimeAsync(0);
+      await failed;
+    } finally { vi.useRealTimers(); }
+  });
+  it('the chat page is asked again too, and closing chat cancels both copies', async () => {
+    vi.useFakeTimers();
+    try {
+      const signals: AbortSignal[] = [];
+      const client = new DuelClient({ baseUrl: 'https://api.example', storage: memoryStore(),
+        fetch: async (_url, init) => { signals.push(init.signal!); return new Promise(() => {}); } });
+      const closing = new AbortController();
+      const page = client.territoryChat('t', closing.signal);
+      const failed = expect(page).rejects.toBeTruthy();
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(signals).toHaveLength(2);
+      closing.abort();
+      await failed;
+      expect(signals.every((s) => s.aborted)).toBe(true);
+    } finally { vi.useRealTimers(); }
+  });
 });

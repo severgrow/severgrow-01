@@ -684,7 +684,7 @@ export class DuelClient {
 
   // ---- Territory chat (server/src/chat/territory.ts): one shared channel, newest 30 ----
   territoryChat(token: string, signal?: AbortSignal): Promise<TerritoryChatPage> {
-    return this.request('GET', '/v1/territory/chat', { token, retry: true, ...(signal ? { signal } : {}) });
+    return this.requestWithDeadline('GET', '/v1/territory/chat', { token, retry: true, ...(signal ? { signal } : {}) }, 'Chat read');
   }
 
   territoryChatSend(token: string, text: string, requestId: string): Promise<TerritoryChatPage> {
@@ -700,32 +700,64 @@ export class DuelClient {
   }
 
   /**
-   * Bound the requests a Planet screen waits on: the world, guest creation, and the private reads
-   * (wallet, challenges, achievements, colour). Measured on the real server (2026-11-18): an answer
-   * comes in under 3 s, even cold, or not at all (requests left open for 30 s and more while the
-   * health check answered in 0.3 s). 12 s is four times the slowest real answer seen, so a read that
-   * would have succeeded is not cut off, and the screen's next poll retries.
+   * The requests a Planet screen waits on: the world, guest creation, the private reads (wallet,
+   * challenges, achievements, colour) and the chat page.
+   *
+   * Measured on the real server (2026-11-18): an answer comes in under 3 s, even cold, or not at all
+   * (requests left open for 30 s and more while the health check answered in 0.3 s). So:
+   *   - ASKED AGAIN AT 3 s (owner, 2026-11-18: 25 s to chat in the slow-server check, "how is that
+   *     fixed?"): a request still silent after HEDGE_MS gets a second copy beside it, and the first
+   *     answer wins; the other is cancelled. One extra copy at most, and only for a silent request.
+   *     A guest creation answered twice leaves one unused guest row; only the first is kept.
+   *   - BOUNDED AT 12 s: four times the slowest real answer; both copies are cancelled and the
+   *     screen's next poll retries.
+   * A real answer (any 4xx, a 500) from either copy is final, as before.
    */
   private async requestWithDeadline<T>(
     method: string,
     path: string,
-    options: { token?: string; body?: unknown; traffic?: boolean; retry?: boolean },
+    options: { token?: string; body?: unknown; traffic?: boolean; retry?: boolean; signal?: AbortSignal },
     label: string,
   ): Promise<T> {
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const deadline = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => {
-        controller.abort();
-        reject(new Error(`${label} timed out`));
-      }, 12_000);
-    });
+    const outer = options.signal;
+    const copies: AbortController[] = [];
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const cancel = () => { for (const c of copies) c.abort(); };
     try {
-      return await Promise.race([this.request<T>(method, path, { ...options, signal: controller.signal }), deadline]);
+      return await new Promise<T>((resolve, reject) => {
+        let settled = false;
+        let running = 0;
+        let lastError: unknown = null;
+        const finish = (fn: () => void) => { if (settled) return; settled = true; fn(); };
+        const send = () => {
+          const controller = new AbortController();
+          copies.push(controller);
+          running++;
+          const { signal: _outer, ...rest } = options;
+          this.request<T>(method, path, { ...rest, signal: controller.signal }).then(
+            (value) => finish(() => resolve(value)),
+            (error) => {
+              running--;
+              lastError = error;
+              const transport = !(error instanceof DuelError) && !(error instanceof DOMException && error.name === 'AbortError');
+              // A real answer is final. A dropped connection waits for the other copy, if one runs.
+              if (!transport || running === 0) finish(() => reject(error));
+            },
+          );
+        };
+        if (outer?.aborted) { reject(new DOMException('Aborted', 'AbortError')); return; }
+        outer?.addEventListener('abort', () => finish(() => reject(lastError ?? new DOMException('Aborted', 'AbortError'))), { once: true });
+        send();
+        timers.push(setTimeout(() => { if (!settled) send(); }, DuelClient.HEDGE_MS));
+        timers.push(setTimeout(() => finish(() => reject(new Error(`${label} timed out`))), 12_000));
+      });
     } finally {
-      if (timer) clearTimeout(timer);
+      for (const t of timers) clearTimeout(t);
+      cancel();
     }
   }
+  /** A request still silent this long is asked again (see `requestWithDeadline`). */
+  static readonly HEDGE_MS = 3_000;
 
   private async request<T>(
     method: string,

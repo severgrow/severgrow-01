@@ -669,6 +669,9 @@ export class WorldView {
   private achievements: AchievementsState = noAchievements();
   /** One achievements read in flight: a poll or a force may ask again, never in parallel. */
   private achievementsLoading = false;
+  /** The quick re-ask after a failed achievements read (2, 4, 8 s), and how many were made. */
+  private achievementRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private achievementRetries = 0;
   /** The achievement whose CLAIM is on its way, and the one that just paid (for its moment). */
   private claimingAchievement: string | null = null;
   private justClaimed: string | null = null;
@@ -2981,6 +2984,18 @@ export class WorldView {
       this.achievementsLoading = false;
     }
     this.achievements = afterAchievementsRead(this.achievements, outcome);
+    // A FAILED READ IS ASKED AGAIN SOON (owner, 2026-11-18: "25 seconds to load the chat?"): at 2 s,
+    // then 4 s, then 8 s, before handing over to the 12 s poll. One-shot timers, none while hidden.
+    if (this.achievementRetryTimer) { clearTimeout(this.achievementRetryTimer); this.achievementRetryTimer = null; }
+    if (outcome.kind === 'loaded' || outcome.kind === 'missing') this.achievementRetries = 0;
+    const hidden = () => typeof document !== 'undefined' && document.hidden;
+    if (outcome.kind === 'transient' && this.achievementRetries < 3 && this.active && !hidden()) {
+      const wait = 2_000 * 2 ** this.achievementRetries++;
+      this.achievementRetryTimer = setTimeout(() => {
+        this.achievementRetryTimer = null;
+        if (this.active && this.identity === identity && !hidden()) void this.loadAchievements();
+      }, wait);
+    }
     if (outcome.kind === 'loaded' && outcome.views.length > 0) {
       try {
         this.achievementNoteHook?.(outcome.views.filter((view) => view.done).map((view) => view.id));
