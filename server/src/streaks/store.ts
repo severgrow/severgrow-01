@@ -31,6 +31,16 @@ export const blitzResult = (row: Pick<BlitzResultRow, 'seat' | 'winner' | 'reaso
         : row.reason === 'resigned' ? 'forfeit'
           : 'loss';
 
+/**
+ * A finished match is folded only once it is this old (debug pass, 2026-11-18). A match's finish
+ * time is stamped when its finishing request starts, but the row commits when that request ends,
+ * seconds later on a slow server; a fold that ran in between moved its checkpoint past the older,
+ * not-yet-committed match, which was then skipped for ever (reproduced on real Postgres). Thirty
+ * seconds is three times the database stall limit (storage/stall-guard.ts), so every write that can
+ * still commit has. The profile's Blitz record therefore lags a finished match by up to 30 s.
+ */
+export const FOLD_SETTLE_MS = 30_000;
+
 /** The fold's order: finish time, then id, so two matches finishing in the same millisecond still have one order. */
 export const afterCheckpoint = (row: BlitzResultRow, at: number, id: string): boolean =>
   row.finishedAt > at || (row.finishedAt === at && row.matchId > id);
@@ -57,10 +67,10 @@ export const memoryStreakStore = (deps: {
       return copy(state);
     },
     async practice(playerId) { return copy(practice.get(playerId) ?? emptyPracticeStreaks()); },
-    async onlineBlitz(playerId) {
+    async onlineBlitz(playerId, now) {
       const held = blitz.get(playerId) ?? { streak: emptyStreak(), at: -1, id: '' };
       const rows = [...await deps.blitzResults(playerId)]
-        .filter((row) => afterCheckpoint(row, held.at, held.id))
+        .filter((row) => row.finishedAt <= now - FOLD_SETTLE_MS && afterCheckpoint(row, held.at, held.id))
         .sort((a, b) => a.finishedAt - b.finishedAt || a.matchId.localeCompare(b.matchId));
       let { streak, at, id } = held;
       for (const row of rows) { streak = applyGame(streak, blitzResult(row)); at = row.finishedAt; id = row.matchId; }

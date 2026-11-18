@@ -44,15 +44,15 @@ describe('the online Blitz streak, from server results only', () => {
     expect(blitzResult(row('x', 1, 'draw'))).toBe('draw');
     const rows = [row('m1', 1, 'win'), row('m2', 2, 'win'), row('m3', 3, 'draw'), row('m4', 4, 'win'), row('m5', 5, 'timeout'), row('m6', 6, 'win')];
     const store = memoryStreakStore({ blitzResults: () => rows });
-    expect(await store.onlineBlitz('p', 10)).toEqual({ current: 1, best: 3 });
+    expect(await store.onlineBlitz('p', 10 + 60_000)).toEqual({ current: 1, best: 3 });
   });
   it('a match folded once is never counted again, and one deleted later is not forgotten', async () => {
     let rows = [row('m1', 1, 'win'), row('m2', 2, 'win')];
     const store = memoryStreakStore({ blitzResults: () => rows });
-    expect(await store.onlineBlitz('p', 3)).toEqual({ current: 2, best: 2 });
-    expect(await store.onlineBlitz('p', 4)).toEqual({ current: 2, best: 2 });
+    expect(await store.onlineBlitz('p', 3 + 60_000)).toEqual({ current: 2, best: 2 });
+    expect(await store.onlineBlitz('p', 4 + 60_000)).toEqual({ current: 2, best: 2 });
     rows = [row('m3', 5, 'win')]; // m1 and m2 were deleted by retention
-    expect(await store.onlineBlitz('p', 6)).toEqual({ current: 3, best: 3 });
+    expect(await store.onlineBlitz('p', 6 + 60_000)).toEqual({ current: 3, best: 3 });
   });
 });
 
@@ -94,7 +94,7 @@ describe("a profile's record: best online Blitz streak and achievements unlocked
       { matchId: 'c', finishedAt: 3, seat: 0, winner: 1, reason: 'timeout' },
     ] : []) }),
     authenticate: async (t) => { if (t !== 'tok') throw Object.assign(new Error('no'), { code: 'UNAUTHORIZED' }); return { id: 'viewer' } as never; },
-    now: () => 10,
+    now: () => 100_000,
     achievementsOf: async (id) => (id === ME ? { done: 12, total: 35 } : null),
   });
   const read = (id: string, token = 'tok') => route(new Request(`http://x/v1/players/${id}/record`, { headers: { authorization: `Bearer ${token}` } }), `/v1/players/${id}/record`);

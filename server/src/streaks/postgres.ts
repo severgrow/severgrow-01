@@ -11,7 +11,7 @@ import type { OnlineEndReason } from '../protocol.js';
 import type { PracticeStreaks, Streak } from './rules.js';
 import { PRACTICE_TIERS, applyGame, emptyPracticeStreaks, emptyStreak, isPracticeTier } from './rules.js';
 import type { BlitzResultRow, PracticeGame, StreakStore } from './store.js';
-import { blitzResult } from './store.js';
+import { FOLD_SETTLE_MS, blitzResult } from './store.js';
 
 const num = (v: unknown): number => (typeof v === 'number' ? v : Number(v ?? 0) || 0);
 
@@ -48,11 +48,11 @@ export const foldOnlineBlitz = async (pool: PgPool, playerId: string, now: numbe
          from matches m
          join match_participants mp on mp.match_id = m.id and mp.player_id = $1
         where m.status = 'finished' and m.result is not null and m.live_since is not null
-          and m.finished_at is not null
+          and m.finished_at is not null and m.finished_at <= $4
           and (m.finished_at > $2 or (m.finished_at = $2 and m.id::text > $3))
         order by m.finished_at, m.id::text
         limit 500`,
-      [playerId, at, id],
+      [playerId, at, id, now - FOLD_SETTLE_MS],
     );
     for (const row of rows) {
       const result: BlitzResultRow = {
