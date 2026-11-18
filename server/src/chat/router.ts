@@ -1,4 +1,5 @@
 import { ApiError } from '../errors.js';
+import { createMemoryLimiter } from '../memory-limit.js';
 import type { MatchService } from '../service.js';
 import type { Storage } from '../storage/types.js';
 import type { MatchBroadcaster } from '../broadcast.js';
@@ -12,8 +13,10 @@ export const createChatRouter =
     service: MatchService;
     storage: Storage;
     notifier?: MatchBroadcaster;
-  }) =>
-  async (
+  }) => {
+  /** Reads are limited in memory, one per Edge isolate (memory-limit.ts); writes keep the database budget. */
+  const readLimit = createMemoryLimiter({ max: 120, windowMs: 60_000, now: () => deps.service.serverNow() });
+  return async (
     req: Request,
     path: string,
   ): Promise<{ status: number; body: unknown } | null> => {
@@ -26,12 +29,13 @@ export const createChatRouter =
       req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? null,
     );
     const now = deps.service.serverNow();
-    const budget = await deps.storage.hitRateLimit(
-      `chat:api:${player.id}`,
-      Math.floor(now / 60000) * 60000,
-      120,
-    );
-    if (!budget.ok) throw new ApiError('RATE_LIMITED', 'Please wait a moment.');
+    // A READ WRITES NOTHING (2026-11-18): the match chat is polled during every online game, and the
+    // database budget was one Postgres write per poll. Reads use the same 120/min, in memory.
+    const read = req.method === 'GET' && !route[2];
+    const budgetOk = read
+      ? readLimit.hit(player.id)
+      : (await deps.storage.hitRateLimit(`chat:api:${player.id}`, Math.floor(now / 60000) * 60000, 120)).ok;
+    if (!budgetOk) throw new ApiError('RATE_LIMITED', 'Please wait a moment.');
     const number = (v: unknown): number => {
       if (typeof v !== 'number' || !Number.isSafeInteger(v) || v < 0)
         throw new ApiError('INVALID_REQUEST', 'Invalid chat cursor.');
@@ -112,3 +116,4 @@ export const createChatRouter =
     }
     return { status: 200, body: { ok: true, ...result } };
   };
+};

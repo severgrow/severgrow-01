@@ -10,6 +10,7 @@
 // (a duel chat only ever says "mine" or not), and a store that keeps the newest 30 and nothing older.
 // A report copies the reported line, so it survives the message rolling out of the window.
 // No sender id ever leaves the API: a block or a report names the MESSAGE, and the server finds the sender.
+import { createMemoryLimiter } from '../memory-limit.js';
 import { ApiError } from '../errors.js';
 import { newId } from '../ids.js';
 import type { MatchService } from '../service.js';
@@ -171,18 +172,23 @@ export const postgresTerritoryChatStore = (pool: PgPool): TerritoryChatStore => 
 
 /** GET /v1/territory/chat · POST /v1/territory/chat {text, requestId} · POST …/block {messageId} · POST …/report {messageId, reason} */
 export const createTerritoryChatRouter =
-  (deps: { store: TerritoryChatStore; service: MatchService; storage: Storage }) =>
-  async (req: Request, path: string): Promise<{ status: number; body: unknown } | null> => {
+  (deps: { store: TerritoryChatStore; service: MatchService; storage: Storage }) => {
+  /** One per router, so one per Edge isolate: see memory-limit.ts. */
+  const readLimit = createMemoryLimiter({ max: 120, windowMs: 60_000, now: () => deps.service.serverNow() });
+  return async (req: Request, path: string): Promise<{ status: number; body: unknown } | null> => {
     const route = /^\/v1\/territory\/chat(?:\/(block|report))?$/.exec(path);
     if (!route) return null;
     const player = await deps.service.authenticate(req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? null);
     const now = deps.service.serverNow();
     const minute = Math.floor(now / 60_000) * 60_000;
-    // The same per-player API budget duel chat uses.
-    if (!(await deps.storage.hitRateLimit(`chat:api:${player.id}`, minute, 120)).ok) throw new ApiError('RATE_LIMITED', 'Please wait a moment.');
     if (req.method === 'GET' && !route[1]) {
+      // A READ WRITES NOTHING (2026-11-18): the page is polled every few seconds, and the database
+      // budget below was one Postgres write per poll. The same 120/min, kept in memory per isolate.
+      if (!readLimit.hit(player.id)) throw new ApiError('RATE_LIMITED', 'Please wait a moment.');
       return { status: 200, body: { ok: true, ...(await deps.store.history(player.id, now)) } };
     }
+    // The same per-player API budget duel chat uses, for everything that writes.
+    if (!(await deps.storage.hitRateLimit(`chat:api:${player.id}`, minute, 120)).ok) throw new ApiError('RATE_LIMITED', 'Please wait a moment.');
     if (req.method !== 'POST') throw new ApiError('NOT_FOUND', 'Chat route not found.');
     const bytes = await req.arrayBuffer();
     if (bytes.byteLength > 4096) throw new ApiError('INVALID_REQUEST', 'Chat request is too large.');
@@ -214,3 +220,4 @@ export const createTerritoryChatRouter =
     await deps.store.send(player.id, text!, body.requestId, now);
     return { status: 200, body: { ok: true, ...(await deps.store.history(player.id, now)) } };
   };
+};
