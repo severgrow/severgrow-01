@@ -121,7 +121,19 @@ try {
     await p.locator('#level-grid .difficulty-tile').first().focus();
     const ring = await p.evaluate("getComputedStyle(document.querySelector('#level-grid .difficulty-tile')).outlineStyle");
     assert.notEqual(ring, 'none', `${name}: the focus ring stays`);
-    assert.match(await p.locator('#level-grid .difficulty-tile').first().getAttribute('aria-label') ?? '', /Streak 2, best 5\./, `${name}: the numbers are spoken`);
+    assert.match(await p.locator('#level-grid .difficulty-tile').first().getAttribute('aria-label') ?? '', /Current streak 2, longest streak 5\./, `${name}: the numbers are spoken`);
+    // THE LEGEND (owner, 2026-11-18): "current streak" and "longest streak" above the first key, each
+    // word exactly over its own column, mirror images of each other.
+    const legend = await p.evaluate(`(() => { const l = document.querySelector('#level-grid > .practice-streak-legend'); const key = document.querySelector('#level-grid .difficulty-tile');
+      const [a, b] = l.querySelectorAll('span'); const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+      const c = key.querySelector('.practice-streak-current').getBoundingClientRect(), d = key.querySelector('.practice-streak-best').getBoundingClientRect(), k = key.getBoundingClientRect();
+      return { first: l.nextElementSibling === key, words: [a.textContent, b.textContent], left: ra.left - c.left, right: rb.right - d.right,
+        mirror: (ra.left - k.left) - (k.right - rb.right), above: k.top - rb.bottom, overlap: rb.left - ra.right }; })()`) as { first: boolean; words: string[]; left: number; right: number; mirror: number; above: number; overlap: number };
+    assert(legend.first, `${name}: the legend sits between the title and EASY`);
+    assert.deepEqual(legend.words, ['Current streak', 'Longest streak']);
+    assert(Math.abs(legend.left) <= 1 && Math.abs(legend.right) <= 1, `${name}: each word over its own numbers (${legend.left.toFixed(1)} / ${legend.right.toFixed(1)})`);
+    assert(Math.abs(legend.mirror) <= 1, `${name}: symmetric (${legend.mirror.toFixed(1)})`);
+    assert(legend.above >= 2 && legend.overlap >= 12, `${name}: clear of the key and of each other (${legend.above.toFixed(1)} / ${legend.overlap.toFixed(1)})`);
     await p.screenshot({ path: `${out}/keys-${ios ? 'webkit' : 'chromium'}-${name}.png` });
     console.log('PASS', ios ? 'webkit' : 'chromium', name, 'four keys, centred labels, numbers inside, 44px, focus ring');
     await p.close();

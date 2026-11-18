@@ -32,9 +32,30 @@ const CSS = `
    key and on the selected (filled) key alike. */
 #levels .practice-streak-key > .practice-streak-current { grid-area: 1 / 1; justify-self: start; text-align: start; opacity: .52; }
 #levels .practice-streak-key > .practice-streak-best { grid-area: 1 / 3; justify-self: end; text-align: end; opacity: .74; }
+/* THE LEGEND (owner, 2026-11-18: "between easy and practice match make it say 'current streak' and
+   'longest streak' cleanly. All aligned symmetric"). One quiet line above the first key, in the
+   instrument label style; each word sits exactly over its own column of numbers (the key's 1px
+   border + 16px padding), mirror images of each other. Not spoken: each key says its own numbers. */
+#levels .level-grid > .practice-streak-legend {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 0 17px;
+  margin-bottom: -2px;
+  font-family: var(--font-ui);
+  font-size: var(--instrument-label-size, .6875rem);
+  letter-spacing: var(--instrument-tracking, .08em);
+  line-height: 1;
+  text-transform: uppercase;
+  color: var(--instrument-muted, #e8ddc5b3);
+  opacity: .8;
+  white-space: nowrap;
+}
+#levels .practice-streak-legend > span:last-child { text-align: end; }
 @media (max-width: 340px) {
   #levels .level-grid .difficulty-tile.practice-streak-key { padding-inline: 12px; }
   #levels .practice-streak-key > .practice-streak-side { font-size: 0.8rem; }
+  #levels .level-grid > .practice-streak-legend { padding: 0 13px; font-size: .625rem; }
 }
 `;
 
@@ -53,7 +74,10 @@ const ensureCss = (doc: Document) => {
 };
 
 const spoken = (base: string, current: number, best: number): string =>
-  `${base} Streak ${current}, best ${best}.`;
+  `${base} Current streak ${current}, longest streak ${best}.`;
+
+/** The legend's two words (owner, 2026-11-18). */
+export const STREAK_LEGEND = Object.freeze({ current: 'Current streak', best: 'Longest streak' });
 
 /**
  * Give every Practice key in `grid` its two numbers (once), or refresh them in place. The key's own
@@ -61,6 +85,17 @@ const spoken = (base: string, current: number, best: number): string =>
  */
 export const paintPracticeStreakKeys = (grid: HTMLElement, streaks: PracticeStreaks): void => {
   ensureCss(grid.ownerDocument);
+  if (!grid.querySelector(':scope > .practice-streak-legend') && grid.querySelector('.difficulty-tile')) {
+    const legend = grid.ownerDocument.createElement('div');
+    legend.className = 'practice-streak-legend';
+    legend.setAttribute('aria-hidden', 'true');
+    const current = grid.ownerDocument.createElement('span');
+    current.textContent = STREAK_LEGEND.current;
+    const best = grid.ownerDocument.createElement('span');
+    best.textContent = STREAK_LEGEND.best;
+    legend.append(current, best);
+    grid.prepend(legend);
+  }
   for (const key of grid.querySelectorAll<HTMLElement>('.difficulty-tile')) {
     const tier = tierOfKey(key);
     if (!tier) continue;
