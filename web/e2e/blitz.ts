@@ -121,7 +121,9 @@ try {
   const page = await open(TEST_URL);
   await openPractice(page);
   check(await page.locator('#level-grid [data-difficulty="pro"]').count() === 1, '/test/ Practice has the BLITZ tier');
-  check((await page.locator('#level-grid .difficulty-tile').allTextContents()).at(-1) === 'BLITZ', 'BLITZ is the last Practice tier');
+  // A Practice key with streaks (futa05) wears its name in .practice-streak-label beside the two
+  // numbers; without streaks the name is the key's whole text.
+  check((await page.locator('#level-grid .difficulty-tile').evaluateAll((keys) => keys.map((k) => (k.querySelector('.practice-streak-label') ?? k).textContent?.trim()))).at(-1) === 'BLITZ', 'BLITZ is the last Practice tier');
 
   // ---------------------------------------------------------------------------------------------
   // 3. Starting: a campaign board 30-70, bot 9, the 21 s LED stopwatch in place of Undo + Match Intel.
