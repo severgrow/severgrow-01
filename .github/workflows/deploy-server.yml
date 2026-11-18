@@ -56,6 +56,34 @@ jobs:
           done
           echo "::error::CI did not finish on $SHA in time; not deploying the server"; exit 1
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # ONLY A CHANGED SERVER IS DEPLOYED (owner, 2026-11-18: "make the server side way more reliable").
+      # Every push used to redeploy the Edge function, even when only page code changed: six pushes in
+      # one day were six cold restarts under live players. The committed bundle is proven to be what
+      # the code builds (next steps), so "the server changed" is exactly "the bundle or a migration
+      # differs from the last commit this workflow deployed successfully". A manual run always deploys.
+      - name: Did the server change since the last deploy?
+        id: changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then echo "deploy=1" >> "$GITHUB_OUTPUT"; echo "manual run: deploying"; exit 0; fi
+          last=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/actions/workflows/deploy-server.yml/runs?branch=futa0.5-online&status=success&per_page=30" \
+            | jq -r --arg sha "$SHA" '[.workflow_runs[] | select(.head_sha != $sha)] | first | .head_sha // empty' || true)
+          if [ -z "$last" ] || ! git cat-file -e "$last^{commit}" 2>/dev/null; then
+            echo "deploy=1" >> "$GITHUB_OUTPUT"; echo "no earlier successful deploy found: deploying"; exit 0
+          fi
+          if git diff --quiet "$last" "$SHA" -- supabase/functions/duel server/migrations; then
+            echo "deploy=0" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Server unchanged::The Edge bundle and migrations are the same as $last (last successful deploy). Not redeploying."
+          else
+            echo "deploy=1" >> "$GITHUB_OUTPUT"; echo "server changed since $last: deploying"
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -69,6 +97,7 @@ jobs:
             exit 1
           fi
       - name: Apply database migrations
+        if: ${{ steps.changed.outputs.deploy == '1' }}
         # The same runner as `npm run server:migrate`: each pending migration in its own transaction,
         # recorded with a checksum, an edited old migration refused. Needs the DATABASE_URL repository
         # secret (Supabase -> Connect -> Session pooler URI). Without it this says so and skips; the
@@ -82,6 +111,7 @@ jobs:
           fi
           npm run server:migrate
       - name: Deploy
+        if: ${{ steps.changed.outputs.deploy == '1' }}
         id: deploy
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -93,7 +123,7 @@ jobs:
           fi
           npx --yes supabase@2 functions deploy duel --project-ref "$PROJECT_REF" --no-verify-jwt --use-api
       - name: Prove it — /v1/health lists this commit's bot version
-        if: ${{ steps.deploy.outputs.skipped != '1' }}
+        if: ${{ steps.changed.outputs.deploy == '1' && steps.deploy.outputs.skipped != '1' }}
         run: |
           want=$(node --import tsx -e "import('./src/bots/versions.ts').then(m => console.log(m.CURRENT_BOT_VERSION))")
           for i in 1 2 3 4 5 6; do

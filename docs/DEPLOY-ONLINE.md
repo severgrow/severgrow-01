@@ -100,6 +100,19 @@ Every value is an Edge secret with a safe clamp (see `server/src/storage/pool-co
 | `EDGE_POOL_IDLE_TIMEOUT` | `10` | 2–120 | Seconds an idle connection may sit |
 | `EDGE_POOL_MAX_LIFETIME` | `60` | 15–900 | Seconds before a connection is recycled |
 | `EDGE_POOL_CONNECT_TIMEOUT` | `8` | 2–30 | Seconds to wait for a new connection |
+| `EDGE_QUERY_STALL_MS` | `10000` | 3000–30000 | A database call silent this long fails as 503 and the isolate opens fresh connections (`server/src/storage/stall-guard.ts`) |
+
+**A stuck connection heals itself (2026-11-18).** Measured that day: 1 of 10 one-line pings
+(`/v1/health?db=1`) hung 25 s while 9 answered in 0.6 s and the database answered a ping in 3 ms;
+guest creation, chat and wallet reads went silent the same way. Every database call now has the
+stall limit above: past it the request gets a clean `DB_UNAVAILABLE` (503, retried by the page) and
+the isolate swaps in a fresh postgres client, closing the stuck one (`EDGE_DB_STALL_RECYCLE` in
+the Edge logs). A stalled statement is never sent again by the server; the page's own retry decides.
+
+**The server deploys only when it changed (2026-11-18).** `deploy-server.yml` compares the Edge bundle
+and `server/migrations/` with the last successfully deployed commit and skips the deploy when both
+are the same (a manual run always deploys). Every push used to restart the Edge function cold under
+live players, even for page-only changes.
 
 Do **not** raise `EDGE_POOL_MAX` to "fix" 500s on the Session pooler: more connections per isolate
 makes the exhaustion worse. Switch to the Transaction pooler instead. Redeploy after changing a

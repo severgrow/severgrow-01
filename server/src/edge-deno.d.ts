@@ -12,6 +12,8 @@ declare module 'postgres' {
       unsafe(text: string, values?: readonly unknown[]): Promise<readonly Row[]>;
       release(): void;
     }>;
+    /** Close every connection; `timeout: 0` closes at once (postgres.js `sql.end`). */
+    end(options?: { timeout?: number }): Promise<void>;
   };
   type Options = {
     prepare?: boolean;

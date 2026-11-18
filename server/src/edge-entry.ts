@@ -23,6 +23,7 @@ import { chainRouters, createFeedbackRouter, postgresFeedbackStore } from './fee
 import type { PgPool } from './storage/postgres.js';
 import { createAccountsRouter, postgresIdentityLinkStore, supabaseAuthProvider } from './accounts/accounts.js';
 import { poolFromPostgresJs } from './storage/postgres-js-pool.js';
+import { createRecyclingPool, queryStallMs } from './storage/stall-guard.js';
 import { postgresWorldEconomyStore } from './seeds/postgres.js';
 import { WorldEconomyService } from './seeds/service.js';
 import { createWorldEconomyRouter } from './seeds/router.js';
@@ -123,14 +124,22 @@ const buildRuntime = async (): Promise<EdgeRuntime> => {
   if (!databaseUrl) {
     throw new Error('DATABASE_URL secret is not set on the Edge Function.');
   }
-  const sql = postgres(databaseUrl, {
-    // `edgePoolOptions` holds `prepare: false` (required for the Transaction pooler, port 6543),
-    // the bounded pool size and the idle/lifetime/connect-timeout values. Every value is
-    // overridable with an Edge secret so the pool can be tuned without a code change.
-    ...edgePoolOptions((name) => Deno.env.get(name)),
-    ssl: 'require',
-  });
-  const pool = withEdgeConnectionRetry(poolFromPostgresJs(sql));
+  const openClient = () => {
+    const sql = postgres(databaseUrl, {
+      // `edgePoolOptions` holds `prepare: false` (required for the Transaction pooler, port 6543),
+      // the bounded pool size and the idle/lifetime/connect-timeout values. Every value is
+      // overridable with an Edge secret so the pool can be tuned without a code change.
+      ...edgePoolOptions((name) => Deno.env.get(name)),
+      ssl: 'require',
+    });
+    return { pool: poolFromPostgresJs(sql), end: () => sql.end({ timeout: 0 }) };
+  };
+  // A STUCK CONNECTION HEALS ITSELF (storage/stall-guard.ts): a database call that does not come back
+  // within EDGE_QUERY_STALL_MS (10 s) fails as a 503 and this isolate opens fresh connections.
+  const pool = withEdgeConnectionRetry(createRecyclingPool(openClient, {
+    stallMs: queryStallMs((name) => Deno.env.get(name)),
+    onRecycle: (reason) => log(`EDGE_DB_STALL_RECYCLE ${reason}`),
+  }));
   const live = wireLiveEdge({ storage: postgresStorage(pool), pool, server: edgeConfig, env: (n) => Deno.env.get(n), ...(broadcaster ? { broadcaster } : {}) });
   const economyStore = postgresWorldEconomyStore(pool);
   // Sliced proof checks sign their resume tokens with a server secret: SEED_PROOF_SECRET when set,
