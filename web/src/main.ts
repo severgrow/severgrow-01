@@ -11950,6 +11950,8 @@ function setSound(on: boolean) {
   }
 }
 const menuSoundKey = mountMenuSoundKey({ isOn: () => settings.sound, setSound });
+// Sound is off for now (owner, 2026-11-18: "needs a rework"): its Settings rows are not shown either.
+if (SOUND_REMOVED) for (const id of ['sound-settings', 'sound-volume']) { const el = document.getElementById(id); if (el) el.hidden = true; }
 // The page's first paint is a dark cover (index.html); it lifts once the menu is composed.
 liftBootCover({ reduceMotion: settings.reduceMotion });
 sound.setEffects(settings.effects);

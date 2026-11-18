@@ -247,8 +247,11 @@ describe('the turn ring', () => {
 });
 
 describe('the page', () => {
-  it('sound is on: the page builds every engine with the recordings', () => {
-    expect(SOUND_REMOVED).toBe(false);
+  // OWNER RULE CHANGE (2026-11-18: "hide the sound button for now -- and sound is disabled in total
+  // for now -- needs a rework"): the one gate is set; the engines are still built with the recordings,
+  // so turning it back on is that one constant.
+  it('sound is off for now, and every engine is still built with the recordings for when it returns', () => {
+    expect(SOUND_REMOVED).toBe(true);
     for (const file of ['../src/main.ts', '../src/online/live/mount.ts']) {
       expect(readFileSync(root(file), 'utf8'), file).toMatch(/new Sound\(SOUND_REMOVED, (new RecordedFx\(\)|recorded)\)/);
     }

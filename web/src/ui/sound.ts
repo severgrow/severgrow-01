@@ -39,7 +39,10 @@ const LAYER_GAIN: Readonly<Record<string, number>> = Object.freeze({ tick: 0.55,
  * returns with the owner's own recordings ("let's do some sound work - 10/10 tactile responsive fun
  * and excellent"), ON by default (asked), on /test first.
  */
-export const SOUND_REMOVED = false;
+export const SOUND_REMOVED = true;
+// Owner, 2026-11-18: "hide the sound button for now -- and sound is disabled in total for now --
+// needs a rework". The one gate is set again: nothing plays, no AudioContext is built, and the menu's
+// sound key and the Settings sound rows are not shown. Setting this back to false restores all of it.
 
 export class Sound {
   private ctx: AudioContext | null = null;

@@ -10,16 +10,22 @@
 import type { PracticeStreaks, PracticeTier } from '../../../server/src/streaks/rules.js';
 
 const CSS = `
+/* THE KEY'S THREE CELLS (owner, 2026-11-18: "numbers ... centered under [the legend words] - but with
+   equal spaces from the edges of the buttons so its symmetric"). The two number cells are exactly as
+   wide as the legend's words (--streak-col, measured once when painted) and sit 3px inside the key's
+   edge, like the words; the label takes the middle. The key's 1px (transparent) border + 3px. */
 #levels .level-grid .difficulty-tile.practice-streak-key {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: var(--streak-col, 7.5em) minmax(0, 1fr) var(--streak-col, 7.5em);
   align-items: center;
-  column-gap: 6px;
-  padding-inline: 16px;
+  column-gap: 0;
+  padding-inline: 3px;
 }
 #levels .practice-streak-key > .practice-streak-label { grid-area: 1 / 2; display: inline-flex; align-items: center; justify-content: center; gap: .28em; white-space: nowrap; }
 #levels .practice-streak-key > .practice-streak-side {
-  min-width: 3ch;
+  min-width: 0;
+  justify-self: stretch;
+  text-align: center;
   font-family: var(--font-ui);
   font-size: 0.95rem;
   font-weight: var(--w-ui-medium, 500);
@@ -30,8 +36,8 @@ const CSS = `
 }
 /* Current is muted, best slightly brighter. Opacity of the key's own ink, so both read on the plain
    key and on the selected (filled) key alike. */
-#levels .practice-streak-key > .practice-streak-current { grid-area: 1 / 1; justify-self: start; text-align: start; opacity: .52; }
-#levels .practice-streak-key > .practice-streak-best { grid-area: 1 / 3; justify-self: end; text-align: end; opacity: .74; }
+#levels .practice-streak-key > .practice-streak-current { grid-area: 1 / 1; opacity: .52; }
+#levels .practice-streak-key > .practice-streak-best { grid-area: 1 / 3; opacity: .74; }
 /* THE LEGEND (owner, 2026-11-18: "between easy and practice match make it say 'current streak' and
    'longest streak' cleanly. All aligned symmetric"). One quiet line above the first key, in the
    instrument label style; each word sits exactly over its own column of numbers (the key's 1px
@@ -40,8 +46,10 @@ const CSS = `
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  padding: 0 17px;
-  margin-bottom: -2px;
+  /* "aligned inside to the button['s] left border with 3px margin" (owner): 1px border + 3px. */
+  padding: 0 4px;
+  /* "a tiny bit more margin between [the] titles and [the] first button" (owner, 2026-11-18). */
+  margin-bottom: 2px;
   font-family: var(--font-ui);
   font-size: var(--instrument-label-size, .6875rem);
   letter-spacing: var(--instrument-tracking, .08em);
@@ -53,9 +61,8 @@ const CSS = `
 }
 #levels .practice-streak-legend > span:last-child { text-align: end; }
 @media (max-width: 340px) {
-  #levels .level-grid .difficulty-tile.practice-streak-key { padding-inline: 12px; }
   #levels .practice-streak-key > .practice-streak-side { font-size: 0.8rem; }
-  #levels .level-grid > .practice-streak-legend { padding: 0 13px; font-size: .625rem; }
+  #levels .level-grid > .practice-streak-legend { font-size: .5625rem; letter-spacing: .06em; }
 }
 `;
 
@@ -96,6 +103,15 @@ export const paintPracticeStreakKeys = (grid: HTMLElement, streaks: PracticeStre
     legend.append(current, best);
     grid.prepend(legend);
   }
+  // The number cells take the legend words' exact width (the wider of the two, so both sides match).
+  // Measured on every paint (the screen opening, a streak changing) and once the fonts settle.
+  const fit = () => {
+    const words = grid.querySelectorAll<HTMLElement>(':scope > .practice-streak-legend > span');
+    const width = Math.max(0, ...Array.from(words, (w) => w.getBoundingClientRect().width));
+    if (width > 0) grid.style.setProperty('--streak-col', `${Math.ceil(width * 100) / 100}px`);
+  };
+  fit();
+  void grid.ownerDocument.fonts?.ready.then(fit);
   for (const key of grid.querySelectorAll<HTMLElement>('.difficulty-tile')) {
     const tier = tierOfKey(key);
     if (!tier) continue;

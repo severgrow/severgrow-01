@@ -77,10 +77,13 @@ const measure = (p: Page) => p.evaluate(`(() => [...document.querySelectorAll('#
   const r = key.getBoundingClientRect();
   const label = key.querySelector('.practice-streak-label').getBoundingClientRect();
   const cur = key.querySelector('.practice-streak-current'); const best = key.querySelector('.practice-streak-best');
-  const c = cur.getBoundingClientRect(); const b = best.getBoundingClientRect();
+  // The DIGITS' own extent (the cells stretch across their column; the text is what must stay clear).
+  const ink = (el) => { const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect(); };
+  const labelInk = (() => { const r = document.createRange(); r.selectNodeContents(key.querySelector('.practice-streak-label')); return r.getBoundingClientRect(); })();
+  const c = ink(cur); const b = ink(best);
   return { tier: key.dataset.difficulty, current: cur.textContent, best: best.textContent, height: r.height,
     labelOff: Math.abs((label.left + label.right) / 2 - (r.left + r.right) / 2),
-    gapLeft: label.left - c.right, gapRight: b.left - label.right,
+    gapLeft: labelInk.left - c.right, gapRight: b.left - labelInk.right,
     inside: c.left >= r.left - 0.5 && b.right <= r.right + 0.5,
     brighter: Number(getComputedStyle(best).opacity) > Number(getComputedStyle(cur).opacity) };
 }))()`) as Promise<KeyGeometry[]>;
@@ -116,24 +119,35 @@ try {
       assert(k.inside, `${name} ${k.tier}: both numbers inside the key`);
       assert(k.brighter, `${name} ${k.tier}: best is brighter than current`);
     }
+    // "dont go 'Practice / match'" (owner): the heading is one line at every size.
+    const heading = await p.evaluate(`(() => { const h = document.getElementById('levels-heading'); const r = h.getBoundingClientRect(); const lh = parseFloat(getComputedStyle(h).lineHeight) || parseFloat(getComputedStyle(h).fontSize) * 1.3; return { lines: Math.round(r.height / lh), clipped: h.scrollWidth > h.clientWidth + 1 }; })()`) as { lines: number; clipped: boolean };
+    assert.equal(heading.lines, 1, `${name}: the heading stays on one line`);
+    assert(!heading.clipped, `${name}: the heading fits without being cut`);
     // Keyboard focus keeps its ring.
     await p.keyboard.press('Tab');
     await p.locator('#level-grid .difficulty-tile').first().focus();
     const ring = await p.evaluate("getComputedStyle(document.querySelector('#level-grid .difficulty-tile')).outlineStyle");
     assert.notEqual(ring, 'none', `${name}: the focus ring stays`);
     assert.match(await p.locator('#level-grid .difficulty-tile').first().getAttribute('aria-label') ?? '', /Current streak 2, longest streak 5\./, `${name}: the numbers are spoken`);
-    // THE LEGEND (owner, 2026-11-18): "current streak" and "longest streak" above the first key, each
-    // word exactly over its own column, mirror images of each other.
-    const legend = await p.evaluate(`(() => { const l = document.querySelector('#level-grid > .practice-streak-legend'); const key = document.querySelector('#level-grid .difficulty-tile');
-      const [a, b] = l.querySelectorAll('span'); const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
-      const c = key.querySelector('.practice-streak-current').getBoundingClientRect(), d = key.querySelector('.practice-streak-best').getBoundingClientRect(), k = key.getBoundingClientRect();
-      return { first: l.nextElementSibling === key, words: [a.textContent, b.textContent], left: ra.left - c.left, right: rb.right - d.right,
-        mirror: (ra.left - k.left) - (k.right - rb.right), above: k.top - rb.bottom, overlap: rb.left - ra.right }; })()`) as { first: boolean; words: string[]; left: number; right: number; mirror: number; above: number; overlap: number };
+    // THE LEGEND (owner, 2026-11-18): "current streak" starts 3px inside the key's left border and
+    // "longest streak" ends 3px inside its right border; each key's numbers sit centred under their
+    // word, so both sides are the same distance from the key's edges.
+    const legend = await p.evaluate(`(() => { const l = document.querySelector('#level-grid > .practice-streak-legend'); const keys = [...document.querySelectorAll('#level-grid .difficulty-tile')];
+      const [a, b] = l.querySelectorAll('span'); const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); const k0 = keys[0].getBoundingClientRect();
+      const border = parseFloat(getComputedStyle(keys[0]).borderLeftWidth) || 0;
+      const centre = (r) => (r.left + r.right) / 2;
+      const off = keys.map((key) => { const k = key.getBoundingClientRect(); const c = key.querySelector('.practice-streak-current').getBoundingClientRect(), d = key.querySelector('.practice-streak-best').getBoundingClientRect();
+        return { under: Math.max(Math.abs(centre(c) - centre(ra)), Math.abs(centre(d) - centre(rb))), mirror: Math.abs((centre(c) - k.left) - (k.right - centre(d))) }; });
+      return { first: l.nextElementSibling === keys[0], words: [a.textContent, b.textContent],
+        leftInset: ra.left - (k0.left + border), rightInset: (k0.right - border) - rb.right,
+        under: Math.max(...off.map((o) => o.under)), mirror: Math.max(...off.map((o) => o.mirror)),
+        above: k0.top - rb.bottom, overlap: rb.left - ra.right }; })()`) as { first: boolean; words: string[]; leftInset: number; rightInset: number; under: number; mirror: number; above: number; overlap: number };
     assert(legend.first, `${name}: the legend sits between the title and EASY`);
     assert.deepEqual(legend.words, ['Current streak', 'Longest streak']);
-    assert(Math.abs(legend.left) <= 1 && Math.abs(legend.right) <= 1, `${name}: each word over its own numbers (${legend.left.toFixed(1)} / ${legend.right.toFixed(1)})`);
-    assert(Math.abs(legend.mirror) <= 1, `${name}: symmetric (${legend.mirror.toFixed(1)})`);
-    assert(legend.above >= 2 && legend.overlap >= 12, `${name}: clear of the key and of each other (${legend.above.toFixed(1)} / ${legend.overlap.toFixed(1)})`);
+    assert(Math.abs(legend.leftInset - 3) <= 1 && Math.abs(legend.rightInset - 3) <= 1, `${name}: 3px inside the key's borders (${legend.leftInset.toFixed(1)} / ${legend.rightInset.toFixed(1)})`);
+    assert(legend.under <= 1, `${name}: every number centred under its word (${legend.under.toFixed(2)}px off)`);
+    assert(legend.mirror <= 1, `${name}: the two numbers equally far from the key's edges (${legend.mirror.toFixed(2)}px off)`);
+    assert(legend.above >= 2 && legend.overlap >= 8, `${name}: clear of the key and of each other (${legend.above.toFixed(1)} / ${legend.overlap.toFixed(1)})`);
     await p.screenshot({ path: `${out}/keys-${ios ? 'webkit' : 'chromium'}-${name}.png` });
     console.log('PASS', ios ? 'webkit' : 'chromium', name, 'four keys, centred labels, numbers inside, 44px, focus ring');
     await p.close();

@@ -3847,6 +3847,19 @@ html.has-sheet-profile:not(#no-has) #menu .menu-inner { opacity: .28; }
   letter-spacing: -0.012em;
   padding-top: 1px;
 }
+/* ONE LINE, ALWAYS (owner, 2026-11-18: "dont go 'Practice / match' -- if lacking space on some screens
+   - try making the font a bit smaller so it all fits in 1 row"). The heading never wraps; on a narrow
+   phone its size steps down to what the space between the back key and the empty cell holds (about
+   7.9 em of "Practice match" in the display face (measured; 8.2 leaves a margin), inside a column ~168px narrower than the screen).
+   Wider screens keep their size: `min()` only ever makes it smaller. */
+html .levels-head h2 {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+}
+@media (max-width: 420px) {
+  html:root .levels-head h2 { font-size: min(clamp(1.45rem, 2.4vw + 0.9rem, 2rem), calc((100vw - 168px) / 8.2)) !important; }
+}
 .level-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

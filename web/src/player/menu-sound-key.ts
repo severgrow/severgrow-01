@@ -4,6 +4,7 @@
 // A quiet speaker in the menu's top corner: crossed out while sound is off, plain while it is on.
 // It mirrors the fullscreen key (top right, 14px in). One tap switches sound through the page's one settings path (the same as Settings' switch). It is a
 // real 44px button with a label and a focus ring; it has no animation of its own.
+import { SOUND_REMOVED } from '../ui/sound.js';
 import { ICONS } from '../ui/icons.js';
 
 export const MENU_SOUND_CSS = `
@@ -36,7 +37,8 @@ export type MenuSoundKeyHooks = {
 /** Mounts the key in the menu; returns `refresh` for when sound changes elsewhere (Settings). */
 export const mountMenuSoundKey = (hooks: MenuSoundKeyHooks): { refresh: () => void } => {
   const menu = document.getElementById('menu');
-  if (!menu) return { refresh: () => undefined };
+  // Sound is off for now (owner, 2026-11-18, ui/sound.ts SOUND_REMOVED): no key at all.
+  if (!menu || SOUND_REMOVED) return { refresh: () => undefined };
   if (!document.getElementById('menu-sound-css')) {
     const style = document.createElement('style');
     style.id = 'menu-sound-css';
