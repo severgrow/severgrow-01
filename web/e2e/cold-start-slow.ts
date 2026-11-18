@@ -8,7 +8,7 @@
  * browser interception, so WebKit's preflights are real) that behaves like that:
  *
  *   - the FIRST guest creation never answers; the next answers after 7 s;
- *   - the first map read takes 8 s; the first wallet read never answers;
+ *   - the first map read takes 8 s; the first two wallet reads never answer;
  *   - the first achievements read fails (503); the first chat read takes 6 s.
  *
  * A fresh visitor (no identity, no cached map: iPhone Private Browsing) opens the Planet and its
@@ -63,7 +63,7 @@ const api = createServer((req: IncomingMessage, res: ServerResponse) => {
     case 'POST /v1/guests': return n === 1 ? stall() : answer(n === 2 ? 7000 : 0, 201,
       { ok: true, player: { id: PLAYER, kind: 'guest', displayName: 'MossyGrove' }, token: 'slow-token', serverNow: Date.now() });
     case 'GET /v1/world': setTimeout(() => { worldAnswered = true; }, n === 1 ? 8000 : 200); return answer(n === 1 ? 8000 : 200, 200, { ok: true, world });
-    case 'GET /v1/seeds/wallet': return n === 1 ? stall() : answer(100, 200, { ok: true, wallet: { balance: 40, lifetimeEarned: 40, lifetimeSpent: 0, worldInvitationSeen: true }, campaignHighestLevel: null });
+    case 'GET /v1/seeds/wallet': return n <= 2 ? stall() : answer(100, 200, { ok: true, wallet: { balance: 40, lifetimeEarned: 40, lifetimeSpent: 0, worldInvitationSeen: true }, campaignHighestLevel: null });
     case 'GET /v1/world/challenges': return answer(100, 200, { ok: true, incoming: [], outgoing: [], serverNow: Date.now() });
     case 'GET /v1/seeds/achievements': return n === 1 ? answer(300, 503, { ok: false, code: 'UNAVAILABLE', message: 'cold' }) : answer(200, 200, { ok: true, achievements: views });
     case 'GET /v1/territory/chat': return answer(n === 1 ? 6000 : 150, 200, { ok: true, messages });

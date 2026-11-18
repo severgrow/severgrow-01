@@ -560,3 +560,40 @@ different commit and is not an exact A/B comparison. The 15-match online soak is
 teardown and request-rate check. No new images, packages, render loop or polling cadence were
 introduced. Physical iPhone/Android battery draw and temperature remain unmeasured; these CDP
 numbers only describe a throttled desktop software renderer.
+
+### Cold start on the real server: Planet, Global chat, achievements (2026-11-18)
+
+Owner report: on a fresh iPhone visit to /test (1852a15d), Global chat stayed loading and the
+achievements never showed. Measured with a fresh phone context (Chromium 390 × 844 and WebKit
+iPhone 13) on the real futasaku.com/test and futasaku.com, same server, 5 cold + 5 warm runs each,
+interleaved, every API request marked as test traffic, 30 s watch after the Planet opened.
+
+**The server answers in under 3 s, or not at all.** Health and auth-methods answered in 0.2–0.6 s
+throughout. Requests that touch the database — guest creation, the map, wallet, challenges, chat,
+presence — were sometimes left open with no answer for 30 s and more, on both sites. In the
+Chromium runs live got no guest within 30 s in 7 of 10 loads, /test in 4 of 10 (/test retries the
+guest every 12 s; live never does). A burst of 20 parallel map reads from one host hung 18 of them
+for 25 s; the map answered in 0.4–2.7 s once single requests resumed. The database was not
+inspected (no access from this pass); the cause of the silences is a server question
+(docs/DEPLOY-ONLINE.md) and no server code was changed.
+
+**What stalled on /test.** Achievements were only requested after the wallet read, and the wallet
+read had no time limit: one silent wallet read left "Reading your progress…" for as long as the
+page stayed open (reproduced on real /test, Chromium cold run 3 and 4; live showed the same stall
+in its run 3 and warm 5). Fix: achievements are their own read (on identity, and on the next 12 s
+poll while no list has arrived or a read failed); wallet, challenges, achievements and colour reads
+end after 12 s like the map and guest creation (four times the slowest real answer seen); chat
+shows the last page this account read (one slot, credential digest, 24 h) on the next visit.
+
+`web/e2e/cold-start-slow.ts` (+ `-ios`), local API: first guest never answers then 7 s, first map
+8 s, first two wallet reads never answer, first achievements 503, first chat 6 s; fresh visitor:
+
+| | Planet | Chat messages | Achievements | Longest loading line |
+| --- | ---: | ---: | ---: | ---: |
+| 1852a15d, Chromium | 7.9 s | 24.9 s | never (stuck 34 s+) | 34 s (achievements) |
+| 1852a15d, WebKit | 7.3 s | 24.3 s | never (stuck 34 s+) | 35 s (achievements) |
+| fix, Chromium | 7.9 s | 24.9 s | 31.0 s | 7.4 s (map) |
+| fix, WebKit | 7.2 s | 24.3 s | 30.3 s | 6.6 s (map) |
+
+Chat and achievements wait on the guest (first creation silent for 12 s, then 7 s). No new
+interval, frame callback or socket: each bound is one timer per request, cleared on answer.

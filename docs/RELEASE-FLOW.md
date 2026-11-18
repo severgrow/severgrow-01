@@ -160,7 +160,7 @@ Two checks, because the real server can be slow or silent in ways a mock is not:
 
 - **`cold-start-slow` / `cold-start-slow-ios` (CI, every push).** The built page against a local API
   that behaves like the real server on a bad minute: the first guest creation never answers (the
-  next takes 7 s), the first map read takes 8 s, the first wallet read never answers, the first
+  next takes 7 s), the first map read takes 8 s, the first two wallet reads never answer, the first
   achievements read fails, the first chat read takes 6 s. A fresh visitor must end with the Planet
   painted, chat messages and the achievements list within 60 s, and no loading line may stay on
   screen for more than 16 s in a row. Chromium and WebKit.
