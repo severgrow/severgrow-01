@@ -596,7 +596,7 @@ const sound = new Sound(SOUND_REMOVED, recorded);
 // The key takes decode while the menu is idle, so even the first tap plays a recording.
 if (typeof window !== 'undefined') {
   const idle = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
-  const warm = () => { if (settings.sound) recorded.warm(); };
+  const warm = () => sound.warm();
   if (idle) idle(warm, { timeout: 2500 }); else setTimeout(warm, 1200);
 }
 const boardHandlers = { tap: (k: string) => onHexTap(k), inspect: (k: string | null) => onInspect(k), hold: (k: string) => pinCard(k) };
@@ -11945,7 +11945,7 @@ function setSound(on: boolean) {
   syncSettingsForm();
   if (on) {
     sound.unlock();
-    recorded.warm();
+    sound.warm();
     sound.press();
   }
 }

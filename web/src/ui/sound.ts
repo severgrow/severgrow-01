@@ -94,6 +94,14 @@ export class Sound {
   private fillScheduled = false;
 
   /** Call from a user gesture: creates the audio context, bakes the first click, fills the bank. */
+  /**
+   * Fetch and decode the first recordings ahead of the first tap. Behind the same gate as every play
+   * path: with sound removed (or the player's switch off) nothing is downloaded at all.
+   */
+  warm(): void {
+    if (!this.enabled) return;
+    this.rec?.warm();
+  }
   unlock() {
     if (!this.enabled) return; // Sound off: do not even build a context (or a bank) in the background
     if (this.ctx) {

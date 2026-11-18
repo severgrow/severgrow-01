@@ -282,3 +282,25 @@ describe('the page', () => {
     for (const m of ['data-setting="music"', 'data-volume="musicVolume"']) expect(hiddenBlock(m), m).toBe(true);
   });
 });
+
+// DEBUG PASS (2026-11-18), P3: with sound off for now (SOUND_REMOVED), a player whose own setting was
+// still "on" kept downloading and decoding the warm-up recordings at every boot, because the page's
+// warm-up read the player's switch instead of the engine's gate. The engine owns the gate.
+describe('the warm-up follows the engine gate', () => {
+  it('a removed engine never warms its recordings, whatever the player switch says', () => {
+    let warmed = 0;
+    const rec = { warm: () => { warmed++; } } as unknown as ConstructorParameters<typeof Sound>[1];
+    const off = new Sound(true, rec);
+    off.enabled = true;            // the player's own switch, still "on" from before
+    off.warm();
+    expect(warmed).toBe(0);
+    const on = new Sound(false, rec);
+    on.enabled = true;
+    on.warm();
+    expect(warmed).toBe(1);
+  });
+  it('the page warms through the engine, not around it', () => {
+    const main = readFileSync(root('../src/main.ts'), 'utf8');
+    expect(main).not.toMatch(/recorded\.warm\(\)/);
+  });
+});
