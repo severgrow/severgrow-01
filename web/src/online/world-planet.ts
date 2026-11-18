@@ -48,7 +48,8 @@ const CSS = `
   .online-world.planet-screen:not([data-living-territory="menu"]) #online-world-notice {
     grid-row: 3; align-self: start; justify-self: start; z-index: 5; box-sizing: border-box;
     width: fit-content; max-width: calc(var(--world-w) - 100px); min-height: 0; max-height: 6em;
-    margin: 12px 0 0 calc((100% - var(--world-w)) / 2 + 12px); padding: 7px 10px; border-radius: 10px; overflow: hidden;
+    /* Keep loading/offline copy below the 44px MENU row, even when all five keys unfold. */
+    margin: 70px 0 0 calc((100% - var(--world-w)) / 2 + 12px); padding: 7px 10px; border-radius: 10px; overflow: hidden;
     background: rgba(10,13,11,.5); text-align: left; pointer-events: none;
   }
   .online-world.planet-screen:not([data-living-territory="menu"]) #online-world-notice:empty { display: none; }

@@ -1,6 +1,45 @@
 import { expect, it, vi } from 'vitest';
 import { WorldView } from '../src/online/world-view.js';
 
+it('reports the first failed public read when a fresh visit has no map to show', async () => {
+  const view: any = Object.create(WorldView.prototype);
+  Object.assign(view, {
+    active: true, world: null, identity: null, privateReadVersion: 0, publicReadVersion: 0,
+    readFailures: 0, readWorld: vi.fn(async () => { throw new Error('offline'); }),
+    notice: vi.fn(), schedule: vi.fn(),
+  });
+  await (view as WorldView).refresh(true);
+  expect(view.notice).toHaveBeenCalledWith('Could not read the map. Try again.');
+  expect(view.schedule).toHaveBeenCalledOnce();
+});
+
+it('retries missing guest identity on a later map refresh after a temporary outage', async () => {
+  const world = { version: 1, revision: 1, cells: [{ id: '0,0', q: 0, r: 0 }], claims: [], disputes: [] };
+  const identity = { playerId: 'me', token: 'token', kind: 'guest' };
+  const view: any = Object.create(WorldView.prototype);
+  Object.assign(view, {
+    active: true, identityKnown: true, identity: null, identityFlight: null,
+    world, fromMemory: false, privateReadVersion: 0, publicReadVersion: 0,
+    appliedPublicReadVersion: 0, readFailures: 0,
+    ensureIdentity: vi.fn(async () => identity),
+    client: { seedWallet: async () => null, worldChallenges: async () => null,
+      worldMap: async () => ({ world }) },
+    chat: { prefetch: vi.fn() }, readWorld: async () => ({ world }),
+    challenges: { incoming: [], outgoing: [], serverNow: 0 },
+    achievements: { retry: false }, paintSignature: 'same',
+    challengeSignatureOf: () => '', paintSignatureOf: () => 'same',
+    paint: vi.fn(), notice: vi.fn(), paintWallet: vi.fn(), paintPanel: vi.fn(),
+    paintSelection: vi.fn(), paintRings: vi.fn(), paintSwords: vi.fn(),
+    pushPlanet: vi.fn(), paintStakes: vi.fn(), paintChallenges: vi.fn(),
+    loadAchievements: vi.fn(), loadColour: vi.fn(), settleAutomatically: vi.fn(), schedule: vi.fn(),
+  });
+  await (view as WorldView).refresh();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(view.ensureIdentity).toHaveBeenCalledOnce();
+  expect(view.identity).toEqual(identity);
+  expect(view.chat.prefetch).toHaveBeenCalledOnce();
+});
+
 it('paints a fresh public planet before a slow private wallet or challenge read', async () => {
   let finishPrivate!: (value: unknown) => void;
   const slowPrivate = new Promise<unknown>(resolve => { finishPrivate = resolve; });

@@ -223,12 +223,12 @@ export class DuelClient {
   // ---- identity ----
 
   createGuest(displayName?: string): Promise<CreateGuestResponse> {
-    return this.request<CreateGuestResponse>('POST', '/v1/guests', {
+    return this.requestWithDeadline<CreateGuestResponse>('POST', '/v1/guests', {
       body: displayName === undefined ? {} : { displayName },
       // Only ever sent for guest CREATION, and only by a harness (see `DuelClientOptions`). The
       // server stores it as `players.is_test` — the marker the dashboard trusts.
       traffic: this.testTraffic,
-    });
+    }, 'Guest creation');
   }
 
   getMe(token: string): Promise<MeResponse> {
@@ -491,7 +491,12 @@ export class DuelClient {
   async worldMap(token?: string | null, poll = false): Promise<WorldMapPayload> {
     // `poll`: the Territory screen's periodic read, which the server may answer from its short cache.
     const path = poll && !token ? '/v1/world?poll=1' : '/v1/world';
-    return await this.request<WorldMapPayload>('GET', path, token ? { retry: true, token } : { retry: true });
+    // A fresh private-browser visit has no remembered map. If the connection stalls rather than
+    // failing, an unbounded fetch keeps the shared world source in flight forever and the Planet
+    // can say "Reading the map" indefinitely. Abort the transport and settle the promise even if
+    // an injected fetch ignores AbortSignal, so the next scheduled read can recover.
+    return await this.requestWithDeadline<WorldMapPayload>('GET', path,
+      token ? { retry: true, token } : { retry: true }, 'World read');
   }
 
   async seedWallet(token: string): Promise<SeedWallet> {
@@ -692,6 +697,28 @@ export class DuelClient {
 
   territoryChatReport(token: string, messageId: string, reason: 'abuse' | 'spam' | 'other'): Promise<{ reported: true }> {
     return this.request('POST', '/v1/territory/chat/report', { token, body: { messageId, reason } });
+  }
+
+  /** Bound world reads and guest creation, the two requests that can strand a fresh Planet/chat. */
+  private async requestWithDeadline<T>(
+    method: string,
+    path: string,
+    options: { token?: string; body?: unknown; traffic?: boolean; retry?: boolean },
+    label: string,
+  ): Promise<T> {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error(`${label} timed out`));
+      }, 12_000);
+    });
+    try {
+      return await Promise.race([this.request<T>(method, path, { ...options, signal: controller.signal }), deadline]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   private async request<T>(

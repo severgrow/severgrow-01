@@ -1,6 +1,6 @@
 // The typed client: request shape, error mapping and the local session that makes a page refresh
 // able to resume a match. Uses a fake fetch, so it runs in Node without a browser or a server.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DuelClient, DuelError, lastOpponentTurn } from '../src/client.js';
 import type { FetchLike, KeyValue } from '../src/client.js';
 
@@ -218,4 +218,51 @@ describe('a blip never reaches the player as an error (2026-11-12)', () => {
       expect(get.calls, String(status)).toHaveLength(1);
     }
   });
+});
+
+it('releases a world read when the transport never settles, so a later read can retry', async () => {
+  vi.useFakeTimers();
+  try {
+    const signals: AbortSignal[] = [];
+    const client = new DuelClient({
+      baseUrl: 'https://api.example', storage: memoryStore(),
+      fetch: async (_url, init) => {
+        signals.push(init.signal!);
+        return new Promise(() => {});
+      },
+    });
+    const first = client.worldMap();
+    const failed = expect(first).rejects.toThrow(/timed out/i);
+    await vi.advanceTimersByTimeAsync(12_000);
+    await failed;
+    expect(signals[0]?.aborted).toBe(true);
+    const second = client.worldMap();
+    expect(signals).toHaveLength(2);
+    const failedAgain = expect(second).rejects.toThrow(/timed out/i);
+    await vi.advanceTimersByTimeAsync(12_000);
+    await failedAgain;
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('releases a stalled guest mint so a fresh private session can retry identity', async () => {
+  vi.useFakeTimers();
+  try {
+    let aborted = false;
+    const client = new DuelClient({
+      baseUrl: 'https://api.example', storage: memoryStore(),
+      fetch: async (_url, init) => {
+        init.signal?.addEventListener('abort', () => { aborted = true; });
+        return new Promise(() => {});
+      },
+    });
+    const mint = client.createGuest();
+    const failed = expect(mint).rejects.toThrow(/timed out/i);
+    await vi.advanceTimersByTimeAsync(12_000);
+    await failed;
+    expect(aborted).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
 });

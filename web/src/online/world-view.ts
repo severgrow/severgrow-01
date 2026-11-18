@@ -612,6 +612,7 @@ export class WorldView {
   private fromMemory = false;
   /** The player's identity has resolved (to someone, or to nobody). Until then the wallet line is blank. */
   private identityKnown = false;
+  private identityFlight: Promise<void> | null = null;
   private selected: string | null = null;
   /** The cells on the map at the last paint: new ones rise in (null before the first paint). */
   private knownCells: Set<string> | null = null;
@@ -1229,7 +1230,14 @@ export class WorldView {
     // The world is public. A guest token may be slow, offline or rate-limited; it must never
     // prevent the player from seeing the map. Attach the private wallet when identity resolves.
     const publicRefresh = this.refresh(true);
-    void this.ensureIdentity().then((identity) => {
+    void this.attachIdentity();
+    await publicRefresh;
+  }
+
+  /** A failed guest mint must be retryable while the public Planet remains open. */
+  private attachIdentity(): Promise<void> {
+    if (this.identityFlight) return this.identityFlight;
+    const flight = this.ensureIdentity().then((identity) => {
       this.identityKnown = true;
       if (!this.active) return;
       const changedIdentity = this.identity?.playerId !== identity?.playerId || this.identity?.token !== identity?.token;
@@ -1252,8 +1260,11 @@ export class WorldView {
       // Public world remains usable without an identity; the wallet line may now say so.
       this.identityKnown = true;
       if (this.active) this.paintWallet();
+    }).finally(() => {
+      if (this.identityFlight === flight) this.identityFlight = null;
     });
-    await publicRefresh;
+    this.identityFlight = flight;
+    return flight;
   }
   private saveCamera() {
     // ONLY A CAMERA THE PLAYER CHOSE IS REMEMBERED (owner, 2026-11-02: the anchor "works once and
@@ -1321,6 +1332,9 @@ export class WorldView {
       }
       return;
     }
+    // A guest mint can time out independently of the public map. The next normal map poll retries
+    // it once, and the shared flight prevents overlapping guest creations during rapid refreshes.
+    if (this.identityKnown && !this.identity && !this.identityFlight) void this.attachIdentity();
     try {
       const identityAtRequest = this.identity;
       const publicVersion = ++this.publicReadVersion;
@@ -1457,7 +1471,9 @@ export class WorldView {
     } catch {
       // One blip says nothing: the drawn map stays and the next read comes sooner (online/blips.ts).
       this.readFailures++;
-      if (this.active && shouldReportFailure(this.readFailures)) this.notice(ONLINE.worldError);
+      // A quiet blip is useful only when there is already a map to keep showing. On a clean visit
+      // an empty stage plus the old loading copy would otherwise look like a permanently hung app.
+      if (this.active && (!this.world || shouldReportFailure(this.readFailures))) this.notice(ONLINE.worldError);
     } finally { this.schedule(); }
   }
 

@@ -16,7 +16,7 @@ describe('a blip is not an error (2026-11-12)', () => {
   it('the world map and the territory chat both go through it', () => {
     const world = readFileSync(new URL('../src/online/world-view.ts', import.meta.url), 'utf8');
     const chat = readFileSync(new URL('../src/online/territory-chat.ts', import.meta.url), 'utf8');
-    expect(world).toMatch(/shouldReportFailure\(this\.readFailures\)\) this\.notice\(ONLINE\.worldError\)/);
+    expect(world).toMatch(/!this\.world \|\| shouldReportFailure\(this\.readFailures\)\)\) this\.notice\(ONLINE\.worldError\)/);
     expect(chat).toMatch(/shouldReportFailure\(this\.failures\)\) this\.say\(ONLINE\.worldChatOffline\)/);
   });
 });

@@ -21,6 +21,8 @@ export class TerritoryChat {
   private pending: { text: string; id: string } | null = null;
   private generation = 0;
   private failures = 0;
+  /** A guest mint can fail before chat has a token; do not leave its opening copy forever. */
+  private noTokenPolls = 0;
   private signature = '';
   private actor:string|null=null;
   private openedOnce=false;
@@ -109,6 +111,7 @@ export class TerritoryChat {
     this.key?.classList.toggle('on', open);
     this.picked = null;
     this.blockArmed = false;
+    if (open) this.noTokenPolls = 0;
     this.cancelPoll();
     if (!open) this.feed.abort();
     // Focus goes back to the key that opened it, or to MENU when the row of keys has folded away.
@@ -131,6 +134,7 @@ export class TerritoryChat {
     const generation = this.generation;
     const token = this.token();
     if (token) {
+      this.noTokenPolls = 0;
       try {
         await this.feed.read(token,TERRITORY_CHAT_POLL_MS);
         if (generation !== this.generation) return;
@@ -144,6 +148,10 @@ export class TerritoryChat {
         // With no cached page, the first failed request must not leave LOADING on screen.
         if (!this.feed.snapshot(token).loaded || shouldReportFailure(this.failures)) this.say(ONLINE.worldChatOffline);
       }
+    } else if (++this.noTokenPolls >= 2 && this.status?.textContent === ONLINE.worldChatLoading) {
+      // Identity is independent of the public map. After one quiet retry, tell a fresh visitor
+      // that chat is unavailable while retaining the normal four-second retry for recovery.
+      this.say(ONLINE.worldChatOffline);
     }
     if (this.open && generation === this.generation && !document.hidden) this.timer = setTimeout(() => void this.poll(), Math.min(60_000, TERRITORY_CHAT_POLL_MS * 2 ** Math.min(4, this.failures)));
   }
