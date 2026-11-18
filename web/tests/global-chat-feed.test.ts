@@ -41,3 +41,18 @@ it('bounds a stalled cold read and permits an immediate retry',async()=>{
   feed.abort();
  } finally { vi.useRealTimers(); }
 });
+
+// WARM START (2026-11-18): the last page this account read is on screen before the network answers,
+// and never for another account.
+it('shows the last page this scope read before the network answers, and never another scope\'s', async () => {
+ const saved = new Map<string, readonly string[]>();
+ const memory = { load: (scope: string) => saved.get(scope) ?? null, save: (scope: string, rows: readonly string[]) => { saved.set(scope, rows); } };
+ let resolve!: (v: { messages: string[] }) => void;
+ const first = createChatFeed<string>(() => new Promise(r => { resolve = r; }), () => {}, Date.now, 10_000, memory);
+ const read = first.read('a'); resolve({ messages: ['hello'] }); await read;
+ const next = createChatFeed<string>(() => new Promise(() => {}), () => {}, Date.now, 10_000, memory);
+ expect(next.snapshot('a')).toEqual({ messages: ['hello'], loaded: false });
+ expect(next.snapshot('b')).toEqual({ messages: [], loaded: false });
+ next.replace('b', ['mine']);
+ expect(saved.get('b')).toEqual(['mine']);
+});

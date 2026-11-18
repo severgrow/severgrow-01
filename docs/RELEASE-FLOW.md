@@ -145,7 +145,7 @@ docs/WORLD-MAP.md: the key stays hidden until the endpoint answers).
   a job-level `if`):
   - **`browser` (always):** futa04-critical, futa04-information, futa04-motion, lessons-3,
     territory-menu, territory-gestures, territory-gestures-ios, sphere-test, sphere-test-ios,
-    planet-matte.
+    planet-matte, planet-login(-ios), cold-start-slow, cold-start-slow-ios.
   - **`browser-release` (`futa0.5-online` push, PRs into it, or workflow_dispatch):** also
     futa04-tutorial-intel, futa04-tutorial-lock, futa04-lesson-9-free, cut-severe,
     territory-challenges, living-territory, living-territory-ios, territory-final-polish.
@@ -153,6 +153,30 @@ docs/WORLD-MAP.md: the key stays hidden until the endpoint answers).
   waits for CI on the `futa0.5-online` commit, which runs the **full** browser set.
 - `extra-regressions.yml`: admin-dashboard, online-stale-token-recovery, online-soak-teardown,
   settings-visual, accounts-email, pwa-viewport-layout.
+
+## Cold start on the real /test (2026-11-18)
+
+Two checks, because the real server can be slow or silent in ways a mock is not:
+
+- **`cold-start-slow` / `cold-start-slow-ios` (CI, every push).** The built page against a local API
+  that behaves like the real server on a bad minute: the first guest creation never answers (the
+  next takes 7 s), the first map read takes 8 s, the first wallet read never answers, the first
+  achievements read fails, the first chat read takes 6 s. A fresh visitor must end with the Planet
+  painted, chat messages and the achievements list within 60 s, and no loading line may stay on
+  screen for more than 16 s in a row. Chromium and WebKit.
+- **`web/e2e/real-test-smoke.ts` (by hand, after a push has published /test).** Read-only against the
+  REAL site and server: a fresh phone visitor (no identity, no cache) opens the Planet, Global chat and
+  achievements, and each must show content within 45 s. It creates only the guest every fresh visitor
+  gets, marked as test traffic. Run it on /test and on live to compare:
+
+  ```sh
+  node --import tsx web/e2e/real-test-smoke.ts
+  SMOKE_URL=https://futasaku.com/ node --import tsx web/e2e/real-test-smoke.ts
+  ```
+
+  A FAIL prints what was on screen and every request that failed or never answered. When the
+  server itself never answers (both sites fail the same way), that is a server matter
+  (docs/DEPLOY-ONLINE.md), not a reason to change the page.
 
 Removed as redundant: the seven suites that tested the old `live` (Main) channel this branch never
 ships (smoke, painting, overhaul, monkey, emptyturn, fruitcards, propass), the `futa05-preview-build`

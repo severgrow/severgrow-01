@@ -266,3 +266,40 @@ it('releases a stalled guest mint so a fresh private session can retry identity'
     vi.useRealTimers();
   }
 });
+
+// COLD START ON THE REAL SERVER (2026-11-18): measured on futasaku.com, the server sometimes never
+// answers at all (wallet, challenges, chat, guest creation; health stays fast). Every read a Planet
+// screen waits on must settle, or the screen behind it waits for ever.
+it('releases every Planet private read when the transport never settles', async () => {
+  vi.useFakeTimers();
+  try {
+    const signals: AbortSignal[] = [];
+    const client = new DuelClient({
+      baseUrl: 'https://api.example', storage: memoryStore(),
+      fetch: async (_url, init) => { signals.push(init.signal!); return new Promise(() => {}); },
+    });
+    const reads = [client.seedWallet('t'), client.worldChallenges('t'), client.achievements('t'), client.worldColour('t')];
+    const failed = reads.map((read) => expect(read).rejects.toThrow(/timed out/i));
+    await vi.advanceTimersByTimeAsync(12_000);
+    await Promise.all(failed);
+    expect(signals).toHaveLength(4);
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('a slow read that answers inside the bound is never cut off', async () => {
+  vi.useFakeTimers();
+  try {
+    const client = new DuelClient({
+      baseUrl: 'https://api.example', storage: memoryStore(),
+      fetch: async () => new Promise((resolve) => setTimeout(() => resolve({ ok: true, status: 200, json: async () => ({ ok: true, wallet: { balance: 7 } }) } as never), 9_000)),
+    });
+    const read = client.seedWallet('t');
+    await vi.advanceTimersByTimeAsync(9_000);
+    await expect(read).resolves.toMatchObject({ balance: 7 });
+  } finally {
+    vi.useRealTimers();
+  }
+});

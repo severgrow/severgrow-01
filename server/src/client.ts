@@ -500,7 +500,7 @@ export class DuelClient {
   }
 
   async seedWallet(token: string): Promise<SeedWallet> {
-    const response = await this.request<{ wallet: SeedWallet }>('GET', '/v1/seeds/wallet', { token });
+    const response = await this.requestWithDeadline<{ wallet: SeedWallet }>('GET', '/v1/seeds/wallet', { token }, 'Wallet read');
     return response.wallet;
   }
 
@@ -510,7 +510,7 @@ export class DuelClient {
    * the current swatch, because the map is already drawing that colour.
    */
   async worldColour(token: string): Promise<WorldColour> {
-    const response = await this.request<{ colour: WorldColour }>('GET', '/v1/world/colour', { token });
+    const response = await this.requestWithDeadline<{ colour: WorldColour }>('GET', '/v1/world/colour', { token }, 'Colour read');
     return response.colour;
   }
 
@@ -580,7 +580,7 @@ export class DuelClient {
 
   /** Territory achievements: progress and which are paid (server/src/seeds/achievements.ts). */
   async achievements(token: string): Promise<AchievementView[]> {
-    const response = await this.request<{ achievements: AchievementView[] }>('GET', '/v1/seeds/achievements', { token });
+    const response = await this.requestWithDeadline<{ achievements: AchievementView[] }>('GET', '/v1/seeds/achievements', { token }, 'Achievements read');
     return response.achievements;
   }
 
@@ -598,7 +598,7 @@ export class DuelClient {
   // ---- Territory challenges (docs/TERRITORY-CHALLENGES.md) ----
 
   async worldChallenges(token: string): Promise<WorldChallengesPayload> {
-    const response = await this.request<WorldChallengesPayload & { ok: true }>('GET', '/v1/world/challenges', { token });
+    const response = await this.requestWithDeadline<WorldChallengesPayload & { ok: true }>('GET', '/v1/world/challenges', { token }, 'Challenges read');
     return { incoming: response.incoming, outgoing: response.outgoing, serverNow: response.serverNow };
   }
 
@@ -699,7 +699,13 @@ export class DuelClient {
     return this.request('POST', '/v1/territory/chat/report', { token, body: { messageId, reason } });
   }
 
-  /** Bound world reads and guest creation, the two requests that can strand a fresh Planet/chat. */
+  /**
+   * Bound the requests a Planet screen waits on: the world, guest creation, and the private reads
+   * (wallet, challenges, achievements, colour). Measured on the real server (2026-11-18): an answer
+   * comes in under 3 s, even cold, or not at all (requests left open for 30 s and more while the
+   * health check answered in 0.3 s). 12 s is four times the slowest real answer seen, so a read that
+   * would have succeeded is not cut off, and the screen's next poll retries.
+   */
   private async requestWithDeadline<T>(
     method: string,
     path: string,

@@ -141,6 +141,8 @@ jobs:
           - { suite: blast-input-ios, artifact: futa05-sphere }
           - { suite: planet-login, artifact: futa05-sphere }
           - { suite: planet-login-ios, artifact: futa05-sphere }
+          - { suite: cold-start-slow, artifact: futa05-sphere }
+          - { suite: cold-start-slow-ios, artifact: futa05-sphere }
           - { suite: art-lab, artifact: futa05-sphere }
           - { suite: art-lab-ios, artifact: futa05-sphere }
     # PINNED, not `ubuntu-latest`: GitHub moved `ubuntu-latest` to 26.04 during 2026-10-28, and

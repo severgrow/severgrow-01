@@ -166,3 +166,50 @@ it('reuses a slow private read across public polls so the wallet can still settl
   expect(state.wallet.balance).toBe(55);
   expect(state.paintPanel).toHaveBeenCalledTimes(2);
 });
+
+// COLD START ON THE REAL SERVER (2026-11-18). Measured on futasaku.com/test/: the wallet read was
+// sent and never answered, and achievements were only ever asked for after the wallet — so the pane
+// said "Reading your progress…" for as long as the page stayed open. Achievements are their own read.
+const hanging = () => new Promise<never>(() => {});
+const achievementsState = (over: Record<string, unknown>) => {
+  const world = { version: 1, revision: 2, cells: [{ id: '0,0', q: 0, r: 0 }], claims: [], disputes: [] };
+  const state: any = Object.create(WorldView.prototype);
+  Object.assign(state, {
+    active: true, fromMemory: false, privateReadVersion: 0, publicReadVersion: 0, appliedPublicReadVersion: 0,
+    world, identity: { playerId: 'me', token: 'token' }, identityKnown: true, identityFlight: null, wallet: null,
+    challenges: { incoming: [], outgoing: [], serverNow: 0 }, challengeSignature: '',
+    achievements: { playerId: 'me', views: null, routeMissing: false, retry: false }, achievementsLoading: false,
+    paintSignature: 'same',
+    client: { seedWallet: vi.fn(hanging), worldChallenges: vi.fn(hanging), worldMap: async () => ({ world }) },
+    readWorld: vi.fn(async () => ({ world })), challengeSignatureOf: () => '', paintSignatureOf: () => 'same',
+    chat: { prefetch: vi.fn() },
+    paint: vi.fn(), notice: vi.fn(), paintWallet: vi.fn(), paintPanel: vi.fn(), paintSelection: vi.fn(),
+    paintRings: vi.fn(), paintSwords: vi.fn(), pushPlanet: vi.fn(), paintStakes: vi.fn(), paintChallenges: vi.fn(),
+    loadAchievements: vi.fn(), loadColour: vi.fn(), settleAutomatically: vi.fn(), schedule: vi.fn(),
+    ...over,
+  });
+  return state;
+};
+
+it('asks for achievements the moment identity arrives, without waiting for the wallet', async () => {
+  const identity = { playerId: 'me', token: 'token', kind: 'guest' };
+  const state = achievementsState({ identity: null, ensureIdentity: vi.fn(async () => identity) });
+  await state.attachIdentity();
+  expect(state.client.seedWallet).toHaveBeenCalled();
+  expect(state.loadAchievements).toHaveBeenCalled();
+});
+
+it('a poll asks again for achievements that have never arrived, even while the wallet hangs', async () => {
+  const state = achievementsState({});
+  await (state as WorldView).refresh();
+  expect(state.loadAchievements).toHaveBeenCalledOnce();
+  state.achievements = { playerId: 'me', views: null, routeMissing: false, retry: true };
+  await (state as WorldView).refresh();
+  expect(state.loadAchievements).toHaveBeenCalledTimes(2);
+});
+
+it('a poll does not re-read achievements that are already on screen', async () => {
+  const state = achievementsState({ achievements: { playerId: 'me', views: [{ id: 'a' }], routeMissing: false, retry: false } });
+  await (state as WorldView).refresh();
+  expect(state.loadAchievements).not.toHaveBeenCalled();
+});

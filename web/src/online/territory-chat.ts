@@ -9,6 +9,8 @@ import type { DuelClient } from '../../../server/src/client.js';
 import type { TerritoryMessage } from '../../../server/src/chat/territory.js';
 import { ONLINE } from '../../../src/strings.js';
 import { createChatFeed } from './global-chat-feed.js';
+import { chatMemory } from './chat-memory.js';
+import { browserStorage } from '../../../server/src/client.js';
 
 /** How often an open chat asks for news. */
 export const TERRITORY_CHAT_POLL_MS = 4_000;
@@ -34,7 +36,7 @@ export class TerritoryChat {
     (token,signal)=>this.client.territoryChat(token,signal),()=>{
       this.paint();
       if(this.status?.textContent===ONLINE.worldChatLoading)this.say('');
-    });
+    },Date.now,10_000,chatMemory<TerritoryMessage>(browserStorage()));
   /** The message whose moderation keys are showing, and whether its Block is armed. */
   private picked: string | null = null;
   private blockArmed = false;

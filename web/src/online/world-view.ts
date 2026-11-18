@@ -1250,6 +1250,8 @@ export class WorldView {
       // guest has no key at all, and never inherits another account's remembered list.
       this.achievements = restoreAchievements(browserStorage(), identity?.playerId ?? null);
       this.paintPanel();
+      // Achievements are their own read (cold start, 2026-11-18): never queued behind the wallet.
+      if (this.identity) void this.loadAchievements();
       if (!changedIdentity) this.paintWallet();
       // ensureIdentity may return a fresh wrapper for the same credentials. Use the retained
       // actor object so loadColour's stale-account guard accepts this still-current response.
@@ -1424,6 +1426,13 @@ export class WorldView {
       if (!painted) this.pushPlanet();
       this.paintStakes();
       this.paintChallenges();
+      // ACHIEVEMENTS NEVER WAIT ON THE WALLET (cold start on the real server, 2026-11-18: the wallet
+      // read was sent and never answered, and the pane said "Reading your progress…" for good). A
+      // list that has never arrived, or a read that failed, is asked for again on this poll.
+      if (this.identity && (this.achievements.views === null || this.achievements.retry)) {
+        this.achievements = { ...this.achievements, retry: false };
+        void this.loadAchievements();
+      }
       // Private metadata may be slower than the map. It updates its own controls when ready;
       // it never holds the public ownership/skin paint or an opening transition hostage.
       const privateWork = privateReads.then(([wallet, challenges]) => {
