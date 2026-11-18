@@ -3,13 +3,13 @@
 // getting seeds - every level of campaign and any other game should pay out seeds immediately").
 //
 // The stub API verifies the replay with the SERVER's own verifier (`verifyCampaignProof`) and pays
-// the economy's real amount for level 33 (20 Seeds, server/src/seeds/config.ts). Only the transport
+// the economy's real amount for level 33 (20 Seeds, doubled to 40 while the beta pays double; server/src/seeds/config.ts). Only the transport
 // is stubbed, so what is measured is the client: the proof it builds, the queue it drains, and the
 // line it paints.
 //
 // Three walks, because the bug was a QUEUE bug, not a level-data bug:
 //
-//   pay       a plain first clear: the proof is sent, the server pays 20, the card shows "+20 Seeds"
+//   pay       a plain first clear: the proof is sent, the server pays 40, the card shows "+40 Seeds"
 //   blocked   the device is also holding a Training proof the server answers with its CPU limit
 //             (HTTP 546). The queue is drained oldest-first, so a pass that stopped at the first
 //             answered failure never reached level 33's proof: the card showed NOTHING and no
@@ -33,7 +33,7 @@ import type { Action, State } from '../../src/engine/index.js';
 import { botSeed, chooseLevelAction } from '../../src/bots/levels.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { verifyCampaignProof } from '../../server/src/seeds/verify.js';
-import { campaignSeedReward } from '../../server/src/seeds/config.js';
+import { BETA_PAYOUT_MULTIPLIER, campaignSeedReward } from '../../server/src/seeds/config.js';
 import { SEEDS_IDENTITY_UNVERIFIED } from '../src/online/seed-icon.js';
 
 const OUT = process.env.SEEDS_SHOTS ?? '/tmp/seeds33';
@@ -60,7 +60,8 @@ const SETTINGS_KEY = 'futa05:severgrow.settings.v1';
 const PROGRESS_KEY = 'futa05:severgrow.campaign.progress.v3';
 const PENDING_KEY = 'futa05:severgrow.seeds.pending.v1';
 const LEVEL = CAMPAIGN_LEVELS.find((level) => level.number === 33)!;
-const REWARD = campaignSeedReward(LEVEL.number)!.firstWin;
+// What the server pays, multiplier included (owner, 2026-10-26: the beta pays double).
+const REWARD = campaignSeedReward(LEVEL.number)!.firstWin * BETA_PAYOUT_MULTIPLIER;
 const WALLET = { balance: 0, lifetimeEarned: 0, lifetimeSpent: 0, worldInvitationSeen: true };
 /** Everything before level 33, so the campaign's Continue opens level 33 itself. */
 const BEFORE_33 = JSON.stringify({
@@ -219,7 +220,7 @@ const stubSeeds = async (page: Page, options: { blockTraining: boolean }): Promi
         return route.fulfill({ status: 400, json: { ok: false, code: 'INVALID_REQUEST', message: 'That Campaign result could not be verified.' } });
       }
       const levelNumber = Number(body.levelId.split('-')[1]);
-      const awarded = verified.winner === 0 ? (campaignSeedReward(levelNumber)?.firstWin ?? 0) : 0;
+      const awarded = verified.winner === 0 ? (campaignSeedReward(levelNumber)?.firstWin ?? 0) * BETA_PAYOUT_MULTIPLIER : 0;
       stub.awards.push(awarded);
       return route.fulfill({ json: { reward: { awarded, reason: null, wallet: WALLET, replayed: false } } });
     }
@@ -234,6 +235,9 @@ const stubSeeds = async (page: Page, options: { blockTraining: boolean }): Promi
     }
     return route.fulfill({ status: 404, json: { ok: false, code: 'NOT_FOUND', message: 'no stub route' } });
   });
+  // A proof against the newest bot is sent only once the server's health lists that bot
+  // (web/src/online/seed-rewards.ts, bots-v0.11, 2026-11-04); the deployed server does.
+  await page.route('**/v1/health', (route: Route) => route.fulfill({ json: { ok: true, features: [CURRENT_BOT_VERSION] } }));
   void options;
   return stub;
 };
