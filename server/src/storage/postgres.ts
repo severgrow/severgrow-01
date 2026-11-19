@@ -12,6 +12,7 @@
 // Row Level Security: the migrations enable RLS with no anon/authenticated policies, so only the
 // service role (the API server) can read authoritative state. This adapter must be given a
 // service-role connection; never a client-side key.
+import { sha256Hex } from '../sha256.js';
 import { foldOnlineBlitz } from '../streaks/postgres.js';
 import type { Action, Event, Player, RulesConfig, State } from '../../../src/engine/index.js';
 import { scores } from '../../../src/engine/index.js';
@@ -530,6 +531,9 @@ const runCommit = async (client: PgClient, input: {
   const last = applied[applied.length - 1]!;
   return { ok: true, replayed: false, match: copy(current), move: copy(last), moves: copy(applied) };
 };
+
+/** The stored name of a rate-limit bucket: a hash, so a bucket named after an IP keeps no address. */
+export const rateBucketKey = (bucket: string): string => `h:${sha256Hex(`futasaku-rate:${bucket}`)}`;
 
 export const postgresStorage = (pool: PgPool): Storage => ({
   async createPlayer(player: PlayerRecord): Promise<void> {
@@ -1202,11 +1206,15 @@ export const postgresStorage = (pool: PgPool): Storage => ({
   },
 
   async hitRateLimit(bucket: string, windowStart: number, max: number): Promise<{ ok: boolean; count: number }> {
+    // NO ADDRESS AT REST (privacy review, 2026-11-19): several buckets are named after the client IP
+    // (`guest:ip:<ip>`, `join:ip:<ip>`, ...). A counter needs a stable name, not the address, so the
+    // row stores a one-way hash of it. Nothing reads a bucket back by name; counting is unchanged.
+    const stored = rateBucketKey(bucket);
     const { rows } = await pool.query(
       `insert into rate_limits (bucket, window_start, count) values ($1, $2, 1)
        on conflict (bucket, window_start) do update set count = rate_limits.count + 1
        returning count`,
-      [bucket, windowStart],
+      [stored, windowStart],
     );
     const count = asNumber(rows[0]?.count ?? 1);
     return { ok: count <= max, count };
