@@ -648,3 +648,11 @@ Level with live and with the 0.86 baseline above. `hidden-synthetic` counted 2 r
 3 on the branch: logged per URL, both builds make the same reads, all started by the synthetic
 `pageshow` a moment before the page is hidden (wallet, challenges, matches, achievements, chat); which
 of them land after the window opens is timing. Nothing new runs while hidden.
+
+### Accounts pass re-measure (2026-11-19)
+
+`44bfd948` (merge, settings sync, win ownership, sign-in warm-up) against `c3e41cf3` (before it),
+same machine, serial, 5 samples each. performance-lifecycle board idle, median task ms (390 / 1440):
+**10.9 / 10.1** vs 12.9 / 11.5 before; menu asleep 0 recalcs on both. Level. The settings sync runs
+only for a signed-in account, on start-up, on return to the page (at most every 30 s), when Settings
+opens and on the way out: no timer, no polling, nothing while hidden.
