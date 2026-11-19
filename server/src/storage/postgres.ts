@@ -21,6 +21,7 @@ import { prunableMatches } from '../retention.js';
 import type { RetentionRow } from '../retention.js';
 import type { AccountCampaignProgressWire } from '../account-campaign-progress.js';
 import { mergeAccountGuide, type AccountGuideWire } from '../account-guide.js';
+import { EMPTY_PREFS, mergePrefs, parsePrefs, type PrefsDoc } from '../account-prefs.js';
 import { furtherAheadWire } from '../account-campaign-progress.js';
 import type { MatchStatus, OfflineCounters, OfflineSummary, OnlineGameResult } from '../protocol.js';
 import type {
@@ -1311,6 +1312,35 @@ export const postgresStorage = (pool: PgPool): Storage => ({
          on conflict (player_id) do update set seen = excluded.seen, games = excluded.games, updated_at = excluded.updated_at`,
         // JSON text, like every jsonb write here: a raw array would be sent as a Postgres array literal.
         [playerId, JSON.stringify(kept.seen), kept.games, now],
+      );
+      await client.query('commit');
+      return kept;
+    } catch (error) {
+      await client.query('rollback').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release?.();
+    }
+  },
+
+  async accountPrefsOf(playerId: string): Promise<PrefsDoc | null> {
+    const row = (await pool.query(`select doc from account_prefs where player_id = $1`, [playerId])).rows[0];
+    if (!row) return null;
+    const doc = asJson<Record<string, unknown>>(row.doc);
+    return doc ? parsePrefs(doc) : null;
+  },
+
+  async mergeAccountPrefs(playerId: string, incoming: PrefsDoc, now: number): Promise<PrefsDoc> {
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      const row = (await client.query(`select doc from account_prefs where player_id = $1 for update`, [playerId])).rows[0];
+      const storedDoc = row ? asJson<Record<string, unknown>>(row.doc) : null;
+      const kept = mergePrefs(storedDoc ? parsePrefs(storedDoc) : EMPTY_PREFS, incoming, now);
+      await client.query(
+        `insert into account_prefs(player_id, doc, updated_at) values ($1, $2::jsonb, $3)
+         on conflict (player_id) do update set doc = excluded.doc, updated_at = excluded.updated_at`,
+        [playerId, JSON.stringify(kept), now],
       );
       await client.query('commit');
       return kept;

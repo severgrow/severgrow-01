@@ -232,6 +232,21 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
       return { status: 200, body: { ok: true, guide: await service.putAccountGuide(player, body), serverNow: service.serverNow() } };
     }
 
+    // SETTINGS, LESSON PROGRESS AND TIPS FOLLOW THE ACCOUNT (owner, 2026-11-18, accounts pass). A
+    // server without migration 0030 answers 404, and the page keeps its own copy.
+    if ((method === 'GET' || method === 'POST') && path === '/v1/players/me/prefs') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      try {
+        if (method === 'GET') return { status: 200, body: { ok: true, prefs: await service.accountPrefs(player), serverNow: service.serverNow() } };
+        const raw = await readJson(req, config.maxBodyBytes);
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new ApiError('INVALID_REQUEST', 'Preferences must be an object.');
+        return { status: 200, body: { ok: true, prefs: await service.putAccountPrefs(player, raw as Record<string, unknown>), serverNow: service.serverNow() } };
+      } catch (error) {
+        if ((error as { code?: unknown } | null)?.code === '42P01') throw new ApiError('NOT_FOUND', 'Not available yet.');
+        throw error;
+      }
+    }
+
     if (method === 'POST' && path === '/v1/players/me/offline') {
       const player = await service.authenticate(bearer(req.headers.get('authorization')));
       const body = asRecord(await readJson(req, config.maxBodyBytes));

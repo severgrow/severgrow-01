@@ -4,6 +4,7 @@
 import type { Action, Event, Player, RulesConfig, State } from '../../../src/engine/index.js';
 import type { AccountCampaignProgressWire } from '../account-campaign-progress.js';
 import type { AccountGuideWire } from '../account-guide.js';
+import type { PrefsDoc } from '../account-prefs.js';
 import type { HeadToHead, MatchStatus, OfflineCounters, OfflineSummary, OnlineGameResult, PlayerSummary } from '../protocol.js';
 import type { RetentionRow } from '../retention.js';
 
@@ -261,6 +262,11 @@ export interface Storage {
   accountGuideOf(playerId: string): Promise<AccountGuideWire | null>;
   /** Join `incoming` into the stored row (union of beats, higher count) and return the result. */
   mergeAccountGuide(playerId: string, incoming: AccountGuideWire, now: number): Promise<AccountGuideWire>;
+
+  /** Settings, lesson progress and tips that follow the account (migration 0030), or null before a POST. */
+  accountPrefsOf(playerId: string): Promise<PrefsDoc | null>;
+  /** Join `incoming` into the stored copy (account-prefs.ts rules) and return the result. */
+  mergeAccountPrefs(playerId: string, incoming: PrefsDoc, now: number): Promise<PrefsDoc>;
 
   createMatch(match: MatchRecord): Promise<{ ok: true } | Fail>;
   /**

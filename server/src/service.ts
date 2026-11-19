@@ -40,6 +40,7 @@ import type {
 } from './protocol.js';
 import { parseAccountCampaignProgress } from './account-campaign-progress.js';
 import { parseAccountGuide } from './account-guide.js';
+import { parsePrefs } from './account-prefs.js';
 import { parseOfflineCounters } from './offline.js';
 import { fromEngineResult } from './protocol.js';
 import { actorChanged, gatedRevisionFor, gatedStateFor, turnBoundaryAdvanced } from './turn-boundary.js';
@@ -235,6 +236,16 @@ export class MatchService {
   /** Join this device's guide progress into the account's (beats only ever added). */
   async putAccountGuide(player: PlayerRecord, body: Record<string, unknown>) {
     return this.storage.mergeAccountGuide(player.id, parseAccountGuide(body), this.now());
+  }
+
+  /** Settings, lesson progress and tips that follow the account (migration 0030), or null before a POST. */
+  async accountPrefs(player: PlayerRecord) {
+    return this.storage.accountPrefsOf(player.id);
+  }
+
+  /** Join this device's copy into the account's: per setting the newer choice, progress only grows. */
+  async putAccountPrefs(player: PlayerRecord, body: Record<string, unknown>) {
+    return this.storage.mergeAccountPrefs(player.id, parsePrefs(body), this.now());
   }
 
   /**

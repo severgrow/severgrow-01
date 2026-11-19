@@ -115,6 +115,17 @@ describe.skipIf(!enabled)('guest merged into an existing account (real Postgres)
     expect(Number(bal!.balance)).toBe(10);
   });
 
+  it('settings, lesson progress and tips join too (migration 0030)', async () => {
+    const guest = await player('guest');
+    const account = await player('account');
+    const docOf = (fields: Record<string, unknown>, tips: string[]) => JSON.stringify({ fields, tips, lessons: null });
+    await q(`insert into account_prefs (player_id, doc, updated_at) values ($1, $2::jsonb, 1)`, [account, docOf({ sound: { v: false, at: 10 } }, ['fruit'])]);
+    await q(`insert into account_prefs (player_id, doc, updated_at) values ($1, $2::jsonb, 1)`, [guest, docOf({ sound: { v: true, at: 20 }, handSide: { v: 'left', at: 5 } }, ['draw'])]);
+    await mergeGuestIntoAccount(pool, { guestId: guest, accountId: account, now: 1000 });
+    const doc = (await q(`select doc from account_prefs where player_id = $1`, [account])).rows[0]!.doc;
+    expect(doc).toEqual({ fields: { handSide: { v: 'left', at: 5 }, sound: { v: true, at: 20 } }, tips: ['draw', 'fruit'], lessons: null });
+  });
+
   it('a guest with nothing to bring is retired with an empty summary', async () => {
     const guest = await player('guest');
     const account = await player('account');

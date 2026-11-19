@@ -3,6 +3,7 @@
 // checks and the writes), so in Node's single-threaded model it is atomic, exactly like the
 // row lock the Postgres adapter takes.
 import { mergeAccountGuide, type AccountGuideWire } from '../account-guide.js';
+import { EMPTY_PREFS, mergePrefs, type PrefsDoc } from '../account-prefs.js';
 import type { Player } from '../../../src/engine/index.js';
 import { scores } from '../../../src/engine/index.js';
 import { hasGrace, spendGrace } from '../grace.js';
@@ -76,6 +77,7 @@ export class MemoryStorage implements Storage {
   /** player id → further-ahead campaign progress snapshot (migration 0023). */
   private readonly campaignProgressByPlayer = new Map<string, AccountCampaignProgressWire>();
   private readonly guideByPlayer = new Map<string, AccountGuideWire>();
+  private readonly prefsByPlayer = new Map<string, PrefsDoc>();
 
   /** Synchronous copy boundary for the local chat adapter; no async gap before its write. */
   chatAuthority(id: string): { match: MatchRecord | null; participants: Participant[] } {
@@ -149,6 +151,17 @@ export class MemoryStorage implements Storage {
     const stored = this.guideByPlayer.get(playerId);
     const kept = stored ? mergeAccountGuide(stored, incoming) : mergeAccountGuide({ seen: [], games: 0 }, incoming);
     this.guideByPlayer.set(playerId, copy(kept));
+    return copy(kept);
+  }
+
+  async accountPrefsOf(playerId: string): Promise<PrefsDoc | null> {
+    const stored = this.prefsByPlayer.get(playerId);
+    return stored ? copy(stored) : null;
+  }
+
+  async mergeAccountPrefs(playerId: string, incoming: PrefsDoc, now: number): Promise<PrefsDoc> {
+    const kept = mergePrefs(this.prefsByPlayer.get(playerId) ?? EMPTY_PREFS, incoming, now);
+    this.prefsByPlayer.set(playerId, copy(kept));
     return copy(kept);
   }
 

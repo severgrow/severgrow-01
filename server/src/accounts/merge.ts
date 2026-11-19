@@ -12,6 +12,7 @@
 //                   (the better campaign clear is kept), so nothing is paid or counted twice
 //   campaign        every level either cleared, the better result per level (merge-rules.ts)
 //   guide           everything either has seen
+//   settings        per setting the newer choice; lesson progress and tips only grow (account-prefs.ts)
 //   streaks         the higher best per Practice key and the account's current streak; online Blitz best
 //   colour / skin   the account's, or the guest's if the account never chose one
 //
@@ -23,6 +24,7 @@ import { SEED_ECONOMY } from '../seeds/config.js';
 import type { PgClient, PgPool } from '../storage/postgres.js';
 import type { AccountCampaignBest, AccountCampaignProgressWire } from '../account-campaign-progress.js';
 import { mergeAccountGuide } from '../account-guide.js';
+import { EMPTY_PREFS, mergePrefs, parsePrefs } from '../account-prefs.js';
 import { mergeBlitzStreak, mergePracticeStreak, unionCampaignProgress } from './merge-rules.js';
 
 /** What the player is told: what this device brought into the account. */
@@ -139,6 +141,20 @@ export const mergeGuestIntoAccount = async (
       await q(`insert into account_guide (player_id, seen, games, updated_at) values ($1, $2::jsonb, $3, $4)
                on conflict (player_id) do update set seen = excluded.seen, games = excluded.games, updated_at = excluded.updated_at`,
         [a, JSON.stringify(guide.seen), guide.games, now]);
+    }
+
+    // ---- Settings, lesson progress and tips (migration 0030; skipped where that table is not there yet,
+    // checked first so a missing table can never abort the rest of the merge).
+    if ((await q(`select to_regclass('public.account_prefs') as t`)).rows[0]?.t) {
+      const docs = (await q('select player_id, doc from account_prefs where player_id = any($1::uuid[]) for update', [[g, a]])).rows;
+      const gp = docs.find((r) => r.player_id === g);
+      if (gp) {
+        const ap = docs.find((r) => r.player_id === a);
+        const read = (r: Row | undefined) => (r?.doc && typeof r.doc === 'object' ? parsePrefs(r.doc as Record<string, unknown>) : EMPTY_PREFS);
+        const prefs = mergePrefs(read(ap), read(gp), now);
+        await q(`insert into account_prefs (player_id, doc, updated_at) values ($1, $2::jsonb, $3)
+                 on conflict (player_id) do update set doc = excluded.doc, updated_at = excluded.updated_at`, [a, JSON.stringify(prefs), now]);
+      }
     }
 
     // ---- Streaks ---------------------------------------------------------------------------------
