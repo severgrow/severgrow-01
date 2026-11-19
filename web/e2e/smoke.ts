@@ -259,6 +259,13 @@ const playTurn = async (page: Page) => {
       if (await page.locator('#confirm-play').isVisible()) await page.click('#confirm-play');
       await idle(page);
       await page.click('#tool-undo');
+      // Undo animates the tile away (the fade outlasts busy()); the board must match the game within
+      // 3 s, and a tile that never leaves still fails below.
+      await idle(page);
+      await page.waitForFunction(() => {
+        const h = (window as unknown as { __severgrow: Hook }).__severgrow;
+        return document.querySelectorAll('.l-tiles .tile').length === Object.values(h.state()!.board).filter((t) => t).length;
+      }, undefined, { timeout: 3000 }).catch(() => undefined);
       undone = (await stateJson(page)) === before && (await boardTiles(page)) === (await stateTiles(page));
     }
   }
