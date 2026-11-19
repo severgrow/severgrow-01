@@ -18,6 +18,7 @@ import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { duelApiUrl, duelRegion } from '../online/config.js';
 import { IDENTITY_STORAGE_KEY, subscribeIdentityChanges } from '../online/identity.js';
 import { retagSeedProofs } from '../online/seed-rewards.js';
+import { signInWarmer } from './warm.js';
 import { STORAGE_PREFIX } from '../channel.js';
 import { clearAccountBoundProgress } from './signout-reset.js';
 import { DISPLAY_NAME_MAX } from '../../../server/src/display-name.js';
@@ -220,6 +221,11 @@ const apiUrl = (path: string): string | null => {
   const region = duelRegion();
   return `${api}${path}${region ? `?forceFunctionRegion=${encodeURIComponent(region)}` : ''}`;
 };
+/** Wakes the server before a sign-in hand-over (warm.ts): one GET /v1/health, at most once a minute. */
+const warmSignIn = signInWarmer(async () => {
+  const url = apiUrl('/v1/health');
+  if (url && navigator.onLine) await fetch(url, { method: 'GET', cache: 'no-store' });
+});
 const apiRequest = async (method: 'POST' | 'PATCH', path: string, body: unknown, token: string | null): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> => {
   const url = apiUrl(path);
   if (!url) return { ok: false, status: 0, json: {} };
@@ -589,6 +595,7 @@ export const mountAccounts = async (): Promise<void> => {
   document.body.classList.add('acct-on');
 
   const start = async (returnTo: ReturnTo, btn: HTMLButtonElement | null, status: HTMLElement | null) => {
+    warmSignIn();
     if (!navigator.onLine) {
       if (status) {
         status.textContent = ACCOUNT.offline;
@@ -616,6 +623,7 @@ export const mountAccounts = async (): Promise<void> => {
   const emailPanel = mountEmailPanel(emailSheet.panel,{supabase:supa,alternative:emailGoogle,
     complete:(access,active)=>completeSignIn(access,'email',emailReturnTo,active),close:()=>emailSheet.close()});
   const openEmail = (returnTo:ReturnTo) => {
+    warmSignIn();
     welcome.close(); emailReturnTo=returnTo; emailPanel.reset(); emailSheet.open(()=>emailPanel.cancel());
     emailSheet.panel.querySelector<HTMLInputElement>('input:not([hidden])')?.focus({preventScroll:true});
   };
