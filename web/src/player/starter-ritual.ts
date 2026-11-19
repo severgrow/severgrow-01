@@ -84,6 +84,7 @@ export type StarterRitualOptions = {
 const TEMPO_SCALE: Record<StarterRitualTempo, number> = { slow: 1.16, normal: 1, fast: 0.82, skip: 1 };
 /** One layer per card in the nine-card deck; the DOM stack and the logic deck must agree. */
 const DECK_LAYERS = RITUAL_DECK_SIZE;
+const PILE_STREAM_MS = 440;
 /** Distance from the edge of the viewport that a dealt card may never cross. */
 const SAFE_MARGIN = 14;
 
@@ -803,7 +804,7 @@ class StarterRitual {
     const pileScale = pile
       ? clamp(Math.min(pile.width / cardW, pile.height / cardH), 0.08, 1)
       : 0.4;
-    const streamMs = this.ms(440);
+    const streamMs = this.ms(PILE_STREAM_MS);
     const stagger = this.ms(10);
     const stream: (Animation | null)[] = [];
     /** How far into each card's own flight the group has formed up on the line into the tile. */
@@ -832,6 +833,9 @@ class StarterRitual {
       // Under 2° even at its widest, and gone well before the landing.
       const tilt = lane * 1.6;
       const localScale = clamp(pileScale / k, 0.05, 1);
+      // The emblem stays readable through its last turn. The existing overlay fade still hands
+      // it off to the painted card in the pile.
+      const arrivalOpacity = order === 0 && this.emblemCover ? 1 : 0;
       return this.animate(el, [
         // Ease out of the deck, build speed gently, then settle into the tile: one gesture, no
         // keyframe where the direction visibly changes.
@@ -852,7 +856,7 @@ class StarterRitual {
           offset: CONVERGE_AT,
           easing: 'cubic-bezier(.22,.32,.18,1)',
         },
-        { translate: `${dx.toFixed(2)}px ${dy.toFixed(2)}px`, rotate: '0deg', scale: localScale, opacity: 0 },
+        { translate: `${dx.toFixed(2)}px ${dy.toFixed(2)}px`, rotate: '0deg', scale: localScale, opacity: arrivalOpacity },
       ], {
         duration: streamMs,
         delay: order * stagger,
@@ -1022,9 +1026,9 @@ class StarterRitual {
     // card lands as the painted emblem it covers. Not one of the ritual's own animations, so the filing
     // never waits for it or cancels it.
     if (cover) {
-      // Home as the deck lands on the pile (the stream is 440 ms plus its stagger), before the overlay fades.
-      const home = this.ms(500);
-      cover.ring.animate(ringReturnFrames(fit), { duration: home, easing: 'cubic-bezier(.45,0,.25,1)', fill: 'forwards' });
+      // Finish the turn when the top card reaches the pile, while the existing overlay fades.
+      const home = this.ms(PILE_STREAM_MS);
+      cover.ring.animate(ringReturnFrames(fit), { duration: home, fill: 'forwards' });
       for (const part of [cover.tree, cover.kanji]) {
         part.animate([{ opacity: 0 }, { opacity: 0, offset: 0.5 }, { opacity: 1 }], { duration: home, easing: 'ease-out', fill: 'forwards' });
       }

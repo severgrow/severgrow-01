@@ -93,6 +93,6 @@ export const ringFitScale = (cardWidth: number, tileWidth: number): number => {
  */
 export const RING_HOME_DEG = 720;
 export const ringReturnFrames = (fit: number): Keyframe[] => [
-  { transform: `rotate(${RING_SPIN_DEG}deg) scale(${fit.toFixed(4)})` },
+  { transform: `rotate(${RING_SPIN_DEG}deg) scale(${fit.toFixed(4)})`, easing: 'cubic-bezier(.35,.25,.65,.75)' },
   { transform: `rotate(${RING_HOME_DEG}deg) scale(1)` },
 ];

@@ -100,4 +100,8 @@ describe('the way home: a full circle back to the emblem (owner, 2026-11-17)', (
   it('the turn and the way home make two whole turns: a full circle and back', () => {
     expect(RING_HOME_DEG).toBe(720);
   });
+  it('spreads the home turn across the flight with a gentle ease and no blur filter', () => {
+    expect(r[0]?.easing).toBe('cubic-bezier(.35,.25,.65,.75)');
+    expect(r.every((frame) => frame.filter === undefined)).toBe(true);
+  });
 });

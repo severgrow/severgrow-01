@@ -360,6 +360,22 @@ const main = async (): Promise<void> => {
       await checkResultAgainstEngine(page, 'normal');
       await checkHomeLayout(page, 'normal');
       await checkDeck(page, 'normal');
+      const landing = await page.waitForFunction(() => {
+        const ring = document.querySelector('.ritual-emblem-ring:not(.ritual-emblem-ripple)');
+        const turn = ring?.getAnimations().map(a => a.effect as KeyframeEffect)
+          .find(effect => String(effect.getKeyframes().at(-1)?.transform).includes('rotate(720deg)'));
+        const flight = ring?.closest('.ritual-deck-layer')?.getAnimations()
+          .map(a => a.effect as KeyframeEffect).find(effect => effect.getKeyframes().length === 4);
+        if (!turn || !flight) return null;
+        return {
+          turnMs: turn.getTiming().duration,
+          flightMs: flight.getTiming().duration,
+          opacity: flight.getKeyframes().at(-1)?.opacity,
+        };
+      }, undefined, { timeout: 8_000 }).then(handle => handle.jsonValue());
+      check('normal: the visible hex finishes its turn within the existing Draw flight',
+        landing?.turnMs === 440 && landing.flightMs === 440 && Number(landing.opacity) === 1,
+        JSON.stringify(landing));
       await waitHidden(page);
       const trace = await phases(page);
       const order = ['arrive', 'shuffle', 'deal', 'reveal', 'result', 'exit'];

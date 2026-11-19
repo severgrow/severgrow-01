@@ -9072,6 +9072,7 @@ body.result .corner-tools {
   max-width: 100%;
   text-align: center;
   font-size: 1.05rem;
+  line-height: 1.625rem;
 }
 #sheet-profile .sp-tile dt {
   font-size: 0.55rem;
