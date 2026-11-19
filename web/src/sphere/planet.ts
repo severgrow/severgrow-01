@@ -469,7 +469,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       if (mode === 'menu') zoom = targetZoom = posed ? zoom : MENU_ZOOM;
       else if (keep) zoom = targetZoom = clampZoom(zoomFor(keep));
     }
-    if (!introduced && input) intro();
+    if (!introduced && input && (mode === 'menu' || input.home)) intro();
     paintFrame();
     ask();
   };
@@ -489,8 +489,8 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     // THE PLANET PAGE'S OWN FRAMING (owner feedback, 2026-11-11: "same setup and layout as the
     // planet page"). It opens on the player's largest holding at the window's own tile size — the
     // finish card asks for a tight one, so the window is full of your land rather than a small patch
-    // in the middle of the globe. `home` is never allowed to be a whole-planet pose (owner report,
-    // 2026-11-12); the opening flight and every later world read land on the same cell.
+    // in the middle of the globe. A world without a home yet waits for its initial data,
+    // including when a resize arrives before that read.
     const target = northUpDrag(homeQuat(sphere, map, input?.home ?? '0,0'),north,0,0,1);
     const open = clampZoom(zoomFor(openTile(hooks)));
     if (!motion()) { q = target; zoom = targetZoom = open; frameNow = frameTarget(); cropNow = cropTarget(); light = 1; posed = true; ask(); return; }

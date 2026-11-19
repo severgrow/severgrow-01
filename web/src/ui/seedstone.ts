@@ -21,12 +21,21 @@ export const seedStoneCrop = (owner: Player, strength: number) => {
   const index = (owner === 0 ? 0 : 9) + Math.max(1, Math.min(9, strength)) - 1;
   const [x0,y0,x1,y1] = BOUNDS[index]!;
   const size = Math.max(x1-x0,y1-y0) + 12;
-  return { x: (x0+x1-size)/2, y: (y0+y1-size)/2, size };
+  const top = (y0+y1-size)/2;
+  // Some stones are wider than their row. Clip the square's padding before it reaches
+  // the stone above or below, keeping the original scale and centre in both renderers.
+  const previous = BOUNDS[index - 3];
+  const next = BOUNDS[index + 3];
+  const y = Math.max(top, previous ? (previous[3] + y0) / 2 : 0);
+  const bottom = Math.min(top + size, next ? (y1 + next[1]) / 2 : 1536);
+  return { x: (x0+x1-size)/2, y, size, height: bottom - y, offsetY: y - top };
 };
 
-const stoneViewBox = (owner: Player, strength: number) => {
-  const crop = seedStoneCrop(owner, strength);
-  return `${crop.x.toFixed(1)} ${crop.y.toFixed(1)} ${crop.size} ${crop.size}`;
+const fitStoneArt = (art: SVGSVGElement, owner: Player, strength: number) => {
+  const { x, y, size, height, offsetY } = seedStoneCrop(owner, strength);
+  art.setAttribute('viewBox', `${x} ${y} ${size} ${height}`);
+  art.setAttribute('y', String(-10.5 + 21 * offsetY / size));
+  art.setAttribute('height', String(21 * height / size));
 };
 
 export function setSeedStoneStrength(stone: SVGGElement | null, strength: number) {
@@ -34,7 +43,7 @@ export function setSeedStoneStrength(stone: SVGGElement | null, strength: number
   const owner: Player = stone.dataset.owner === '1' ? 1 : 0;
   stone.dataset.strength = String(strength);
   const art = stone.querySelector<SVGSVGElement>('.seed-stone-art');
-  art?.setAttribute('viewBox', stoneViewBox(owner, strength));
+  if (art) fitStoneArt(art, owner, strength);
   const value = stone.querySelector('.tile-num');
   if (value) value.textContent = String(strength);
 }
@@ -55,8 +64,8 @@ export function drawSeedStone(parent: SVGGElement, key: string, x: number, y: nu
   const stone = el('g', { class: 'seed-stone', transform: `translate(${x.toFixed(2)},${y.toFixed(2)}) scale(0.66)`,
     'data-key': key, 'data-owner': owner, 'data-strength': strength }, parent);
   el('ellipse', { cx: 1.7, cy: 9.1, rx: 8.9, ry: 2.6, class: 'seed-stone-shadow' }, stone);
-  const art = el('svg', { x: -10.5, y: -10.5, width: 21, height: 21,
-    viewBox: stoneViewBox(owner,strength), class: 'seed-stone-art', overflow: 'hidden', 'aria-hidden': 'true' }, stone);
+  const art = el('svg', { x: -10.5, width: 21, class: 'seed-stone-art', overflow: 'hidden', 'aria-hidden': 'true' }, stone);
+  fitStoneArt(art, owner, strength);
   el('image', { href: atlasUrl, x: 0, y: 0, width: 1024, height: 1536 }, art);
   // This live value is the source for the existing Strengthen tick and board checks.
   el('text', { class: 'tile-num seed-stone-value', 'aria-hidden': 'true' }, stone).textContent = String(strength);

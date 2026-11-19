@@ -8168,7 +8168,7 @@ body.result .corner-tools {
 /* THE FINAL BOARD'S LOOK (owner, 2026-11-16: "off brand ... cooler, more FUTASAKU, minimal and
    elegant"; logic/harvest.ts harvestSvg). Tiles set slightly apart, as on the board itself: each hex
    is drawn at the lattice's size and drawn in a little here, with a stroke of its own fill to round
-   its corners. Static and flat: nothing moves, nothing is blurred, no picture. */
+   its corners. The gold rims and rock sprites follow the final position's terrain. */
 #gameover .go-harvest-svg .hv-plate path,
 #gameover .go-harvest-svg .hv-them path,
 #gameover .go-harvest-svg .hv-you path,
@@ -8181,23 +8181,29 @@ body.result .corner-tools {
 }
 /* The ground: quiet tiles of the board the match was played on. */
 #gameover .go-harvest-svg .hv-plate path {
-  fill: color-mix(in srgb, var(--fu-cream) 8%, #0e0f10);
-  stroke: color-mix(in srgb, var(--fu-cream) 8%, #0e0f10);
+  fill: #202628;
+  stroke: #343a39;
 }
 #gameover .go-harvest-svg .hv-plate .hv-rock {
-  fill: color-mix(in srgb, var(--c-rock) 50%, #0e0f10);
-  stroke: color-mix(in srgb, var(--c-rock) 50%, #0e0f10);
+  fill: #312722;
+  stroke: #615146;
 }
-/* The reader's network: solid, the brightest thing on the plate. */
+#gameover .go-harvest-svg .hv-gold {
+  fill: none;
+  stroke: var(--c-gold);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+}
+/* The reader's network has a soft edge like the tiles on the board. */
 #gameover .go-harvest-svg .hv-you path {
-  fill: var(--c-you);
-  stroke: var(--c-you);
+  fill: color-mix(in srgb, var(--c-you) 46%, #28351a);
+  stroke: color-mix(in srgb, var(--c-you) 60%, #46552a);
 }
 /* The other network: a deep ember, darker than the reader's, with an engraved inner edge, so the
    two read apart by lightness and by that edge as well as by ink — never by colour alone. */
 #gameover .go-harvest-svg .hv-them path {
   fill: color-mix(in srgb, var(--c-bot) 58%, #0e0f10);
-  stroke: color-mix(in srgb, var(--c-bot) 58%, #0e0f10);
+  stroke: color-mix(in srgb, var(--c-bot) 64%, #3e2c24);
 }
 #gameover .go-harvest-svg .hv-them-edge path {
   fill: none;
@@ -8213,15 +8219,17 @@ body.result .corner-tools {
   stroke-width: 0.9;
   stroke-dasharray: 1.5 1.5;
 }
-/* The rim of the board: barely there; the tiles themselves give the ground its shape. */
+/* The warm outer rim follows the same silhouette as the playable board. */
 #gameover .go-harvest-svg .hv-outline line {
-  stroke: color-mix(in srgb, var(--fu-cream) 9%, transparent);
+  stroke: color-mix(in srgb, var(--fu-cream) 42%, transparent);
   stroke-width: .8;
+  stroke-linecap: round;
 }
-/* Where the two networks meet: a gold seam in the gaps between their tiles. */
+/* A thin ivory seam marks contact. Gold is reserved for the tile rims and sealed home. */
 #gameover .go-harvest-svg .hv-frontier line {
-  stroke: var(--c-gold);
-  stroke-width: 1.4;
+  stroke: var(--fu-cream);
+  stroke-opacity: .72;
+  stroke-width: 1;
   stroke-linecap: round;
 }
 /* Each home: a small hex seal pressed into its tile. */

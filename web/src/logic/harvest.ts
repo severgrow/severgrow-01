@@ -38,6 +38,7 @@ import { allNeighbors, boardCoords, boardNeighbors, coordKey, homeCoord, onBoard
 import { isStrangled } from '../../../src/engine/index.js';
 import type { Coord, Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
 import { HARVEST } from '../../../src/strings.js';
+import rockArt from '../assets/forest-ash/rock-01.webp?url';
 
 /** The lattice unit: one hex's circumradius in drawing units. */
 const S = 10;
@@ -59,7 +60,7 @@ export type HarvestCell = {
   home: boolean;
 };
 
-export type HarvestHex = { q: number; r: number; x: number; y: number; rock: boolean; occupied: boolean };
+export type HarvestHex = { q: number; r: number; x: number; y: number; rock: boolean; gold: boolean; occupied: boolean };
 export type HarvestEdge = { x1: number; y1: number; x2: number; y2: number };
 
 export type HarvestFigure = {
@@ -313,7 +314,8 @@ export const joinedMass = (board: Record<string, Tile | null>, config: RulesConf
     const p = place(d.q, d.r);
     pointOf.set(key, p);
     const tile: Tile | null = board[key] ?? null;
-    hexes.push({ q: d.q, r: d.r, x: p.x, y: p.y, rock: terrain?.[key] === 'rock', occupied: !!tile });
+    const ground = terrain?.[key];
+    hexes.push({ q: d.q, r: d.r, x: p.x, y: p.y, rock: ground === 'rock', gold: ground === 'rich', occupied: !!tile });
     if (!tile) continue;
     const owner = displayOwner(tile.owner);
     tilesByOwner[owner] += 1;
@@ -414,9 +416,8 @@ export const joinedMass = (board: Record<string, Tile | null>, config: RulesConf
  * THE LOOK (owner, 2026-11-16: "the end board drawing is off brand - make it cooler, more FUTASAKU,
  * keep it minimal and elegant"). The board as tiles, not a diagram: every hex is a tile set slightly
  * apart from its neighbours (the gap is CSS, so the geometry stays the lattice's own), the reader's
- * network solid in its ink, the other network a deep ember with an engraved inner edge (told apart by
- * lightness and that edge, never by colour alone), the line where the two networks meet a gold seam
- * in the gaps, and each home a small hex seal — gold when it ended sealed.
+ * network solid in its ink, the other network a deep ember with an engraved inner edge. Gold
+ * terrain wears a rim under either network, and blocked terrain uses the board's rock artwork.
  */
 export const harvestSvg = (f: HarvestFigure): string => {
   const n = (v: number) => v.toFixed(1);
@@ -444,6 +445,12 @@ export const harvestSvg = (f: HarvestFigure): string => {
     .join('');
   const frontier = f.frontier.map((e) => `<line x1="${n(e.x1)}" y1="${n(e.y1)}" x2="${n(e.x2)}" y2="${n(e.y2)}"/>`).join('');
   const outline = f.outline.map((e) => `<line x1="${n(e.x1)}" y1="${n(e.y1)}" x2="${n(e.x2)}" y2="${n(e.y2)}"/>`).join('');
+  const rocks = f.hexes.filter((h) => h.rock && !h.occupied)
+    .map((h) => `<image class="hv-rock-art" href="${rockArt}" x="${n(h.x - 8)}" y="${n(h.y - 8)}" width="16" height="16"/>`)
+    .join('');
+  const gold = f.hexes.filter((h) => h.gold)
+    .map((h) => `<path class="hv-gold" d="${cellPath(h.x, h.y, S * 0.8, f.tilt)}"/>`)
+    .join('');
   return [
     `<svg class="go-harvest-svg" viewBox="0 0 ${n(f.width)} ${n(f.height)}" role="img" aria-label="${f.label}" focusable="false" xmlns="http://www.w3.org/2000/svg">`,
     `<g class="hv-outline">${outline}</g>`,
@@ -455,6 +462,8 @@ export const harvestSvg = (f: HarvestFigure): string => {
     `<g class="hv-them-edge">${rings}</g>`,
     `<g class="hv-you">${cells(0)}</g>`,
     cutOff,
+    rocks,
+    gold,
     `<g class="hv-frontier">${frontier}</g>`,
     `<g class="hv-homes">${homes}</g>`,
     `</svg>`,

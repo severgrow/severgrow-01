@@ -29,7 +29,7 @@ import type { Planet, PlanetInput } from '../sphere/planet.js';
 import { PLANET_PANE, PLANET_TEACH, SEEDS_WORD, seedBalanceLabel, seedIcon } from './seed-icon.js';
 import { isIdentityStorageEvent, subscribeIdentityChanges } from './identity.js';
 import { STORAGE_PREFIX } from '../channel.js';
-import { focusCell } from './world-planet.js';
+import { homeTile } from './world-planet.js';
 import { ownerLine, ownerSpokenLine } from './world-selection.js';
 
 type Identity = { token: string; playerId: string; kind: string };
@@ -394,6 +394,7 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
   let planet: Planet | null = null;
   let mounting = false;
   let readAt = 0;
+  let openingReady = false;
   /** Level 10's in-situ explanation is wanted on THIS card (main.ts decides, once per card). */
   let teachShown = false;
 
@@ -486,7 +487,7 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
       selected,
       // NO WORLD, NO HOME: the opening flight waits for the map, so the window can never start on
       // the world's centre and then jump (owner report, 2026-11-12: "not ALWAYS showing my cluster").
-      home: world ? focusCell(claims, me) : null,
+      home: world && openingReady ? homeTile(claims, me) : null,
       growAnywhere: world?.growAnywhere === true,
     } as PlanetInput);
   };
@@ -555,10 +556,9 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
 
   const applyRead = (map: WorldMapPayload | null, nextWallet: SeedWallet | null): void => {
     if (map) {
+      if (!world) note.hidden = true;
       world = map.world;
       if (selected && !selectedKnown()) selected = null;
-      const shown = world;
-      if (shown) planet?.home(focusCell(shown.claims, me), PANE_TILE_PX);
     }
     if (nextWallet) walletNow = nextWallet;
     if (!world) {
@@ -573,18 +573,20 @@ export const mountEndgamePlanet = (host: HTMLElement, deps: EndgamePlanetDeps): 
   const read = (): void => {
     if (disposed) return;
     const token = ++readAt;
+    const identity = deps.identity().catch(() => null);
     void Promise.all([
       deps.client.worldMap().catch(() => null),
-      (async () => {
-        const id = await deps.identity().catch(() => null);
-        me = id?.playerId ?? null;
-        account = id?.kind === 'account';
-        if (!id) return null;
-        return deps.client.seedWallet(id.token).catch(() => null);
-      })(),
-    ]).then(([map, nextWallet]) => {
+      identity,
+    ]).then(([map, id]) => {
       if (disposed || readAt !== token) return;
-      applyRead(map, nextWallet);
+      me = id?.playerId ?? null;
+      account = id?.kind === 'account';
+      openingReady = true;
+      applyRead(map, null);
+      if (!id) return;
+      void deps.client.seedWallet(id.token).then((nextWallet) => {
+        if (!disposed && readAt === token) applyRead(null, nextWallet);
+      }).catch(() => undefined);
     });
   };
 

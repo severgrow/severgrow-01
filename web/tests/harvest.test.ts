@@ -124,6 +124,17 @@ describe('joined mass: the tiles reachable from a home', () => {
 });
 
 describe('the figure is the position this game ended on', () => {
+  it('marks gold on occupied and empty tiles and shows rock artwork', () => {
+    const st = newGame(11);
+    const figure = harvestFigure(st.board, st.config, 0, {
+      '-2,2': 'rich', '0,0': 'rich', '1,0': 'rock',
+    })!;
+    expect(figure.hexes.filter((hex) => hex.gold).map((hex) => hex.occupied).sort()).toEqual([false, true]);
+    const svg = harvestSvg(figure);
+    expect(svg.match(/class="hv-gold"/g)).toHaveLength(2);
+    expect(svg.match(/class="hv-rock-art"/g)).toHaveLength(1);
+  });
+
   it('counts the real final board of a played-out match', () => {
     const st = playOut(96001);
     const fig = harvestFigure(st.board, st.config, 0, st.terrain)!;

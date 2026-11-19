@@ -504,7 +504,9 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
         g.fill();
         const crop = seedStoneCrop(cell.owner, cell.strength);
         const stone = 21 * q;
-        g.drawImage(atlas, crop.x, crop.y, crop.size, crop.size, cell.x - stone / 2, cell.y - stone / 2, stone, stone);
+        const scale = stone / crop.size;
+        g.drawImage(atlas, crop.x, crop.y, crop.size, crop.height,
+          cell.x - stone / 2, cell.y - stone / 2 + crop.offsetY * scale, stone, crop.height * scale);
       } else {
         g.font = `700 ${Math.round(L.hex * 0.48)}px ${o.font}`;
         g.fillStyle = 'rgba(7, 9, 8, .84)';

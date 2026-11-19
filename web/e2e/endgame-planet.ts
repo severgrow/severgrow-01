@@ -329,6 +329,15 @@ try {
     check(`[${vp.key}] your holding fills a good part of the pane`, (focus?.share ?? 0) >= 0.4, `${(focus?.share ?? 0).toFixed(2)} of the pane`);
     check(`[${vp.key}] the tiles are big enough to read as YOUR place`, (focus?.tilePx ?? 0) >= 44, `${focus?.tilePx?.toFixed(1)}px`);
 
+    const pose = () => page.evaluate('(() => { const { frames, q, zoom } = window.__goPlanet(); return { frames, q, zoom }; })()');
+    const beforeRefresh = await pose();
+    const walletRead = page.waitForResponse('**/v1/seeds/wallet');
+    await page.evaluate(() => window.dispatchEvent(new Event('futasaku:identity')));
+    await walletRead;
+    await page.waitForTimeout(350);
+    check(`[${vp.key}] a settled Planet keeps its pose and draws no frames on a repeated map read`,
+      JSON.stringify(await pose()) === JSON.stringify(beforeRefresh));
+
     await page.evaluate(() => ((globalThis as unknown as Record<string, unknown>).__goPlanetFrame as (() => void) | undefined)?.());
     await page.waitForTimeout(250);
     await page.screenshot({ path: `${OUT}endgame-planet-${vp.key}.png` });

@@ -8985,6 +8985,7 @@ function syncEndgamePlanet(show: boolean, teach: boolean): void {
   if (!endgamePlanet) {
     endgamePlanet = onlineLobbyCtl?.mountEndgamePlanet(host, () => campaignLevel?.number ?? null, rememberBalance) ?? null;
     endgamePlanet?.open();
+    if (finishResultOpen) endgamePlanet?.freeze(true);
   }
   // Painted after the open, so a cached map cannot reset the foot mid-way.
   endgamePlanet?.teach(teach);
@@ -9001,6 +9002,7 @@ function hideGameOver(): void {
   endgamePlanet = null;
   pane?.leave();
   // A wallet read still on its way belongs to this card: it must not repaint the next one.
+  if (finishWindow?.timer) clearTimeout(finishWindow.timer);
   finishWindow = null;
   finishCard++;
   if (wasShown) {
@@ -9259,13 +9261,6 @@ function checkResultHold(): void {
 function paintVerdict(figure: HarvestFigure | null): void {
   const box = document.getElementById('go-verdict');
   const fig = document.getElementById('go-harvest');
-  // The RESULT window's own, larger copy. One painter for both, so the stamp can never disagree
-  // with itself (the classic card keeps its small one; the planet card shows the big one).
-  const board = document.getElementById('go-result-board');
-  if (board) {
-    board.innerHTML = figure ? harvestSvg(figure) : '';
-    board.hidden = !figure;
-  }
   if (!box || !fig) return;
   if (figure) {
     fig.innerHTML = harvestSvg(figure);
@@ -9410,7 +9405,9 @@ function renderGameOver() {
       cut: false,
       difficulty: false,
     };
-    syncFinishWindow(anatomy === 'planet', won, false, harvest);
+    // Online updates can still refresh the score and history after the finish. The window
+    // belongs to the card's entrance, so those updates must preserve its canvas and camera.
+    if (wasHidden) syncFinishWindow(anatomy === 'planet', won, false, harvest);
     // A fresh finish starts folded: the card shows the result and the ways forward, nothing else.
     if (wasHidden) setGoExtrasOpen(false);
     else syncGoExtras();
