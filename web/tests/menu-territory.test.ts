@@ -197,11 +197,11 @@ describe('the menu show pays ONE wallet read and ONE map read, never a poll', ()
     expect(lobbySource).toMatch(/if \(menuPass\) return menuPass/);
     // The public map now starts before identity/settlement, so the living backdrop is never blocked.
     // The SAME promise joins the wallet/challenge read. Still ONE read of each, never a poll.
-    expect(lobbySource).toMatch(/Promise\.all\(\[\s*client\.seedWallet\(id\.token\),\s*publicMap,\s*[\s\S]{0,220}?client\.worldChallenges\(id\.token\)/);
+    expect(lobbySource).toMatch(/Promise\.all\(\[\s*readTerritoryWallet\(id\.playerId, async \(\) => \{[\s\S]*?\}, true\),\s*publicMap,\s*[\s\S]{0,220}?client\.worldChallenges\(id\.token\)/);
     // One source of the public map (a timed poll may say `poll`, which the server may cache).
     expect(lobbySource.match(/client\.worldMap\(null, poll\)/g)).toHaveLength(1);
     expect(lobbySource).toContain('mountWorldSource((poll) => client.worldMap(null, poll)');
-    expect(lobbySource).toContain('await readMenuCounts(undefined, publicMap)');
+    expect(lobbySource).toContain('await readMenuCounts(publicMap)');
     // And no timer/interval/rAF drives it.
     expect(moduleSource).not.toMatch(/setInterval|setTimeout|requestAnimationFrame/);
     expect(lobbySource.slice(lobbySource.indexOf('const refreshMenu ='), lobbySource.indexOf("window.addEventListener('futasaku:menu'"))).not.toMatch(/setInterval|setTimeout|requestAnimationFrame/);
@@ -218,7 +218,7 @@ describe('the menu show pays ONE wallet read and ONE map read, never a poll', ()
     const cacheSource = read('../src/online/territory-cache.ts');
     expect(cacheSource).toMatch(/remembered\?\.playerId === playerId/);
     expect(lobbySource).toMatch(/rememberTerritory\(id\.playerId, counts\)/);
-    expect(lobbySource).toContain("import { cachedTerritory, registerTerritoryReader, rememberTerritory } from './territory-cache.js'");
+    expect(lobbySource).toContain("import { cachedTerritory, readTerritoryWallet, rememberTerritory } from './territory-cache.js'");
     expect(lobbySource).toMatch(/territoryUI\.paint\(cachedTerritory\(identity\.peek\(\)\?\.playerId \?\? null\)\)/);
   });
 });
@@ -228,7 +228,7 @@ describe('the menu key shows the Seeds and tiles first, then settles rewards (ow
   // Seeds settlement BEFORE reading the counts, so a slow or stuck settle left the key empty.
   it('reads the counts before settling, and reads again only when a settle paid something', () => {
     const pass = lobbySource.slice(lobbySource.indexOf('const refreshMenu ='), lobbySource.indexOf("window.addEventListener('futasaku:menu'"));
-    const read = pass.indexOf('await readMenuCounts(undefined, publicMap)');
+    const read = pass.indexOf('await readMenuCounts(publicMap)');
     const settle = pass.indexOf('syncSeedRewards()');
     expect(read).toBeGreaterThan(-1);
     expect(settle).toBeGreaterThan(read);

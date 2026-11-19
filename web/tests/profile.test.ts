@@ -22,6 +22,7 @@ import { installProfileUI, profileColour, profileRows } from '../src/accounts/pr
 import { TILE_COLOURS, colourById, colourFor, colourIdFor } from '../../src/tile-colours.js';
 import { SEEDS_WORD } from '../src/online/seed-icon.js';
 import type { ProfileFacts } from '../src/accounts/profile.js';
+import { readTerritoryWallet } from '../src/online/territory-cache.js';
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 const html = read('../index.html');
@@ -328,20 +329,31 @@ describe('a signed-in player ALWAYS has a colour, so the tile is never absent', 
 });
 
 describe('the numbers are the Territory entry’s own reads, reused', () => {
+  it('shares an in-flight wallet between Profile and the menu, independently of the map', async () => {
+    const wallet = { balance: 128, lifetimeEarned: 128, lifetimeSpent: 0, worldInvitationSeen: true };
+    let complete!: (value: typeof wallet) => void;
+    const profile = readTerritoryWallet('shared-wallet-player', () => new Promise(resolve => { complete = resolve; }));
+    const menu = readTerritoryWallet('shared-wallet-player', async () => { throw new Error('duplicate read'); }, true);
+    expect(menu).toBe(profile);
+    complete(wallet);
+    await expect(menu).resolves.toEqual(wallet);
+    await expect(readTerritoryWallet('other-player', async () => null)).resolves.toBeNull();
+  });
+
   it('is fed by the shared Territory cache, not a second request in the account module', () => {
-    expect(mountSource).toContain("import { cachedTerritory, readTerritory } from '../online/territory-cache.js'");
+    expect(mountSource).toContain("import { cachedTerritory, readTerritoryWallet } from '../online/territory-cache.js'");
     expect(mountSource).toMatch(/const pair = cachedTerritory\(identity\.playerId\)/);
     expect(mountSource).toMatch(/seeds: pair\?\.seeds \?\? null/);
     expect(mountSource).toMatch(/tiles: pair\?\.tiles \?\? null/);
-    // An empty cache asks the registered reader ONCE; it never fetches on its own.
-    expect(mountSource).toMatch(/void readTerritory\(identity\.playerId\)/);
-    expect(mountSource).not.toMatch(/seedWallet|worldMap/);
+    // The account and menu share the same pending wallet read even before the lobby mounts.
+    expect(mountSource).toMatch(/void readTerritoryWallet\(identity\.playerId,/);
+    expect(mountSource).not.toMatch(/worldMap/);
   });
 
   it('keeps the cached pair tied to the identity it was read for', () => {
     expect(cacheSource).toMatch(/remembered\?\.playerId === playerId/);
     expect(lobbySource).toMatch(/rememberTerritory\(id\.playerId, counts\)/);
-    expect(lobbySource).toContain('registerTerritoryReader');
+    expect(lobbySource).toContain('readTerritoryWallet');
   });
 
   it('builds the all-time win total from both halves, and says unknown when one is missing', () => {

@@ -342,7 +342,8 @@ describe('the markup and CSS carry the two modes', () => {
     const bridge = read('../src/accounts/profile-request.ts');
     expect(bridge).toContain("export const PLAYER_PROFILE_EVENT = 'futasaku:player-profile'");
     expect(mountSource).toContain('PLAYER_PROFILE_EVENT');
-    expect(mountSource).toContain("`/v1/players/${encodeURIComponent(playerId)}/profile`");
+    expect(mountSource).toContain("profileClient?.playerProfile(identity.token, playerId)");
+    expect(read('../../server/src/client.ts')).toContain("`/v1/players/${encodeURIComponent(playerId)}/profile`");
     expect(mountSource).toContain('profile.openVisitor(null, opener)');
   });
 });

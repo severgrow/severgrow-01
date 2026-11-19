@@ -502,15 +502,15 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     flyTo(target, open, INTRO_MS, easeInOut, openTile(hooks));
   };
   /**
-   * Your land wears your tile set: one picture, fetched and decoded off the main path the first time
-   * this renderer shows the world view (never for the menu's planet, so the cold start is untouched),
-   * then uploaded once.
+   * Load the shared skin atlas as soon as the menu has a skinned claim to show. Decoding
+   * runs alongside the opening paint so a slow atlas cannot hold up the menu.
    */
   let tilesFor: PlanetRenderer | null = null;
   const wearTiles = () => {
     if (!renderer || tilesFor === renderer || typeof Image === 'undefined') return;
     const made = tilesFor = renderer, tiles = new Image();
     tiles.decoding = 'async';
+    if (mode === 'menu') tiles.fetchPriority = 'low';
     tiles.src = faPlanetAllUrl();
     void tiles.decode().then(() => { if (renderer === made && !disposed) { made.setTiles(tiles); ask(); } }).catch(() => undefined);
   };
@@ -519,7 +519,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
     try {
       renderer = new PlanetRenderer(canvas, sphere,north);
       lost = false; fallback.hidden = true; canvas.hidden = false;
-      if (mode === 'world') wearTiles();
+      if (mode === 'world' || ground?.skin.some(Boolean)) wearTiles();
       if (ground) renderer.setGround(ground, selected, kinOf(selected));
       resize();
     } catch {
@@ -705,6 +705,7 @@ export const mountPlanet = (stage: HTMLElement, hooks: PlanetHooks) => {
       if (newGround) {
         signature = sig;
         ground = groundOf(sphere, map, { ...next, claims, ...(ownSkin ? { ownSkin } : {}), fog, disputes });
+        if (mode === 'menu' && ground.skin.some(Boolean)) wearTiles();
         selected = index;
         renderer?.setGround(ground, selected, kinOf(selected));
       } else if (newSelection) {

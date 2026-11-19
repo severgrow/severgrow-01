@@ -12,7 +12,7 @@ import { enterSurface, exitSurface } from '../ui/interface-motion.js';
 import { ACCOUNT, PRIVACY } from '../../../src/strings.js';
 import { TERMS } from '../terms.js';
 import { taggedName } from '../../../src/player-tag.js';
-import { DUEL_CLIENT_VERSION, browserStorage } from '../../../server/src/client.js';
+import { DUEL_CLIENT_VERSION, DuelClient, browserStorage } from '../../../server/src/client.js';
 import type { KeyValue } from '../../../server/src/client.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { duelApiUrl, duelRegion } from '../online/config.js';
@@ -22,7 +22,7 @@ import { signInWarmer } from './warm.js';
 import { STORAGE_PREFIX } from '../channel.js';
 import { clearAccountBoundProgress } from './signout-reset.js';
 import { DISPLAY_NAME_MAX } from '../../../server/src/display-name.js';
-import { cachedTerritory, readTerritory } from '../online/territory-cache.js';
+import { cachedTerritory, readTerritoryWallet } from '../online/territory-cache.js';
 import { glassBaseCss } from '../player/glass-surface.js';
 import { installProfileUI, profileColour } from './profile.js';
 import { EMAIL_ON_KEY, GOOGLE_ON_KEY, paintAccountKey } from './menu-key.js';
@@ -709,16 +709,10 @@ export const mountAccounts = async (): Promise<void> => {
   // a fresh sign-in lands back on the menu). Signed in it reads the player's NAME and opens their
   // profile. It reuses `signedIn` and `shownName`: no second sign-in path, no second identity read.
   const profile = installProfileUI();
+  const profileApi = duelApiUrl();
+  const region = duelRegion();
+  const profileClient = profileApi ? new DuelClient({ baseUrl: profileApi, ...(region ? { region } : {}) }) : null;
 
-  /**
-   * The profile's facts. Seeds and tiles are the SAME pair the Territory entry shows: the cache is
-   * the lobby's own menu-show read, and an empty cache costs ONE more pair read, never a poll.
-   *
-   * The rest arrives after the sheet is already on screen (owner, 2026-11-01): the offline record is
-   * this device's own counters to begin with, then the account's totals across every device; the
-   * online record comes from the match list the server returns unbounded; the flag is derived on the
-   * device and costs nothing. Nothing here polls, and every read paints as it lands.
-   */
   /** This device's saved record (the game writes it under the same keys); blocked storage reads as none. */
   const readLocal = (key: string): string | null => {
     try {
@@ -772,14 +766,15 @@ export const mountAccounts = async (): Promise<void> => {
   const syncOffline = async (token: string, device: string): Promise<OfflineSummary | null> => {
     const counters = offlineCounters(parseStats(readLocal(STATS_KEY)), device);
     const body = counters.played > 0
-      ? await apiPost('/v1/players/me/offline', counters, token)
-      : { ok: true, json: (await apiGet('/v1/players/me/offline', token)) ?? {} };
-    const offline = (body.json as { offline?: OfflineSummary }).offline;
+      ? (await apiPost('/v1/players/me/offline', counters, token).catch(() => null))?.json
+      : await apiGet('/v1/players/me/offline', token);
+    const offline = (body as { offline?: OfflineSummary } | null | undefined)?.offline;
     return offline && typeof offline.games === 'number' ? offline : null;
   };
 
   const localRecord = () => offlineRecord(parseStats(readLocal(STATS_KEY)));
 
+  /** Initial Profile values from this device and the latest menu figures. */
   const profileFacts = (identity: Identity): ProfileFacts => {
     const pair = cachedTerritory(identity.playerId);
     const offline = localRecord();
@@ -802,8 +797,7 @@ export const mountAccounts = async (): Promise<void> => {
   /** A profile's record (best online Blitz streak, achievements x/x); null on any failure (old server). */
   const readRecord = async (playerId: string, token: string): Promise<{ blitzBest: number | null; achievements: { done: number; total: number } | null } | null> => {
     if (!FEATURES.practiceStreaks) return null;
-    const body = await apiGet(`/v1/players/${encodeURIComponent(playerId)}/record`, token) as
-      { onlineBlitzBest?: unknown; achievements?: { done?: unknown; total?: unknown } | null } | null;
+    const body = await profileClient?.playerRecord(token, playerId).catch(() => null);
     if (!body) return null;
     const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : null);
     const done = n(body.achievements?.done); const total = n(body.achievements?.total);
@@ -820,7 +814,7 @@ export const mountAccounts = async (): Promise<void> => {
     // One painter for every read: each answer repaints the sheet it is already looking at, and the
     // all-time win total is recomputed from whichever halves are known.
     const paint = (patch: Partial<ProfileFacts>) => {
-      if (seq !== visitorRequest) return;
+      if (seq !== visitorRequest || signedIn()?.identity.playerId !== identity.playerId) return;
       facts = { ...facts, ...patch };
       facts.matchesWon = matchesWonEver(facts.offline, facts.online);
       profile.show(facts);
@@ -828,23 +822,26 @@ export const mountAccounts = async (): Promise<void> => {
     facts.matchesWon = matchesWonEver(facts.offline, facts.online);
     profile.open(facts, menuLogin);
 
-    void readRecord(identity.playerId, token).then((record) => { if (record) paint(record); });
-    void apiGet(`/v1/players/${encodeURIComponent(identity.playerId)}/profile`,token).then(body=>{
-      const wire=(body as {profile?:PublicPlayerProfile}|null)?.profile;
-      if(wire)paint({connectedTiles:wire.connectedTiles ?? null,tiles:wire.tiles,
-        online:wire.online,colour:profileColour(identity.playerId,wire.colourId)});
-    });
+    if (FEATURES.practiceStreaks) {
+      // These endpoints can succeed independently when the public combined record stalls.
+      void profileClient?.streaks(token, true).then(({ onlineBlitz }) => {
+        paint({ blitzBest: onlineBlitz.best });
+      }).catch(() => undefined);
+      void profileClient?.achievements(token, true).then((views) => {
+        paint({ achievements: { done: views.filter((view) => view.done).length, total: views.length } });
+      }).catch(() => undefined);
+    }
+    void profileClient?.playerProfile(token, identity.playerId).then(({ profile: wire }) => {
+      paint({ connectedTiles: wire.connectedTiles ?? null, tiles: wire.tiles,
+        online: wire.online, colour: profileColour(identity.playerId, wire.colourId) });
+    }).catch(() => undefined);
     const device = deviceId();
     void syncOffline(token, device).then((offline) => {
       if (offline) paint({ offline: accountRecord(offline) });
     });
-    // This one public aggregate also supplies the online record and colour; do not add separate
-    // match-list/colour reads to the Edge pool for facts already returned in that snapshot.
-    // At most one pair read, and only when the Territory entry's read has not landed. The same
-    // request also paints the Territory entry (web/src/online/lobby-ui.ts), so nothing is doubled.
-    void readTerritory(identity.playerId).then((counts) => {
-      if (!counts) return;
-      paint({ seeds: counts.seeds, tiles: counts.tiles });
+    if (!profileClient) return;
+    void readTerritoryWallet(identity.playerId, () => profileClient.seedWallet(token)).then((wallet) => {
+      if (wallet) paint({ seeds: wallet.balance });
     });
   };
 
@@ -884,13 +881,12 @@ export const mountAccounts = async (): Promise<void> => {
       profile.showVisitor(FEATURES.practiceStreaks ? { ...facts, blitzBest: record?.blitzBest ?? null, achievements: record?.achievements ?? null } : facts);
     };
     void readRecord(playerId, identity.token).then((r) => { record = r; paintVisitor(); });
-    void apiGet(`/v1/players/${encodeURIComponent(playerId)}/profile`, identity.token).then((body) => {
+    void profileClient?.playerProfile(identity.token, playerId).then(({ profile: wire, headToHead }) => {
       if (seq !== visitorRequest) return;
-      const payload = body as { profile?: PublicPlayerProfile; headToHead?: HeadToHead } | null;
-      facts = visitorFromWire(payload?.profile, payload?.headToHead);
+      facts = visitorFromWire(wire, headToHead);
       if (!facts) { profile.showVisitor(null); return; }
       paintVisitor();
-    });
+    }).catch(() => undefined);
   };
   window.addEventListener(PLAYER_PROFILE_EVENT, (event) => {
     const detail = (event as CustomEvent<PlayerProfileRequest>).detail;

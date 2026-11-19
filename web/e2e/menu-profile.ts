@@ -7,7 +7,7 @@
 //   1. signed out, the bottom row is LOG IN (left) and Settings (right), both the owner's 50px key;
 //   2. signed in (a local fixture: identity + Google account record), the SAME left key carries the
 //      player's name, and its spoken label says whose profile it opens;
-//   3. pressing that key opens the profile sheet with EXACTLY five rows, and — with no reachable
+//   3. pressing that key opens the profile sheet with six identity rows, and — with no reachable
 //      API in this build — Seeds, tiles and matches won are em dashes, never a fake 0;
 //   4. the profile closes on Escape and hands focus back to the key, and it is reachable by
 //      keyboard (focus the key, press Enter);
@@ -299,7 +299,37 @@ try {
     await context.close();
   }
 
-  // ---- 2. signed in: the SAME key carries the name, and opens the five-line profile ----
+  {
+    const { context, page } = await device({ w: 390, h: 844, signedIn: true });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    let profileReads = 0;
+    await page.route('**/v1/players/fixture-player/profile*', route => {
+      if (++profileReads === 1) return route.fulfill({ status: 503, json: {} });
+      return route.fulfill({ json: { profile: {
+        displayName: 'Ann', tag: 'AAAA', level: 2, tiles: 3, connectedTiles: 2, colourId: 1,
+        online: { games: 8, wins: 4, longestStreak: 3 },
+      } } });
+    });
+    await page.route('**/v1/players/me/streaks*', route => route.fulfill({ json: { onlineBlitz: { best: 3 } } }));
+    await page.route('**/v1/seeds/achievements*', route => route.fulfill({ json: { achievements: [{ done: true }, { done: false }] } }));
+    await page.route('**/v1/seeds/wallet*', route => route.fulfill({ json: { wallet: {
+      balance: 128, lifetimeEarned: 128, lifetimeSpent: 0, worldInvitationSeen: true,
+    } } }));
+    // The map and combined /record still fail. They cannot hold any of these fields back.
+    await page.locator('#menu-login').click();
+    const data = await waitFor(() => page.evaluate((achievementValue) => (
+      document.getElementById('profile-seeds')?.textContent === '128'
+      && document.getElementById('profile-tiles')?.textContent === '3'
+      && document.getElementById('profile-connected')?.textContent === '2'
+      && document.getElementById('profile-wins')?.textContent === '11'
+      && document.getElementById('profile-achievements')?.textContent === achievementValue
+      && document.querySelector('#profile-play-online .sp-tile-key dd')?.textContent === '3'
+    ), PROFILE.achievementsValue(1, 2)));
+    check('Profile fills every server field after a transient failure without the map or combined record', data);
+    await context.close();
+  }
+
+  // ---- 2. signed in: the SAME key carries the name, and opens the profile ----
   // `large` runs the same measurements with the game's Large text (html.large-text = 118%), which
   // is where a name line and a nameplate are most likely to collide or clip.
   type Size = { w: number; h: number; large?: boolean; dpr?: number };
@@ -567,9 +597,9 @@ try {
       rootFont: string; titleFont: string; labelFont: string; nameFont: string; largeText: boolean;
       tileOverflow: number; rowRightSpread: number;
     };
-    check(`${label}: the identity block includes only the five requested rows`, rows.n === 5, String(rows.n));
-    check(`${label}: the rows are name, Seeds, tiles, matches won`,
-      JSON.stringify(rows.labels) === JSON.stringify([PROFILE.nameTag, SEEDS_WORD, PROFILE.connectedTiles, PROFILE.tiles, PROFILE.matchesWon]), rows.labels.join(' | '));
+    check(`${label}: the identity block includes all six profile rows`, rows.n === 6, String(rows.n));
+    check(`${label}: the identity rows include achievements`,
+      JSON.stringify(rows.labels) === JSON.stringify([PROFILE.nameTag, SEEDS_WORD, PROFILE.connectedTiles, PROFILE.tiles, PROFILE.matchesWon, PROFILE.achievements]), rows.labels.join(' | '));
     check(`${label}: the first row is the player's name`, rows.values[0] === 'Ann', rows.values[0] ?? '');
     // No API in this build: all three numbers are unknown, so all three are em dashes — never 0.
     check(`${label}: unknown Seeds are an em dash`, rows.values[1] === PROFILE.unknown, rows.values[1] ?? '');
@@ -580,8 +610,8 @@ try {
     const labels3 = [PROFILE.games, PROFILE.winRate, PROFILE.longestStreak];
     check(`${label}: the offline row is games / win rate / longest streak`,
       JSON.stringify(rows.offline.map((t) => t[0])) === JSON.stringify(labels3), JSON.stringify(rows.offline));
-    check(`${label}: the online row is the same three tiles`,
-      JSON.stringify(rows.online.map((t) => t[0])) === JSON.stringify(labels3), JSON.stringify(rows.online));
+    check(`${label}: the online row includes the Blitz record`,
+      JSON.stringify(rows.online.map((t) => t[0])) === JSON.stringify([PROFILE.games, PROFILE.winRate, PROFILE.bestBlitzStreak]), JSON.stringify(rows.online));
     check(`${label}: each row is named down its edge`,
       JSON.stringify(rows.sides.map((s) => s.text)) === JSON.stringify([PROFILE.offline, PROFILE.online]), rows.sides.map((s) => s.text).join(' | '));
     check(`${label}: the row words stay inside the sheet`,
@@ -721,7 +751,7 @@ try {
       // ground the plate paints (glass over the veiled menu), which is where the owner's band was.
       const geo = await page.evaluate(() => {
         const sheet = document.getElementById('sheet-profile')!;
-        const row = [...sheet.querySelectorAll('.sp-row')].at(-1)!;
+        const row = sheet.querySelector('#profile-wins')!.closest('.sp-row')!;
         const r = row.getBoundingClientRect();
         const probe = document.createElement('style');
         probe.id = 'band-probe';

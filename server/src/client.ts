@@ -14,6 +14,7 @@ import type {
   CreateMatchResponse,
   FindOpponentResponse,
   GetViewResponse,
+  HeadToHead,
   JoinMatchResponse,
   LinkCodeResponse,
   LinkRedeemResponse,
@@ -23,6 +24,7 @@ import type {
   MeResponse,
   OfflineCounters,
   OfflineSummaryResponse,
+  PublicPlayerProfile,
   ReconnectResponse,
   ReplayResponse,
   ResignResponse,
@@ -580,8 +582,8 @@ export class DuelClient {
   }
 
   /** Territory achievements: progress and which are paid (server/src/seeds/achievements.ts). */
-  async achievements(token: string): Promise<AchievementView[]> {
-    const response = await this.requestWithDeadline<{ achievements: AchievementView[] }>('GET', '/v1/seeds/achievements', { token }, 'Achievements read');
+  async achievements(token: string, retry = false): Promise<AchievementView[]> {
+    const response = await this.requestWithDeadline<{ achievements: AchievementView[] }>('GET', '/v1/seeds/achievements', { token, retry }, 'Achievements read');
     return response.achievements;
   }
 
@@ -601,8 +603,8 @@ export class DuelClient {
   // ---- streaks (owner, 2026-11-18: practice streaks + the best online Blitz streak) ----
 
   /** The account's four practice streaks and its online Blitz streak (server results only). */
-  async streaks(token: string): Promise<{ practice: PracticeStreaks; onlineBlitz: Streak }> {
-    const r = await this.requestWithDeadline<{ practice: PracticeStreaks; onlineBlitz: Streak }>('GET', '/v1/players/me/streaks', { token }, 'Streaks read');
+  async streaks(token: string, retry = false): Promise<{ practice: PracticeStreaks; onlineBlitz: Streak }> {
+    const r = await this.requestWithDeadline<{ practice: PracticeStreaks; onlineBlitz: Streak }>('GET', '/v1/players/me/streaks', { token, retry }, 'Streaks read');
     return { practice: r.practice, onlineBlitz: r.onlineBlitz };
   }
 
@@ -612,10 +614,14 @@ export class DuelClient {
     return r.practice;
   }
 
-  /** A profile's record: the best online Blitz streak and achievements unlocked (own or a visitor's). */
+  async playerProfile(token: string, playerId: string): Promise<{ profile: PublicPlayerProfile; headToHead?: HeadToHead }> {
+    return this.requestWithDeadline('GET', `/v1/players/${encodeURIComponent(playerId)}/profile`, { token, retry: true }, 'Profile read');
+  }
+
+  /** A profile's record: the best online Blitz streak and achievements unlocked. */
   async playerRecord(token: string, playerId: string): Promise<{ onlineBlitzBest: number; achievements: { done: number; total: number } | null }> {
     const r = await this.requestWithDeadline<{ onlineBlitzBest: number; achievements: { done: number; total: number } | null }>(
-      'GET', `/v1/players/${encodeURIComponent(playerId)}/record`, { token }, 'Record read');
+      'GET', `/v1/players/${encodeURIComponent(playerId)}/record`, { token, retry: true }, 'Record read');
     return { onlineBlitzBest: r.onlineBlitzBest, achievements: r.achievements };
   }
 

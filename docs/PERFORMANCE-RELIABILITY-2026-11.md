@@ -656,3 +656,16 @@ same machine, serial, 5 samples each. performance-lifecycle board idle, median t
 **10.9 / 10.1** vs 12.9 / 11.5 before; menu asleep 0 recalcs on both. Level. The settings sync runs
 only for a signed-in account, on start-up, on return to the page (at most every 30 s), when Settings
 opens and on the way out: no timer, no polling, nothing while hidden.
+
+### Menu Planet skins and Profile (19 November)
+
+Chromium at 390×844, same slow-server fixture on the live baseline `95494bb9` and the candidate.
+From the immediate Planet tap, Planet/chat/achievements appeared at 1.61/6.03/7.11 s before and
+0.40/4.21/5.31 s after. After 12 s on the menu, the same values were 0.46/0.46/1.48 s and
+0.43/0.43/1.50 s. These are single runs against a simulated slow API. The Planet skin suite
+also holds the atlas response while the menu paints, then checks the menu and Territory share
+one atlas request. A menu with no skinned claims keeps the plain path.
+
+Profile shares the menu's pending wallet read. Its achievements and Blitz requests only start
+when Profile opens. The browser fixture exercises a transient public Profile failure and a
+failed map and combined record response while all the individual Profile fields populate.

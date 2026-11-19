@@ -2701,7 +2701,8 @@ html.backdrop-held :is(#game, #menu, #texture, #spores, #futa04-ambient-light) *
 
 /* A readout takes visual focus: dim the existing menu ink behind the classic glass. The new
    connected row must not pick up a bright PLAY-key band; no extra veil/filter/material layer. */
-html.has-sheet-profile:not(#no-has) #menu .menu-inner { opacity: .28; }
+html.has-sheet-profile:not(#no-has) #menu .menu-inner { opacity: .18; }
+html.futasaku-product #profile-scrim { background: color-mix(in srgb, var(--c-bg) 38%, transparent); }
 
 /* ---------- the player's profile: the pause panel's language, five read-only lines ----------
    Owner brief (2026-10-21): a SKELETON built now, showing basic info about the player. It borrows
@@ -2798,6 +2799,11 @@ html.has-sheet-profile:not(#no-has) #menu .menu-inner { opacity: .28; }
   grid-row: 1;
   justify-self: end;
   color: var(--c-muted);
+}
+#sheet-profile .sp-close:focus-visible,
+.go-result-head .icon-only:focus-visible {
+  outline: 2px solid var(--fu-cream);
+  outline-offset: -3px;
 }
 /* The Futasaku wordmark in the nameplate's left cell — the tree-less mark the HUD badge and the
    online submenu header carry (web/src/player/branding.ts), so the sheet is signed like the game.
@@ -2937,8 +2943,8 @@ html.has-sheet-profile:not(#no-has) #menu .menu-inner { opacity: .28; }
 }
 #sheet-profile .sp-swatch-face {
   fill: var(--tile, var(--c-muted));
-  stroke: color-mix(in srgb, var(--c-text) 26%, transparent);
-  stroke-width: 1.2;
+  stroke: color-mix(in srgb, var(--tile, var(--c-muted)) 60%, var(--c-text));
+  stroke-width: 1;
   stroke-linejoin: round;
 }
 
@@ -8189,8 +8195,8 @@ body.result .corner-tools {
 }
 #gameover .go-harvest-svg .hv-gold {
   fill: none;
-  stroke: var(--c-gold);
-  stroke-width: 1.25;
+  stroke: color-mix(in srgb, var(--c-gold) 85%, var(--fu-cream));
+  stroke-width: 1.15;
   stroke-linejoin: round;
 }
 /* The reader's network has a soft edge like the tiles on the board. */
@@ -8894,12 +8900,14 @@ body.result .corner-tools {
   gap: 10px;
   font-size: 2rem;
   line-height: 1;
+  font-variant-numeric: lining-nums tabular-nums;
   color: var(--fu-cream);
 }
 .go-result-score .bot, .go-result-score .dash { color: var(--fu-cream-55); }
 .go-result-reason {
   margin: 0 auto;
   max-width: 34ch;
+  text-wrap: balance;
   font-size: 0.86rem;
   line-height: 1.35;
   color: var(--fu-cream-70);
@@ -9057,7 +9065,7 @@ body.result .corner-tools {
      glass without drawing six lines across the sheet. */
   border: 0;
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--c-text) 4%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c-text) 5%, transparent), color-mix(in srgb, var(--c-text) 2%, transparent));
   text-align: center;
 }
 #sheet-profile .sp-tile dd {
@@ -9067,14 +9075,19 @@ body.result .corner-tools {
 }
 #sheet-profile .sp-tile dt {
   font-size: 0.55rem;
-  letter-spacing: 0.12em;
+  letter-spacing: var(--instrument-tracking);
 }
 /* THE COMPETITIVE NUMBER (owner, 2026-11-18: "make it look more important"): the best online Blitz
    streak keeps the tile's shape and place, with a brighter fill, a larger value in full ink and a
    label in full ink. No frame, no badge, no icon (docs/VISUAL-CONVENTIONS.md). */
-#sheet-profile .sp-tile.sp-tile-key { background: color-mix(in srgb, var(--c-text) 9%, transparent); }
+#sheet-profile .sp-tile.sp-tile-key { background: color-mix(in srgb, var(--c-gold) 11%, transparent); }
 #sheet-profile .sp-tile.sp-tile-key dd { font-size: 1.3rem; font-weight: var(--w-ui-medium, 500); color: var(--c-text); }
 #sheet-profile .sp-tile.sp-tile-key dt { color: var(--c-text); }
+@media (max-height: 600px) and (max-width: 559px) {
+  #sheet-profile .sp-play { margin-top: 6px; padding-top: 7px; }
+  #sheet-profile .sp-play-title { margin-bottom: 6px; }
+  #sheet-profile .sp-play-row + .sp-play-row { margin-top: 4px; padding-top: 4px; }
+}
 /* The old "Against the computer, on this device" note is gone on the owner's instruction
    (2026-11-01): nothing takes its place, so the record ends on the online row. */
 /* Landscape phones: the identity lines and the record sit side by side, so nothing scrolls. */

@@ -57,6 +57,14 @@ try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
+  let openAtlas!: () => void;
+  const atlasGate = new Promise<void>(resolve => { openAtlas = resolve; });
+  let atlasRequests = 0;
+  await page.route(/\/planet-all-[^/]+\.webp$/, async route => {
+    atlasRequests++;
+    await atlasGate;
+    await route.continue();
+  });
   const posts: string[] = [];
   await page.route('**/v1/world/skin*', async route => {
     if (route.request().method() === 'OPTIONS') {
@@ -118,9 +126,17 @@ try {
       return out;
     };
   }, mine);
-  await page.goto(fixture.origin + '/test/');
+  await page.goto(fixture.origin + '/test/', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => (window as any).__severgrow?.ready?.());
+  await page.waitForFunction(() => (window as any).__severgrow?.planet?.()?.frames > 0);
+  assert.equal(await page.evaluate(() => (window as any).__severgrow.planet().tiles), false, 'cold Planet paints while the atlas is held');
+  openAtlas();
+  await page.waitForFunction(() => {
+    const planet = (window as any).__severgrow?.planet?.();
+    return planet?.mode === 'menu' && planet.tiles;
+  }, undefined, { timeout: 8_000 });
   await page.locator('#menu-world').click();
+  assert.equal(atlasRequests, 1, 'the menu and Territory share one atlas download');
   await page.waitForFunction(() => (window as any).__severgrow?.planet?.()?.ready);
   // MOTION ON: wait for the landing flight to finish, then for the view to rest.
   await page.waitForFunction(() => !(window as any).__severgrow.planet().flying, undefined, { timeout: 30000 });

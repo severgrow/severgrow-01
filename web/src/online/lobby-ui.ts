@@ -35,7 +35,7 @@ import type { TerritoryCounts } from './menu-territory.js';
 import { mountAnswerClock } from './menu-territory-clock.js';
 import { correctedNow, emptyClock, noteServerNow } from './clock.js';
 import { waitingActionCount } from './territory-attention.js';
-import { cachedTerritory, registerTerritoryReader, rememberTerritory } from './territory-cache.js';
+import { cachedTerritory, readTerritoryWallet, rememberTerritory } from './territory-cache.js';
 import { seedIcon } from './seed-icon.js';
 import type { SeedFlushResult } from './seed-rewards.js';
 import { settlePendingSeeds } from './seed-settle.js';
@@ -1632,15 +1632,13 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
 
   /**
    * The pair, read ONCE for this identity: the wallet and the map in one `Promise.all`. Used by the
-   * menu pass below AND by the profile (through `registerTerritoryReader`), so the two surfaces can
-   * never pay for two different reads of the same thing (owner brief, 2026-10-21). Unknown stays
-   * unknown; the caller paints an em dash, never a 0.
+   * menu pass. Profile shares its wallet read and can show that balance before the menu pair is ready.
    */
-  const readMenuCounts = async (playerId?: string, publicMap = worldSource.read()): Promise<TerritoryCounts | null> => {
+  const readMenuCounts = async (publicMap: Promise<WorldMapPayload>): Promise<TerritoryCounts | null> => {
     // Public geography must load even when identity or the wallet cannot be read.
     void publicMap.catch(() => undefined);
     const id = await ensureIdentity();
-    if (!id || (playerId && id.playerId !== playerId)) {
+    if (!id) {
       if (menuEl?.hidden === false) territoryUI.paint(null);
       answerClock.stop();
       return null;
@@ -1653,7 +1651,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     let duelServerNow = 0;
     try {
       const [readWallet, map, challenges, duels] = await Promise.all([
-        client.seedWallet(id.token),
+        readTerritoryWallet(id.playerId, async () => {
+          const result = await client.seedWallet(id.token);
+          return identity.peek()?.playerId === id.playerId ? result : null;
+        }, true),
         publicMap,
         // The menu's own signal: the shared "is anything waiting for me" predicate.
         client.worldChallenges(id.token).catch(() => null),
@@ -1682,6 +1683,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     if (wallet && menuEl?.hidden === false && identity.peek()?.playerId === id.playerId)
       worldView?.useMenuWallet(id.playerId, wallet);
     const counts = territoryCounts(wallet, world, id.playerId, waiting);
+    if (identity.peek()?.playerId !== id.playerId) return null;
     rememberTerritory(id.playerId, counts);
     if (menuEl?.hidden === false) territoryUI.paint(counts);
     // The SAME list paints the Play online key's live word (and the hub, if it is open). Kept out
@@ -1695,8 +1697,6 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     offerWorldInvitation(id, wallet);
     return counts;
   };
-  registerTerritoryReader((playerId) => readMenuCounts(playerId));
-
   const offerWorldInvitation = (id: { token: string }, wallet: SeedWallet | null) => {
     if (invitationOpen || invitationDismissedThisSession || menuEl?.hidden !== false || !worldEl.hidden) return;
     if (!wallet || wallet.balance < 100 || wallet.worldInvitationSeen) return;
@@ -1754,11 +1754,11 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         // The counts FIRST (owner, 2026-11-08: "I don't see my seeds and tiles amount on the territory
         // button"): awaiting the Seeds settlement before this read left the key empty for as long as
         // a slow or stuck settle took. One wallet + one map read, remembered for the profile too.
-        await readMenuCounts(undefined, publicMap);
+        await readMenuCounts(publicMap);
         // Then settle queued Seed proofs; read the wallet again only if that actually paid something.
         const settled = await syncSeedRewards().catch(() => null);
         if (menuEl?.hidden !== false) return;
-        if (settled && settled.awards.length > 0) await readMenuCounts(undefined, worldSource.read());
+        if (settled && settled.awards.length > 0) await readMenuCounts(worldSource.read());
       } finally {
         menuPass = null;
       }
