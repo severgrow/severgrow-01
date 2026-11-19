@@ -9,15 +9,19 @@ import type { AccountsRouter, IdentityLinkStore } from './accounts.js';
 export const accountsRouterNode = async (storage: Storage, service: MatchService, databaseUrl: string | null, env: NodeJS.ProcessEnv = process.env, injectedLinks?: IdentityLinkStore | null): Promise<AccountsRouter> => {
   const { MemoryStorage } = await import('../storage/memory.js');
   let links: IdentityLinkStore;
+  let merge: ((guestId: string, accountId: string) => Promise<{ seeds: number; tiles: number; levels: number } | null>) | undefined;
   if (injectedLinks) links = injectedLinks;
   else if (storage instanceof MemoryStorage || !databaseUrl) {
     links = new MemoryIdentityLinkStore(storage instanceof MemoryStorage ? (p, k, n) => storage.revokeTokensOfPlayer(p, k, n) : undefined);
   } else {
     const { poolFromUrl } = await import('../storage/pg-pool.js');
-    links = postgresIdentityLinkStore(poolFromUrl(databaseUrl));
+    const { mergeGuestIntoAccount } = await import('./merge.js');
+    const pool = poolFromUrl(databaseUrl);
+    links = postgresIdentityLinkStore(pool);
+    merge = (guestId, accountId) => mergeGuestIntoAccount(pool, { guestId, accountId, now: service.serverNow() });
   }
   const url = env.SUPABASE_URL?.trim();
   const anonKey = (env.SUPABASE_ANON_KEY ?? env.VITE_SUPABASE_ANON_KEY)?.trim();
   const auth = url && anonKey ? supabaseAuthProvider({ url, anonKey, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY ?? null }) : null;
-  return createAccountsRouter({ links, storage, auth, emailEnabled: env.EMAIL_ACCOUNTS_ENABLED === 'true', authenticate: (t) => service.authenticate(t), now: () => service.serverNow() });
+  return createAccountsRouter({ links, storage, auth, emailEnabled: env.EMAIL_ACCOUNTS_ENABLED === 'true', authenticate: (t) => service.authenticate(t), now: () => service.serverNow(), ...(merge ? { merge } : {}) });
 };

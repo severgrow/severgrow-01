@@ -22,6 +22,7 @@ import { wireLiveEdge } from './live/runtime.js';
 import { chainRouters, createFeedbackRouter, postgresFeedbackStore } from './feedback/feedback.js';
 import type { PgPool } from './storage/postgres.js';
 import { createAccountsRouter, postgresIdentityLinkStore, supabaseAuthProvider } from './accounts/accounts.js';
+import { mergeGuestIntoAccount } from './accounts/merge.js';
 import { poolFromPostgresJs } from './storage/postgres-js-pool.js';
 import { createRecyclingPool, queryStallMs } from './storage/stall-guard.js';
 import { achievementsCount, createStreakRouter } from './streaks/router.js';
@@ -167,6 +168,7 @@ const buildRuntime = async (): Promise<EdgeRuntime> => {
     auth: supaUrl && supaKey ? supabaseAuthProvider({ url: supaUrl, anonKey: supaKey, serviceRoleKey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? null }) : null,
     authenticate: (t) => service.authenticate(t),
     now: () => service.serverNow(),
+    merge: (guestId, accountId) => mergeGuestIntoAccount(pool, { guestId, accountId, now: service.serverNow() }),
   });
   const app = createFetchApp({ service, config: edgeConfig, logger: log, live: chainRouters(live.router(service), createChatRouter({ store: postgresChatStore(pool), service, storage: live.storage,
     ...(supaUrl && supaKey ? { notifier: chatNotifier(supaUrl, supaKey)! } : {}) }), createTerritoryChatRouter({ store: postgresTerritoryChatStore(pool), service, storage: live.storage }), createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t), worldReadsPerIpPerHour: edgeConfig.rateLimits.worldPerIpPerHour }), createStreakRouter({ store: postgresStreakStore(pool), authenticate: (t) => service.authenticate(t), now: () => service.serverNow(), achievementsOf: achievementsCount(live.storage, economy) }), createFeedbackRouter({ store: postgresFeedbackStore(pool), storage: live.storage, authenticate: (t) => service.authenticate(t), now: () => service.serverNow() }), accounts, createAdminRouter({ store: postgresAdminStore(pool), economy: economyStore, authenticate: (t) => service.authenticate(t), config: edgeConfig, now: () => service.serverNow(), rulesVersion: service.rulesVersion, storage: live.storage, pingDb: () => service.pingStorage(), log })) });

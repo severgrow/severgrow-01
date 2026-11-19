@@ -150,6 +150,12 @@ export const createAccountsRouter = (deps: {
   authenticate: (token: string | null) => Promise<PlayerRecord>;
   now: () => number;
   limits?: { signInPerIpPerHour: number; unlinkPerPlayerPerHour: number };
+  /**
+   * KEEP THE BEST OF BOTH (owner, 2026-11-18): moves a guest's progress into the account it signs
+   * into (merge.ts). Null when there is nothing to merge or it was merged already. Absent on a server
+   * without migration 0029: sign-in then behaves exactly as before.
+   */
+  merge?: (guestId: string, accountId: string) => Promise<{ seeds: number; tiles: number; levels: number } | null>;
 }): AccountsRouter => {
   const limits = deps.limits ?? ACCOUNT_LIMITS;
   const hour = 60 * 60 * 1000;
@@ -204,10 +210,21 @@ export const createAccountsRouter = (deps: {
       if (existing) {
         const player = await deps.storage.playerById(existing.playerId);
         if (!player) throw new ApiError('INTERNAL', 'That account could not be loaded.');
+        // A guest on this device signing into an account that already exists: its progress comes
+        // along. A merge that fails throws BEFORE any token is issued, so the device stays the guest,
+        // keeps everything, and simply tries again.
+        let merged: { seeds: number; tiles: number; levels: number } | null = null;
+        if (deps.merge && current && current.id !== player.id && current.kind === 'guest') {
+          try {
+            merged = await deps.merge(current.id, player.id);
+          } catch {
+            throw new ApiError('DB_UNAVAILABLE', 'Signing in could not finish. Please try again in a moment.');
+          }
+        }
         const token = await issueToken(player.id);
         return {
           status: 200,
-          body: { ok: true, player: playerSummary(player), token, email: user.email, outcome: current && current.id === player.id ? 'same' : 'signed-in', serverNow: deps.now() },
+          body: { ok: true, player: playerSummary(player), token, email: user.email, outcome: current && current.id === player.id ? 'same' : 'signed-in', ...(merged ? { merged } : {}), serverNow: deps.now() },
         };
       }
       // First sign-in for this Google account: attach it to the player on this device, unless that

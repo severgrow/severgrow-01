@@ -35,7 +35,7 @@ const fakeAuth = () => {
   return { auth, google, deleted };
 };
 
-const setup = (opts: { auth?: AuthProvider | null; limits?: { signInPerIpPerHour: number; unlinkPerPlayerPerHour: number } } = {}) => {
+const setup = (opts: { auth?: AuthProvider | null; limits?: { signInPerIpPerHour: number; unlinkPerPlayerPerHour: number }; merge?: (guestId: string, accountId: string) => Promise<{ seeds: number; tiles: number; levels: number } | null> } = {}) => {
   const storage = new MemoryStorage();
   const config = { ...DEFAULT_SERVER_CONFIG, corsOrigin: '*' };
   const service = new MatchService({ storage, config });
@@ -49,6 +49,7 @@ const setup = (opts: { auth?: AuthProvider | null; limits?: { signInPerIpPerHour
     authenticate: (t) => service.authenticate(t),
     now: () => Date.now(),
     ...(opts.limits ? { limits: opts.limits } : {}),
+    ...(opts.merge ? { merge: opts.merge } : {}),
   });
   const app = createFetchApp({ service, config, live: chainRouters(async () => null, accounts) });
   const call = async (method: string, path: string, body: unknown, token?: string, ip = '8.8.8.8'): Promise<{ status: number; json: Json }> => {
@@ -99,7 +100,11 @@ describe('POST /v1/auth/google', () => {
     expect(await t.matchIds(phone2.json.token!)).toEqual([matchId]);
   });
 
-  it('a returning player on a device that made a new guest switches to their account; the guest is never merged in', async () => {
+  // OWNER RULE CHANGE (2026-11-18, accounts pass: "keep the best of both"): a guest signing into an
+  // account that already exists is now MERGED into it (server/src/accounts/merge.ts, migration 0029).
+  // This test pinned "the guest is never merged in"; it now pins only the server WITHOUT the merge
+  // store (before migration 0029), which must still sign in exactly as before.
+  it('without the merge store (before migration 0029) a returning player switches to their account and the guest is left as it was', async () => {
     const t = setup();
     const { a } = await t.pair();
     await t.signIn(t.fake.google('g-alice'), a.token);
@@ -113,6 +118,55 @@ describe('POST /v1/auth/google', () => {
     expect(guest.kind).toBe('guest');
     expect(await t.matchIds(strangerGuest.token)).toEqual([guestMatch]);
     expect(t.links.rows).toHaveLength(1);
+  });
+
+  it('a guest signing into an existing account is merged into it, once, and the device is told what came across', async () => {
+    const calls: [string, string][] = [];
+    const t = setup({ merge: async (guestId, accountId) => { calls.push([guestId, accountId]); return { seeds: 120, tiles: 2, levels: 3 }; } });
+    const { a } = await t.pair();
+    await t.signIn(t.fake.google('g-alice'), a.token);
+    const { b: guest } = await t.pair();
+    const res = await t.signIn(t.fake.google('g-alice'), guest.token);
+    expect(res.status).toBe(200);
+    expect(res.json.outcome).toBe('signed-in');
+    expect(res.json.player!.id).toBe(a.player.id);
+    expect(res.json.merged).toEqual({ seeds: 120, tiles: 2, levels: 3 });
+    expect(calls).toEqual([[guest.player.id, a.player.id]]);
+  });
+
+  it('the email code merges the same way', async () => {
+    const calls: [string, string][] = [];
+    const t = setup({ merge: async (guestId, accountId) => { calls.push([guestId, accountId]); return { seeds: 0, tiles: 0, levels: 1 }; } });
+    const { a } = await t.pair();
+    await t.call('POST', '/v1/auth/email', { accessToken: t.fake.google('e-bob', 'bob@x.org', ['email'], true) }, a.token);
+    const { b: guest } = await t.pair();
+    const res = await t.call('POST', '/v1/auth/email', { accessToken: t.fake.google('e-bob', 'bob@x.org', ['email'], true) }, guest.token);
+    expect(res.status).toBe(200);
+    expect(res.json.merged).toEqual({ seeds: 0, tiles: 0, levels: 1 });
+    expect(calls).toEqual([[guest.player.id, a.player.id]]);
+  });
+
+  it('nothing is merged on the same player, a first link, or a device with no guest', async () => {
+    const calls: [string, string][] = [];
+    const t = setup({ merge: async (guestId, accountId) => { calls.push([guestId, accountId]); return { seeds: 0, tiles: 0, levels: 0 }; } });
+    const { a } = await t.pair();
+    const first = await t.signIn(t.fake.google('g-alice'), a.token); // linked in place
+    const same = await t.signIn(t.fake.google('g-alice'), first.json.token);
+    const fresh = await t.signIn(t.fake.google('g-alice'));
+    expect([first.json.outcome, same.json.outcome, fresh.json.outcome]).toEqual(['linked', 'same', 'signed-in']);
+    expect(calls).toEqual([]);
+    expect(first.json.merged ?? null).toBeNull();
+  });
+
+  it('a merge that fails fails the sign-in, so the device stays the guest and nothing is lost', async () => {
+    const t = setup({ merge: async () => { throw Object.assign(new Error('db down'), { code: '57P01' }); } });
+    const { a } = await t.pair();
+    await t.signIn(t.fake.google('g-alice'), a.token);
+    const { b: guest } = await t.pair();
+    const res = await t.signIn(t.fake.google('g-alice'), guest.token);
+    expect(res.status).toBeGreaterThanOrEqual(500);
+    expect(res.json.token ?? null).toBeNull();
+    expect((await t.service.authenticate(guest.token)).id).toBe(guest.player.id);
   });
 
   it('signing in twice on the same device is harmless (outcome "same", still one link)', async () => {
