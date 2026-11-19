@@ -141,7 +141,7 @@ import {
   DIFFICULTIES, DIFFICULTY_STEP_KEY, defaultDifficultyForLevel, matchLabel, opponentFor, parseDifficultyStep, stepAfterGame, stepLevelFor,
 } from './logic/difficulty.js';
 import type { DifficultyId } from './logic/difficulty.js';
-import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
+import { describe, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { tapAgainPlays, throwFlight, throwPileAction } from './logic/throw-pile.js';
 import { undoIntent } from './logic/undo.js';
@@ -8791,7 +8791,6 @@ type FinishResult = {
   score: [number, number];
   reason: string;
   breakdown: string;
-  moves: string;
   stats: string;
   highlights: { title: string; by: Player | null; value: number; text: string }[];
   harvest: HarvestFigure | null;
@@ -8823,10 +8822,8 @@ function openFinishResult(): void {
     `<span class="you">${m.score[0]}</span><span class="dash">–</span><span class="bot">${m.score[1]}</span>`;
   $('go-result-reason').textContent = m.reason;
   $('go-result-break').textContent = m.breakdown;
-  $('go-result-moves').textContent = m.moves;
   $('go-result-stats').textContent = m.stats;
   $('go-result-break').hidden = !m.breakdown;
-  $('go-result-moves').hidden = !m.moves;
   $('go-result-stats').hidden = !m.stats;
   paintHighlightList($('go-result-highlights'), m.highlights);
   const board = $('go-result-board');
@@ -9362,8 +9359,6 @@ function renderGameOver() {
     const harvest = info.harvest ?? harvestFigure(os.state.board, os.state.config, HUMAN, os.state.terrain);
     paintVerdict(harvest);
     $('go-break').textContent = info.breakdown;
-    $('go-moves').textContent = info.moves ?? '';
-    setGoExtra('go-moves', !!info.moves);
     paintHighlightList($('go-highlights'), info.highlights);
     // The record line counts offline games only — never leak it onto a server match.
     $('go-stats').textContent = '';
@@ -9397,7 +9392,6 @@ function renderGameOver() {
       score: [info.scores[0], info.scores[1]],
       reason: info.reason,
       breakdown: info.breakdown,
-      moves: info.moves ?? '',
       stats: '',
       highlights: info.highlights,
       harvest,
@@ -9564,10 +9558,6 @@ function renderGameOver() {
   // THE DOUBLE HARVEST (surprise, 2026-10-29): this match's final position, stamped as one small
   // figure. (The one-line summary that sat beside it was removed, owner 2026-10-30.)
   paintVerdict(offlineVerdict(st));
-  // UX pass: what I did with the one-card move
-  const moves = moveSummary(st.history ?? [], HUMAN);
-  $('go-moves').textContent = moves ?? '';
-  setGoExtra('go-moves', !!moves);
   const breakdown = RESULT.breakdown(breakdownPart(st, HUMAN), breakdownPart(st, BOT));
   $('go-break').textContent = breakdown;
   const record = statsLine(stats);
@@ -9587,7 +9577,6 @@ function renderGameOver() {
     score: [r.scores[HUMAN], r.scores[BOT]],
     reason,
     breakdown,
-    moves: moves ?? '',
     stats: record,
     highlights,
     // The board window shows the board as it stands even without a result: never an empty window.

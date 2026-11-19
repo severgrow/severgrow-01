@@ -120,7 +120,7 @@ describe('the card is one screen: the result leads, the rest waits behind RESULT
     // The result window is a real surface inside the finish dialog, with its own board and keys.
     expect(html).toContain('id="go-result-pane"');
     expect(html).toContain('id="go-result-board"');
-    for (const id of ['go-result-reason', 'go-result-break', 'go-result-moves', 'go-result-highlights', 'go-result-stats', 'go-result-share', 'go-result-cut']) {
+    for (const id of ['go-result-reason', 'go-result-break', 'go-result-highlights', 'go-result-stats', 'go-result-share', 'go-result-cut']) {
       expect(html, `${id} lives in the result window`).toContain(`id="${id}"`);
     }
     // main.ts fills it from the ONE model, once per card, and freezes the planet behind it.
@@ -138,7 +138,7 @@ describe('the card is one screen: the result leads, the rest waits behind RESULT
   it('the detail lines and the extra actions are behind it, hidden by default', () => {
     // `go-board` is deliberately NOT here: it is how a player looks at the final position, and the
     // documented way for a suite to put the card away (`web/e2e/smoke.ts` uses `#go-board:visible`).
-    for (const id of ['go-break', 'go-moves', 'go-highlights', 'go-stats', 'go-share', 'go-cut']) {
+    for (const id of ['go-break', 'go-highlights', 'go-stats', 'go-share', 'go-cut']) {
       expect(goCard, `${id} is a detail line or an extra action`).toMatch(new RegExp(`id="${id}"[^>]*data-go-extra`));
       expect(goCard, `${id} starts hidden`).toMatch(new RegExp(`id="${id}"[^>]*data-go-extra[^>]*hidden|id="${id}"[^>]*hidden[^>]*data-go-extra`));
     }
@@ -166,6 +166,10 @@ describe('the card is one screen: the result leads, the rest waits behind RESULT
     expect(mainSource).toMatch(/const otherWord = 'Change difficulty';/);
   });
 
+  it('omits the one-card move summary in both finish layouts', () => {
+    expect(html).not.toMatch(/id="go-(?:result-)?moves"/);
+  });
+
   it('is driven by one disclosure in main.ts, shared by every mode', () => {
     expect(mainSource).toMatch(/function syncGoExtras\(\)/);
     expect(mainSource).toMatch(/document\.querySelectorAll<HTMLElement>\('#gameover \[data-go-extra\]'\)/);
@@ -175,7 +179,6 @@ describe('the card is one screen: the result leads, the rest waits behind RESULT
     expect((mainSource.match(/else syncGoExtras\(\);/g) ?? []).length).toBe(2);
     // A mode with nothing to offer marks it unavailable rather than showing a dead control.
     expect(mainSource).toMatch(/setGoExtra\('go-cut', false\)/);
-    expect(mainSource).toMatch(/setGoExtra\('go-moves', !!moves\)/);
   });
 });
 

@@ -3550,8 +3550,7 @@ html.has-sheet-profile:not(#no-has) #menu .menu-inner { opacity: .28; }
 /* Body lines stay Commissioner and muted. */
 .go-card .go-sub,
 .go-card .go-reason,
-.go-card .go-break,
-.go-card .go-moves {
+.go-card .go-break {
   color: var(--fu-cream-62);
 }
 .go-buttons {
@@ -8361,7 +8360,6 @@ body.result .corner-tools {
     margin-top: 0;
   }
   #gameover .go-break,
-  #gameover .go-moves,
   #gameover .go-highlights {
     grid-column: 1 / -1;
   }
@@ -8633,7 +8631,6 @@ body.result .corner-tools {
 #gameover[data-anatomy='planet'] #go-reason,
 #gameover[data-anatomy='planet'] #go-verdict,
 #gameover[data-anatomy='planet'] #go-break,
-#gameover[data-anatomy='planet'] #go-moves,
 #gameover[data-anatomy='planet'] #go-highlights,
 #gameover[data-anatomy='planet'] #go-stats,
 #gameover[data-anatomy='planet'] #go-more,
@@ -9342,7 +9339,7 @@ html.futasaku-product #gameover :is(.go-context, .go-title, .go-sub, .go-learned
 html.futasaku-product #gameover .go-score { justify-content: center; }
 html.futasaku-product #gameover .go-reason { margin-inline: auto; }
 html.futasaku-product #gameover .go-buttons .btn { justify-content: center; text-align: center; }
-html.futasaku-product #gameover :is(#go-highlights, #go-break, #go-moves, #go-stats) { text-align: center; }
+html.futasaku-product #gameover :is(#go-highlights, #go-break, #go-stats) { text-align: center; }
 /* The pause panel's turn line centres in its pill, and every sheet's title sits on the centre
    line with its close key at the right edge (Settings, Restart, Profile, How to play…). Rows that
    pair a label with a control (a switch, a choice) keep the label left and the control right:

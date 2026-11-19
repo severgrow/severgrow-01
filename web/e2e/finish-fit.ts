@@ -68,7 +68,7 @@ mkdirSync(OUT, { recursive: true });
 
 /** Every line and button the finish card owns, in document order (what a mode chooses to show). */
 const PARTS = [
-  'go-title', 'go-sub', 'go-score', 'go-reason', 'go-break', 'go-moves', 'go-highlights', 'go-stats',
+  'go-title', 'go-sub', 'go-score', 'go-reason', 'go-break', 'go-highlights', 'go-stats',
   'go-rematch', 'go-result', 'go-replay', 'go-more', 'go-share', 'go-cut', 'go-menu', 'go-world',
 ] as const;
 

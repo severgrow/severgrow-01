@@ -9,7 +9,7 @@ import { breakdownPart } from '../logic/endgame.js';
 import { gameHighlights } from '../logic/highlights.js';
 import { harvestFigure } from '../logic/harvest.js';
 import type { HarvestFigure } from '../logic/harvest.js';
-import { moveSummary, resultReason, resultTitle } from '../logic/log.js';
+import { resultReason, resultTitle } from '../logic/log.js';
 import type { Highlight } from '../logic/highlights.js';
 import { ONLINE, RESULT } from '../../../src/strings.js';
 import type { OnlineDriver } from './driver.js';
@@ -55,7 +55,6 @@ export type FinishInfo = {
   breakdown: string;
   /** Already mapped to display seats (0 = me), ready for the shared highlight list. */
   highlights: Highlight[];
-  moves: string | null;
   /**
    * THE DOUBLE HARVEST: the final position as one small figure, once the duel's public record has
    * loaded (null until then). The one-line summary that sat beside it was removed (owner, 2026-10-30).
@@ -512,7 +511,7 @@ export class OnlineSession {
     const sub = snap.opponentName ? ONLINE.finishSubOpponent(snap.opponentName) : ONLINE.finishSubFallback;
     const breakdown = RESULT.breakdown(breakdownPart(this.state, 0), breakdownPart(this.state, 1));
     const r = snap.result;
-    if (!r) return { title: ONLINE.finishedFallback, reason: '', sub, opponentName: snap.opponentName, scores, breakdown, highlights: [], moves: null, harvest: null };
+    if (!r) return { title: ONLINE.finishedFallback, reason: '', sub, opponentName: snap.opponentName, scores, breakdown, highlights: [], harvest: null };
     const history = this.historyEvents;
     const highlights = gameHighlights(history, snap.seat).map((h) => ({
       ...h,
@@ -528,7 +527,6 @@ export class OnlineSession {
       scores,
       breakdown,
       highlights,
-      moves: moveSummary(history, snap.seat),
       // `snap.view` is the engine's own seat view: engine coords; the figure turns it into the
       // reading seat's perspective itself.
       harvest: record ? harvestFigure(snap.view.board, snap.view.config, snap.seat, snap.view.terrain) : null,
