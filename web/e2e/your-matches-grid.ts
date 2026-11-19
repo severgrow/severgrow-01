@@ -56,6 +56,9 @@ try {
     if (await p.locator('#online-matches-panel').isHidden().catch(() => false)) await p.click('#online-matches-toggle');
     await p.waitForSelector('#online-matches li', { timeout: 15_000 });
     await p.waitForTimeout(900);
+    // The row fonts load with font-display: swap; measure the names in their own font, not the
+    // wider fallback a slow runner can still be showing.
+    await p.evaluate(() => document.fonts.ready.then(() => undefined));
     const rows = await p.evaluate(() => [...document.querySelectorAll<HTMLElement>('#online-matches li.online-row')].map((li) => {
       const r = (sel: string) => { const el = li.querySelector(sel) as HTMLElement | null; if (!el) return null; const b = el.getBoundingClientRect(); return { x: Math.round(b.left), r: Math.round(b.right), w: el.scrollWidth, cw: el.clientWidth }; };
       const box = li.getBoundingClientRect();
@@ -70,7 +73,7 @@ try {
     assert(rows.every((r) => r.keys.every((w) => w === 44)), 'keys are 44px');
     assert(!rows.some((r) => /grace/i.test(r.text)), 'no grace words');
     // the server's names are two short words (up to ~11 letters): never cut, even at 360px
-    assert(rows.every((r) => r.name && r.name.w <= r.name.cw + 1), `no name is cut (${size.tag})`);
+    assert(rows.every((r) => r.name && r.name.w <= r.name.cw + 1), `no name is cut (${size.tag}: ${rows.map((r) => `${r.name?.w}/${r.name?.cw}`).join(' ')})`);
     await p.locator('#online-matches-panel').screenshot({ path: `${out}/${size.tag}.png` });
     await s.context.close();
   }
