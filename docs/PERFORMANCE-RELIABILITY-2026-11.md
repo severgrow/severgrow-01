@@ -631,3 +631,20 @@ spends 12 s on the menu, then taps the Planet:
 | WebKit | 0.35 s | 0.35 s | 1.3 s |
 
 No poll, interval or socket was added: one read per identity, and nothing runs while hidden.
+
+## Debug pass re-measure (2026-11-19)
+
+Live `1776fe3d` against this branch (`c3e41cf3`: sound warm-up gated by the master switch, the
+streak fold window, test-only fixes). Same machine, serial runs, futa05 builds, 4x CPU.
+
+| Measure | live 1776fe3d | branch |
+| --- | --- | --- |
+| performance-lifecycle board idle, 390 / 1440 (median task ms, recalcs) | 12.7 / 6.1 ms, 0.25 / 0 | 4.0 / 6.4 ms, 0 / 0 |
+| performance-lifecycle menu asleep, 390 / 1440 | 4.7 / 8.2 ms, 0 recalcs | 6.2 / 10.4 ms, 0 recalcs |
+| performance-lifecycle 10 navigations, 390 / 1440 (task ms, `/v1/` requests) | 231 / 130 ms, 109 / 112 | 240 / 126 ms, 110 / 115 |
+| performance-offline-soak heap after game 1 / 6 (MiB) | 11.69 / 13.22 | 11.74 / 13.24 |
+
+Level with live and with the 0.86 baseline above. `hidden-synthetic` counted 2 requests on live and
+3 on the branch: logged per URL, both builds make the same reads, all started by the synthetic
+`pageshow` a moment before the page is hidden (wallet, challenges, matches, achievements, chat); which
+of them land after the window opens is timing. Nothing new runs while hidden.
