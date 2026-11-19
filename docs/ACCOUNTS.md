@@ -75,6 +75,39 @@ browser ──(1) PKCE: verifier stays on the device──▶ Supabase /auth/v1/
 Run the real-Postgres suite (a throwaway local database, never production):
 `LIVE_DATABASE_URL=postgres://postgres@127.0.0.1:55432/futalive PGSSL=disable npx vitest run server/tests/accounts-postgres.integration.test.ts`
 
+## One account, everything, everywhere — the data map (accounts pass, 2026-11-19)
+
+Read from the code. "Server" = per player in the database; "device" = this browser only
+(`severgrow.*` / `futasaku.*` keys, prefixed per channel). Owner decisions 2026-11-18.
+
+| Player data | Before this pass | After | When two copies meet |
+| --- | --- | --- | --- |
+| Name, player id, kind | server `players` | same | the account's |
+| Seeds (wallet) | server `seed_wallets`, ledger; device caches `seeds.balance.v1` | same | guest -> account: guest balance ADDED (ledger rows both sides) |
+| Tiles, colour, skin | server `world_claims`, `player_tile_colours/skins` | same | guest's tiles move to the account; colour/skin: the account's, else the guest's |
+| Achievements | server, computed from facts (matches, receipts, clears, claims, challenges) | same | the guest's facts move, so both count; a fact both have stays the account's (never paid twice) |
+| Campaign level, cleared levels, best results | server `account_campaign_progress`, `campaign_clears`; device `campaign.progress.v3` | same | union of cleared levels, better result per level, better clear kept |
+| Guide windows seen | server `account_guide` | same | union |
+| Practice streaks | server `practice_streaks` (+ games), device `practice.streaks.v1` per player | same | higher best per key, the account's current streak |
+| Online Blitz streak | server `online_blitz_streaks` | same | higher best |
+| Stats (offline games) | server `offline_stats` per device, summed | same | moved to the account, per device added |
+| Matches (online) | server | same | the guest's move to the account (never one between the two) |
+| Settings: sound, vibration, reduced motion | device `settings.v1` only | device + server `account_prefs` (signed-in accounts) | per setting the newer choice (server clock) |
+| Left-hand (hand side, thumb layout) | device `severgrow-thumb` only | device + server | per setting the newer choice |
+| Guide mode | device `severgrow-guide` only | device + server | per setting the newer choice |
+| Blitz preferences | device `blitz.v1` only | device + server | per setting the newer choice |
+| Lesson progress | device `lesson.mastery.v1` only | device + server | counts max, hellos union, spotlight kept once |
+| Tips already seen | device `tips.v1` only | device + server | union |
+| Queued offline wins | device `seeds.pending.v1`, no owner: paid to whoever was signed in | device, each tagged with the player who earned it | paid only to that player; a guest's pass to the account it signs into |
+| Practice tickets | device `seeds.ticket-shelf.v1` (cleared at sign-out) | same | issued per player |
+| Unfinished offline game | device `save.v7`, `campaign.save.v3` | same (stays on its device, owner decision 3) | — |
+| Play notes, achievement-toast marks, install prompt, camera, art | device | same | per device by design |
+| Chat cache, achievements cache | device, per account | same | — |
+
+A guest is merged at most once (`player_merges`), then retired (tokens revoked). An account is never
+merged into another account. Migrations 0029 (merges) and 0030 (prefs) are additive; without them the
+server signs in and syncs exactly as before.
+
 ## Setup — exactly what the owner clicks (no code)
 
 Project: Supabase **FUTASAKU** (`wbfrbeedlvjercrukngn`). Site: **https://www.futasaku.com**.
