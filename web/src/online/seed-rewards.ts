@@ -39,6 +39,30 @@ export const SEED_SETTLE_TIMEOUT_MS = 5_000;
 const isDealSeed = (value: unknown): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 0xffffffff;
 
+/**
+ * WHO EARNED IT (owner, 2026-11-18, accounts pass: "queued wins belong to the account that earned
+ * them ... never pays someone else"). A queued proof carries the player signed in when it was won;
+ * a pass only sends the proofs of the player it is sending as. Signing out or switching accounts
+ * leaves the others queued until their own player is back on this device. A proof queued before
+ * this (no owner) goes to whoever is signed in, as it always did.
+ */
+type Owned = { owner?: string };
+const IDENTITY_KEY = 'severgrow.duel.identity.v1';
+const signedInPlayer = (storage: KeyValue): string | null => {
+  try {
+    const id = JSON.parse(storage.get(IDENTITY_KEY) ?? 'null') as { playerId?: unknown } | null;
+    return typeof id?.playerId === 'string' ? id.playerId : null;
+  } catch { return null; }
+};
+const ownerOf = (p: PendingSeedProof): string | null => {
+  const o = (p as Owned).owner;
+  return typeof o === 'string' && o.length > 0 ? o : null;
+};
+const belongsTo = (p: PendingSeedProof, owner: string | null | undefined): boolean => {
+  const o = ownerOf(p);
+  return !o || !owner || o === owner;
+};
+
 const proofKey = (p: PendingSeedProof) =>
   p.kind === 'campaign' ? `campaign:${p.levelId}`
     : 'ticketId' in p ? `training:${p.ticketId}` : `training-deal:${p.deal.seed}`;
@@ -88,11 +112,23 @@ export const MAX_CONSECUTIVE_TRANSIENT = 2;
 
 /** Pending is never spendable; only the server wallet can report earned Seeds. */
 export const queueSeedProof = (storage: KeyValue, input: PendingSeedProof): void => {
-  const proof = { ...input, botVersion: input.botVersion || CURRENT_BOT_VERSION } as PendingSeedProof;
+  const owner = signedInPlayer(storage);
+  const proof = { ...input, botVersion: input.botVersion || CURRENT_BOT_VERSION, ...(owner ? { owner } : {}) } as PendingSeedProof;
   const pending = read(storage).filter((v) => proofKey(v) !== proofKey(proof));
   pending.push(proof);
   // First clears are irreplaceable while offline. A queue limit must never silently erase one.
   write(storage, pending);
+};
+
+/**
+ * The proofs `from` earned now belong to `to`: a guest merged into the account it signed into, or a
+ * dead identity this device recovered. Nothing else ever changes an owner.
+ */
+export const retagSeedProofs = (storage: KeyValue, from: string, to: string): void => {
+  if (!from || !to || from === to) return;
+  const pending = read(storage);
+  if (!pending.some((p) => ownerOf(p) === from)) return;
+  write(storage, pending.map((p) => (ownerOf(p) === from ? ({ ...p, owner: to } as unknown as PendingSeedProof) : p)));
 };
 
 /** What ONE pass over the queue did — including the proofs it had to give up on. */
@@ -211,7 +247,8 @@ export const flushSeedProofs = (
   storage: KeyValue,
   client: DuelClient,
   token: string,
-  options: { timeoutMs?: number } = {},
+  /** `owner`: the player this pass sends as; only that player's proofs (and unowned ones) are sent. */
+  options: { timeoutMs?: number; owner?: string | null } = {},
 ): Promise<SeedFlushResult> => {
   let accounts = flushes.get(storage);
   if (!accounts) { accounts = new Map(); flushes.set(storage, accounts); }
@@ -220,7 +257,7 @@ export const flushSeedProofs = (
     const queued = read(storage);
     // This pass is still draining, so it re-reads the queue after every submit: everything queued
     // when it started is covered. Anything it has not even seen is chained behind it.
-    if (queued.every((proof) => existing.attempted.has(JSON.stringify(proof)))) return existing.promise;
+    if (queued.every((proof) => !belongsTo(proof, options.owner) || existing.attempted.has(JSON.stringify(proof)))) return existing.promise;
     return existing.promise.then((first) => flushSeedProofs(storage, client, token, options)
       .then((next) => mergeResults(first, next)));
   }
@@ -280,7 +317,7 @@ export const flushSeedProofs = (
       return (await features).includes(TRAINING_DEALS);
     };
     for (;;) {
-      const next = read(storage).find((proof) => !attempted.has(JSON.stringify(proof)));
+      const next = read(storage).find((proof) => belongsTo(proof, options.owner) && !attempted.has(JSON.stringify(proof)));
       if (!next) break;
       const sent = JSON.stringify(next);
       attempted.add(sent);

@@ -18,7 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DuelClient } from '../../server/src/client.js';
 import type { FetchLike, KeyValue } from '../../server/src/client.js';
 import { createIdentityStore, IDENTITY_STORAGE_KEY } from '../src/online/identity.js';
-import { PENDING_SEED_PROOFS_KEY, pendingSeedProofCount, queueSeedProof } from '../src/online/seed-rewards.js';
+import { retagSeedProofs, PENDING_SEED_PROOFS_KEY, pendingSeedProofCount, queueSeedProof } from '../src/online/seed-rewards.js';
 import type { SeedConnection } from '../src/online/seed-settle.js';
 import { settlePendingSeeds, settleQueuedSeedsOnBoot } from '../src/online/seed-settle.js';
 
@@ -127,6 +127,10 @@ describe('the settle pays the identity that is actually playing', () => {
     store.set(IDENTITY_STORAGE_KEY, JSON.stringify(guest));
     queueSeedProof(store, proof);
     store.set(IDENTITY_STORAGE_KEY, JSON.stringify(account)); // sign-in writes the same key
+    // OWNER RULE CHANGE (2026-11-18, accounts pass): a queued win belongs to the player who earned it.
+    // The sign-in hands the guest's wins to the account it signed into (accounts/mount.ts, the same
+    // call), because the guest's progress was merged there. A write of the key alone no longer does.
+    retagSeedProofs(store, guest.playerId, account.playerId);
 
     const result = await settle(store);
 

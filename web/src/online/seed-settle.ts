@@ -20,7 +20,7 @@ import type { RewardResult } from '../../../server/src/seeds/types.js';
 import { duelApiUrl, duelRegion } from './config.js';
 import { createIdentityStore } from './identity.js';
 import type { IdentityStore } from './identity.js';
-import { flushSeedProofs, pendingSeedProofCount, SEED_SETTLE_TIMEOUT_MS } from './seed-rewards.js';
+import { flushSeedProofs, pendingSeedProofCount, retagSeedProofs, SEED_SETTLE_TIMEOUT_MS } from './seed-rewards.js';
 import type { SeedFlushResult } from './seed-rewards.js';
 
 /**
@@ -138,7 +138,7 @@ export const settlePendingSeeds = async (
       },
     };
   }
-  const first = await flushSeedProofs(seeds.storage, seeds.client, status.identity.token, { timeoutMs });
+  const first = await flushSeedProofs(seeds.storage, seeds.client, status.identity.token, { timeoutMs, owner: status.identity.playerId });
   if (!first.identityRejected) return first;
   // The stored token was rejected (401). The online hub recovers exactly this way — mint a fresh
   // guest on this device and write the shared identity key — so the settle must do the same, or a
@@ -151,7 +151,9 @@ export const settlePendingSeeds = async (
     };
   }
   // Retry the SAME queue with the replacement identity: nothing was paid, nothing was dropped.
-  const second = await flushSeedProofs(seeds.storage, seeds.client, recovered.identity.token, { timeoutMs });
+  // The dead identity's wins were this device's player's: they move to the recovered one.
+  retagSeedProofs(seeds.storage, status.identity.playerId, recovered.identity.playerId);
+  const second = await flushSeedProofs(seeds.storage, seeds.client, recovered.identity.token, { timeoutMs, owner: recovered.identity.playerId });
   // A pass could have paid an earlier proof before the token went bad; never lose that award from
   // the answer the finish card reads.
   return {

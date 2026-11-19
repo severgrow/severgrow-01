@@ -17,6 +17,7 @@ import type { KeyValue } from '../../../server/src/client.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { duelApiUrl, duelRegion } from '../online/config.js';
 import { IDENTITY_STORAGE_KEY, subscribeIdentityChanges } from '../online/identity.js';
+import { retagSeedProofs } from '../online/seed-rewards.js';
 import { STORAGE_PREFIX } from '../channel.js';
 import { clearAccountBoundProgress } from './signout-reset.js';
 import { DISPLAY_NAME_MAX } from '../../../server/src/display-name.js';
@@ -484,6 +485,8 @@ export const mountAccounts = async (): Promise<void> => {
     // Do not reload onto a forgotten identity if browser storage is blocked.
     if (!writeAccount(kv, {provider,email:typeof res.json.email === 'string'?res.json.email:null,playerId:identity.playerId}) || !writeIdentity(kv,identity))
       throw new Error('account-storage-failed');
+    // A guest's queued wins pass to the account it signed into (its progress was merged there).
+    if (kv && before?.kind === 'guest' && before.playerId !== identity.playerId) retagSeedProofs(kv, before.playerId, identity.playerId);
     window.dispatchEvent(new Event('futasaku:identity'));
     kv?.set(WELCOME_KEY,'1');
     if (res.json.outcome === 'created' || res.json.outcome === 'linked' || (before?.kind === 'guest' && before.playerId === identity.playerId)) setNicknamePrompt(kv,identity.playerId);

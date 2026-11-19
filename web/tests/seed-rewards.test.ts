@@ -1,7 +1,7 @@
 import { BOT_VERSIONS, CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { describe, expect, it, vi } from 'vitest';
 import { DuelError, type DuelClient, type KeyValue } from '../../server/src/client.js';
-import { flushSeedProofs, MAX_CONSECUTIVE_TRANSIENT, PENDING_SEED_PROOFS_KEY, pendingSeedProofCount, queueSeedProof, seedProofKey, TRAINING_DEALS } from '../src/online/seed-rewards.js';
+import { flushSeedProofs, MAX_CONSECUTIVE_TRANSIENT, PENDING_SEED_PROOFS_KEY, pendingSeedProofCount, queueSeedProof, retagSeedProofs, seedProofKey, TRAINING_DEALS } from '../src/online/seed-rewards.js';
 import { settlePendingSeeds, settleQueuedProof } from '../src/online/seed-settle.js';
 
 const storage = (): KeyValue => {
@@ -484,5 +484,66 @@ describe('a Practice proof that names its deal', () => {
     await flushSeedProofs(store, clientWith(['sliced-proofs'], submit), 'acct');
     expect(submit.mock.calls.map((c) => (c as unknown[])[1])).toEqual([{ ticketId: 't-1' }]);
     expect(pendingSeedProofCount(store), 'the deal is kept for later').toBe(1);
+  });
+});
+
+// OFFLINE WINS PAY THE RIGHT ACCOUNT (owner, 2026-11-18, accounts pass): "queued wins belong to the
+// account that earned them. Signing out, switching accounts or a first sign-in never drops them and
+// never pays someone else. Each counts exactly once."
+describe('a queued win belongs to the player who earned it', () => {
+  const IDENTITY = 'severgrow.duel.identity.v1';
+  const signedIn = (store: KeyValue, playerId: string, kind = 'account') =>
+    store.set(IDENTITY, JSON.stringify({ token: `tok-${playerId}`, playerId, displayName: 'P', kind }));
+
+  it('a win is tagged with the player signed in when it was earned', () => {
+    const store = storage();
+    signedIn(store, 'acct-a');
+    queueSeedProof(store, proof('c1-04'));
+    expect(JSON.parse(store.get(PENDING_SEED_PROOFS_KEY)!)[0].owner).toBe('acct-a');
+  });
+
+  it('after a sign-out, the next player on the device is never paid the account\'s win; it waits for the account', async () => {
+    const store = storage();
+    signedIn(store, 'acct-a');
+    queueSeedProof(store, proof('c1-04'));
+    signedIn(store, 'guest-new', 'guest'); // signed out: a fresh guest on the device
+    const submit = vi.fn(async () => reward(20));
+    const asGuest = await flushSeedProofs(store, clientOf(submit), 'tok-guest-new', { owner: 'guest-new' });
+    expect(submit).not.toHaveBeenCalled();
+    expect(asGuest.awards).toEqual([]);
+    expect(pending(store)).toHaveLength(1); // still queued, unpaid, unlost
+    signedIn(store, 'acct-a');
+    const back = await flushSeedProofs(store, clientOf(submit), 'tok-acct-a', { owner: 'acct-a' });
+    expect(back.awards.map((a) => a.key)).toEqual(['campaign:c1-04']);
+    expect(pending(store)).toHaveLength(0);
+  });
+
+  it('another account signing in on the device is never paid it either', async () => {
+    const store = storage();
+    signedIn(store, 'acct-a');
+    queueSeedProof(store, proof('c2-12'));
+    const submit = vi.fn(async () => reward(15));
+    await flushSeedProofs(store, clientOf(submit), 'tok-acct-b', { owner: 'acct-b' });
+    expect(submit).not.toHaveBeenCalled();
+    expect(pending(store)).toHaveLength(1);
+  });
+
+  it('a guest\'s wins pass to the account it signs into (the guest is merged into it)', async () => {
+    const store = storage();
+    signedIn(store, 'guest-1', 'guest');
+    queueSeedProof(store, proof('c1-05'));
+    retagSeedProofs(store, 'guest-1', 'acct-a');
+    const submit = vi.fn(async () => reward(20));
+    const res = await flushSeedProofs(store, clientOf(submit), 'tok-acct-a', { owner: 'acct-a' });
+    expect(res.awards).toHaveLength(1);
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
+  it('a win queued before this change (no owner) is paid to whoever is signed in, as before', async () => {
+    const store = storage();
+    store.set(PENDING_SEED_PROOFS_KEY, JSON.stringify([proof('c1-06')]));
+    const submit = vi.fn(async () => reward(20));
+    const res = await flushSeedProofs(store, clientOf(submit), 'tok-x', { owner: 'x' });
+    expect(res.awards).toHaveLength(1);
   });
 });
