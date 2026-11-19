@@ -440,6 +440,13 @@ export const mountAccounts = async (): Promise<void> => {
     } catch { return null; }
   };
 
+  /** The server's "what came across" (keep the best of both, 2026-11-18), read defensively. */
+  const mergedFrom = (raw: unknown): { seeds: number; tiles: number; levels: number } | null => {
+    if (!raw || typeof raw !== 'object') return null;
+    const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
+    const m = raw as Record<string, unknown>;
+    return { seeds: n(m.seeds), tiles: n(m.tiles), levels: n(m.levels) };
+  };
   const completeSignIn = async (access: string, provider: 'google' | 'email', returnTo: ReturnTo, active:()=>boolean = ()=>true): Promise<void> => {
     const checkActive=()=>{if(!active())throw new Error('account-cancelled');};
     checkActive();
@@ -480,7 +487,7 @@ export const mountAccounts = async (): Promise<void> => {
     window.dispatchEvent(new Event('futasaku:identity'));
     kv?.set(WELCOME_KEY,'1');
     if (res.json.outcome === 'created' || res.json.outcome === 'linked' || (before?.kind === 'guest' && before.playerId === identity.playerId)) setNicknamePrompt(kv,identity.playerId);
-    setFlash(kv,{kind:'signed-in',text:signInMessage({outcome:res.json.outcome,name:shownName(identity)??'',beforePlayerId:before?.playerId??null,afterPlayerId:identity.playerId,guestHadMatches}),returnTo});
+    setFlash(kv,{kind:'signed-in',text:signInMessage({outcome:res.json.outcome,name:shownName(identity)??'',beforePlayerId:before?.playerId??null,afterPlayerId:identity.playerId,guestHadMatches,merged:mergedFrom(res.json.merged)}),returnTo});
     dropResume();
     // Keep the verified session for a failed exchange's retry. Close it only after success.
     void authJson(`${supa.url}/auth/v1/logout?scope=local`,{method:'POST',headers:{apikey:supa.key,authorization:`Bearer ${access}`}}).catch(()=>undefined);

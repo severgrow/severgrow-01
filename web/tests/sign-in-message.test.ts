@@ -27,6 +27,23 @@ describe('the sign-in toast', () => {
     expect(signInMessage({ ...base, outcome: 'signed-in', afterPlayerId: 'guest-1', guestHadMatches: true })).toBe(ACCOUNT.welcomeBack(base.name));
     expect(signInMessage({ ...base, outcome: 'signed-in', beforePlayerId: null, guestHadMatches: null })).toBe(ACCOUNT.welcomeBack(base.name));
   });
+  // KEEP THE BEST OF BOTH (owner, 2026-11-18): a server that merged the guest says what came across.
+  it('a merged guest is told what came across, in one short line', () => {
+    const merged = { seeds: 120, tiles: 2, levels: 3 };
+    const line = signInMessage({ ...base, outcome: 'signed-in', guestHadMatches: true, merged });
+    expect(line).toBe(ACCOUNT.merged(base.name, merged));
+    expect(line).toBe('Signed in as MapleFox #7QK2. Added from this device: 120 Seeds, 2 tiles, 3 levels.');
+    expect(line).not.toContain('not moved');
+  });
+  it('a merge lists only what there was, in the singular when there was one', () => {
+    expect(ACCOUNT.merged('Ash', { seeds: 1, tiles: 0, levels: 1 })).toBe('Signed in as Ash. Added from this device: 1 Seed, 1 level.');
+    expect(ACCOUNT.merged('Ash', { seeds: 0, tiles: 1, levels: 0 })).toBe('Signed in as Ash. Added from this device: 1 tile.');
+  });
+  it('a merge with nothing countable still never says games were left behind', () => {
+    const line = signInMessage({ ...base, outcome: 'signed-in', guestHadMatches: true, merged: { seeds: 0, tiles: 0, levels: 0 } });
+    expect(line).toBe(ACCOUNT.merged(base.name, { seeds: 0, tiles: 0, levels: 0 }));
+    expect(line).toBe('Signed in as MapleFox #7QK2. Your games from this device are on your account.');
+  });
   it('the sign-in path asks the guest\'s own match list before it hands the token over', () => {
     const mount = readFileSync(fileURLToPath(new URL('../src/accounts/mount.ts', import.meta.url)), 'utf8');
     expect(mount).toContain("'/v1/players/me/matches'");

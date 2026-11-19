@@ -1462,6 +1462,17 @@ export const ACCOUNT = Object.freeze({
   linked: (name: string) => `Signed in. Your matches are saved to your account, ${name}.`,
   welcomeBack: (name: string) => `Signed in. Welcome back, ${name}.`,
   switched: (name: string) => `Signed in as ${name}. Games played as a guest on this device were not moved.`,
+  /** KEEP THE BEST OF BOTH (owner, 2026-11-18): the guest's progress moved into the account. */
+  merged: (name: string, m: { seeds: number; tiles: number; levels: number }) => {
+    const parts = [
+      m.seeds > 0 ? `${m.seeds} ${m.seeds === 1 ? 'Seed' : 'Seeds'}` : '',
+      m.tiles > 0 ? `${m.tiles} ${m.tiles === 1 ? 'tile' : 'tiles'}` : '',
+      m.levels > 0 ? `${m.levels} ${m.levels === 1 ? 'level' : 'levels'}` : '',
+    ].filter(Boolean);
+    return parts.length
+      ? `Signed in as ${name}. Added from this device: ${parts.join(', ')}.`
+      : `Signed in as ${name}. Your games from this device are on your account.`;
+  },
   failed: 'Google sign-in did not finish. Please try again.',
   offline: 'You are offline. Connect and try again.',
   unavailable: 'Google sign-in is not available right now. Please try again later.',

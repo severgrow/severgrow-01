@@ -178,8 +178,11 @@ export const signInMessage = (s: {
   beforePlayerId: string | null;
   afterPlayerId: string;
   guestHadMatches: boolean | null;
+  /** What the server moved from this device's guest into the account (null: nothing was merged). */
+  merged?: { seeds: number; tiles: number; levels: number } | null;
 }): string => {
   if (s.outcome === 'linked') return ACCOUNT.linked(s.name);
+  if (s.merged) return ACCOUNT.merged(s.name, s.merged);
   const switched = s.outcome === 'signed-in' && s.beforePlayerId !== null && s.beforePlayerId !== s.afterPlayerId;
   return switched && s.guestHadMatches !== false ? ACCOUNT.switched(s.name) : ACCOUNT.welcomeBack(s.name);
 };
