@@ -1296,7 +1296,7 @@ function openSheetNow(id: string | null, wasOpen: boolean) {
     closingSheet = null;
     $('scrim').hidden = false;
     next.hidden = false;
-    if (id === 'sheet-settings') syncSettingsForm();
+    if (id === 'sheet-settings') { syncSettingsForm(); prefsSync?.now(); }
     if (id === 'sheet-history') renderHistory();
     if (id === 'sheet-howto') renderHowTo();
     // The backdrop only changes density; it never travels. The surface becomes present.
@@ -12329,6 +12329,18 @@ if (timingEnabled()) {
 
 // Beta feedback (docs/BETA.md): Report a problem, crash reports, the #beta tester guide. Read-only.
 void import('./feedback/mount.js').then((f) => f.mountFeedback()).catch(() => undefined);
+// SETTINGS, LESSON PROGRESS AND TIPS FOLLOW THE ACCOUNT (owner, 2026-11-18): signed-in devices sync
+// them (accounts/prefs-sync.ts); a sync that changed something here is re-read at once.
+let prefsSync: { now: () => void } | null = null;
+if (onlineBuildEnabled()) {
+  void import('./accounts/prefs-sync.js').then((p) => {
+    prefsSync = p.mountPrefsSync({ kv: () => store, ready: signInGate.settled });
+    window.addEventListener(p.PREFS_APPLIED_EVENT, () => {
+      settings = parseSettings(store.get(SETTINGS_KEY), systemReduce(), IS_FUTA04);
+      finishLabChange();
+    });
+  }).catch(() => undefined);
+}
 // Accounts: "Continue with Google" (docs/ACCOUNTS.md); shows nothing until Google is on in Supabase.
 void import('./accounts/mount.js').then((a) => a.mountAccounts()).catch(() => undefined).finally(() => signInGate.settle());
 // Seeds earned while the settle could not run are QUEUED on this device, not lost. Drain them as

@@ -72,6 +72,14 @@ export const mountGuide = (hooks: { reduceMotion: () => boolean }) => {
       }),
     );
   paint();
+  // A setting synced from the account (accounts/prefs-sync.ts) is taken at once.
+  window.addEventListener('futasaku:prefs-applied', () => {
+    const next = loadMode();
+    if (next === mode) return;
+    mode = next;
+    root.dataset.guide = mode;
+    paint();
+  });
   // Owner, 2026-10-17 ("settings should hold only essentials"): the step guidance is a teaching aid,
   // so its row lives in the folded "More playing options" group with the other aids. It still
   // belongs beside the phone-layout rows when that group is missing (an older shell).

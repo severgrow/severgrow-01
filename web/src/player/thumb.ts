@@ -27,6 +27,13 @@ export const isPhonePortrait = (w: number, h: number) => w <= 600 && h > w && ty
 
 export const mountThumb = (hooks: { relayout: () => void; reduceMotion: () => boolean }) => {
   let prefs = load();
+  // A hand side synced from the account (accounts/prefs-sync.ts) is taken at once.
+  window.addEventListener('futasaku:prefs-applied', () => {
+    const next = load();
+    if (JSON.stringify(next) === JSON.stringify(prefs)) return;
+    prefs = next;
+    hooks.relayout();
+  });
   const save = () => {
     try {
       localStorage.setItem(KEY, JSON.stringify(prefs));
