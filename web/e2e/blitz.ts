@@ -21,6 +21,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { contextKinds } from './helpers/context-key.js';
+import { HARD_TOP_ROTATION } from '../src/logic/difficulty.js';
 import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
 import { allNeighbors, apply, coordKey, homeCoord, newMatch, rootCoord, scores } from '../../src/engine/index.js';
 import type { Card, State } from '../../src/engine/index.js';
@@ -132,7 +133,11 @@ try {
   await page.waitForFunction(() => (window as any).__severgrow?.blitz?.()?.active === true, undefined, { timeout: 30000 });
   const started = await blitz(page);
   check(started.turnMs === 30_000, 'the turn limit is 30 s');
-  check(started.botLevel === 9, 'a fresh Blitz match starts at bot 9');
+  // OWNER RULE CHANGE (2026-11-12, web/src/logic/difficulty.ts HARD_TOP_ROTATION): a game at the
+  // top of the ladder faces level 9 or one of the rivals 10-12, chosen by the game's seed; the ladder
+  // itself still reads 9.
+  check(started.level === 9 && (HARD_TOP_ROTATION as readonly number[]).includes(started.botLevel),
+    `a fresh Blitz match starts at ladder 9, against 9 or a rival (${started.level} / ${started.botLevel})`);
   check(started.nextBotLevel === 9, 'the ladder starts at 9');
   check(started.map >= 30 && started.map <= 70, `the board is a campaign map 30-70 (${started.map})`);
   const map = CAMPAIGN_LEVELS.find((level) => level.number === started.map)!;
@@ -293,6 +298,8 @@ try {
           const g = (window as any).__severgrow;
           return g.state().phase === 'ACT' && !g.busy();
         }, undefined, { timeout: 20000 });
+        // The key takes its Grow face a moment after the phase changes.
+        await p.waitForFunction(() => (document.getElementById('smart-context') as HTMLButtonElement | null)?.dataset.action === 'skip', undefined, { timeout: 3000 }).catch(() => undefined);
         check(JSON.stringify(await contextKinds(p)) === '["skip"]',
           `${name}: in Grow skip owns the key and no "?" joins its menu`);
       }
