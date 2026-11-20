@@ -826,15 +826,31 @@ html.test-typography-v2 #menu #logo:has(> :is(svg, img)) {
    shadows, no ring, no neon, no colour of its own beyond the keys' own cream.
    It is a STATIC `box-shadow` on the key's `::after` halo: painted once, never per frame, and NOT a
    `filter` on the key (the trap the Territory fog and the surrounded-home glow hit twice). There is
-   no keyframe and no transition, so Reduce motion has no movement to switch off. Because the halo is
-   its own box, the key's material, inset light and focus ring are untouched; because it is
-   `pointer-events:none` and paints outside the key's box, it steals no tap. */
+   no keyframe and no transition on the HALO, so Reduce motion has no movement to switch off. Because
+   the halo is its own box, the key's material, inset light and focus ring are untouched; because it
+   is `pointer-events:none` and paints outside the key's box, it steals no tap.
+   The KEY still answers a press and still RETURNS from it (0.8s polish): this rule used to say
+   `transition: none`, which also killed the release of the delegated press — the key snapped home
+   in one frame, the one thing a "machine key" must not do. The halo is unchanged; only the two
+   properties the press owns (translate, scale) ease, on the shared press beat. */
 #menu .menu-buttons > .btn.suggest,
 #play-menu .menu-buttons > .btn.suggest {
   position: relative;
-  /* Explicit, so "no motion" is a fact the browser reports, not an omission. */
+  /* The halo paints statically; the key's answer is the shared press, never a keyframe. */
   animation: none;
+  transition:
+    translate var(--ix-press) var(--ix-ease-open),
+    scale var(--ix-press) var(--ix-ease-open);
+}
+.reduce-motion #menu .menu-buttons > .btn.suggest,
+.reduce-motion #play-menu .menu-buttons > .btn.suggest {
   transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  #menu .menu-buttons > .btn.suggest,
+  #play-menu .menu-buttons > .btn.suggest {
+    transition: none;
+  }
 }
 #menu .menu-buttons > .btn.suggest::after,
 #play-menu .menu-buttons > .btn.suggest::after {
@@ -7839,6 +7855,12 @@ html.settings-essentials #settings-report {
 [data-ix-press] {
   transition:
     transform var(--ix-press) var(--ix-ease-open),
+    /* THE PRESS RETURNS ON THE SAME BEAT (0.8s polish). `translate` and `scale` are the two
+       properties the delegated press (logic/press.ts) owns; while pressed its own rule supplies the
+       transition, but on RELEASE the element falls back to this list — and it used to list neither,
+       so every key in the game snapped home in one frame. Compositor-only; nothing here paints. */
+    translate var(--ix-press) var(--ix-ease-open),
+    scale var(--ix-press) var(--ix-ease-open),
     background-color var(--ix-open) var(--ix-ease-open),
     border-color var(--ix-open) var(--ix-ease-open),
     color var(--ix-open) var(--ix-ease-open),
