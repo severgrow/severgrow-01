@@ -8,6 +8,15 @@ import type { Orient } from './orient.js';
 
 export type Viewport = { w: number; h: number; safeTop?: number; safeBottom?: number; safeLeft?: number; safeRight?: number };
 export type Box = { x: number; y: number; w: number; h: number };
+/**
+ * SHORT LANDSCAPE: the hand's two-row block. A phone held sideways has a 340pt cockpit at most, and
+ * its hand row keeps 4 + 28pt for Undo and Sort at each end, so a one-row fan of eight cards can
+ * only show a ~33pt strip of each — under the game's 44pt tap target. Below that promise the hand
+ * wraps instead: `perRow` cards in each of `rows` rows, each card fully visible, with `gap` px
+ * between the rows. The cockpit's pile row and the map are unchanged (the hand row simply grows
+ * upwards into the dock's own column).
+ */
+export type HandBlock = { rows: number; perRow: number; gap: number };
 export type Layout = {
   mode: 'stack' | 'side';
   /** Desktop quarters: board centred in the left half, the dock on the bottom-right quarter's centre. */
@@ -24,6 +33,8 @@ export type Layout = {
   /** the dock's parts, each symmetric about the dock's centre line */
   parts: { hint: Box; piles: Box; deck: Box; discard: Box; moves: Box; pileCard: { w: number; h: number }; undo: Box; fan: Box; sort: Box };
   card: { w: number; h: number; slice: number };
+  /** SHORT LANDSCAPE only: the hand wraps into two rows (see `hand`). Absent everywhere else. */
+  hand?: HandBlock;
   /** a tile's width on screen in CSS px (the distance between neighbouring tile centres) */
   hexPx: number;
   /** screen px per board unit */
@@ -257,6 +268,17 @@ export const setSlimHud = (on: boolean) => {
 };
 /** At least this much of every card is visible in a full hand. */
 export const MIN_SLICE = 36;
+/** The game's tap-target promise (44pt): a card's own box, the strip of it a full hand shows, and a
+ *  board tile. Below it a hand wraps into two rows (`HandBlock`). */
+export const TOUCH_MIN = 44;
+/** Short landscape: the gutter between the hand's two rows (the game's 8pt grid). */
+export const HAND_ROW_GAP = 8;
+/** Short landscape: the cockpit's pile row and the gaps below it, as the shipping side cockpit
+ *  lays them out (player/branding.ts `polishLayout` reflows the dock to exactly these numbers, so
+ *  the two-row hand is sized against the height the page really has). */
+const SHORT_COCKPIT = { table: 124, gap: 8, pad: 4 } as const;
+/** Short landscape: air kept between the two-row cockpit and the screen's top and bottom edges. */
+const SHORT_AIR = 4;
 /** Side margin of the board zone (v0.8: 4pt, the board takes the full width on tall phones). */
 export const BOARD_MARGIN = 4;
 /** The largest gap allowed above or below the board (pt). */
@@ -339,6 +361,38 @@ export const cardSize = (width: number, maxHand = MAX_HAND, cap = 76) => {
   return { w, h: Math.round(w * 1.42), slice };
 };
 
+/**
+ * SHORT LANDSCAPE: the two-row hand, or null when even it cannot keep the 44pt promise.
+ *
+ * The cockpit's own column (`dockW`) is the limit: its hand row keeps 4 + 28pt for Undo and Sort at
+ * each end, so `perRow` cards of `cw` must fit that width, and two rows of `ch` must fit the height
+ * left under the header (the pile row and the gaps belong to the cockpit, not the hand). The
+ * largest card that satisfies both wins; each is fully visible (`slice === cw`), so nothing overlaps.
+ * Below `TOUCH_MIN` there is no honest card to show and the one-row fan stays (as before).
+ */
+const twoRowHand = (v: Viewport, top: number, sb: number, dockW: number, maxHand: number, cap: number): { card: Layout['card']; rows: Layout['rows']; hand: HandBlock } | null => {
+  const perRow = Math.ceil(maxHand / 2);
+  const handW = dockW - 2 * (HAND_EDGE + SORT_W);
+  // the height the page's own cockpit leaves under the header, less the air we keep at the edges
+  const budget = v.h - top - sb - SHORT_AIR - (SHORT_COCKPIT.gap + SHORT_COCKPIT.pad);
+  const widest = Math.min(cap, Math.floor(handW / perRow));
+  if (budget <= SHORT_COCKPIT.table || widest < TOUCH_MIN) return null;
+  for (let cw = widest; cw >= TOUCH_MIN; cw--) {
+    const ch = Math.round(cw * 1.42);
+    // a bigger hand card may also keep a bigger pile card: the pile row is the taller of its own
+    // minimum and the card plus its label (player/branding.ts, the shipping cockpit's rule)
+    const table = Math.max(SHORT_COCKPIT.table, ch + PILE_LABEL);
+    const handH = 2 * ch + HAND_ROW_GAP;
+    if (table + handH > budget) continue;
+    return {
+      card: { w: cw, h: ch, slice: cw },
+      rows: { table, hand: handH },
+      hand: { rows: 2, perRow, gap: HAND_ROW_GAP },
+    };
+  }
+  return null;
+};
+
 /** The orientation and scale that fit the board in a w x h area with the biggest tiles (ties: points left-right). */
 export const bestFit = (w: number, h: number, radius: number): { orient: Orient; scale: number } => {
   const fit = (o: Orient) => {
@@ -365,7 +419,7 @@ const pileHeightFor = (dock: Box, table: number, card: Layout['card']) => {
  * The dock's parts, all centred on the dock's centre line: the deck and the throw pile mirrored
  * either side of the centre column (the hint, the moves under it), then the hand row.
  */
-const partsIn = (dock: Box, rows: Layout['rows'], card: Layout['card'], mode: Layout['mode'], maxHand: number): Layout['parts'] => {
+const partsIn = (dock: Box, rows: Layout['rows'], card: Layout['card'], mode: Layout['mode'], maxHand: number, hand?: HandBlock): Layout['parts'] => {
   const c = dock.x + dock.w / 2;
   const ph = pileHeightFor(dock, rows.table, card);
   const pileCard = { w: ph / 1.42, h: ph };
@@ -381,9 +435,11 @@ const partsIn = (dock: Box, rows: Layout['rows'], card: Layout['card'], mode: La
   const piles: Box = { x: deck.x, y: dock.y, w: discard.x + pileW - deck.x, h: rows.table };
   const hint: Box = { x: centre.x, y: dock.y + (rows.table - HINT_H - MOVES_H - 6) / 2, w: centreW, h: HINT_H };
   const moves: Box = { x: centre.x, y: hint.y + HINT_H + 6, w: centreW, h: MOVES_H };
-  const handY = dock.y + rows.table + (mode === 'side' ? SIDE_GAP : 0);
-  const fanW = card.w + (maxHand - 1) * card.slice;
-  const fan: Box = { x: c - fanW / 2, y: handY + HEIGHTS.handPad / 2, w: fanW, h: card.h };
+  const handY = dock.y + rows.table + (mode === 'side' ? (hand ? SHORT_COCKPIT.gap : SIDE_GAP) : 0);
+  // a wrapped hand is a block of whole cards (no overlap); the fan is the one-row default
+  const fanW = hand ? hand.perRow * card.w : card.w + (maxHand - 1) * card.slice;
+  const fanH = hand ? hand.rows * card.h + (hand.rows - 1) * hand.gap : card.h;
+  const fan: Box = { x: c - fanW / 2, y: handY + (hand ? 0 : HEIGHTS.handPad / 2), w: fanW, h: fanH };
   // at the bottom of the hand row: the tilted end cards lean outward only at the top
   const slotY = handY + rows.hand - SORT_W - 10;
   const undo: Box = { x: dock.x + HAND_EDGE, y: slotY, w: SORT_W, h: SORT_W };
@@ -427,12 +483,23 @@ export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND, thumb
     // Card caps (owner, 2026-11-14: "Make the cards a bit bigger"): the compact dock's cap rose
     // 76 -> 84 and the wide dock's 150 -> 168 (and 17% -> 18.5% of its width), so both desktop
     // shapes grow instead of only the narrow band that the old 72 -> 76 cap happened to reach.
-    const card = cardSize(dockW, maxHand, wideDesktop ? Math.min(168, Math.round(dockW * 0.185)) : 84);
-    const rows = { table: Math.max(HEIGHTS.table, card.h + PILE_LABEL), hand: card.h + HEIGHTS.handPad };
+    let card = cardSize(dockW, maxHand, wideDesktop ? Math.min(168, Math.round(dockW * 0.185)) : 84);
+    let rows = { table: Math.max(HEIGHTS.table, card.h + PILE_LABEL), hand: card.h + HEIGHTS.handPad };
     // A phone on its side (owner, 2026-10-24): the board takes the whole height with the same tiny
     // margin above and below. The menu key and the wordmark sit in the corners, where a hexagonal
     // board has no tiles. Desktops keep the board under the header.
     const phoneSide = v.w > v.h && v.h <= 560;
+    // SHORT LANDSCAPE (owner, 2026-11-20): the one-row fan cannot show a 44pt strip of every card
+    // in a 340pt cockpit, so the hand wraps into two rows (the map keeps every point of its zone).
+    let hand: HandBlock | undefined;
+    if (phoneSide && card.slice < TOUCH_MIN) {
+      const two = twoRowHand(v, top, sb, dockW, maxHand, wideDesktop ? Math.min(168, Math.round(dockW * 0.185)) : 84);
+      if (two) {
+        card = two.card;
+        rows = two.rows;
+        hand = two.hand;
+      }
+    }
     const zoneTop = phoneSide ? st + BOARD_MARGIN : top;
     // DESKTOP QUARTERS (owner, 2026-11-08: "if you divide screen into 4 equal parts - [hand and cockpit]
     // should be roughly centred in the bottom right corner of 4 rectangles"; the board "centred in left
@@ -447,15 +514,20 @@ export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND, thumb
     const bw = u.w * fit.scale;
     const bh = u.h * fit.scale;
     const board: Box = { x: zone.x + (zone.w - bw) / 2, y: zone.y + (zone.h - bh) / 2, w: bw, h: bh };
-    const dockH = rows.table + rows.hand + SIDE_GAP + HEIGHTS.bottomPad;
+    const wrapped = hand !== undefined;
+    const dockH = rows.table + rows.hand + (wrapped ? SHORT_COCKPIT.gap : SIDE_GAP) + (wrapped ? SHORT_COCKPIT.pad : HEIGHTS.bottomPad);
     const dock: Box = quad
       ? {
           x: sl + Math.round(W * 0.75 - dockW / 2),
           y: Math.round(Math.max(top, Math.min(v.h * 0.75 - dockH / 2, v.h - sb - BOARD_MARGIN - dockH))),
           w: dockW, h: dockH,
         }
-      : { x: sl + W - dockW - BOARD_MARGIN, y: top + Math.max(0, (zone.h - dockH) / 2), w: dockW, h: dockH };
-    return { mode: 'side', quad, orient: fit.orient, header, zone, board, dock, rows, card, parts: partsIn(dock, rows, card, 'side', maxHand), hexPx: u.hexW * fit.scale, scale: fit.scale, tools: toolsIn(zone) };
+      : wrapped
+        // the wrapped cockpit fills its own column from the bottom (the page centres it in the play
+        // row); it is taller than the one-row dock, so its top edge is all the way up by the header
+        ? { x: sl + W - dockW - BOARD_MARGIN, y: v.h - sb - dockH, w: dockW, h: dockH }
+        : { x: sl + W - dockW - BOARD_MARGIN, y: top + Math.max(0, (zone.h - dockH) / 2), w: dockW, h: dockH };
+    return { mode: 'side', quad, orient: fit.orient, header, zone, board, dock, rows, card, ...(hand ? { hand } : {}), parts: partsIn(dock, rows, card, 'side', maxHand, hand), hexPx: u.hexW * fit.scale, scale: fit.scale, tools: toolsIn(zone) };
   }
 
   if (thumb) {

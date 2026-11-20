@@ -6,7 +6,7 @@ import type { Card, Player, State, Suit } from '../../src/engine/index.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { EMPTY_SEL, kindOf, tapKind } from '../src/logic/interaction.js';
 import { comboFor, hexesAlong, paintEnter, pixelOf } from '../src/logic/draw.js';
-import { MAX_HAND, MIN_SLICE, computeLayout, overlaps } from '../src/logic/layout.js';
+import { MAX_HAND, MIN_SLICE, TOUCH_MIN, computeLayout, overlaps } from '../src/logic/layout.js';
 import { landmarkBox } from '../src/logic/landmark.js';
 import type { LandmarkKind } from '../src/logic/landmark.js';
 import { setOrient } from '../src/logic/orient.js';
@@ -53,31 +53,58 @@ describe('ADVERSARIAL (v0.7 page)', () => {
     expect(overlaps(l.header, l.board)).toBe(false);
     expect(l.hexPx, `${w}x${h} tile`).toBeGreaterThanOrEqual(44);
   };
-  /** The game's 44pt tap-target promise: the card's own box, the strip it shows, and a board tile. */
-  const fullHandTargets = (w: number, h: number) => {
+  /**
+   * SHORT LANDSCAPE (owner, 2026-11-20): a phone held sideways wraps its hand into two rows of
+   * four — the one-row fan could only show a ~33pt strip of each card in a 340pt cockpit — so every
+   * card keeps its whole box (and a strip wider than 44pt), every tile keeps the map's own size,
+   * and nothing overlaps: not the next card, not a tile, not Undo/Sort.
+   */
+  const wrappedHandFits = (w: number, h: number) => {
     const l = computeLayout({ w, h });
-    expect(l.card.w, `${w}x${h} card width`).toBeGreaterThanOrEqual(44);
-    expect(l.card.slice, `${w}x${h} card strip`).toBeGreaterThanOrEqual(44);
-    expect(l.hexPx, `${w}x${h} tile`).toBeGreaterThanOrEqual(44);
-    // the cockpit and the map stay separate, so no control can cover a tile
+    const hand = l.hand;
+    expect(hand, `${w}x${h} wraps the hand into rows`).toBeTruthy();
+    // the 44pt promise: the card's own box, the strip it exposes, and a tile
+    expect(l.card.w, `${w}x${h} card width`).toBeGreaterThanOrEqual(TOUCH_MIN);
+    expect(l.card.slice, `${w}x${h} card strip`).toBeGreaterThanOrEqual(TOUCH_MIN);
+    expect(l.hexPx, `${w}x${h} tile`).toBeGreaterThanOrEqual(TOUCH_MIN);
+    // the cockpit and the map stay separate, so no control or card can cover a tile
     expect(overlaps(l.board, l.dock), `${w}x${h} board/dock overlap`).toBe(false);
+    // per row: four whole cards (no overlap), each row inside the cockpit's width
+    const perRow = hand!.perRow;
+    expect(perRow).toBe(Math.ceil(MAX_HAND / 2));
+    expect(perRow * l.card.w, `${w}x${h} row width`).toBeLessThanOrEqual(l.parts.fan.w + 1e-9);
+    expect(l.parts.fan.w).toBeLessThanOrEqual(l.dock.w);
+    expect(l.parts.fan.x).toBeGreaterThanOrEqual(l.dock.x);
+    expect(l.parts.fan.x + l.parts.fan.w).toBeLessThanOrEqual(l.dock.x + l.dock.w);
+    // the rows: both inside the cockpit, apart (a real gutter), and the row holds both of them
+    const rowTop = (i: number) => l.parts.fan.y + i * (l.card.h + hand!.gap);
+    for (const i of [0, 1]) {
+      expect(rowTop(i), `${w}x${h} row ${i + 1} top`).toBeGreaterThanOrEqual(l.dock.y);
+      expect(rowTop(i) + l.card.h, `${w}x${h} row ${i + 1} bottom`).toBeLessThanOrEqual(l.dock.y + l.dock.h);
+    }
+    expect(hand!.gap, `${w}x${h} gutter`).toBeGreaterThanOrEqual(2);
+    expect(rowTop(1) - (rowTop(0) + l.card.h), `${w}x${h} rows do not overlap`).toBe(hand!.gap);
+    expect(l.rows.hand, `${w}x${h} hand row holds both rows`).toBeGreaterThanOrEqual(2 * l.card.h + hand!.gap);
+    // the keys sit beside the hand, never on a card
+    expect(overlaps(l.parts.undo, l.parts.fan), `${w}x${h} Undo over a card`).toBe(false);
+    expect(overlaps(l.parts.sort, l.parts.fan), `${w}x${h} Sort over a card`).toBe(false);
+    // and the taller cockpit still starts under the header and ends on screen
+    expect(l.dock.y, `${w}x${h} cockpit under the header`).toBeGreaterThanOrEqual(l.header.y + l.header.h - 0.5);
+    expect(l.dock.y + l.dock.h, `${w}x${h} cockpit on screen`).toBeLessThanOrEqual(h + 0.5);
   };
   it('9a. the largest hand (Fruit cards included) on a 360x640 phone held upright', () => fullHandFits(360, 640));
-  // KNOWN BLOCKED — the owner's call (reported 2026-11-20). Sideways at 640x360 the two 44pt
-  // promises cannot both hold in the one-row cockpit: the hand row spends 4+28+28+4 on Undo/Sort,
-  // so a fan of 8 cards at 44pt strips needs a 416pt dock (64 + 44 + 7x44), which leaves the map
-  // 212pt and 33.0pt tiles; keeping 44pt tiles caps the dock at 345pt, which allows at most 33pt
-  // strips. Measured today: card strip 33pt, tile 44.81pt (layout) / 44.37pt (the page, no safe
-  // area); a notched phone held sideways (51pt of insets) gives the reported 37.8pt tiles and the
-  // same 33pt strips. A 36pt strip (MIN_SLICE) already needs a 360pt dock and drops the tiles to
-  // 41.7pt, so the old helper's two assertions were mutually exclusive too. Every card still owns
-  // its own centre through the fan's midpoint floor (style.css), which is what 9c pins. Fixing
-  // this means a hand that wraps or scrolls (the map untouched) or a smaller map: a design change
-  // for the owner, so this stays failing on purpose. Do not loosen it.
-  it.fails('9b. the same hand on a 360x640 phone turned sideways (640x360)', () => fullHandTargets(640, 360));
+  // 9b was an expected failure while the one-row fan could only give 33pt strips sideways; the
+  // wrap (the owner's option 1) makes both promises hold, so it is a real gate now. Two short
+  // landscape sizes are checked: the reported 640x360 and a taller phone. (568x320 still cannot
+  // pass the TILE promise: a 340pt cockpit leaves the map 216pt, about 33.6pt tiles. That is the
+  // map's width, not the hand's height — reported, not asserted away.)
+  for (const [w, h] of [[640, 360], [844, 390]] as const)
+    it(`9b. the same hand on a phone turned sideways (${w}x${h}): two rows of four, every target 44pt`, () => wrappedHandFits(w, h));
   it('9c. sideways, the hand still shows every card and nothing overlaps (what does hold)', () => {
     const l = computeLayout({ w: 640, h: 360 });
-    expect(l.card.w + (MAX_HAND - 1) * l.card.slice).toBeLessThanOrEqual(l.dock.w);
+    // two rows of whole cards inside the hand's own slot (the one-row fan's width no longer applies)
+    expect(l.hand?.rows).toBe(2);
+    expect((l.hand?.perRow ?? 0) * l.card.w).toBeLessThanOrEqual(l.parts.fan.w + 1e-9);
     expect(l.card.slice).toBeGreaterThanOrEqual(30);
     expect(overlaps(l.board, l.dock)).toBe(false);
   });

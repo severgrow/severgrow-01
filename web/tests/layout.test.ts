@@ -3,7 +3,7 @@
 // gap around the board is over 16pt, and the corner tools never cover a tile.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { allCoords, coordKey } from '../../src/engine/index.js';
-import { BOARD_MARGIN, CENTRE_MIN, HAND_EDGE, HEIGHTS, LIVE_CARD_CEILING, SIDE_GAP, MAX_GAP, MAX_HAND, MIN_SLICE, SORT_W, TOOL, boardUnits, computeLayout, overlaps, setSlimHud } from '../src/logic/layout.js';
+import { BOARD_MARGIN, CENTRE_MIN, HAND_EDGE, HAND_ROW_GAP, HEIGHTS, LIVE_CARD_CEILING, SIDE_GAP, MAX_GAP, MAX_HAND, MIN_SLICE, SORT_W, TOOL, TOUCH_MIN, boardUnits, computeLayout, overlaps, setSlimHud } from '../src/logic/layout.js';
 import type { Box, Layout, Viewport } from '../src/logic/layout.js';
 import { setOrient } from '../src/logic/orient.js';
 import { cornerPts } from '../src/ui/geom.js';
@@ -330,6 +330,45 @@ describe('positioning pass: a symmetric dock', () => {
   it('the board got the hint row back: 360x640 (height-limited) tiles grow', () => {
     // v0.8 at 360x640: 50.0pt tiles with the 56pt message row
     expect(computeLayout({ w: 360, h: 640 }).hexPx).toBeGreaterThan(50.0 * 1.05);
+  });
+});
+
+// OWNER, 2026-11-20 (option 1): "the TWO-ROW HAND on short landscape". A phone held sideways has a
+// 340pt cockpit at most, and its hand row keeps 4 + 28pt at each end for Undo and Sort, so a
+// one-row fan of eight cards could only show a ~33pt strip of each — under the 44pt promise. The
+// hand now wraps into two rows of four whole cards. The map must keep every point of its column,
+// and the portrait layout and the normal-height landscape must not change at all.
+describe('short landscape: the hand wraps into two rows, and only there', () => {
+  beforeEach(() => setSlimHud(true));
+  afterEach(() => setSlimHud(false));
+  for (const [w, h] of [[640, 360], [844, 390]] as const) {
+    it(`${w}x${h}: two rows of four whole cards, and the map keeps its column`, () => {
+      const l = computeLayout({ w, h });
+      expect(l.mode).toBe('side');
+      expect(l.hand).toEqual({ rows: 2, perRow: 4, gap: HAND_ROW_GAP });
+      expect(l.card.w).toBeGreaterThanOrEqual(TOUCH_MIN);
+      expect(l.card.slice).toBe(l.card.w); // every card fully visible: no overlap, no midpoint clamp
+      expect(l.hand!.perRow * l.card.w).toBeLessThanOrEqual(l.dock.w);
+      expect(l.rows.hand).toBe(2 * l.card.h + HAND_ROW_GAP);
+      // the map's column is exactly the one the wrap never touches (screen - cockpit - margins)
+      expect(l.zone.w).toBe(w - l.dock.w - 3 * BOARD_MARGIN);
+      expect(l.hexPx).toBeGreaterThanOrEqual(TOUCH_MIN);
+      expect(l.dock.y).toBeGreaterThanOrEqual(l.header.y + l.header.h - 0.5);
+      expect(l.dock.y + l.dock.h).toBeLessThanOrEqual(h + 0.5);
+    });
+  }
+  it('the portrait phone and the normal-height landscape keep their one-row hand', () => {
+    for (const [w, h] of [[360, 640], [390, 844], [1000, 620], [1280, 800], [1440, 900]] as const) {
+      expect(computeLayout({ w, h }).hand, `${w}x${h}`).toBeUndefined();
+    }
+  });
+  it('a very short window keeps the one-row fan rather than a card under 44pt', () => {
+    // 640x300 leaves 112pt for the hand: two rows cost 2 x (44 x 1.42) + 8 > 112, so there is no
+    // honest two-row card — the wrap is refused and the old fan stands (the map is not stolen for
+    // a card that cannot be tapped).
+    const l = computeLayout({ w: 640, h: 300 });
+    expect(l.hand).toBeUndefined();
+    expect(l.card.w).toBeGreaterThanOrEqual(TOUCH_MIN);
   });
 });
 

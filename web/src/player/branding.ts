@@ -144,7 +144,10 @@ export function polishLayout(layout: Layout, v: Viewport, radius: number): Layou
     l.zone = { x: left + 2, y: l.header.y + l.header.h, w: v.w-left-right-4, h: l.dock.y-l.header.y-l.header.h };
   } else {
     l.rows.table = Math.max(124, l.parts.pileCard.h + 22);
-    l.rows.hand = l.card.h + 20;
+    // A wrapped (short-landscape) hand owns its rows: `rows.hand` is two card rows plus their
+    // gutter, sized against exactly this cockpit (logic/layout.ts `twoRowHand`), so it must not be
+    // recomputed from one card here.
+    l.rows.hand = layout.hand ? layout.rows.hand : l.card.h + 20;
     const gap = l.mode === 'side' ? 8 : 0;
     l.dock.h = l.rows.table + l.rows.hand + gap + 4;
     l.dock.y = v.h-bottom-l.dock.h;

@@ -124,7 +124,7 @@ import type { ScreenName } from './ui/screen-motion.js';
 import { BOARD_MARGIN, HEIGHTS, LIVE_CARD_CEILING, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setFixedBoardOrient, setSlimHud, THUMB } from './logic/layout.js';
 import { mountSkinSwitch } from './online/skin-switch.js';
 import { SKIN_SWITCH } from './ui/skinChoice.js';
-import type { Thumb } from './logic/layout.js';
+import type { Layout, Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
 import { howToReferenceHtml } from './logic/howto-reference.js';
@@ -2055,6 +2055,8 @@ function fillMenuStatus() {
 }
 /** The thumb layout in use (test copy, phones in portrait), or null. */
 let thumbLayout: Thumb | null = null;
+/** The wrapped two-row hand (short landscape: a phone held sideways), or null. */
+let handBlock: Layout['hand'] | null = null;
 /** Thumb layout v2, smart overlap: how far (px) the board reaches under the fan right now. */
 let thumbOverlap = 0;
 let overlapFor: unknown = null;
@@ -7258,7 +7260,26 @@ function applyLayout() {
     delete document.documentElement.dataset.thumb;
     delete document.documentElement.dataset.fanOver;
   }
-  if (thumbWas !== thumbLayout && session) queueMicrotask(() => render());
+  // SHORT LANDSCAPE: a wrapped two-row hand (logic/layout.ts `hand`). The stylesheet turns the hand
+  // into a `perRow`-wide grid and the cards lose the one-row fan's tilt (they sit side by side).
+  const handWas = handBlock;
+  handBlock = l.hand ?? null;
+  if (handBlock) {
+    const r = document.documentElement.style;
+    document.documentElement.dataset.handRows = String(handBlock.rows);
+    r.setProperty('--hand-per-row', String(handBlock.perRow));
+    r.setProperty('--hand-gap', `${handBlock.gap}px`);
+    // the model's card height wins over the stylesheet's `--cw * 1.42`, so the two rows land
+    // exactly on the hand row's height
+    r.setProperty('--ch', `${l.card.h}px`);
+  } else {
+    delete document.documentElement.dataset.handRows;
+    const r = document.documentElement.style;
+    r.removeProperty('--hand-per-row');
+    r.removeProperty('--hand-gap');
+    r.removeProperty('--ch');
+  }
+  if ((thumbWas !== thumbLayout || handWas !== handBlock) && session) queueMicrotask(() => render());
   // Step 3: the board's orientation (points left-right or up-down), whichever gives bigger
   // tiles; a turn of the board is a full redraw (rendering only: the game state never changes)
   document.documentElement.dataset.orient = l.orient;
@@ -8404,8 +8425,10 @@ function renderHand(v: View, advice: Advice | null) {
       b.style.zIndex = String(thumbLayout.side === 'left' ? n - i : i + 1);
     } else {
       b.style.zIndex = '';
-      b.style.setProperty('--rot', `${(off * spread).toFixed(2)}deg`);
-      b.style.setProperty('--dy', `${(off * off * 0.7).toFixed(1)}px`);
+      // the wrapped two-row hand is a plain grid: every card sits upright in its own cell, so
+      // nothing leans over its neighbour (the one-row fan keeps its gentle curve)
+      b.style.setProperty('--rot', `${(handBlock ? 0 : off * spread).toFixed(2)}deg`);
+      b.style.setProperty('--dy', `${(handBlock ? 0 : off * off * 0.7).toFixed(1)}px`);
     }
     if (IS_FUTA04 && b.classList.contains('futa04-throw-picked')) b.style.zIndex = '100';
     b.classList.toggle('tutorial-target-card', tutorialCard === c.id);

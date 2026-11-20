@@ -5378,6 +5378,29 @@ svg.board .fx-mote {
   overflow: visible;
   align-content: center;
 }
+/* SHORT LANDSCAPE: THE HAND WRAPS INTO TWO ROWS (owner, 2026-11-20).
+   A phone held sideways gives the cockpit a 340pt column at most, and its hand row keeps 4 + 28pt
+   at each end for Undo and Sort: a single-row fan of eight cards can only show a ~33pt strip of
+   each, under the game's 44pt tap target. Below that promise the hand becomes a grid of
+   `--hand-per-row` whole cards (logic/layout.ts `hand`), so every card is fully visible and its
+   own centre is its own. `--row-hand` is two card rows plus `--hand-gap`, so the rows fill the hand
+   row exactly and cannot overlap. The cards keep the one-row card component; main.ts drops the
+   fan's tilt (`--rot`/`--dy` = 0) because a leaning card would cross into its neighbour's cell.
+   Nothing here exists at any other size: the attribute is set only for the wrapped hand. */
+html[data-hand-rows] .dock .hand-row > #hand {
+  display: grid;
+  grid-template-columns: repeat(var(--hand-per-row, 4), var(--cw));
+  grid-auto-rows: var(--ch, calc(var(--cw) * 1.42));
+  align-content: center;
+  justify-content: center;
+  row-gap: var(--hand-gap, 8px);
+  padding: 0;
+  translate: 0 0;
+}
+html[data-hand-rows] .dock .hand-row > #hand .card {
+  /* each card owns its whole cell: no fan overlap, so no midpoint clamp is needed */
+  margin-left: 0;
+}
 /* the hand: each card shows at least --slice px, a gentle fan */
 .dock .hand-row > .hand {
   height: var(--row-hand, 118px);
