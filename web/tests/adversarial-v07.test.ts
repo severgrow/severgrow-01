@@ -53,11 +53,28 @@ describe('ADVERSARIAL (v0.7 page)', () => {
     expect(overlaps(l.header, l.board)).toBe(false);
     expect(l.hexPx, `${w}x${h} tile`).toBeGreaterThanOrEqual(44);
   };
+  /** The game's 44pt tap-target promise: the card's own box, the strip it shows, and a board tile. */
+  const fullHandTargets = (w: number, h: number) => {
+    const l = computeLayout({ w, h });
+    expect(l.card.w, `${w}x${h} card width`).toBeGreaterThanOrEqual(44);
+    expect(l.card.slice, `${w}x${h} card strip`).toBeGreaterThanOrEqual(44);
+    expect(l.hexPx, `${w}x${h} tile`).toBeGreaterThanOrEqual(44);
+    // the cockpit and the map stay separate, so no control can cover a tile
+    expect(overlaps(l.board, l.dock), `${w}x${h} board/dock overlap`).toBe(false);
+  };
   it('9a. the largest hand (Fruit cards included) on a 360x640 phone held upright', () => fullHandFits(360, 640));
-  // KNOWN FAIL (reported): sideways, 640x360 cannot hold 7 tiles of 44pt (about 308pt) next to a
-  // hand of 8 with 36pt of each card showing (about 360pt). Measured: tiles 37.8pt, card slices
-  // 33pt; every card still shows and nothing overlaps. Kept failing on purpose, not loosened.
-  it.fails('9b. the same hand on a 360x640 phone turned sideways (640x360)', () => fullHandFits(640, 360));
+  // KNOWN BLOCKED — the owner's call (reported 2026-11-20). Sideways at 640x360 the two 44pt
+  // promises cannot both hold in the one-row cockpit: the hand row spends 4+28+28+4 on Undo/Sort,
+  // so a fan of 8 cards at 44pt strips needs a 416pt dock (64 + 44 + 7x44), which leaves the map
+  // 212pt and 33.0pt tiles; keeping 44pt tiles caps the dock at 345pt, which allows at most 33pt
+  // strips. Measured today: card strip 33pt, tile 44.81pt (layout) / 44.37pt (the page, no safe
+  // area); a notched phone held sideways (51pt of insets) gives the reported 37.8pt tiles and the
+  // same 33pt strips. A 36pt strip (MIN_SLICE) already needs a 360pt dock and drops the tiles to
+  // 41.7pt, so the old helper's two assertions were mutually exclusive too. Every card still owns
+  // its own centre through the fan's midpoint floor (style.css), which is what 9c pins. Fixing
+  // this means a hand that wraps or scrolls (the map untouched) or a smaller map: a design change
+  // for the owner, so this stays failing on purpose. Do not loosen it.
+  it.fails('9b. the same hand on a 360x640 phone turned sideways (640x360)', () => fullHandTargets(640, 360));
   it('9c. sideways, the hand still shows every card and nothing overlaps (what does hold)', () => {
     const l = computeLayout({ w: 640, h: 360 });
     expect(l.card.w + (MAX_HAND - 1) * l.card.slice).toBeLessThanOrEqual(l.dock.w);
