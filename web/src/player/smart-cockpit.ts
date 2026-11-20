@@ -399,7 +399,9 @@ html.futa04-information.reduce-motion #smart-panel.hardware-reflect #smart-led-b
     --pile-h:125px; --cw:88px; --ch:125px; width:88px; height:125px;
   }
   html.futa04-information[data-layout='side'][data-step='draw'] .dock > #futa04-box {
-    --box-piles:224px;
+    /* The same reservation the phone cockpit makes (information.ts): keep the middle control column
+       the same 22px clear of the 8% bigger drawn pile (--draw-pile-scale). */
+    --box-piles:232px;
   }
 }
 html.futa04-information #smart-selector {

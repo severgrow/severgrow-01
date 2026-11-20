@@ -7022,6 +7022,9 @@ function safeArea() {
 let firstToolTips: () => void = () => {};
 let layoutKey = '';
 let drawPileAnchorKey = '';
+let drawPileGeometry = '';
+let drawPileRetries = 0;
+let drawPileSettles = 0;
 /** Draw brings the two pile instruments toward the first hand card, without moving
  * their counters separately or letting them cover the cockpit's action buttons. */
 function alignDrawPiles() {
@@ -7030,14 +7033,37 @@ function alignDrawPiles() {
   if (!box || !piles) return;
   if (document.documentElement.dataset.step !== 'draw') {
     drawPileAnchorKey = '';
+    drawPileGeometry = '';
+    drawPileRetries = 0;
+    drawPileSettles = 0;
     piles.style.setProperty('--futa04-draw-shift', '0px');
     return;
   }
   const anchorKey = `${layoutKey}|${session?.state.turnNumber ?? 0}`;
-  if (drawPileAnchorKey === anchorKey) return;
   const handCards = [...document.querySelectorAll<HTMLElement>('#hand .card')];
   const actions = document.getElementById('smart-panel') ?? document.getElementById('futa04-actions');
+  // The cockpit's geometry lands AFTER the first Draw frame: the piles' track grows from Grow's
+  // 108px to Draw's 133px over 240ms and the thumb layout can resize the box. An anchor computed
+  // from half-settled inputs was then cached for the whole turn (measured: a 3-card hand travelled
+  // 104px instead of 94px and ended 1.9px inside the tools; at 320x568 the travel collapsed to 4px
+  // because the box still read its pre-thumb width). So the anchor is only final once the inputs it
+  // was computed from hold still — bounded retries, then trust what we have.
+  const geometryKey = `${box.clientWidth}|${piles.offsetWidth}|${actions?.offsetWidth ?? 0}`;
+  if (drawPileAnchorKey === anchorKey && drawPileGeometry === geometryKey) {
+    // The anchor is only re-checked for a bounded burst (~0.4s) after it was placed, so the track
+    // transition below cannot lock a travel computed against Grow's narrower slot.
+    if (drawPileSettles > 0 && drawPileSettles++ < 24) requestAnimationFrame(alignDrawPiles);
+    return;
+  }
   if (!handCards.length) return;
+  // Capping the travel needs a real tools box. The cockpit's controls mount a beat after the first
+  // Draw render (`#smart-panel` is absent, and `#futa04-actions` is display:contents → 0x0), and a
+  // cap computed against nothing let the piles ride over the LED. Wait for it, bounded.
+  if (!actions?.offsetWidth) {
+    if (drawPileRetries++ < 30) requestAnimationFrame(alignDrawPiles);
+    return;
+  }
+  drawPileRetries = 0;
   // offsetLeft is layout geometry, so the calculation stays steady while the group animates.
   const baseLeft = box.getBoundingClientRect().left + piles.offsetLeft;
   // Hand sorting uses a FLIP animation on the individual card's `translate`.
@@ -7050,31 +7076,46 @@ function alignDrawPiles() {
     return { left: r.left - t, right: r.right - t };
   });
   const pileWidth = Math.max(0, ...Array.from(piles.children, el => (el as HTMLElement).offsetWidth));
+  // The visual overflow of ONE drawn pile, from the same --draw-pile-scale the swell uses: the
+  // scale about the pile's inner edge plus the 1.035 breath riding on it. Both branches cap the
+  // travel with it, so a bigger Draw pile reserves a bigger margin instead of covering the tools.
+  const drawScale = parseFloat(getComputedStyle(box).getPropertyValue('--draw-pile-scale')) || 1.16;
+  const overflow = pileWidth * ((drawScale - 1) + drawScale * .035);
   if (document.documentElement.dataset.cockpit === 'left') {
     // Piles on the RIGHT (the default since 2026-11-11): the mirror of the rule below. The throw
     // pile's right edge comes to the hand's rightmost card, never over the tools on the left.
-    const restingRight = Math.max(...resting.map(r => r.right));
-    const desired = restingRight - (baseLeft + piles.offsetWidth);
-    const contentLeft = piles.offsetLeft + Math.min(...Array.from(piles.children, el => (el as HTMLElement).offsetLeft));
-    const toolsRight = actions ? actions.offsetLeft + actions.offsetWidth : 0;
-    const room = Math.max(0, contentLeft - pileWidth * .21 - toolsRight - 8);
+    // Their track is the LAST grid column, which grows from Grow's 108px to Draw's 133px over
+    // 240ms: offsetLeft still reads the smaller slot on the first Draw frames, so the cap is taken
+    // against the settled track (the same --box-piles the swell is reserving). Reading the moving
+    // value let a short hand's travel end 1.9px inside the tools on the base build.
+    const drawSlot = parseFloat(getComputedStyle(box).getPropertyValue('--box-piles')) || piles.offsetWidth;
+    const settledLeft = box.clientWidth - (parseFloat(getComputedStyle(box).paddingRight) || 0) - drawSlot;
+    const desired = Math.max(...resting.map(r => r.right)) - (baseLeft + piles.offsetWidth);
+    const contentLeft = settledLeft + Math.min(...Array.from(piles.children, el => (el as HTMLElement).offsetLeft));
+    const toolsRight = actions.offsetLeft + actions.offsetWidth;
+    const room = Math.max(0, contentLeft - overflow - toolsRight - 8);
     piles.style.setProperty('--futa04-draw-shift', `${-Math.round(Math.max(0, Math.min(-desired, room)))}px`);
     drawPileAnchorKey = anchorKey;
+    drawPileGeometry = geometryKey;
+    drawPileSettles = Math.max(1, drawPileSettles);
+    if (drawPileSettles++ < 24) requestAnimationFrame(alignDrawPiles);
     return;
   }
   // The LEFTMOST card on screen (a left-hand fan is mirrored, so it is not always the first).
   const restingLeft = Math.min(...resting.map(r => r.left));
   const desired = restingLeft - baseLeft;
   // Keep this limit in the cockpit's layout coordinates: its entrance transform can make
-  // screen rectangles disagree while the sheet settles. Reserve the ready pile's 1.16 scale
-  // plus its 1.035 breath too; offsetWidth alone never includes that visual overflow.
-  // Grid tracks also transition from Grow's 108px slot to Draw's 128px slot. The custom
+  // screen rectangles disagree while the sheet settles.
+  // Grid tracks also transition from Grow's 108px slot to Draw's 133px slot. The custom
   // property is the settled target, so the first Draw frame cannot cache the smaller width.
   const drawSlot = parseFloat(getComputedStyle(box).getPropertyValue('--box-piles')) || piles.offsetWidth;
-  const reach = Math.max(drawSlot, piles.offsetWidth) + pileWidth * .21;
-  const room = Math.max(0, (actions?.offsetLeft ?? box.clientWidth) - 8 - piles.offsetLeft - reach);
+  const reach = Math.max(drawSlot, piles.offsetWidth) + overflow;
+  const room = Math.max(0, actions.offsetLeft - 8 - piles.offsetLeft - reach);
   piles.style.setProperty('--futa04-draw-shift', `${Math.round(Math.max(0, Math.min(desired, room)))}px`);
   drawPileAnchorKey = anchorKey;
+  drawPileGeometry = geometryKey;
+  drawPileSettles = Math.max(1, drawPileSettles);
+  if (drawPileSettles++ < 24) requestAnimationFrame(alignDrawPiles);
 }
 /**
  * Wide screens: centre the cockpit in the empty space to the right of the board (owner,

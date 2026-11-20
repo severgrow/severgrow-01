@@ -168,6 +168,12 @@ html.futa04-information #hand .card.futa04-bloom-pick {
 /* The box: one stable cockpit, with a centre display and a right action slot. */
 html.futa04-information .dock > #futa04-box {
   --box-tools: 140px; --box-pile: 50px; --box-piles: calc(2 * var(--box-pile) + 8px);
+  /* THE DRAW SWELL, AS ONE NUMBER. The two piles scale by this during Draw and the grid reserves
+     the room it needs, so the swell can never eat the middle control column. Owner, 2026-11-20:
+     "during DRAW the piles size up - make them size up a tiny bit more, like 8% more, so it's even
+     more tappable and obvious". 1.16 x 1.08 = 1.2532, so the drawn face is 62.65px wide instead of
+     58px on every phone and on desktop below 1500px (same 50px instrument there). */
+  --draw-pile-scale: 1.2532;
   --hardware-surface:
     radial-gradient(ellipse 24px 12px at 7% 0%,rgba(222,213,188,.045),transparent 80%),
     radial-gradient(ellipse 19px 10px at 97% 100%,rgba(224,211,180,.035),transparent 80%),
@@ -178,7 +184,11 @@ html.futa04-information .dock > #futa04-box {
   box-sizing: border-box; border: 0; border-radius: 0; background: none; box-shadow: none; align-items: end;
   transition: grid-template-columns 240ms ease;
 }
-html.futa04-information[data-step='draw'] .dock > #futa04-box { --box-piles: 128px; }
+/* The Draw cockpit reserves the enlarged piles' own width, so the middle control column (where the
+   optional Bloom button is laid out during Grow) keeps the same 8px of air it has always had:
+   clearance = --box-piles - pile - draw gap + 6 - pile * scale = 133 - 50 - 18 + 6 - 62.66 = 8.3px.
+   At 128px the 8% bigger piles would have left only 3.3px. */
+html.futa04-information[data-step='draw'] .dock > #futa04-box { --box-piles: 133px; }
 html.futa04-information[data-thumb] .dock > #futa04-box {
   position: absolute; top: 8px; left: 4px; width: calc(100% - 8px);
   height: 122px; grid-template-rows: 44px 48px; align-content: end;
@@ -210,10 +220,10 @@ html.futa04-information .dock #futa04-box #deck .pile-stack { inset: 0; }
 /* The face, halo and meter share one edge. Draw scales the whole instrument, including
    its two-digit meter, while the surrounding grid reserves the extra width. */
 html.futa04-information[data-step='draw'] .dock #futa04-box > .piles > .pile.ready {
-  transform: scale(1.16); animation: futa04-draw-pile-breathe 1.8s ease-in-out 240ms infinite;
+  transform: scale(var(--draw-pile-scale, 1.2532)); animation: futa04-draw-pile-breathe 1.8s ease-in-out 240ms infinite;
 }
 html.futa04-information[data-thumb][data-step='draw'] .dock #futa04-box > .piles > .pile.ready {
-  transform: translateY(10px) scale(1.16);
+  transform: translateY(10px) scale(var(--draw-pile-scale, 1.2532));
 }
 @keyframes futa04-draw-pile-breathe { 0%,100% { scale: 1; } 50% { scale: 1.035; } }
 html.futa04-information[data-step='draw'] .dock #futa04-box .pile.ready .pile-card {
