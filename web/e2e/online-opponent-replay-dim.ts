@@ -233,6 +233,25 @@ try {
   check('after the replay the watcher is on its own turn', final.turn === 'Your turn');
   check('the replay placed the tiles the opponent placed', placed === 0 || final.tiles > 0, `placed=${placed}`);
 
+  // THE MOMENT (docs/ONLINE.md): the opponent's committed turn is tagged with the SAME moment plan
+  // the offline path uses for that move (its tier, its anticipation beat, its banner). The tier
+  // depends on the deal, so the proof here is that the catch-up WAS marked, and that it was
+  // decided before the replay was queued and before any of its steps played — the build-up can
+  // never pre-empt the reveal. Thresholds and the plan itself are pinned by
+  // web/tests/online-moment.test.ts.
+  type Mark = { t: number; ev: string } & Record<string, unknown>;
+  const marks = (await waitPage.evaluate('window.__severgrow.animLog()')) as Mark[];
+  const momentAt = marks.findIndex((m) => m.ev === 'replay:moment');
+  const moment = momentAt >= 0 ? marks[momentAt]! : null;
+  const firstStepAfter = marks.findIndex((m, i) => i > momentAt && m.ev === 'step');
+  check('the opponent’s replay carries the moment plan', !!moment, JSON.stringify(moment ?? null));
+  check(
+    'the moment is decided before the replay animates (never before the board commits)',
+    momentAt >= 0 && firstStepAfter > momentAt,
+    `moment@${momentAt} firstStep@${firstStepAfter}`,
+  );
+  if (moment) console.log(`    replay moment: tier=${String(moment.tier)} anticipation=${String(moment.anticipationMs)}ms banner="${String(moment.banner)}"`);
+
   // The board the watcher ends on matches the authoritative final board.
   const authoritative = (await api.getState(waitGuest.token, matchId)).player;
   const authoritativeTiles = Object.values(authoritative.view.board).filter((t) => t).length;

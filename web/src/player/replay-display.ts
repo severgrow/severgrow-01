@@ -10,6 +10,10 @@
 //    the moment it drains. Idempotent, so no drain path (pump, watchdog, teardown, finish) can
 //    leave it stuck on; a stuck dim would be worse than none.
 import type { Event, Player } from '../../../src/engine/index.js';
+import type { Step } from '../logic/anim.js';
+import { momentPlan } from '../logic/juice.js';
+import type { MomentPlan } from '../logic/juice.js';
+import type { Effects } from '../logic/settings.js';
 
 /**
  * True when the buffered events were authored by the opponent. Every replay event but `GameEnd`
@@ -18,6 +22,24 @@ import type { Event, Player } from '../../../src/engine/index.js';
  */
 export const replayedByOpponent = (events: readonly Event[], seat: Player): boolean =>
   events.some((event) => 'player' in event && event.player !== seat);
+
+/**
+ * The build-up an ONLINE replay of a committed turn should carry: exactly the moment the offline
+ * path tags for the same steps (`markMoment` → `momentPlan`), or none.
+ *
+ * `theirs` is the same flag the cockpit dim reads. Only the opponent's turn is a moment here: the
+ * player's own play is already marked on its own path (`humanPlayOnline`), so the catch-up — which
+ * also carries the player's aftermath — must not mark that move a second time. A turn with no
+ * moment-worthy step (a Draw alone) gets no plan at all.
+ */
+export const replayMomentPlan = (
+  steps: readonly Step[],
+  opts: { theirs: boolean; isGold: (key: string) => boolean; intensity: Effects; reduceMotion: boolean },
+): MomentPlan | null => {
+  if (!opts.theirs) return null;
+  const plan = momentPlan(steps, opts.isGold, opts.intensity, opts.reduceMotion);
+  return plan.tier === 'none' ? null : plan;
+};
 
 /** Where the dim is applied — the cockpit's own `dim` sink. */
 export type DimSink = (on: boolean) => void;

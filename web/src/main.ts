@@ -49,7 +49,7 @@ import { bloomNoRoom } from './logic/bloom-room.js';
 import { blastForPair } from './logic/blast-input.js';
 import { throwPileCompletesBloom } from './logic/pile-glow.js';
 import type { DisplayEvent } from './player/display-readout.js';
-import { createTheirsDim, replayedByOpponent } from './player/replay-display.js';
+import { createTheirsDim, replayMomentPlan, replayedByOpponent } from './player/replay-display.js';
 import { outcomeCue } from './player/outcome-light.js';
 import { pulseAmbientLight } from './ui/ambient-light.js';
 import type { OutcomeLight } from './player/atmosphere.js';
@@ -235,8 +235,8 @@ import { CONFIRM_MODES, forecastMove, ghostLinks, needsConfirm, riskLines } from
 import { hapticFor, settleFor, undoPitches } from './logic/feedback.js';
 import { pileCountState, pileStates, stackLayers } from './logic/piles.js';
 import { renderPileMeter } from './player/pile-meter.js';
-import { effectBudget, idleTarget, moveTier, pitchLadder, tierBanner } from './logic/juice.js';
-import type { Budget, Tier } from './logic/juice.js';
+import { effectBudget, idleTarget, momentPlan, pitchLadder } from './logic/juice.js';
+import type { Budget, MomentPlan, Tier } from './logic/juice.js';
 import { Session } from './logic/session.js';
 import type { Played } from './logic/session.js';
 import { SETTINGS_KEY, EFFECTS, SPEEDS, parseSettings, saveableSettings, speedFactor } from './logic/settings.js';
@@ -4248,20 +4248,44 @@ function autoAdvance() {
 type Moment = { tier: Tier; budget: Budget; banner: string | null; chain: number; first: boolean };
 const moments = new WeakMap<Step, Moment>();
 
-/** Tags one action's steps with how big the moment is, and which effect in a chain each is. */
+/**
+ * Tags one action's steps with how big the moment is, and which effect in a chain each is.
+ * The decision itself is pure (`momentPlan`, logic/juice.ts) so the online replay can ask the
+ * very same question for the opponent's committed turn.
+ */
 function markMoment(steps: readonly Step[], before: State) {
-  const tier = moveTier(steps, (k) => before.terrain[k] === 'rich');
-  const budget = effectBudget(tier, settings.effects, settings.reduceMotion);
-  // Part 2: a cut has its own banner in its payoff (logic/cut.ts), so the move's banner stays quiet
-  // (a Fruit card shows its own "Fruited!" in its burst, mine only: the opponent's is calmer)
-  const banner = budget.banner && !steps.some((s) => s.k === 'sever' || s.k === 'fruit' || s.k === 'megaBomb') ? tierBanner(steps) : null;
+  tagMoment(steps, momentPlan(steps, (k) => before.terrain[k] === 'rich', settings.effects, settings.reduceMotion));
+}
+
+/** Applies a moment plan to the steps it covers (never a second effect of a chain's build-up). */
+function tagMoment(steps: readonly Step[], plan: MomentPlan) {
   let chain = 0;
   let first = true;
   for (const st of steps) {
     if (st.k !== 'grow' && st.k !== 'sever' && st.k !== 'strangle' && st.k !== 'fruit' && st.k !== 'megaBomb' && st.k !== 'strengthen') continue;
-    moments.set(st, { tier, budget, banner, chain, first });
+    moments.set(st, { tier: plan.tier, budget: plan.budget, banner: plan.banner, chain, first });
     chain++;
     first = false;
+  }
+}
+
+/**
+ * The opponent's replayed turn online gets the SAME build-up the offline game gives that move:
+ * the one the whole action is marked with. Stands down for the player's own replay (already
+ * marked by `humanPlayOnline`) and for a catch-up with no moment-worthy step.
+ */
+function markReplayMoment(steps: readonly Step[], before: State, theirs: boolean) {
+  const plan = replayMomentPlan(steps, {
+    theirs,
+    isGold: (k) => before.terrain[k] === 'rich',
+    intensity: settings.effects,
+    reduceMotion: settings.reduceMotion,
+  });
+  if (plan) {
+    // Read-only diagnostic (never drives the game): the two-seat suite can name the replay's
+    // moment and prove it was decided before the replay was queued.
+    animLog('replay:moment', { tier: plan.tier, anticipationMs: plan.budget.anticipationMs, banner: plan.banner ?? '', steps: steps.length });
+    tagMoment(steps, plan);
   }
 }
 const momentOf = (st: Step): Moment => moments.get(st) ?? { tier: 'none', budget: effectBudget('none', 'normal', false), banner: null, chain: 0, first: false };
@@ -12120,6 +12144,13 @@ void signInGate.settled.then(() => import('./online/lobby-ui.js')).then(async (m
             os.endReveal();
           }
           if (catchUp.length) {
+            // The enemy's big move gets the build-up the OFFLINE game gives it (docs/ONLINE.md,
+            // 2026-11-20): the same threshold, the same plan (`markMoment` / `momentPlan`), the same
+            // timing — the beat and banner ride their steps and fire from the queue once the step
+            // animates, never before the reveal has committed. `theirs` stands the player's own
+            // committed play down (its moment is marked on its own path), so a move never speaks
+            // twice. Reduce motion and Effects Low relax it exactly as offline (effectBudget).
+            markReplayMoment(catchUp, beforeState, replayedByOpponent(pending, os.seat));
             // The enemy's finished turn gets the SAME cockpit personality the player's own moves
             // get — same DisplayEvent, same one mechanism offline uses: the event rides its anchor
             // step (the outcome cue, else the turn's closing sync) and fires exactly when that step

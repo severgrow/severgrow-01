@@ -83,6 +83,26 @@ export const effectBudget = (tier: Tier, intensity: Effects, reduceMotion: boole
   return b;
 };
 
+/** How big one action's moment is, and whether it speaks: the whole decision, DOM-free. */
+export type MomentPlan = { tier: Tier; budget: Budget; banner: string | null };
+
+/**
+ * The one decision behind a move's build-up (`markMoment` offline, the opponent's replay online):
+ * the tier from its steps, the effects budget for the player's settings, and its banner. A cut,
+ * Fruit card or Blast shows its banner inside its own effect, so the move's banner stays quiet.
+ */
+export const momentPlan = (
+  steps: readonly Step[],
+  isGold: (key: string) => boolean,
+  intensity: Effects,
+  reduceMotion: boolean,
+): MomentPlan => {
+  const tier = moveTier(steps, isGold);
+  const budget = effectBudget(tier, intensity, reduceMotion);
+  const banner = budget.banner && !steps.some((s) => s.k === 'sever' || s.k === 'fruit' || s.k === 'megaBomb') ? tierBanner(steps) : null;
+  return { tier, budget, banner };
+};
+
 // Steps of a major pentatonic scale in semitones (always pleasant, however many notes);
 // after 8 notes the steps shrink so long lines stay under two octaves.
 const STEPS = [2, 2, 3, 2, 3, 2, 2, 3];

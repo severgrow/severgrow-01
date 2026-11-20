@@ -58,18 +58,19 @@ untouched.
   challenge channel; the flow the player sees (tap Rematch → a waiting surface for the same opponent)
   is the same. Proof: `web/tests/online-rematch.test.ts` + `web/e2e/online-duel-two-browser.ts`
   (finish → Rematch → fresh code → the other side joins and plays).
+- **The opponent's replayed turn carries the same cockpit personality offline and online** (fixed
+  2026-11-20; this was listed as open). The catch-up now marks the opponent's committed turn with the
+  very same moment plan the offline path uses (`markReplayMoment()` → `momentPlan()`, beside the
+  existing `displayEventForPlay()` in the driver `onChange`, `web/src/main.ts`), so a big move gets
+  its anticipation beat and banner at the same threshold and timing — never on a small move, never
+  twice, and never before the reveal has committed. Reduce motion and Effects Low relax it exactly
+  as offline. Proof: `web/tests/online-moment.test.ts` + `web/e2e/online-opponent-replay-dim.ts`.
 
 ## Still open (do not report these as fixed)
 
 - **Presence (Online / Away) is not wired** — the indicator is deliberately hidden rather than faked.
 - A slow **retained-heap drift** (~270 KB per match in a long-lived tab; only a reload releases it).
 - An intermittent **seat-1 Bloom painting stall** (~1 run in 3, cause unidentified).
-- **The opponent's replayed turn carries less cockpit personality online than offline** (verified
-  2026-10-14 against the code). The catch-up steps are queued for the shared `AnimQueue` **without**
-  `markMoment()` / `displayEventForPlay()`, so the smart-cockpit LED announcements and the "big
-  moment" banners/anticipation do **not** fire for an opponent's turn online — while a player's OWN
-  move still gets them (`web/src/main.ts`, the online branch of `afterPlay` vs `humanPlayOnline` /
-  the driver `onChange`). Drag, cut animations and sounds DO run (same `AnimQueue` / `playStep`).
 
 ## Dated reports (accurate for their run; kept for the audit trail)
 
