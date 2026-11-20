@@ -84,11 +84,6 @@ let account: { client: DuelClient; token: string; refresh: () => void } | null =
  * older save — a success or a refusal — is out of date and can never move the choice.
  */
 let saveSeq = 0;
-/**
- * The skin the ACCOUNT is known to hold (from its own read, or from a save it accepted). A refused
- * save goes back to this, never to whatever the tap before it happened to be wearing.
- */
-let confirmed: TerritoryId | null = null;
 
 /** The token comes from the signed-in Planet view, never from a tile or a browser-supplied owner. */
 export async function connectSkinSwitch(client: DuelClient, token: string, refresh?: () => void): Promise<void> {
@@ -105,7 +100,6 @@ export async function connectSkinSwitch(client: DuelClient, token: string, refre
   else {
     current = account = { client, token, refresh: refresh ?? (() => undefined) };
     saveSeq++;  // a save from the previous account (or session) can no longer own this switch
-    confirmed = null;
   }
   // The switch marks, and the board wears, THIS browser's own choice while the account's answer is
   // on its way, never a default that would undo a local six-id choice.
@@ -115,7 +109,6 @@ export async function connectSkinSwitch(client: DuelClient, token: string, refre
     if (account !== current || !current) return;
     // The account's answer is the truth for "your tiles" only when the local choice is one the
     // four-id server column can express (ui/skinChoice.ts: adoptServerSkin).
-    confirmed = saved && TERRITORY_IDS.includes(saved) ? saved : null;
     adoptServerSkin(saved, issued);
   } catch {
     /* No answer (an older server, a dropped connection): the browser's own choice stands. */
@@ -214,7 +207,10 @@ const closeColourSheet = (commit: boolean): void => {
   exitSurface(sheetPanel, { onDone: () => {
     if (sheet) sheet.hidden = true;
     if (commit && skinPickerVisible()) {
-      awaitingGame = true;
+      // A REAL second choice is required: choosing Colour clears the match skin and the picker
+      // keeps asking until one is tapped (the same state survives a reload).
+      chooseSkin({ mine: 'colour', mineGame: null });
+      awaitingGame = skinChoice().mineGame === null;
       paint();
       // The required second step takes focus, so it cannot be missed with a keyboard either.
       const gameBox = section?.querySelector<HTMLElement>('[data-group="game"]');
@@ -255,16 +251,14 @@ const savePlanetSkin = (previous: SkinChoice, selected: SkinId): void => {
   const ticket = ++saveSeq;
   void owner.client.chooseWorldSkin(owner.token, selected as TerritoryId).then((saved) => {
     if (account !== owner || ticket !== saveSeq) return;
-    confirmed = TERRITORY_IDS.includes(saved) ? saved : (selected as TerritoryId);
     chooseSkin({ mine: saved });
     owner.refresh();
   }).catch(() => {
     if (account !== owner || ticket !== saveSeq) return;
-    // The server did not take it. Put the switch back on what is actually stored, and say so.
-    const staying = confirmed ?? ((TERRITORY_IDS as readonly string[]).includes(previous.mine) ? previous.mine as TerritoryId : 'forest');
+    // The server did not take it. Put the switch back exactly where it was, and say so.
     chooseSkin(previous);
     if (note) {
-      note.textContent = `Not saved — the board stays ${SKIN_NAMES[staying]}.`;
+      note.textContent = `Not saved — the board stays ${SKIN_NAMES[skinChoice().mine]}.`;
       note.hidden = false;
     }
   });

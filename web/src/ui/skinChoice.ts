@@ -92,7 +92,8 @@ const game = (value: unknown): GameSkin | null => (isSkinId(value) ? value : nul
  * is being applied over, return the one valid shape:
  *  - a real planet skin with no valid match value follows the planet (old saves; one-tap choices);
  *  - an explicit valid game value is kept, so a match can diverge from the planet;
- *  - 'colour' keeps a valid game skin, otherwise null (the picker's required second step);
+ *  - 'colour' keeps a valid game skin, otherwise null; an explicit null clears it (the picker's
+ *    required second step).
  *  - invalid planet/game/background values fall back to `base`, never throw.
  * Pure: no storage, no clock, no gate.
  */
@@ -114,7 +115,9 @@ export const normaliseSkinChoice = (
       return { planet: p, game: game(gameValue) ?? p };
     }
     // 'colour' is planet-only: keep the game appearance the player already has (or the one this
-    // same call supplies), and leave it null when there is none so the UI must ask.
+    // same call supplies). An EXPLICIT null clears it — that is how choosing Colour asks for a
+    // fresh match skin instead of silently inheriting the previous one.
+    if (gameValue === null) return { planet: p, game: null };
     return { planet: p, game: game(gameValue) ?? game(baseGame) };
   };
   const mine = side(input?.mine, input?.mineGame, base.mine, base.mineGame);

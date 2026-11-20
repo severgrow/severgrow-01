@@ -123,6 +123,16 @@ describe('the normaliser is the one place the invariant lives', () => {
     expect(model.awaitingGameSkin(next)).toBe(false);
   });
 
+  it('an explicit null clears the match skin, so Colour must ask for a new one', async () => {
+    const { model } = await load();
+    model.chooseSkin({ mine: 'forest' });
+    expect(model.skinChoice().mineGame).toBe('forest');
+    model.chooseSkin({ mine: 'colour', mineGame: null });
+    expect(model.skinChoice().mine).toBe('colour');
+    expect(model.skinChoice().mineGame).toBeNull();
+    expect(model.awaitingGameSkin(model.skinChoice())).toBe(true);
+  });
+
   it('never produces a game appearance of "colour", and follows the planet when the stored game is missing', async () => {
     const { model } = await load();
     const planets = ['forest', 'ash', 'water', 'toxic', 'console', 'voxel', 'brushed', 'carrara', 'nero', 'hypnosis', 'colour', 'bogus', null, 7, undefined];

@@ -65,8 +65,9 @@ type SkinChoice = {
 
 - **A real skin is one tap for both.** `chooseSkin({ mine: 'carrara' })` sets the planet and the
   match. `chooseSkin({ mineGame: 'voxel' })` (the picker's MATCH row) sets only the match.
-- **Colour is planet-only.** `chooseSkin({ mine: 'colour' })` keeps the existing match skin; if there
-  is none, `mineGame` is `null` and the picker keeps the required second step visible. Painting
+- **Colour is planet-only.** `chooseSkin({ mine: 'colour' })` keeps the existing match skin; the
+  picker's Done passes an explicit `mineGame: null` so a fresh match skin must be chosen. With no
+  match skin, `mineGame` is `null` and the picker keeps the required second step visible. Painting
   still resolves a valid board skin through `gameSkinFor()`.
 - **One normaliser.** `normaliseSkinChoice(input, base)` is the only code that coerces: unknown
   values fall back, a real planet with a missing game follows the planet (old saves), a valid game
@@ -110,9 +111,10 @@ model, storage and planet previews already keep the real choice.
 - A guest sees only the **Colour** tile and a “Sign in to choose a skin.” line.
 - Choosing **Colour** opens the twenty-colour picker in a dark-glass sheet over the pane (the
   established sheet material and `enterSurface`/`exitSurface` motion). **Done** commits the colour
-  planet and turns the MATCH row into the required next step: the group glows, the line
-  “Now pick how your tiles look in a match.” appears, and focus moves to the first match tile.
-  A cancel (scrim, close, Escape) puts the previous planet skin back.
+  planet AND clears the match skin, so the MATCH row becomes a real required next step: the group
+  glows, the line “Now pick how your tiles look in a match.” appears, no match tile is marked, and
+  focus moves to the first one. That state is stored, so it survives a reload. A cancel (scrim,
+  close, Escape) restores the previous planet AND match appearance exactly.
 - The board backdrop keeps its own small row. Targets are 44 px+, every tile is a native button
   with `aria-pressed`, the sheet is a labelled `role="dialog"`, Escape closes the sheet first, and
   Tab is trapped inside it.
