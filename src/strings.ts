@@ -1479,6 +1479,10 @@ export const ACCOUNT = Object.freeze({
   signingIn: 'Signing in…',
   signInTitle: 'Google sign-in',
   signInRetry: 'Try Google again',
+  /** The game API never answered (the hand-over ran out of time or the network was silent). The
+   *  same honest style as web/src/online/identity.ts's "did not answer just now" line: it says what
+   *  happened instead of the vague "did not finish". Owner report 2026-11-20. */
+  signInNoAnswer: 'The FUTASAKU server did not answer just now. Please try again in a moment.',
   signInExpired: 'This sign-in started in another browser or expired. Start again here.',
   signInSafari: 'For Google, open FUTASAKU in Safari and sign in there. To sign in inside the Home Screen app, use email.',
   offline: 'You are offline. Connect and try again.',
