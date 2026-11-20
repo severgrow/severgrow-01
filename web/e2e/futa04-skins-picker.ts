@@ -33,14 +33,24 @@ const browser = await chromium.launch({
   args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 });
 
+/** The seeds, written under every prefix the built channel might read. `addInitScript` runs BEFORE
+ *  the bundle patches `Storage.prototype`, so these are raw keys: the futa04 product reads `main2:`,
+ *  the 0.5 line's /test/ reads `futa05-test:`, and a preview host reads `futa04:`. Writing all three
+ *  makes the same proof run against either build without knowing which one `dist` holds. */
+const PREFIXES = ['main2:', 'futa05-test:', 'futa04:'];
+const seed = (page: Page, entries: Record<string, string>) =>
+  page.addInitScript(({ entries, prefixes }) => {
+    for (const prefix of prefixes) for (const [key, value] of Object.entries(entries)) localStorage.setItem(prefix + key, value);
+  }, { entries, prefixes: PREFIXES });
+
 const init = async (page: import('playwright-core').Page) => {
-  await page.addInitScript(({ world }) => {
-    localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ sound: false, music: false, reduceMotion: false }));
-    localStorage.setItem('main2:severgrow.duel.identity.v1', JSON.stringify({
+  await seed(page, {
+    'severgrow.settings.v1': JSON.stringify({ sound: false, music: false, reduceMotion: false }),
+    'severgrow.duel.identity.v1': JSON.stringify({
       token: 'picker-token', playerId: '11111111-1111-4111-8111-111111111111', displayName: 'Cedar', kind: 'account',
-    }));
-    localStorage.setItem('main2:futasaku.world.last.v1', JSON.stringify(world));
-  }, { world });
+    }),
+    'futasaku.world.last.v1': JSON.stringify(world),
+  });
 };
 
 /** Open the Planet and its SKINS pane, without any real API. */
@@ -108,6 +118,13 @@ try {
   await phone.locator('#world-skin-switch [data-group="planet"] [data-slot="colour"]').click();
   await phone.locator('#world-colour-sheet').waitFor({ state: 'visible' });
   assert.ok(await phone.locator('#world-colour-grid .world-colour-swatch').count() >= 20, 'the twenty colours are here');
+  const swatchBox = await phone.locator('#world-colour-grid .world-colour-swatch').first().boundingBox();
+  assert.ok(swatchBox && swatchBox.height >= 44 && swatchBox.width >= 44, `a colour swatch is a 44px+ target (${JSON.stringify(swatchBox)})`);
+  const phoneDone = await phone.locator('#world-colour-done').boundingBox();
+  assert.ok(phoneDone && phoneDone.height >= 44, `Done is a 44px+ target (${JSON.stringify(phoneDone)})`);
+  const closeBox = await phone.locator('#world-colour-sheet-close').boundingBox();
+  assert.ok(closeBox && closeBox.height >= 44 && closeBox.width >= 44, `Close is a 44px+ target (${JSON.stringify(closeBox)})`);
+  await phone.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   const sheetStyle = await phone.locator('.world-colour-sheet-panel').evaluate((el) => ({
     backdrop: getComputedStyle(el).backdropFilter,
     position: getComputedStyle(el.closest('.world-colour-sheet')!).position,
@@ -162,20 +179,27 @@ try {
   // ---- GUEST: the twenty colours stay, the skins do not ----------------------------------------
   const guest = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: 'reduce' });
   guest.on('pageerror', (e) => errors.push(`guest: ${e.message}`));
-  await guest.addInitScript(({ world }) => {
-    localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ sound: false, music: false, reduceMotion: false }));
-    localStorage.setItem('main2:futasaku.world.last.v1', JSON.stringify(world));
-  }, { world });
+  await seed(guest, {
+    'severgrow.settings.v1': JSON.stringify({ sound: false, music: false, reduceMotion: false }),
+    'futasaku.world.last.v1': JSON.stringify(world),
+  });
   await openSkins(guest);
   assert.equal(await guest.locator('#world-skin-switch [data-group="planet"] .world-skin-tile:not([hidden])').count(), 1, 'a guest is offered only Colour');
   assert.equal(await guest.locator('#world-skin-switch [data-group="game"]').isVisible(), false, 'no match skins for a guest');
   assert.equal(await guest.locator('#world-skin-switch .world-skin-locked').isVisible(), true, 'the pane says why');
+  // The pane FIRST, then the sheet it opens: two different states, two different pictures.
+  await shot(guest, `${OUT}/09-phone-guest.png`);
   await guest.locator('#world-skin-switch [data-group="planet"] [data-slot="colour"]').click();
   await guest.locator('#world-colour-sheet').waitFor({ state: 'visible' });
   await guest.locator('#world-colour-grid .world-colour-swatch').first().waitFor({ state: 'visible' });
-  await guest.waitForTimeout(300);
+  const guestSwatch = await guest.locator('#world-colour-grid .world-colour-swatch').first().boundingBox();
+  assert.ok(guestSwatch && guestSwatch.height >= 44 && guestSwatch.width >= 44, `a colour swatch is a 44px+ target (${JSON.stringify(guestSwatch)})`);
+  const doneBox = await guest.locator('#world-colour-done').boundingBox();
+  assert.ok(doneBox && doneBox.height >= 44, `Done is a 44px+ target (${JSON.stringify(doneBox)})`);
+  // One composited frame after the sheet's enter motion, or CDP captures the frame before it.
+  await guest.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await guest.waitForTimeout(250);
   assert.ok(await guest.locator('#world-colour-grid .world-colour-swatch').count() >= 20, 'the colours are not skins: a guest keeps them');
-  await shot(guest, `${OUT}/09-phone-guest.png`);
   await shot(guest, `${OUT}/10-phone-guest-colour.png`);
   await guest.close();
 
