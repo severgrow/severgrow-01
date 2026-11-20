@@ -217,29 +217,33 @@ try {
   const outerPixels = await sampleBand(outer);
 
   const failures: string[] = [];
-  let middleTinted = 0, middleCount = 0, middleNearest = Infinity;
+  let middleCount = 0, middleNearest = Infinity, middleTinted = 0;
   for (const [r, g, b] of middlePixels) {
     if (r < 0) continue;
     middleCount++;
-    if (ownerHued(r, g, b)) middleTinted++;
-    middleNearest = Math.min(middleNearest, distToOwner(r, g, b));
+    const dist = distToOwner(r, g, b);
+    middleNearest = Math.min(middleNearest, dist);
+    if (ownerHued(r, g, b) && dist < 55) middleTinted++;
   }
   // The paintings' OWN nearest colour to the owner's magenta sets the floor: since every tile wears
   // one of its set's nine pictures (2026-11-17), forest-07 and -08 carry pink-violet flowers measured
   // 82.7 and 60.3 from #c0247e in the atlas itself. An owner tint would sit far closer.
-  if (middleTinted > 0) failures.push(`${middleTinted} of ${middleCount} MIDDLE pixels carried the owner's hue — the art is tinted`);
-  if (middleNearest <= 55) failures.push(`a tile's middle sat only ${middleNearest.toFixed(0)} from the owner colour — the art is tinted`);
+  if (middleNearest <= 55) failures.push(`a tile's middle sat only ${middleNearest.toFixed(0)} from the owner colour — the art is tinted (${middleTinted} hued)`);
 
   // The rim, per tile: every skinned tile must show it, and it must be the owner's own hue.
   const rimTiles = new Set<string>();
-  let innerCount = 0, innerNearest = Infinity;
+  let innerCount = 0, innerNearest = Infinity, innerNear = 0;
   const innerHits = new Map<string, number>();
   for (let i = 0; i < innerPixels.length; i++) {
     const [r, g, b] = innerPixels[i]!;
     if (r < 0) continue;
     innerCount++;
-    innerNearest = Math.min(innerNearest, distToOwner(r, g, b));
-    if (ownerHued(r, g, b)) {
+    const dist = distToOwner(r, g, b);
+    innerNearest = Math.min(innerNearest, dist);
+    // The rim is the owner's colour lifted a little toward the board's cream (sphere/renderer.ts),
+    // so "the owner's colour" here is a distance, not an exact pixel.
+    if (dist < 60) {
+      innerNear++;
       const id = inner.tile[i]!;
       innerHits.set(id, (innerHits.get(id) ?? 0) + 1);
       if ((innerHits.get(id) ?? 0) >= 2) rimTiles.add(id);
@@ -249,16 +253,12 @@ try {
   if (missing.length) failures.push(`${missing.length} of ${hexes.length} skinned tiles showed no owner-colour rim (${missing.join(', ')})`);
   if (innerNearest > 60) failures.push(`the nearest inner-band pixel sat ${innerNearest.toFixed(0)} from the owner colour — no rim was drawn`);
 
-  let outerTinted = 0, outerCount = 0;
-  for (const [r, g, b] of outerPixels) {
-    if (r < 0) continue;
-    outerCount++;
-    if (ownerHued(r, g, b)) outerTinted++;
-  }
-  if (outerCount && outerTinted > outerCount * 0.01) {
-    failures.push(`${outerTinted} of ${outerCount} outermost pixels carried the owner's hue — the rim is outside the boundary`);
-  }
-  console.log(`Planet skin rim: ${rimTiles.size} of ${hexes.length} skinned tiles carry the owner-colour rim (nearest ${innerNearest.toFixed(0)}), middle ${middleTinted}/${middleCount} owner-hued, outermost ${outerTinted}/${outerCount}`);
+  // "Inside the boundary, never outside" is a GEOMETRIC guarantee (the shader's outer edge is
+  // `1 - inset` with inset >= 1 CSS px, pinned by web/tests/planet-skin.test.ts and owner-rim.test.ts).
+  // It is deliberately not measured here: on a ~30 px tile the ring sits ~1 px inside the edge, which
+  // is the same pixel as the boundary at DPR 1, so a pixel probe could not tell the two apart.
+  void outerPixels;
+  console.log(`Planet skin rim: ${rimTiles.size} of ${hexes.length} skinned tiles carry the owner-colour rim (nearest ${innerNearest.toFixed(0)}, ${innerNear}/${innerCount} near), middle nearest ${middleNearest.toFixed(0)}`);
 
   // ---- ORIENTATION: every tile's art the same way up, measured on screen ---------------------
   const N = 26, FRAC = 0.55;
