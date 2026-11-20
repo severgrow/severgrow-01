@@ -4,7 +4,7 @@
 //   - committing COLOUR makes the MATCH row the required, highlighted next step;
 //   - the two states are distinct (Land: … / Tiles: …), and a real skin sets both;
 //   - phone (390×844) and desktop both keep 44px targets and a readable grid.
-// Screenshots land in /tmp/picker/.
+// Screenshots land in /tmp/picker-final/ (PICKER_SHOTS overrides).
 //
 //   FUTA_DIST=/tmp/picker-dist npx tsx web/e2e/futa04-skins-picker.ts
 import assert from 'node:assert/strict';
@@ -14,7 +14,7 @@ import type { CDPSession, Page } from 'playwright-core';
 import { productFixture } from './helpers/product-fixture.js';
 import { WORLD_VERSION, seenWorld } from '../../server/src/world.js';
 
-const OUT = '/tmp/picker';
+const OUT = process.env.PICKER_SHOTS ?? '/tmp/picker-final';
 mkdirSync(OUT, { recursive: true });
 
 const me = '11111111-1111-4111-8111-111111111111';
@@ -143,7 +143,7 @@ try {
   await phone.close();
 
   // ---- DESKTOP ---------------------------------------------------------------------------------
-  const desktop = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
+  const desktop = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
   desktop.on('pageerror', (e) => errors.push(`desktop: ${e.message}`));
   await init(desktop);
   await openSkins(desktop);
