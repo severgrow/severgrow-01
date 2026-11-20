@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import type { IncomingMessage, Server } from 'node:http';
 import { DEFAULT_SERVER_CONFIG } from './config.js';
 import type { ServerConfig } from './config.js';
+import { corsHeaders, corsOriginFor } from './cors.js';
 import { createFetchApp } from './fetch-app.js';
 import type { MatchService } from './service.js';
 
@@ -55,6 +56,11 @@ export const createHttpServer = (deps: HttpDeps): Server => {
     })().catch((error: unknown) => {
       logger(`ERROR ${req.method ?? 'GET'} ${req.url ?? '/'} ${String(error)}`);
       res.statusCode = 500;
+      // The Node adapter's last-resort catch is still a response the browser must be allowed to
+      // read: a browser that cannot see the status reports an opaque network failure instead of a
+      // server error. Same shared CORS helpers as every other response.
+      const cors = corsHeaders(corsOriginFor(config.corsOrigins, req.headers.origin ?? null));
+      for (const [key, value] of Object.entries(cors)) res.setHeader(key, value);
       res.setHeader('content-type', 'application/json; charset=utf-8');
       res.end(JSON.stringify({ ok: false, code: 'INTERNAL', message: 'Something went wrong on the server.' }));
     });
