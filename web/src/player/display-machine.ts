@@ -26,10 +26,10 @@ export const DISPLAY_MIN_DWELL_MS = PINNED.displayDwell;
 /** The larger floor a LESSON message gets (owner, 2026-10-20): 2 s, so a teaching line is readable. */
 export const LESSON_MIN_DWELL_MS = PINNED.lessonDwell;
 
-const STEP_WORDS = new Set(['DRAW', 'DRAW!', 'GROW', 'GROW!', 'THROW', 'THROW!', 'BLOOM', 'BLOOM!', 'SKIP?']);
+const STEP_WORDS = new Set(['DRAW', 'DRAW!', 'GROW', 'GROW!', 'THROW', 'THROW!', 'BLOOM', 'BLOOM!', 'SKIP?', 'PASS']);
 
 /** Step / skip cues that must never linger after the turn moves on (incl. hint "SKIP"). */
-const STEP_CUE = /^(DRAW|GROW|THROW|BLOOM|SKIP)\??!?$/;
+const STEP_CUE = /^(DRAW|GROW|THROW|BLOOM|SKIP|PASS)\??!?$/;
 
 const normStep = (text: string) => text.replace(/[!?]+$/, '');
 
@@ -114,6 +114,19 @@ export class DisplayMachine {
     this.dwellTimer = 0;
   }
 
+  /**
+   * Empty the dwell queue without losing a STEP word that was waiting in it.
+   *
+   * The step word is the sign's whole job, so an event that clears the queue (a hint, a play fact)
+   * must not swallow it: it moves to `pendingStep` and lands when the event ends. It used to vanish
+   * for the rest of the step — with the 2026-11-20 "GROW 1 during throw" bug the THROW! cue was
+   * queued behind the Grow word, the next event cleared the queue, and THROW! never appeared.
+   */
+  private retireQueuedSteps() {
+    for (const frame of this.queue) if (STEP_CUE.test(frame.text)) this.pendingStep = frame.text;
+    this.clearDwellQueue();
+  }
+
   private displayNow(frame: DisplayFrame) {
     this.frame = frame;
     this.shownAt = this.now();
@@ -166,9 +179,12 @@ export class DisplayMachine {
   private rest() {
     if (this.urgency || this.held) return;
     if (this.ambientWord) {
-      // A STATE word is not a message with a dwell: it is what the glass reads while nothing else
-      // owns it, so it lands on the frame the state begins.
-      this.emit({ text: this.ambientWord, mode: this.ambientMode, ambient: true }, { force: true });
+      // A STATE word is what the glass reads while nothing else owns it. It takes the sign at the
+      // next legal moment — never in front of a word that is still inside its 1 s floor, because the
+      // floor is the one promise the sign always keeps (owner brief, 2026-11-20). Against the other
+      // resting face (the score) it therefore waits at most one dwell, which is imperceptible next
+      // to the turn hand-over, and it never cuts a message.
+      this.emit({ text: this.ambientWord, mode: this.ambientMode, ambient: true });
       return;
     }
     this.emit({ text: this.scoreText, mode: 'score' });
@@ -244,7 +260,9 @@ export class DisplayMachine {
    * obsolete SKIP/GROW/DRAW cues from the queue/active slot so THROW! (etc.) is next.
    */
   private supersedeStep(text: string) {
-    if (this.held) return;
+    // A drag is holding a word on the glass: remember the step that moved on and say it on release
+    // instead of dropping the cue for the rest of the step.
+    if (this.held) { this.pendingStep = text; return; }
     this.queue = this.queue.filter((frame) => !isObsoleteStepCue(frame.text, text));
     this.pendingStep = null;
     this.urgency = false;
@@ -344,7 +362,7 @@ export class DisplayMachine {
     this.held = false;
     this.urgency = false;
     this.clearTimers();
-    this.clearDwellQueue();
+    this.retireQueuedSteps();
     this.clearUrgencyPaint();
     this.active = event;
     this.eventCount++;
@@ -400,7 +418,7 @@ export class DisplayMachine {
     this.held = true;
     this.urgency = false;
     this.clearTimers();
-    this.clearDwellQueue();
+    this.retireQueuedSteps();
     this.clearUrgencyPaint();
     this.active = null;
     // A lesson's action line owns the sign: it never waits behind the score, a result or any
@@ -423,6 +441,14 @@ export class DisplayMachine {
     this.scoreHeld = false;
     if (!this.held) return;
     this.held = false;
+    const next = this.pendingStep;
+    this.pendingStep = null;
+    if (next) {
+      // The step moved on while a word was held: the new step word takes the glass (behind its own
+      // dwell), so releasing a drag never leaves the sign on a score with the cue missing.
+      this.announceStep(next);
+      return;
+    }
     this.rest();
     this.scheduleIdle();
   }

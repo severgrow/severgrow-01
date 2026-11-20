@@ -190,6 +190,9 @@ describe('match display state', () => {
     const sign = new DisplayMachine(frame => frames.push(frame));
     sign.reset('WAIT', 0, 0);
     sign.setAmbient('WAIT');
+    // The score is already on the glass: the state word takes it at the dwell boundary (never in
+    // front of a word still inside its 1 s floor).
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
     expect(frames.at(-1)).toMatchObject({ text: 'WAIT', ambient: true });
     // Steady: no blank beat, no idle alarm, no score after any timer.
     vi.advanceTimersByTime(30_000);
@@ -249,8 +252,7 @@ describe('match display state', () => {
     expect(frames.at(-1)).toMatchObject({ text: '1:0', mode: 'score' });
   });
 
-  it('replaces a SKIP hint with THROW! after the dwell — never leaves SKIP on throw', () => {
-    const frames: DisplayFrame[] = [];
+  it('replaces a SKIP hint with THROW! after the dwell — never leaves SKIP on throw', () => {    const frames: DisplayFrame[] = [];
     const sign = new DisplayMachine(frame => frames.push(frame));
     sign.reset('GROW!', 3, 1);
     vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
@@ -440,5 +442,97 @@ describe('the lesson action line owns the sign (levels 1-10)', () => {
     expect(frames.at(-1)?.text).toBe('2:1'); // queued behind the score's dwell
     vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
     expect(frames.at(-1)?.text).toBe('DRAW');
+  });
+});
+
+describe('no word outlives its step (the 2026-11-20 "GROW 1" throw bug)', () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.stubGlobal('window', globalThis); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  it('keeps a STEP word that was queued when an event lands — the throw cue is not swallowed', () => {
+    // The owner saw GROW 1 during a throw. Two things had to be true: the cockpit named the held
+    // move in the Throw step (fixed in smart-cockpit.ts), and the THROW! cue — already queued behind
+    // the Grow word's 1 s floor — was dropped by the hint's clearDwellQueue, so the step never said
+    // what it was. A queued step word must survive any event.
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('GROW!', 3, 1);
+    sign.phase('THROW!');          // queued: the Grow word is still inside its dwell
+    sign.hint('CLEAR');           // a hint lands while THROW! waits
+    vi.advanceTimersByTime(5000);
+    expect(frames.some((f) => f.text === 'THROW!' || f.text === 'THROW'), 'THROW! still lands').toBe(true);
+    // …and it lands AFTER the Grow word, never before it (the 1s floor still holds).
+    const throwAt = frames.findIndex((f) => f.text === 'THROW!' || f.text === 'THROW');
+    const growAt = frames.findIndex((f) => f.text === 'GROW!' || f.text === 'GROW');
+    expect(throwAt).toBeGreaterThan(growAt);
+  });
+
+  it('says the new step word when a drag hold ends after the step moved on', () => {
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('GROW!', 2, 2);
+    vi.advanceTimersByTime(2500);           // the grow cue finishes, the score rests
+    sign.hold('PLACE');
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
+    expect(frames.at(-1)).toMatchObject({ text: 'PLACE' });
+    sign.phase('THROW!');                   // the move committed while the word was held
+    sign.release();
+    vi.advanceTimersByTime(3000);
+    expect(frames.some((f) => f.text === 'THROW!' || f.text === 'THROW')).toBe(true);
+  });
+
+  it('the steady state word lands on the resting face but never cuts a message short', () => {
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('GROW OR SKIP', 1, 0);
+    expect(frames.at(-1)).toMatchObject({ text: '1:0', mode: 'score' });
+    sign.setAmbient('WAIT');                // their turn begins: behind the resting score's floor
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS - 1);
+    expect(frames.at(-1)).toMatchObject({ text: '1:0', mode: 'score' });
+    vi.advanceTimersByTime(1);
+    expect(frames.at(-1)).toMatchObject({ text: 'WAIT', ambient: true });
+    sign.setAmbient(null);
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
+    expect(frames.at(-1)).toMatchObject({ text: '1:0', mode: 'score' });
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
+    sign.hint('CLEAR');                     // a real message takes the glass
+    expect(frames.at(-1)).toMatchObject({ text: 'CLEAR' });
+    vi.advanceTimersByTime(200);
+    sign.setAmbient('WAIT');                // their turn begins again, mid-message
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS - 201);
+    expect(frames.at(-1), 'the message keeps its floor').toMatchObject({ text: 'CLEAR' });
+    vi.advanceTimersByTime(200);
+    expect(frames.at(-1)).toMatchObject({ text: 'WAIT', ambient: true });
+  });
+
+  it('PASS is a step cue: announced for an empty Grow step and held for the full floor', () => {
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('PASS', 4, 6);
+    expect(frames.at(-1)?.text).toBe('PASS');
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS - 1);
+    expect(frames.at(-1)?.text).toBe('PASS');
+    vi.advanceTimersByTime(2500);
+    expect(frames.at(-1)).toMatchObject({ text: '4:6', mode: 'score' });
+    // A step that moves on retires it at the dwell boundary, like every other cue.
+    sign.phase('PASS');
+    vi.advanceTimersByTime(2500);
+    sign.phase('THROW!');
+    vi.advanceTimersByTime(3000);
+    expect(frames.some((f) => f.text === 'THROW!' || f.text === 'THROW')).toBe(true);
+    expect(frames.at(-1)?.text).not.toBe('PASS');
+  });
+
+  it('a why-answer (ROCK/LINK/PICK/NO/DRAW) holds the full floor', () => {
+    for (const answer of ['ROCK', 'LINK', 'PICK', 'NO', 'DRAW']) {
+      const frames: DisplayFrame[] = [];
+      const sign = new DisplayMachine(frame => frames.push(frame));
+      sign.reset('GROW OR SKIP', 0, 0);
+      vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
+      sign.event({ message: answer, priority: 40, duration: 1700 });
+      expect(frames.at(-1)?.text, answer).toBe(answer);
+      vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS - 1);
+      expect(frames.at(-1)?.text, answer).toBe(answer);
+    }
   });
 });

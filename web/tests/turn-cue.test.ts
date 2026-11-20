@@ -29,8 +29,11 @@ describe('the turn hand-off cue', () => {
 });
 
 describe('the display names the held move', () => {
-  it('asks main for the word, and keeps CANCEL only as the fallback', () => {
-    expect(cockpit).toMatch(/first\?\.icon === 'cancel' \? options\.heldMove\?\.\(\) \?\? 'CANCEL'/);
+  it('asks main for the word in the Grow step, and keeps CANCEL only as the fallback', () => {
+    expect(cockpit).toMatch(/first\?\.icon === 'cancel' \? heldMoveHint\(phase, options\.heldMove\)/);
+    // …and never in another step: the held move answers "what will the next board tap do", which is
+    // only true in Grow (the Throw step's picked card is about to be thrown).
+    expect(cockpit).toMatch(/export const heldMoveHint = \(step: string, held\?: \(\) => string \| null\): string =>\n  step === 'grow' \? held\?\.\(\) \?\? 'CANCEL' : '';/);
     expect(main).toMatch(/heldMove: \(\) => session \? heldMoveWord\(session\.sel,/);
   });
 });

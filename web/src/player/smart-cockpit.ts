@@ -1,7 +1,7 @@
 import { ONLINE } from '../../../src/strings.js';
 /** Futasaku 0.4 cockpit presentation. Game-owned buttons remain the action source. */
 import './led-art.js'; // registers the sign's pictures (explosion, snake, 点)
-import { BLOOM_PAD, LED_ADVANCE, drawLedBloom, drawLedCells, drawLedHot, ledBloomSprite, ledHotSprite, ledMarqueeSpan, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledMotifOnce, ledStaticMessage, ledCompactMessage, ledToken } from './led-cells.js';
+import { BLOOM_PAD, LED_ADVANCE, drawLedBloom, drawLedCells, drawLedHot, ledBloomSprite, ledFitScale, ledHotSprite, ledMarqueeSpan, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledMotifOnce, ledStaticMessage, ledCompactMessage, ledToken } from './led-cells.js';
 import type { LedTone } from './led-cells.js';
 import { publishDisplayLight, LIGHT_CAPS } from './light.js';
 import { BLITZ_CLOCK_EVENT } from '../logic/blitz-clock-event.js';
@@ -773,6 +773,39 @@ export type CockpitGuide = { available(): boolean; on(): boolean; toggle(): void
  */
 const blitzMatchOn = (): boolean => document.documentElement.classList.contains('blitz-match');
 
+/**
+ * The sign's word for the CURRENT step, from the dataset the game publishes (main's
+ * `updateFuta04MoveActive` + the turn guide's `step`).
+ *
+ * `PASS` is the Grow step that has nothing to play (the moves row shows "Nothing to play" and
+ * Continue): the sign used to invite `GROW!` at a moment when no Grow exists, which is the one
+ * place it said something untrue.
+ */
+export const signPhaseWord = (data: { step?: string; futa04NoMove?: string; futa04Bloom?: string; futa04Grew?: string; futa04BloomReady?: string }): string => {
+  if (data.step === 'opp') return 'WAIT';
+  if (data.step === 'draw') return 'DRAW!';
+  if (data.step === 'throw') return 'THROW!';
+  if (data.futa04Bloom === 'true') return 'BLOOM!';
+  if (data.step === 'grow') {
+    // Nothing playable: say so instead of asking for a move that does not exist.
+    if (data.futa04NoMove === 'true') return 'PASS';
+    // After the one Grow, Bloom is optional — make Skip feel like an invitation.
+    if (data.futa04Grew === 'true' && data.futa04BloomReady === 'true') return 'SKIP?';
+    return 'GROW!';
+  }
+  return 'FUTASAKU';
+};
+
+/**
+ * The sign's word while a move is HELD (GROW 1 / BLOOM 3 / BOMB): "what the next board tap will
+ * do". That is only true in the GROW step — the step you paint the board in. In the Throw step the
+ * picked card is about to be thrown, so a Grow word there is a lie: the owner saw exactly that
+ * (2026-11-20: "during throw led display just said GROW 1"). THROW! already owns that step, so a
+ * held move says nothing there.
+ */
+export const heldMoveHint = (step: string, held?: () => string | null): string =>
+  step === 'grow' ? held?.() ?? 'CANCEL' : '';
+
 export function mountSmartCockpit(options: { heldMove?: () => string | null; guide?: CockpitGuide } = {}) {
   // THE "?" LIVES IN THE CONTEXT KEY (owner, 2026-11-11): alone, it is the key; next to a move (Skip,
   // Bloom...) the key keeps the move and "?" joins it in the key's small menu. A detached button is
@@ -915,7 +948,10 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null; gui
     if (value === lastText && mode === lastMode && !!frame.compact === lastCompact && frame.motif === lastMotif && frame.flash === lastFlash) return;
     const previous = lastText;
     const animated = !still;
-    const scoreTick = animated && !document.hidden && mode === 'score' && lastMode === 'score' && previous.length === value.length;
+    const scoreTick = animated && !document.hidden && mode === 'score' && lastMode === 'score' && previous.length === value.length
+      // The digit-by-digit tick maps glyph columns with the FULL-SIZE advance, so it only applies to a
+      // score that fits the glass (a shrunk static readout, see `fit`, has a different pitch).
+      && ledMessageWidth(previous) <= windowEl.clientWidth - 2;
     const animateReel = previous && animated && !document.hidden && !scoreTick;
     settleReel();
     window.clearInterval(motifTimer);
@@ -946,6 +982,10 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null; gui
       // designed shorthand or shows the whole message, and the marquee below runs on width alone.
       const shown = token ?? (reduced ? ledStaticMessage(value) : frame.compact ? ledCompactMessage(value) : value);
       const scrolling = animated && !frame.motif && mode !== 'score' && ledMessageWidth(shown) > windowEl.clientWidth - 2;
+      // THE STILL PATH NEVER CUTS: with motion off (Reduce Motion, Speed Off) there is no marquee, so a
+      // readout one or two glyphs wider than the glass (REPLAY, CANCEL) is shrunk to fit instead of
+      // losing its first and last columns. No effect on anything that already fits.
+      const fit = !scrolling && !frame.motif ? ledFitScale(shown, windowEl.clientWidth) : 1;
       if (frame.motif) {
         const frames = ledMotifFrames(frame.motif);
         // Bake the whole small set ONCE: the 11 fps loop only swaps finished pictures.
@@ -993,10 +1033,10 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null; gui
         // three times over. The bloom also needs the light of the dots just outside the glass
         // (its falloff reaches ~BLOOM_PAD past the bezel), so its strip carries that margin.
         const span = scrolling ? ledMarqueeSpan(shown, windowEl.clientWidth) : undefined;
-        drawLedCells(cells,shown,scrolling,mode,1,span);
+        drawLedCells(cells,shown,scrolling,mode,fit,span);
         // One bake per message: the bloom and the brightness layer come from those same dots.
-        drawLedHot(hot,shown,scrolling,mode,1,span);
-        drawLedBloom(bloomEl,shown,scrolling,mode,1,span === undefined ? undefined : span + 2 * BLOOM_PAD);
+        drawLedHot(hot,shown,scrolling,mode,fit,span);
+        drawLedBloom(bloomEl,shown,scrolling,mode,fit,span === undefined ? undefined : span + 2 * BLOOM_PAD);
       }
       bloomEl.classList.toggle('scrolling', scrolling);
       windowEl.classList.toggle('scrolling', scrolling);
@@ -1060,19 +1100,7 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null; gui
     const raw = Number.parseFloat(document.documentElement.style.getPropertyValue('--anim'));
     return Number.isFinite(raw) ? raw : 1;
   });
-  const phaseMessage = () => {
-    const root = document.documentElement;
-    if (root.dataset.step === 'opp') return 'WAIT';
-    if (root.dataset.step === 'draw') return 'DRAW!';
-    if (root.dataset.step === 'throw') return 'THROW!';
-    if (root.dataset.futa04Bloom === 'true') return 'BLOOM!';
-    if (root.dataset.step === 'grow') {
-      // After the one Grow, Bloom is optional — make Skip feel like an invitation.
-      if (root.dataset.futa04Grew === 'true' && root.dataset.futa04BloomReady === 'true') return 'SKIP?';
-      return 'GROW!';
-    }
-    return 'FUTASAKU';
-  };
+  const phaseMessage = () => signPhaseWord(document.documentElement.dataset);
   machine.reset(phaseMessage());
   publishDisplayLight('amber');
   // The cadence the blink really runs, written once as a contract for the display suite: ON for
@@ -1185,7 +1213,7 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null; gui
     // was lingering into the throw step after EndAct.
     if (lastPhase === phase && lastAction && first?.key !== lastAction) {
       const hint = first?.icon === 'clear' ? 'CLEAR' : first?.icon === 'reverse' ? 'FLIP'
-        : first?.icon === 'cancel' ? options.heldMove?.() ?? 'CANCEL' : first?.icon === 'bloom' ? 'BLOOM' : '';
+        : first?.icon === 'cancel' ? heldMoveHint(phase, options.heldMove) : first?.icon === 'bloom' ? 'BLOOM' : '';
       if (hint) machine.hint(hint);
     }
     // THE STEADY WAIT (owner, 2026-11-20): while the opponent is thinking the sign keeps a still,

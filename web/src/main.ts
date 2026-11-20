@@ -5489,6 +5489,11 @@ function updateFuta04MoveActive() {
     && session.legal.some(a => a.t === 'Bloom' || a.t === 'MegaBomb');
   setData(document.documentElement,'futa04Grew',String(grew));
   setData(document.documentElement,'futa04BloomReady',String(bloomReady));
+  // A Grow step that has nothing to play: the sign says PASS instead of inviting a GROW that cannot
+  // happen (the moves row shows "Nothing to play" and Continue for exactly this state).
+  const noMove = !!session && myTurn() && !busy() && session.view.phase === 'ACT'
+    && skipPlan(session.legal, session.view.hand.length, settings.autoSkip).kind === 'ask';
+  setData(document.documentElement,'futa04NoMove',String(noMove));
   setData(document.documentElement,'futa04Waiting',String(myTurn() && !busy() && !watching));
   setData(document.documentElement,'futa04Turn',String(session?.state.turnNumber ?? ''));
 }
