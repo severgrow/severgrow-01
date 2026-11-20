@@ -5,9 +5,9 @@
 // Every assertion here is written to FAIL if the refinement is reverted to the crude value it
 // replaced — a timing, an easing token, or the presence of the easing at all — rather than merely
 // checking that a rule exists.
-
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { INFORMATION_CSS } from '../src/player/information.js';
 import { PLAYER_CSS } from '../src/player/player-css.js';
 import { INTERFACE_MOTION } from '../src/ui/interface-motion.js';
 
@@ -139,5 +139,40 @@ describe('5. the card detail bubble answers on the press beat', () => {
     expect(tip).toContain('interfaceMotionAllowed()');
     expect(tip).toMatch(/\.finished\.then\(\(anim\) => anim\.cancel\(\)\)/);
     expect(tip).not.toMatch(/setInterval/);
+  });
+});
+
+describe('6. the Throw pile’s light no longer animates a filter on a moving pile', () => {
+  const rules = (marker: string): string[] => {
+    const out: string[] = [];
+    for (const match of INFORMATION_CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selector = match[1]!.replace(/\s+/g, ' ');
+      if (selector.includes('#discard') && selector.includes(marker) && match[2]!.includes('transition:')) out.push(match[2]!);
+    }
+    return out;
+  };
+
+  it('no transition on the pile interpolates `filter` any more', () => {
+    for (const marker of ["data-step='throw'", 'futa04-throw-target']) {
+      const bodies = rules(marker);
+      expect(bodies.length, `a transition for ${marker}`).toBeGreaterThan(0);
+      for (const body of bodies) expect(body, body).not.toMatch(/transition:[^;]*filter/);
+    }
+  });
+
+  it('the brightness is baked per state, so the light itself is unchanged', () => {
+    expect(INFORMATION_CSS).toContain('filter: brightness(1.14) saturate(1.03)');
+    expect(INFORMATION_CSS).toContain('filter: brightness(1.18) saturate(1.04)');
+  });
+
+  it('the light arrives as opacity on the halo, on the shared beat', () => {
+    const halo = bodyAfter(INFORMATION_CSS, "html.futa04-information[data-step='throw'] #discard .gd-halo {");
+    expect(halo).toContain('transition: opacity var(--ix-open) var(--ix-ease-open)');
+    expect(halo).not.toMatch(/transition:[^;]*box-shadow/);
+  });
+
+  it('Reduce motion keeps the bigger pile and the light, with no transition', () => {
+    expect(INFORMATION_CSS).toMatch(/\.reduce-motion\[data-step='throw'\] #discard \.gd-halo \{\s*transition: none;/);
+    expect(INFORMATION_CSS).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\[data-step='throw'\][^{]*#discard \.gd-halo \{ transition: none; \}/);
   });
 });

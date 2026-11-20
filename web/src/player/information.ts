@@ -342,8 +342,14 @@ html.futa04-information[data-step='throw'] #futa04-box #deck {
    recedes, the pile is the brightest thing in the cockpit. (The pile's own .dim used to apply.) */
 html.futa04-information[data-step='throw'] #futa04-box #discard {
   opacity: 1;
+  /* THE LIGHT IS BAKED, NEVER INTERPOLATED (0.8s polish). This pile also SCALES in the Throw step,
+     and a filter transitioning on a node that is moving re-rasterises it on every frame - the
+     documented trap (docs/DECISIONS.md, "never a filter on an animating node"). The brightness is
+     now a STATIC per-state value: it is simply lit when the step arrives, and the arrival is carried
+     by the halo's own opacity (compositor-only). Nothing about the light is lost; only the per-frame
+     re-raster is. */
   filter: brightness(1.14) saturate(1.03);
-  transition: opacity var(--ix-open) ease, filter var(--ix-open) ease;
+  transition: opacity var(--ix-open) var(--ix-ease-open);
 }
 /* A picked card swells its target once, on the acknowledgement beat (owner, 2026-10-30:
    "make the pile bigger after player selects a card to throw"). Transform only: nothing reflows,
@@ -360,18 +366,17 @@ html.futa04-information:not([data-step='draw']) #futa04-box #discard {
   transform-origin: 50% 50%;
   transition:
     transform var(--dur-ack) var(--ease-standard),
-    opacity var(--ix-close) var(--ix-ease-close),
-    filter var(--ix-close) var(--ix-ease-close);
+    opacity var(--ix-close) var(--ix-ease-close);
 }
 html.futa04-information #futa04-box #discard.futa04-throw-target {
   transform: scale(1.16);
   opacity: 1;
   filter: brightness(1.18) saturate(1.04);
   z-index: 2;
+  /* The swell eases; the baked light does not interpolate (see the throw-step rule above). */
   transition:
     transform var(--dur-ack) var(--ease-standard),
-    opacity var(--ix-open) var(--ix-ease-open),
-    filter var(--ix-open) var(--ix-ease-open);
+    opacity var(--ix-open) var(--ix-ease-open);
 }
 /* The existing edge light, a step stronger — but only its FALLOFF. Owner, 2026-10-30: "remove the
    outer contour rectangle around discard pile" when throwing. The contour was this layer's hard,
@@ -396,10 +401,20 @@ html.futa04-information.reduce-motion #futa04-box #discard.futa04-throw-target {
    cockpit's --fa-light, the same light the hand is tap-lit with (owner, 2026-11-15: "use the same on
    ... discard pile during throw"); only the alpha differs, which is what keeps Throw quiet. */
 html.futa04-information[data-step='throw'] #discard .gd-halo {
-  opacity: .62; transition: none;
+  /* The light's ARRIVAL is this opacity, on the shared beat: the halo's shadow is a static,
+     per-state value, so the only thing that moves is alpha on a composited layer. */
+  opacity: .62; transition: opacity var(--ix-open) var(--ix-ease-open);
   box-shadow: 0 0 22px 2px color-mix(in srgb, var(--fa-light, #f2ede4) 32%, transparent);
 }
 html.futa04-information[data-step='throw'] #discard .gd-ring { animation: none !important; opacity: 0; }
+/* Reduce motion for the throw light's alpha: the halo keeps its static per-state shadow, only the
+   fade goes. Declared here, after the rule it neutralises. */
+html.futa04-information.reduce-motion[data-step='throw'] #discard .gd-halo {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.futa04-information[data-step='throw'] #futa04-box #discard .gd-halo { transition: none; }
+}
 /* The hand is a drag surface (Grow and the new swipe-up Throw): it must own the vertical gesture,
    or the browser pans the page instead and the drag layer never sees the swipe. "none" also
    disables double-tap zoom, which "manipulation" did. */
