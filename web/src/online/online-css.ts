@@ -46,6 +46,9 @@ export const ONLINE_CSS = `
   line-height: 1.15;
   letter-spacing: -0.012em;
   padding-top: 1px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 /* The small, treeless Futasaku wordmark that the in-game HUD shows top-right (#hud-brand):
    the same asset, filter, size and opacity, placed top-right of the online submenu header so the
@@ -59,6 +62,10 @@ export const ONLINE_CSS = `
   opacity: 0.75;
   pointer-events: none;
   user-select: none;
+}
+@media (max-width: 420px) {
+  :is(.online-hub, .online-waiting, .online-join) .online-head { gap: 6px; }
+  :is(.online-hub, .online-waiting, .online-join) .online-brand { max-width: 64px; }
 }
 .online-section {
   margin: 0.4rem 0 0;

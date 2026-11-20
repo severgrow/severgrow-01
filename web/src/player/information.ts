@@ -266,6 +266,7 @@ html.futa04-information .dock #futa04-box .pile-meter-face {
   background: transparent;
 }
 html.futa04-information .dock #futa04-box #deck.low .pile-meter { color: var(--c-gold); }
+html.futa04-information .dock #futa04-box #deck.lesson-pile-low .pile-meter { color: #ffd98a; }
 html.futa04-information .dock #futa04-box > .moves {
   display: grid; position: static; inset: auto; grid-column: 2 / 4; grid-row: 1 / 3;
   width: 100%; height: 100%; min-height: 0; max-height: none;

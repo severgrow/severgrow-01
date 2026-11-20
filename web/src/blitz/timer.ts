@@ -60,7 +60,7 @@ html.blitz-match #blitz-clock::before {
 #blitz-clock[data-stage='amber'] { --bc-ink:#f0a24e; }
 #blitz-clock[data-stage='red'] { --bc-ink:${LIGHT_TONES.red.core}; }
 #blitz-clock svg { position:relative; z-index:1; height:72%; width:auto; overflow:visible; color:var(--bc-ink);
-  filter:drop-shadow(0 0 .8px color-mix(in srgb, currentColor 85%, transparent)) drop-shadow(0 0 2.4px color-mix(in srgb, currentColor 50%, transparent)); }
+  filter:drop-shadow(0 0 1px color-mix(in srgb, currentColor 75%, transparent)); }
 #blitz-clock[data-side='theirs'] svg { opacity:.6; }
 #blitz-clock[data-side='theirs'] .bc-glass::before { opacity:.5; }
 #blitz-clock polygon { fill:currentColor; opacity:0; }

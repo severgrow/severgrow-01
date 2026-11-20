@@ -4982,7 +4982,6 @@ async function playStep(step: Step, my: number) {
       const b = mo.budget;
       const mine = step.player === HUMAN;
       const tileEl = board.tile(step.target);
-      const to = tileEl?.getBoundingClientRect();
       // Mine flies from my hand. Theirs has the same body as their throw: the Bomb turns face up on
       // their seat, holds a beat and arcs down onto the tile at card-to-tile size. (It used to fly
       // from their score pill, which the product header hides: a 0x0 box blew the card up ~37x.)
@@ -4991,12 +4990,13 @@ async function playStep(step: Step, my: number) {
       // card grow as it came down): the card settles INTO the hex, smaller than it was on the seat
       const hex = document.querySelector(`#board .hex-cell[data-key="${step.target}"] > path.hex`) ?? tileEl;
       if (seat && hex) {
-        const ms = oppThrow(step.card, seat, hex, f, !!quickShow);
+        const ms = oppThrow(step.card, seat, hex, f, !!quickShow, undefined, true);
         await wait(ms, my);
       } else {
         const from = mine ? cardRects.get(step.card.id) : undefined;
+        const to = hex?.getBoundingClientRect();
         if (from && to && m > 0) {
-          flyCard(step.card, from, to, f);
+          flyCard(step.card, from, to, f, undefined, true);
           await wait(380 * f, my);
         }
       }
@@ -6126,7 +6126,7 @@ for (const name of ['pointerdown', 'pointerup', 'click', 'touchend'] as const) {
   document.addEventListener(name, lessonCapture, { capture: true, passive: false });
 }
 
-/** The Draw pile's count glows as the lesson's clock runs out. */
+/** Mark the last three Draw cards with a steady amber count in lessons. */
 function syncLessonPile(st: State | null) {
   const low = !!st && !!lessonActive() && st.deck.length > 0 && st.deck.length <= 3 && st.phase !== 'GAME_OVER';
   $('deck').classList.toggle('lesson-pile-low', low);

@@ -2802,7 +2802,7 @@ html.futasaku-product #profile-scrim { background: color-mix(in srgb, var(--c-bg
 }
 #sheet-profile .sp-close:focus-visible,
 .go-result-head .icon-only:focus-visible {
-  outline: 2px solid var(--fu-cream);
+  outline: 2px solid var(--fu-cream, var(--c-accent));
   outline-offset: -3px;
 }
 /* The Futasaku wordmark in the nameplate's left cell — the tree-less mark the HUD badge and the
@@ -3852,15 +3852,11 @@ html.futasaku-product #profile-scrim { background: color-mix(in srgb, var(--c-bg
   letter-spacing: -0.012em;
   padding-top: 1px;
 }
-/* ONE LINE, ALWAYS (owner, 2026-11-18: "dont go 'Practice / match' -- if lacking space on some screens
-   - try making the font a bit smaller so it all fits in 1 row"). The heading never wraps; on a narrow
-   phone its size steps down to what the space between the back key and the empty cell holds (about
-   7.9 em of "Practice match" in the display face (measured; 8.2 leaves a margin), inside a column ~168px narrower than the screen).
-   Wider screens keep their size: `min()` only ever makes it smaller. */
-html .levels-head h2 {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: clip;
+/* Keep Practice match on one line on narrow phones. More demanding headings can wrap
+   inside the same centred column when the text needs more room. */
+.levels-head h2 {
+  overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 @media (max-width: 420px) {
   html:root .levels-head h2 { font-size: min(clamp(1.45rem, 2.4vw + 0.9rem, 2rem), calc((100vw - 168px) / 8.2)) !important; }
@@ -7752,14 +7748,10 @@ html.v075.futa04-branding[data-layout='side'][data-quad='1'] .dock {
   animation: lesson-tap-ring 600ms ease-out forwards;
 }
 @keyframes lesson-tap-ring { from { transform: scale(.45); opacity: .95; } to { transform: scale(1.35); opacity: 0; } }
-/* The Draw pile's count glows as the lesson's clock runs out. */
+/* A steady amber warning keeps the lesson's low Draw count visible. */
 #deck.lesson-pile-low .pile-count {
-  color: #ffd98a; text-shadow: 0 0 10px rgba(255, 200, 90, .85);
-  animation: lesson-pile-low 1.2s ease-in-out infinite;
+  color: #ffd98a;
 }
-@keyframes lesson-pile-low { 50% { text-shadow: 0 0 3px rgba(255, 200, 90, .4); } }
-.reduce-motion #deck.lesson-pile-low .pile-count { animation: none; }
-@media (prefers-reduced-motion: reduce) { #deck.lesson-pile-low .pile-count { animation: none; } }
 
 /* SETTINGS ARE ESSENTIALS ON THE FUTASAKU CHANNELS (owner, 2026-10-23). main.ts sets the class there;
    every Settings node marked data-only="classic" (index.html), and the report key the feedback
@@ -9365,7 +9357,10 @@ html.futasaku-product #sheet-menu .gm-turn {
   border: 0; border-radius: 0; background: none; box-shadow: none; padding: 0; min-width: 0;
 }
 html.futasaku-product .sheet .sheet-head { position: sticky; justify-content: center; }
-html.futasaku-product .sheet .sheet-head > h2 { flex: 1; min-width: 0; text-align: center; padding-inline: 44px; }
+html.futasaku-product .sheet .sheet-head > h2 {
+  flex: 1; min-width: 0; text-align: center; padding-inline: 44px;
+  white-space: normal; overflow-wrap: anywhere; text-wrap: balance;
+}
 html.futasaku-product .sheet .sheet-head > .icon-only:last-child { position: absolute; right: 0; top: 50%; translate: 0 -50%; }
 /* Calm, legible settings glass: a lit key behind the sheet must not become a bright stripe
    through the comfort controls. Keep the shared frameless surface and its organic shadow. */

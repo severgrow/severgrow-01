@@ -1,8 +1,28 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BoardView } from '../src/ui/board.js';
-import { createEffects } from '../src/ui/effects.js';
+import { createEffects, fitBombLanding } from '../src/ui/effects.js';
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+describe('Bomb card landing', () => {
+  const card = { left: 0, top: 0, width: 74, height: 104 };
+  const view = { left: 8, top: 16, width: 320, height: 550 };
+  it('keeps the centre of a fully visible target hex', () => {
+    const landing = fitBombLanding(card, { left: 78, top: 100, width: 56, height: 49 }, view);
+    expect(landing).toMatchObject({ x: 106, y: 124.5 });
+    expect(card.height * landing.scale).toBeLessThan(49);
+  });
+  it.each([[4, 180], [304, 180], [125, 8], [125, 542]])('keeps the overshoot visible at edge %s,%s', (left, top) => {
+    const { x, y, scale } = fitBombLanding(card, { left, top, width: 56, height: 49 }, view);
+    const w = card.width * scale * .55;
+    const h = card.height * scale * .55;
+    expect(x - w).toBeGreaterThan(view.left);
+    expect(x + w).toBeLessThan(view.left + view.width);
+    expect(y - h).toBeGreaterThan(view.top);
+    expect(y + h).toBeLessThan(view.top + view.height);
+  });
+});
+
 const fixture = (motion = 1) => {
   vi.useFakeTimers();
   const flyers: any[] = [];

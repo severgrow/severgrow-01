@@ -27,7 +27,7 @@ import { GOLD_FRAME_ATLAS, goldFrameCrop, goldFrameKeys } from '../ui/goldframes
 import { goldFrameFit, goldFrameSize } from '../ui/goldframe-geometry.js';
 import { faBaseColour, faGoldLooks, goldLookId, faRockSprite, faTileSprite, faVariants } from '../ui/forestAsh.js';
 import type { FaSprite, FaVariants, GoldLook } from '../ui/forestAsh.js';
-import { SEED_STONE_ATLAS, seedStoneCrop } from '../ui/seedstone.js';
+import { SEED_STONE_ATLAS, STONE_CONTACT, seedStoneCrop } from '../ui/seedstone.js';
 import type { ReplayModel } from './timeline.js';
 
 /** The 双サク wordmark (the HUD's own asset): the video's sign-off carries the same mark. */
@@ -74,7 +74,7 @@ export type BoardArt = {
 /** The board's quiet rim, drawn over the art (never a bright seam). */
 export const CELL_RIM = 'rgba(178,174,163,0.18)';
 /** The carved counter's shadow (the board's `--seed-stone-shadow` fallback). */
-export const STONE_SHADOW = 'rgba(0,0,0,.4)';
+export const STONE_SHADOW = 'rgba(8,9,6,.23)';
 
 const decoded = new Map<string, HTMLImageElement>();
 const pending = new Map<string, Promise<void>>();
@@ -499,7 +499,8 @@ export const paintBoard = (g: CanvasRenderingContext2D, L: BoardLayout, o: Board
         // own 0.66 scale and with its own soft shadow.
         const q = 0.66 * k;
         g.beginPath();
-        g.ellipse(cell.x + 1.7 * q, cell.y + 9.1 * q, 8.9 * q, 2.6 * q, 0, 0, Math.PI * 2);
+        g.ellipse(cell.x + STONE_CONTACT.x * q, cell.y + STONE_CONTACT.y * q,
+          STONE_CONTACT.rx * q, STONE_CONTACT.ry * q, 0, 0, Math.PI * 2);
         g.fillStyle = STONE_SHADOW;
         g.fill();
         const crop = seedStoneCrop(cell.owner, cell.strength);

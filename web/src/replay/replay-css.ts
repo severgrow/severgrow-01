@@ -352,7 +352,7 @@ export const REPLAY_CSS = `
   pointer-events: none;
 }
 #replay .rp-scrub:focus-visible { outline: none; }
-#replay .rp-scrub:focus-visible .rp-knob { box-shadow: 0 0 0 3px rgba(233, 216, 173, .75); }
+#replay .rp-scrub:focus-visible .rp-knob { box-shadow: 0 0 0 1px #0e0f10, 0 0 0 3px var(--rp-ink); }
 
 /* ---------- the recording line ---------- */
 /* THE VIDEO EXPORT (owner, 2026-10-26): progress and the way out, between the scrub bar and the

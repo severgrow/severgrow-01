@@ -17,6 +17,7 @@ const BOUNDS: readonly [number, number, number, number][] = [
 
 /** The atlas and the square crop of one strength stone, shared with the replay's canvas pictures. */
 export const SEED_STONE_ATLAS = atlasUrl;
+export const STONE_CONTACT = { x: 1.2, y: 8, rx: 8.2, ry: 2.1 } as const;
 export const seedStoneCrop = (owner: Player, strength: number) => {
   const index = (owner === 0 ? 0 : 9) + Math.max(1, Math.min(9, strength)) - 1;
   const [x0,y0,x1,y1] = BOUNDS[index]!;
@@ -63,7 +64,7 @@ export function glintSeedStone(stone: SVGGElement | null) {
 export function drawSeedStone(parent: SVGGElement, key: string, x: number, y: number, strength: number, owner: Player) {
   const stone = el('g', { class: 'seed-stone', transform: `translate(${x.toFixed(2)},${y.toFixed(2)}) scale(0.66)`,
     'data-key': key, 'data-owner': owner, 'data-strength': strength }, parent);
-  el('ellipse', { cx: 1.7, cy: 9.1, rx: 8.9, ry: 2.6, class: 'seed-stone-shadow' }, stone);
+  el('ellipse', { cx: STONE_CONTACT.x, cy: STONE_CONTACT.y, rx: STONE_CONTACT.rx, ry: STONE_CONTACT.ry, class: 'seed-stone-shadow' }, stone);
   const art = el('svg', { x: -10.5, width: 21, class: 'seed-stone-art', overflow: 'hidden', 'aria-hidden': 'true' }, stone);
   fitStoneArt(art, owner, strength);
   el('image', { href: atlasUrl, x: 0, y: 0, width: 1024, height: 1536 }, art);

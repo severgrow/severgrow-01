@@ -15,6 +15,26 @@ import { dustSpecks } from '../logic/impact.js';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
+type FlightBox = Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>;
+
+/** Keep the card's own proportions and leave room for its small landing overshoot. */
+export const fitBombLanding = (card: FlightBox, hex: FlightBox, view: FlightBox) => {
+  const margin = 4;
+  const scale = Math.min(1, .88 * hex.width / card.width, .88 * hex.height / card.height,
+    (view.width - 2 * margin) / (1.1 * card.width), (view.height - 2 * margin) / (1.1 * card.height));
+  const halfWidth = card.width * scale * .55 + margin;
+  const halfHeight = card.height * scale * .55 + margin;
+  const x = Math.min(view.left + view.width - halfWidth, Math.max(view.left + halfWidth, hex.left + hex.width / 2));
+  const y = Math.min(view.top + view.height - halfHeight, Math.max(view.top + halfHeight, hex.top + hex.height / 2));
+  return { x, y, scale };
+};
+
+const flightViewport = (): FlightBox => {
+  const view = window.visualViewport;
+  return view ? { left: view.offsetLeft, top: view.offsetTop, width: view.width, height: view.height }
+    : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+};
+
 export const anim = (target: Element | null | undefined, frames: Keyframe[], opts: KeyframeAnimationOptions) => {
   if (!target) return null;
   try {
@@ -290,17 +310,18 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
    * old card is never uncovered: that fade-over-the-old-top was the "previous card flashes again"
    * the owner saw (2026-10-20).
    */
-  function flyCard(c: Card, from: DOMRect, to: DOMRect, f: number, onLand?: () => void) {
+  function flyCard(c: Card, from: DOMRect, to: DOMRect, f: number, onLand?: () => void, boardTarget = false) {
     // A hidden source has no box: there is nothing to fly from (and the scale would explode).
-    if (from.width < 1 || from.height < 1 || to.height < 1) { onLand?.(); return; }
+    if (from.width < 1 || from.height < 1 || to.width < 1 || to.height < 1) { onLand?.(); return; }
     const d = document.createElement('div');
     d.className = `flyer card ${suitClass(c)}`;
     d.innerHTML = cardFace(c);
     Object.assign(d.style, { left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px` });
     document.body.appendChild(d);
-    const dx = to.left + to.width / 2 - (from.left + from.width / 2);
-    const dy = to.top + to.height / 2 - (from.top + from.height / 2);
-    const sc = to.height / Math.max(from.height, 1);
+    const landing = boardTarget ? fitBombLanding(from, to, flightViewport()) : null;
+    const dx = (landing?.x ?? to.left + to.width / 2) - (from.left + from.width / 2);
+    const dy = (landing?.y ?? to.top + to.height / 2) - (from.top + from.height / 2);
+    const sc = landing?.scale ?? to.height / from.height;
     const frames: Keyframe[] = motion() === 0
       ? [{ opacity: 1 }, { opacity: 0 }]
       : IS_FUTA04
@@ -431,9 +452,9 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
       : [
           { transform: 'translate(0, 0) rotate(0deg) scale(1)', opacity: 0.96 },
           { transform: `translate(${(dx * 0.58).toFixed(1)}px, ${(dy * 0.58 - 18).toFixed(1)}px) rotate(4deg) scale(${((1 + sc) / 2).toFixed(3)})`, opacity: 1, offset: 0.58 },
-          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(-3deg) scale(${sc.toFixed(3)})`, opacity: 1, offset: 0.82 },
-          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(-3deg) scale(${sc.toFixed(3)})`, opacity: 1, offset: 0.9 },
-          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(-3deg) scale(${sc.toFixed(3)})`, opacity: 0 },
+          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(0deg) scale(${sc.toFixed(3)})`, opacity: 1, offset: 0.82 },
+          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(0deg) scale(${sc.toFixed(3)})`, opacity: 1, offset: 0.9 },
+          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(0deg) scale(${sc.toFixed(3)})`, opacity: 0 },
         ];
     removeAfter(anim(d, frames, { duration: ms, easing: EASE.out, fill: 'forwards' }), d, ms + 50);
     return ms;
@@ -445,12 +466,13 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
    * that arrival, never before. A Bomb gets one brief border pulse at the reveal.
    * Reduce motion: a fade on the seat, then a fade on the pile, with no travel between them.
    */
-  function oppThrow(card: Card, seat: HTMLElement, pile: Element, f: number, quick = false, onLand?: () => void): number {
+  function oppThrow(card: Card, seat: HTMLElement, pile: Element, f: number, quick = false, onLand?: () => void, boardTarget = false): number {
     const layer = flightLayer();
     if (!layer) { onLand?.(); return 0; }
     clearFlights(layer);
     const a = seat.getBoundingClientRect();
     const b = pile.getBoundingClientRect();
+    if (boardTarget && (a.width < 1 || a.height < 1 || b.width < 1 || b.height < 1)) return 0;
     const layerRect = layer.getBoundingClientRect();
     const d = document.createElement('div');
     d.className = `flyer card opp ${suitClass(card)}`;
@@ -458,9 +480,10 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     d.innerHTML = cardFace(card);
     placeFlyer(d, a, layerRect);
     layer.appendChild(d);
-    const dx = b.left + b.width / 2 - (a.left + a.width / 2);
-    const dy = b.top + b.height / 2 - (a.top + a.height / 2);
-    const sc = b.height / Math.max(a.height, 1);
+    const landing = boardTarget ? fitBombLanding(a, b, flightViewport()) : null;
+    const dx = (landing?.x ?? b.left + b.width / 2) - (a.left + a.width / 2);
+    const dy = (landing?.y ?? b.top + b.height / 2) - (a.top + a.height / 2);
+    const sc = landing?.scale ?? b.height / Math.max(a.height, 1);
     const reveal = quick ? 45 : 80;
     const arc = quick ? 175 : 260;
     const ms = Math.max(1, Math.round((reveal + arc) * Math.max(f, 0.1)));

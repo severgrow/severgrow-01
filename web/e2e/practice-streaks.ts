@@ -49,6 +49,7 @@ const prepare = async (p: Page, signedIn: boolean) => {
     const body =
       path === '/v1/auth/methods' ? { ok: true, email: true }
       : path === `/v1/players/${PLAYER}/record` ? { ok: true, onlineBlitzBest: 7, achievements: { done: 12, total: 35 } }
+      : path === '/v1/seeds/achievements' ? { ok: true, achievements: Array.from({ length: 35 }, (_, i) => ({ done: i < 12 })) }
       : path === `/v1/players/${PLAYER}/profile` ? { ok: true, profile: { displayName: 'RYK', tag: 'ABCD', level: 23, tiles: 14, connectedTiles: 9, colourId: 3, online: { games: 40, wins: 26, longestStreak: 6 } } }
       : path === '/v1/players/me/streaks' ? { ok: true, practice: account, onlineBlitz: { current: 2, best: 7 } }
       : null;
