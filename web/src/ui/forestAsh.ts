@@ -175,6 +175,75 @@ const order = (keys: Iterable<string>) => [...keys].map((key) => ({ key, c: pars
 export const variantOrder = (key: string, salt: string, count: number): number[] =>
   Array.from({ length: count }, (_, i) => i).sort((a, b) => hash(`${key}:${salt}:${a}`) - hash(`${key}:${salt}:${b}`));
 
+/**
+ * A SEEDED STREAM, NOT A SORT (the six skins' weighted Voxel family needs this; owner's design
+ * proposal, docs/SKINS-PROPOSAL.md §02). `variantOrder` sorts by `hash(key:salt:slot)`, and each
+ * comparison hashes strings that differ only in their LAST character. FNV-1a returns correlated
+ * values for such strings, so with nine slots the first preference is up to 8x more likely to be
+ * one index than another (measured: chi2 606 on 8 df). Nine equally valid grass arts do not care.
+ * A 3 : 1 weighting cannot survive a skewed source of randomness, so the weighted pick takes its
+ * order from a uniform stream instead: FNV-1a of the cell key once, then mulberry32.
+ */
+const fnv1a32 = (s: string): number => {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return h >>> 0;
+};
+
+/** mulberry32: 32-bit seeded PRNG. Pure, fast, no clock and no `Math.random`. */
+const stream = (seed: number): (() => number) => {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1) >>> 0;
+    t ^= (t + Math.imul(t ^ (t >>> 7), t | 61)) >>> 0;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+/**
+ * ONE WEIGHT PER VOXEL GROUND, in variant-id order. Plain ground (v0) first, then dune, scrub and
+ * trail at 2, then the ten features at 1: a bag of 19. Plain ground therefore appears three times
+ * as often as any single feature BY WEIGHT (and about 3.3x measured, because feature repulsion
+ * occasionally hands a cell back to ground).
+ */
+export const VOXEL_GROUND_WEIGHT: readonly number[] = Object.freeze([3, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]);
+
+/**
+ * Weighted, neighbour-aware variant pick. Pure in (keys, salt, weights): the same board always
+ * resolves to the same art, and two neighbouring cells never share a FEATURE.
+ *
+ * TWO DELIBERATE DEPARTURES FROM `assignVariants`, both needed for weighting to mean anything:
+ *   1. the "no two neighbours alike" rule now covers FEATURES only. Applied to ground it would
+ *      forbid exactly the repetition that makes ground read as ground, and would silently undo the
+ *      weights. A weight equal to the smallest weight in `weights` marks a feature.
+ *   2. the preference order is a shuffled bag from a seeded stream, never a hash sort (see above).
+ * `assignVariants` itself is untouched, so Forest/Ash and every board already shipping is the same.
+ */
+export const assignWeightedVariants = (keys: Iterable<string>, salt: string, weights: readonly number[]): Map<string, number> => {
+  const out = new Map<string, number>();
+  const low = Math.min(...weights);
+  const bag: number[] = [];
+  weights.forEach((w, i) => { for (let n = 0; n < w; n++) bag.push(i); });
+  for (const { key, c } of order(keys)) {
+    const taken = new Set<number>();
+    for (const n of allNeighbors(c)) {
+      const v = out.get(coordKey(n));
+      if (v !== undefined) taken.add(v);
+    }
+    // One stream per cell, seeded from the cell's own key: no shared state between cells.
+    const rnd = stream(fnv1a32(`${key}:${salt}`));
+    const order_ = [...bag];
+    for (let i = order_.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      const t = order_[i]!; order_[i] = order_[j]!; order_[j] = t;
+    }
+    out.set(key, order_.find((v) => !(weights[v] === low && taken.has(v))) ?? order_[0]!);
+  }
+  return out;
+};
+
 export const assignVariants = (keys: Iterable<string>, salt: string, count: number): Map<string, number> => {
   const out = new Map<string, number>();
   for (const { key, c } of order(keys)) {

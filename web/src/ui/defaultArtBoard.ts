@@ -29,6 +29,8 @@ import { DEFAULT_ART_SPRITES } from './defaultArtSprites.js';
 import { FA_ALL_URLS, FA_ROCKS, faBaseColour, faGroundUrl, faRockSprite, faSetUrls, faSides, faTileSprite, faVariants, neighbourToward } from './forestAsh.js';
 import type { FaSprite, FaVariants } from './forestAsh.js';
 import type { TerritoryId } from './forestAsh.js';
+import { TILE_SKIN_BASE, tileSkinFor, tileSkinVariants } from './tileSkins.js';
+import { tileSkinDef, tileSkinPlacement } from './tileSkinArt.js';
 import { warmBoardArt } from './art-warm.js';
 // The replay's canvas pictures paint the same faces; they read this list from the module the board
 // already loaded, so neither the poster nor the video pulls a second copy of the sprite URLs.
@@ -282,6 +284,11 @@ export class DefaultArtBoardView extends BoardView {
   protected override usesWorldLayer() { return false; }
 
   private fa: FaVariants = { tile: new Map(), rock: new Map() };
+  /**
+   * A skinned side's variant per cell (ui/tileSkins.ts), or null for the shipped sprite set. Kept
+   * beside `fa` and resolved from the same keys, so a board always repaints the same art.
+   */
+  private skinV: [Map<string, number> | null, Map<string, number> | null] = [null, null];
   private rockKeys = new Set<string>();
   private rockLayer: SVGGElement | null = null;
   /** Cells a visible spill (grass, canopy, smoke) reaches: their hex highlights are cut by it. */
@@ -291,8 +298,13 @@ export class DefaultArtBoardView extends BoardView {
   /** Rows top to bottom (then left to right): a lower tile's grass lies over the tile above. */
   protected override orderKeys(keys: string[]) {
     // Fetch the sets this board is about to draw (Water/Toxic only when /test/ picked them).
-    for (const side of faSides()) requestSet(side);
+    for (const side of [0, 1] as const) if (!tileSkinFor(side)) requestSet(faSides()[side]);
     this.fa = faVariants(keys);
+    this.skinV = [null, null];
+    for (const side of [0, 1] as const) {
+      const skin = tileSkinFor(side);
+      if (skin) this.skinV[side] = tileSkinVariants(skin, keys);
+    }
     this.rockKeys.clear();
     this.rockLayer = null;
     this.centreKey = null;
@@ -300,6 +312,26 @@ export class DefaultArtBoardView extends BoardView {
     this.spillOn.clear();
     const at = new Map(keys.map((k) => [k, centerOf(k)] as const));
     return [...keys].sort((a, b) => at.get(a)!.y - at.get(b)!.y || at.get(a)!.x - at.get(b)!.x);
+  }
+
+  /**
+   * One skinned cell: a `<use>` of the family's variant, built once in the board's `<defs>`
+   * (ui/tileSkinArt.ts). Vector paint servers only — no image, no filter, no per-frame work — and
+   * the hexagon is inside the generated art, so it aligns with the cell exactly.
+   */
+  private skinUse(parent: SVGElement, key: string, x: number, y: number, k: number, owner: 0 | 1, root: boolean): boolean {
+    const skin = tileSkinFor(owner);
+    if (!skin) return false;
+    const defs = this.svg.querySelector('defs');
+    if (!defs) return false;
+    const variant = this.skinV[owner]?.get(key) ?? 0;
+    const def = tileSkinDef(defs, skin, variant, root);
+    el('use', {
+      href: `#${def}`,
+      class: `tileskin ${root ? 'tileskin-home' : 'tileskin-ground'} default-art-sprite`,
+      transform: tileSkinPlacement(x, y, k, getOrient()),
+    }, parent);
+    return true;
   }
 
   /** One upright sprite, its hex centre on the cell's centre (art never takes a tap). */
@@ -413,8 +445,13 @@ export class DefaultArtBoardView extends BoardView {
     // this skin's picture and not only the procedural drawing the body held.
     const host = home.querySelector<SVGGElement>('.lm-art') ?? home;
     const art = el('g', { class: 'default-home-art fa-home-art' }, host);
-    el('path', { d: hexPath('0,0', S, 'flat'), fill: faBaseColour(player), class: 'fa-home-base' }, art);
-    this.art(art, faTileSprite(this.fa, key, player, true), 0, 0, cellScale(key), 'default-art-sprite');
+    const skin = tileSkinFor(player);
+    el('path', { d: hexPath('0,0', S, 'flat'), fill: skin ? TILE_SKIN_BASE[skin] : faBaseColour(player), class: 'fa-home-base' }, art);
+    // A skinned home is the family's own mark (six of them, ui/tileSkinArt.ts); the shipped
+    // tree/volcano still paints when the side wears Forest/Ash.
+    if (!this.skinUse(art, key, 0, 0, cellScale(key), player, true)) {
+      this.art(art, faTileSprite(this.fa, key, player, true), 0, 0, cellScale(key), 'default-art-sprite');
+    }
     return home;
   }
 
@@ -491,7 +528,12 @@ export class DefaultArtBoardView extends BoardView {
     const below = ([0, 1] as const).map((p) => {
       const home = this.rootKey(p);
       const at = centerOf(home);
-      return { p, keys: allNeighbors(parseKey(home)).map(coordKey).filter((k) => centerOf(k).y > at.y + 1 && board[k] && !board[k]!.root) };
+      return {
+        p,
+        keys: allNeighbors(parseKey(home)).map(coordKey)
+          // A skinned ground stays inside its own hex: there is no fringe to lift over a home.
+          .filter((k) => centerOf(k).y > at.y + 1 && board[k] && !board[k]!.root && !tileSkinFor(board[k]!.owner)),
+      };
     });
     const signature = below.map(({ keys }) => keys.map((k) => `${k}:${board[k]!.owner}`).join(',')).join('|');
     if (signature === this.frontSignature) return;
@@ -514,8 +556,11 @@ export class DefaultArtBoardView extends BoardView {
     // The home's art lives on the home layer, above every tile.
     if (tile.root) return group;
     // The territory colour under the art fills its softened corners; the art itself is unclipped.
-    el('path', { d: hexPath(key, S, 'flat'), fill: faBaseColour(owner), class: 'fa-tile-base' }, group);
-    this.art(group, faTileSprite(this.fa, key, owner, false), x, y, cellScale(key), 'default-art-sprite');
+    const skin = tileSkinFor(owner);
+    el('path', { d: hexPath(key, S, 'flat'), fill: skin ? TILE_SKIN_BASE[skin] : faBaseColour(owner), class: 'fa-tile-base' }, group);
+    if (!this.skinUse(group, key, x, y, cellScale(key), owner, false)) {
+      this.art(group, faTileSprite(this.fa, key, owner, false), x, y, cellScale(key), 'default-art-sprite');
+    }
     // NO GOLD FRAME HERE. There is exactly ONE frame per bonus hex, in the single `l-rich-frames`
     // layer above every ground treatment (`afterSetup`), whether the hex is empty or occupied
     // (owner, 2026-11-16). A second copy inside the tile used to be the "occupied" half of a
@@ -533,7 +578,7 @@ export class DefaultArtBoardView extends BoardView {
     const urls = new Set<string>([...FA_ALL_URLS, groundUrl]);
     const bg = faGroundUrl();
     if (bg) urls.add(bg);
-    for (const side of faSides()) for (const url of faSetUrls(side)) urls.add(url);
+    for (const side of [0, 1] as const) if (!tileSkinFor(side)) for (const url of faSetUrls(faSides()[side])) urls.add(url);
     return [...urls];
   }
 
@@ -573,6 +618,8 @@ export class DefaultArtBoardView extends BoardView {
       const t = board[key];
       const rock = this.rockKeys.has(key);
       if (!t && !rock) continue;
+      // Skinned grounds are CSS-shaped and stay inside their hex: no overhang, no mask.
+      if (t && tileSkinFor(t.owner)) continue;
       const sprite = t ? faTileSprite(this.fa, key, t.owner, !!t.root) : faRockSprite(this.fa, key);
       if (!sprite.spill || artUnavailable(sprite.url)) continue;
       const mine = this.rank(board, key, order);

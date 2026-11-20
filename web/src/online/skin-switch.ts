@@ -15,6 +15,9 @@
 // not wearing.
 import { BACKGROUNDS, TERRITORIES, TERRITORY_IDS } from '../ui/forestAsh.js';
 import type { BackgroundId, TerritoryId } from '../ui/forestAsh.js';
+import { TILE_SKIN_IDS, TILE_SKIN_NAMES } from '../ui/tileSkins.js';
+import type { TileSkinId } from '../ui/tileSkins.js';
+import { ART_W, ART_H, tileSkinDef } from '../ui/tileSkinArt.js';
 import { SKIN_SWITCH, adoptServerSkin, chooseSkin, onSkinChoice, skinChoice, skinPickerVisible, skinRevision } from '../ui/skinChoice.js';
 import type { SkinChoice } from '../ui/skinChoice.js';
 import type { DuelClient } from '../../../server/src/client.js';
@@ -24,6 +27,35 @@ const NAMES: Record<TerritoryId | BackgroundId, string> = {
   classic: 'Classic', cocoa: 'Cocoa', lichen: 'Lichen', cinder: 'Cinder', clay: 'Clay', slate: 'Slate',
 };
 
+/** One chip: a value, the name it shows, and either a picture or a generated skin thumbnail. */
+type SkinOption = { id: string; label: string; thumb: string | null; skin?: TileSkinId };
+
+/**
+ * A skin's chip picture, drawn by the SAME builder the board paints from (`ui/tileSkinArt.ts`), so
+ * the pane can never advertise a family the board does not draw. No DOM (the node tests) → no
+ * picture, and the chip keeps its name.
+ */
+const skinThumb = (id: TileSkinId): SVGSVGElement | null => {
+  if (typeof document === 'undefined' || typeof document.createElementNS !== 'function') return null;
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${ART_W} ${ART_H}`);
+  svg.setAttribute('class', 'world-skin-thumb');
+  svg.setAttribute('aria-hidden', 'true');
+  const defs = document.createElementNS(NS, 'defs');
+  svg.appendChild(defs);
+  const use = document.createElementNS(NS, 'use');
+  use.setAttribute('href', `#${tileSkinDef(defs, id, 0)}`);
+  svg.appendChild(use);
+  return svg;
+};
+
+/** The six in-game families, with the shipped look first: `null` is Forest / Ash. */
+const tileOptions = (fallback: string): SkinOption[] => [
+  { id: 'none', label: fallback, thumb: null },
+  ...TILE_SKIN_IDS.map((id) => ({ id, label: TILE_SKIN_NAMES[id], thumb: null, skin: id })),
+];
+
 const CSS = `
 #world-skin-switch { display: grid; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #e8ddc51f; }
 #world-skin-switch .world-colour-chip { background-size: cover; background-position: center; }
@@ -32,6 +64,9 @@ const CSS = `
 #world-skin-switch .world-colour-swatch.skin-on .world-colour-name { color: #f6ecd2; }
 #world-skin-switch .world-colour-swatch.skin-on .world-colour-chip { box-shadow: 0 0 0 2px #f6ecd2; }
 #world-skin-switch .world-skin-note { margin: 0; font-size: 11px; line-height: 1.35; color: #e8ddc5a8; }
+#world-skin-switch .world-skin-thumb { display: block; width: 100%; height: 100%; }
+#world-skin-switch .world-colour-chip:has(.world-skin-thumb) { background: #0d0f13; }
+#world-skin-switch .world-skin-help { margin: 0; font-size: 10.5px; line-height: 1.35; color: #e8ddc57a; }
 #world-skin-switch .world-skin-note[hidden] { display: none; }
 `;
 
@@ -102,15 +137,18 @@ export function mountSkinSwitch(pane: HTMLElement | null): void {
   note.className = 'world-skin-note';
   note.setAttribute('role', 'status');
   note.hidden = true;
-  const rows: [string, keyof SkinChoice, { id: TerritoryId | BackgroundId; thumb: string | null }[]][] = [
-    ['Your tiles (test)', 'mine', TERRITORY_IDS.map((id) => ({ id, thumb: TERRITORIES[id].tiles[0]!.url }))],
-    ['Their tiles (test)', 'theirs', TERRITORY_IDS.map((id) => ({ id, thumb: TERRITORIES[id].tiles[0]!.url }))],
-    ['Board (test)', 'background', BACKGROUNDS.map((b) => ({ id: b.id, thumb: b.url }))],
+  const rows: [string, keyof SkinChoice, SkinOption[]][] = [
+    ['Your tiles (test)', 'mine', TERRITORY_IDS.map((id) => ({ id, label: NAMES[id], thumb: TERRITORIES[id].tiles[0]!.url }))],
+    ['Their tiles (test)', 'theirs', TERRITORY_IDS.map((id) => ({ id, label: NAMES[id], thumb: TERRITORIES[id].tiles[0]!.url }))],
+    ['Your tiles — six skins (test)', 'tileMine', tileOptions('Forest')],
+    ['Their tiles — six skins (test)', 'tileTheirs', tileOptions('Ash')],
+    ['Board (test)', 'background', BACKGROUNDS.map((b) => ({ id: b.id, label: NAMES[b.id], thumb: b.url }))],
   ];
   const mark = () => {
     const c = skinChoice();
     for (const b of box.querySelectorAll<HTMLButtonElement>('button[data-field]')) {
-      const on = c[b.dataset.field as keyof SkinChoice] === b.dataset.value;
+      // `none` stands for "no skin chosen" (null), which is the shipped Forest/Ash look.
+      const on = (c[b.dataset.field as keyof SkinChoice] ?? 'none') === b.dataset.value;
       // Its own mark, not the colour grid's `.current` (tests and styles read that as "my colour").
       b.classList.toggle('skin-on', on);
       b.setAttribute('aria-pressed', String(on));
@@ -133,20 +171,23 @@ export function mountSkinSwitch(pane: HTMLElement | null): void {
       b.className = 'world-colour-swatch';
       b.dataset.field = field;
       b.dataset.value = o.id;
-      b.setAttribute('aria-label', NAMES[o.id]);
+      b.setAttribute('aria-label', o.label);
       const chip = document.createElement('span');
       chip.className = 'world-colour-chip';
       chip.setAttribute('aria-hidden', 'true');
       if (o.thumb) chip.style.backgroundImage = `url("${o.thumb}")`;
       else chip.style.background = '#2a2b2e';
+      const thumb = o.skin ? skinThumb(o.skin) : null;
+      if (thumb) chip.replaceChildren(thumb);
       const name = document.createElement('span');
       name.className = 'world-colour-name';
-      name.textContent = NAMES[o.id];
+      name.textContent = o.label;
       b.append(chip, name);
       b.addEventListener('click', () => {
         note.hidden = true;
         const previous = skinChoice();
-        chooseSkin({ [field]: o.id });   // the pane re-marks itself (ui/skinChoice.ts)
+        // `none` is "no skin": it stores null and the board returns to Forest / Ash.
+        chooseSkin({ [field]: o.id === 'none' ? null : o.id });   // the pane re-marks itself
         if (field !== 'mine' || !account) return;
         const selected = o.id as TerritoryId;
         const owner = account;
@@ -174,7 +215,12 @@ export function mountSkinSwitch(pane: HTMLElement | null): void {
     }
     box.append(title, grid);
   }
-  box.appendChild(note);
+  // Two sides that wear the SAME family cannot be told apart by colour any more: these skins have
+  // fixed colours and are never tinted toward the owner's palette colour (ui/tileSkins.ts).
+  const help = document.createElement('p');
+  help.className = 'world-skin-help';
+  help.textContent = 'Skins paint fixed colours: colour no longer says whose. Pick a different family for each side.';
+  box.append(note, help);
   pane.appendChild(box);
   mark();
 }
