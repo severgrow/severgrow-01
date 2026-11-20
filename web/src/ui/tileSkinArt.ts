@@ -42,6 +42,11 @@ const W = (pct: number): number => (ART_W * pct) / 100;
 const H = (pct: number): number => (ART_H * pct) / 100;
 
 // ---- colour ------------------------------------------------------------------------------------
+//
+// NO PURE WHITE (owner, 2026-11-08: "no white anywhere in game"). Every highlight below is the
+// product's warm off-white, #f2ede4 (web/src/logic/off-white.ts), written with an alpha suffix where
+// a highlight is translucent — so a specular is cream, never a blue-white glare, and the source
+// scan in web/tests/off-white.test.ts stays green for these recipes too.
 
 type RGBA = readonly [number, number, number, number];
 
@@ -248,9 +253,9 @@ const consoleVintage = (vp: number): Shape[] => [
 ];
 
 const consoleArt = (mid: string, mv: string, vp: number, home: boolean): SkinArt => {
-  const hi = mix(mid, 0.66, '#ffffff');
+  const hi = mix(mid, 0.66, '#f2ede4');
   const lo = mix(mid, 0.78, '#5f5c57');
-  const rim1 = mix(hi, 0.88, '#ffffff');
+  const rim1 = mix(hi, 0.88, '#f2ede4');
   const rim2 = mix(lo, 0.74, '#2f2d2a');
   const rim = u(1.2);
   const base = fullHex(lin(158, [[0, rim1], [1, rim2]]));
@@ -264,7 +269,7 @@ const consoleArt = (mid: string, mv: string, vp: number, home: boolean): SkinArt
       hex: [base],
       face: [
         fullHex(flat(mix(rim2, 0.76, '#000000')), inset - u(1.5)),
-        ...cube(300, ['#ffffff', hi, mid], inset),
+        ...cube(300, ['#f2ede4', hi, mid], inset),
       ],
       above: [full(rad([CX, CY], [W(60), H(60)], [[0, fade(mid, 0.4)], [1, 'transparent']]))],
       whole: vintage,
@@ -272,12 +277,12 @@ const consoleArt = (mid: string, mv: string, vp: number, home: boolean): SkinArt
     };
   }
 
-  let face: Shape[] = [full(lin(180, [[0, '#ffffff24'], [0.3, 'transparent']]))];
+  let face: Shape[] = [full(lin(180, [[0, '#f2ede424'], [0.3, 'transparent']]))];
   let above: Shape[] = [];
   if (mv === 'terrace') {
     // Seven stacked bands instead of a cube: a terrace seen edge on.
     face = [
-      full(lin(180, [[0, '#ffffff1f'], [0.26, 'transparent']])),
+      full(lin(180, [[0, '#f2ede41f'], [0.26, 'transparent']])),
       full(lin(180, [
         [0, hi], [0.13, hi], [0.13, lo], [0.28, lo], [0.28, mid], [0.44, mid],
         [0.44, hi], [0.57, hi], [0.57, mid], [0.73, mid], [0.73, lo], [0.87, lo], [0.87, hi], [1, hi],
@@ -308,7 +313,7 @@ const consoleArt = (mid: string, mv: string, vp: number, home: boolean): SkinArt
       const shift = (s: Shape): Shape => (s.t === 'poly' ? poly(s.pts.map(([x, y]) => [x + dx, y + dy] as Pt), s.p) : s);
       above = [
         fullHex(flat(mix(rim2, 0.7, '#000000')), inset - u(1.2)),
-        ...cube(300, ['#ffffff', mid, lo], inset),
+        ...cube(300, ['#f2ede4', mid, lo], inset),
       ].map(shift);
     } else if (mv === 'wire') {
       // Three hairline grids at 0/60/120, the "wireframe" move.
@@ -431,37 +436,37 @@ const voxelArt = (variant: number, home: boolean): SkinArt => {
 // 03 · BRUSHED — blue anodised aluminium: bevel + specular sweep + ambient occlusion
 // =================================================================================================
 
-const BRUSH = { white: '#ffffff', bright: '#d3ebfd', mid: '#5aa7dd', deep: '#2a6597', ink: '#0b2438' } as const;
+const BRUSH = { white: '#f2ede4', bright: '#d3ebfd', mid: '#5aa7dd', deep: '#2a6597', ink: '#0b2438' } as const;
 
 const BRUSH_BASE = lin(180, [
   [0, BRUSH.white], [0.2, mix(BRUSH.bright, 0.8, BRUSH.mid)], [0.48, BRUSH.mid], [0.76, BRUSH.deep], [1, BRUSH.ink],
 ]);
 const BRUSH_BANDS = lin(180, [
-  [0, mix(BRUSH.bright, 0.88, '#ffffff')], [0.15, BRUSH.bright], [0.40, BRUSH.mid],
+  [0, mix(BRUSH.bright, 0.88, '#f2ede4')], [0.15, BRUSH.bright], [0.40, BRUSH.mid],
   [0.68, mix(BRUSH.deep, 0.88, BRUSH.mid)], [0.84, BRUSH.deep], [1, mix(BRUSH.ink, 0.9, BRUSH.deep)],
 ]);
-const BRUSH_SHEEN = lin(180, [[0.04, 'transparent'], [0.075, '#ffffffdb'], [0.11, '#ffffff66'], [0.16, 'transparent']]);
-const BRUSH_LOBE = rad([W(22), H(4)], [W(120), H(68)], [[0, '#ffffffe6'], [0.56, 'transparent']]);
+const BRUSH_SHEEN = lin(180, [[0.04, 'transparent'], [0.075, '#f2ede4db'], [0.11, '#f2ede466'], [0.16, 'transparent']]);
+const BRUSH_LOBE = rad([W(22), H(4)], [W(120), H(68)], [[0, '#f2ede4e6'], [0.56, 'transparent']]);
 const BRUSH_LINES = bands(96, u(4), [
-  [0, 'transparent'], [0.375, '#ffffff2b'], [0.625, '#0b243826'], [1, 'transparent'],
+  [0, 'transparent'], [0.375, '#f2ede42b'], [0.625, '#0b243826'], [1, 'transparent'],
 ]);
 
 /** Per variant: the specular sweep's position, and the wear layer (`--wear`). */
 const BRUSHED_WEAR: readonly { sweep: number; wear: Shape[] }[] = [
   { sweep: 18, wear: [full(bands(178, u(11), [[0, 'transparent'], [0.318, '#0b243824'], [0.5, '#0b243824'], [0.6, 'transparent']]))] },
-  { sweep: 26, wear: [full(lin(112, [[0, 'transparent'], [0.468, 'transparent'], [0.468, '#ffffffd9'], [0.477, '#ffffffd9'], [0.477, '#0b243899'], [0.486, '#0b243899'], [0.486, 'transparent']]))] },
+  { sweep: 26, wear: [full(lin(112, [[0, 'transparent'], [0.468, 'transparent'], [0.468, '#f2ede4d9'], [0.477, '#f2ede4d9'], [0.477, '#0b243899'], [0.486, '#0b243899'], [0.486, 'transparent']]))] },
   { sweep: 32, wear: [
-    full(lin(74, [[0, 'transparent'], [0.41, 'transparent'], [0.41, '#ffffff2e'], [0.55, '#ffffff2e'], [0.55, 'transparent']])),
+    full(lin(74, [[0, 'transparent'], [0.41, 'transparent'], [0.41, '#f2ede42e'], [0.55, '#f2ede42e'], [0.55, 'transparent']])),
     full(lin(74, [[0, 'transparent'], [0.43, 'transparent'], [0.43, '#0b243840'], [0.52, '#0b243840'], [0.52, 'transparent']])),
-    full(lin(74, [[0, 'transparent'], [0.445, 'transparent'], [0.445, '#ffffffe6'], [0.46, '#ffffffe6'], [0.46, 'transparent']])),
+    full(lin(74, [[0, 'transparent'], [0.445, 'transparent'], [0.445, '#f2ede4e6'], [0.46, '#f2ede4e6'], [0.46, 'transparent']])),
   ] },
   { sweep: 14, wear: [full(rad([W(68), H(34)], [W(44), H(30)], [[0, '#1d4a724d'], [0.74, 'transparent']]))] },
-  { sweep: 38, wear: [full(bands(84, u(9), [[0, 'transparent'], [0.556, '#ffffff2b'], [0.778, '#0b243824'], [1, 'transparent']]))] },
+  { sweep: 38, wear: [full(bands(84, u(9), [[0, 'transparent'], [0.556, '#f2ede42b'], [0.778, '#0b243824'], [1, 'transparent']]))] },
   { sweep: 20, wear: [
-    full(lin(126, [[0, 'transparent'], [0.30, 'transparent'], [0.30, '#ffffffcc'], [0.309, '#ffffffcc'], [0.309, 'transparent']])),
+    full(lin(126, [[0, 'transparent'], [0.30, 'transparent'], [0.30, '#f2ede4cc'], [0.309, '#f2ede4cc'], [0.309, 'transparent']])),
     full(lin(126, [[0, 'transparent'], [0.37, 'transparent'], [0.37, '#0b243880'], [0.377, '#0b243880'], [0.377, 'transparent']])),
   ] },
-  { sweep: 44, wear: [full(bands(70, u(11), [[0, 'transparent'], [0.273, '#ffffff73'], [0.364, 'transparent'], [1, 'transparent']]))] },
+  { sweep: 44, wear: [full(bands(70, u(11), [[0, 'transparent'], [0.273, '#f2ede473'], [0.364, 'transparent'], [1, 'transparent']]))] },
 ];
 
 const brushedArt = (variant: number, home: boolean): SkinArt => {
@@ -482,7 +487,7 @@ const brushedArt = (variant: number, home: boolean): SkinArt => {
         full(BRUSH_SHEEN),
         full(BRUSH_LOBE),
         ao,
-        circle([CX, CY], W(5.5), rad([CX, CY], [W(5.5), W(5.5)], [[0, '#ffffff'], [0.40, BRUSH.bright], [0.78, BRUSH.mid], [1, BRUSH.ink]])),
+        circle([CX, CY], W(5.5), rad([CX, CY], [W(5.5), W(5.5)], [[0, '#f2ede4'], [0.40, BRUSH.bright], [0.78, BRUSH.mid], [1, BRUSH.ink]])),
       ],
       whole: [],
     };
@@ -494,7 +499,7 @@ const brushedArt = (variant: number, home: boolean): SkinArt => {
     hex: [fullHex(BRUSH_BASE)],
     face: [full(BRUSH_SHEEN), full(BRUSH_LOBE), full(BRUSH_LINES), full(BRUSH_BANDS)],
     above: [
-      full(lin(112, [[0, 'transparent'], [s, 'transparent'], [s + 0.04, '#ffffffe0'], [s + 0.08, '#ffffff40'], [s + 0.15, 'transparent']])),
+      full(lin(112, [[0, 'transparent'], [s, 'transparent'], [s + 0.04, '#f2ede4e0'], [s + 0.08, '#f2ede440'], [s + 0.15, 'transparent']])),
       ao,
       ...wear,
     ],
@@ -506,7 +511,7 @@ const brushedArt = (variant: number, home: boolean): SkinArt => {
 // 04 · CARRARA — natural stone: veins whose width changes along their length
 // =================================================================================================
 
-const CARRARA = { stone: '#eef1f4', warm: '#f8fafb', shade: '#c3ccd5', deep: '#59636f', vein: '#7d8a97', glint: '#ffffff' } as const;
+const CARRARA = { stone: '#eef1f4', warm: '#f8fafb', shade: '#c3ccd5', deep: '#59636f', vein: '#7d8a97', glint: '#f2ede4' } as const;
 
 const CARRARA_VEINS: readonly Shape[][] = [
   // v1 the bold seam: four members 2-4° apart, so it swells mid-tile and thins to nothing
@@ -555,7 +560,7 @@ const CARRARA_VEINS: readonly Shape[][] = [
 ];
 
 const CARRARA_BASE = lin(180, [[0, CARRARA.glint], [0.54, CARRARA.shade], [1, CARRARA.deep]]);
-const CARRARA_CHAMFER = lin(180, [[0, '#ffffff'], [0.022, '#ffffff'], [0.032, '#ffffffb3'], [0.07, 'transparent']]);
+const CARRARA_CHAMFER = lin(180, [[0, '#f2ede4'], [0.022, '#f2ede4'], [0.032, '#f2ede4b3'], [0.07, 'transparent']]);
 
 const carraraArt = (variant: number, home: boolean): SkinArt => {
   const rim = u(1.5);
@@ -567,12 +572,12 @@ const carraraArt = (variant: number, home: boolean): SkinArt => {
       hex: [fullHex(CARRARA_BASE)],
       face: [
         fullHex(flat(CARRARA.deep), inset - u(1)),
-        fullHex(lin(170, [[0, '#ffffff'], [0.46, '#f2f5f8'], [1, '#c9d2db']]), inset),
+        fullHex(lin(170, [[0, '#f2ede4'], [0.46, '#f2f5f8'], [1, '#c9d2db']]), inset),
         full(lin(118, [[0, 'transparent'], [0.424, 'transparent'], [0.436, '#78858f2b'], [0.464, '#78858f2b'], [0.482, 'transparent']])),
         full(lin(121, [[0, 'transparent'], [0.438, 'transparent'], [0.446, '#78858f1f'], [0.458, '#78858f1f'], [0.470, 'transparent']])),
         { t: 'dots', pitch: u(2.9), r: u(0.6), at: [0, 0], c: '#7d8a9738' },
         full(CARRARA_CHAMFER),
-        full(rad([W(30), H(14)], [W(80), H(46)], [[0, '#ffffffd9'], [0.64, 'transparent']])),
+        full(rad([W(30), H(14)], [W(80), H(46)], [[0, '#f2ede4d9'], [0.64, 'transparent']])),
       ],
       above: [],
       whole: [],
@@ -586,12 +591,12 @@ const carraraArt = (variant: number, home: boolean): SkinArt => {
       full(lin(168, [[0, CARRARA.warm], [0.42, CARRARA.stone], [1, CARRARA.shade]])),
       // the depth shadow is UNDER the veins: the block falls away behind them
       full(rad([W(50), H(114)], [W(140), H(58)], [[0, '#38434ea6'], [0.64, 'transparent']])),
-      full(rad([W(44), H(32)], [W(64), H(42)], [[0, '#ffffff59'], [0.72, 'transparent']])),
+      full(rad([W(44), H(32)], [W(64), H(42)], [[0, '#f2ede459'], [0.72, 'transparent']])),
       ...CARRARA_VEINS[v]!,
       { t: 'dots', pitch: u(2.3), r: u(0.45), at: [u(1.4), u(2.1)], c: '#59636f4d' },
       { t: 'dots', pitch: u(3.1), r: u(0.55), at: [0, 0], c: '#7d8a976b' },
-      full(rad([W(73), H(63)], [W(34), H(22)], [[0, '#ffffff4d'], [0.72, 'transparent']])),
-      full(rad([W(27), H(13)], [W(78), H(44)], [[0, '#ffffffc4'], [0.62, 'transparent']])),
+      full(rad([W(73), H(63)], [W(34), H(22)], [[0, '#f2ede44d'], [0.72, 'transparent']])),
+      full(rad([W(27), H(13)], [W(78), H(44)], [[0, '#f2ede4c4'], [0.62, 'transparent']])),
       // the chamfer, over the veins: light crosses the stone
       full(CARRARA_CHAMFER),
     ],
@@ -738,7 +743,7 @@ const ringStops = (at: Pt, pitch: number, width: number): Paint => {
   const stops: Stop[] = [];
   for (let r = 0; r < far - 1e-6; r += pitch) {
     const inner = r + Math.max(0.001, pitch - width);
-    stops.push([r / far, 'transparent'], [Math.min(1, inner / far), 'transparent'], [Math.min(1, inner / far), '#ffffff73'], [Math.min(1, (r + pitch) / far), '#ffffff73']);
+    stops.push([r / far, 'transparent'], [Math.min(1, inner / far), 'transparent'], [Math.min(1, inner / far), '#f2ede473'], [Math.min(1, (r + pitch) / far), '#f2ede473']);
   }
   if (stops[stops.length - 1]![0] < 1) stops.push([1, stops[stops.length - 1]![1]]);
   return rad(at, [far, far], stops);
@@ -757,8 +762,8 @@ const hypnosisArt = (variant: number, home: boolean): SkinArt => {
         circle([CX, CY], W(17), flat(HYPNOSIS.pearl)),
         circle([CX, CY], W(15), lin(180, [[0, HYPNOSIS.ink], [1, HYPNOSIS.deep]])),
         circle([CX, CY], W(8), flat(HYPNOSIS.pearl)),
-        circle([CX, CY], W(3.4), flat('#ffffff')),
-        full(rad([CX, CY], [W(34), W(34)], [[0, '#ffffffcc'], [0.35, fade('#ffffff', 0.3)], [1, 'transparent']])),
+        circle([CX, CY], W(3.4), flat('#f2ede4')),
+        full(rad([CX, CY], [W(34), W(34)], [[0, '#f2ede4cc'], [0.35, fade('#f2ede4', 0.3)], [1, 'transparent']])),
       ],
       above: [],
       whole: [],
@@ -771,22 +776,22 @@ const hypnosisArt = (variant: number, home: boolean): SkinArt => {
   if (p.arms) {
     const [on, period, from] = p.arms;
     for (let a = from; a < from + 360 - 1e-9; a += period) {
-      face.push(poly(sectorPoly(a, Math.min(a + on, from + 360), at, 0, 0), flat('#ffffff8c')));
+      face.push(poly(sectorPoly(a, Math.min(a + on, from + 360), at, 0, 0), flat('#f2ede48c')));
     }
   }
   if (p.rings) for (const [pitch, width] of p.rings) face.push(full(ringStops([W(p.bx), H(p.by)], u(pitch), u(width))));
   face.push(...wheel(at, PEARL, p.rot));
   face.push(full(rad(at, [far, far], [[0, HYPNOSIS.pearl], [0.34, '#cfd3dd'], [0.88, HYPNOSIS.deep], [1, HYPNOSIS.ink]])));
   if (variant === 6) {
-    face.push(full(bands(0, u(4.6), [[0, '#ffffff2b'], [u(0.7) / u(4.6), 'transparent']])));
-    face.push(full(bands(90, u(4.6), [[0, '#ffffff2b'], [u(0.7) / u(4.6), 'transparent']])));
+    face.push(full(bands(0, u(4.6), [[0, '#f2ede42b'], [u(0.7) / u(4.6), 'transparent']])));
+    face.push(full(bands(90, u(4.6), [[0, '#f2ede42b'], [u(0.7) / u(4.6), 'transparent']])));
   }
   return {
     rim,
     hex: [base],
     face,
     above: [
-      full(rad(at, [W(4), H(4)], [[0, '#ffffffb3'], [0.35, '#ffffffb3'], [1, 'transparent']])),
+      full(rad(at, [W(4), H(4)], [[0, '#f2ede4b3'], [0.35, '#f2ede4b3'], [1, 'transparent']])),
       full(rad([CX, CY], [W(72), W(72)], [[0.44, 'transparent'], [1, '#1a2030b3']])),
     ],
     whole: [],
