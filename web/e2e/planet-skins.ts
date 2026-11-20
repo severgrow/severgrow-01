@@ -282,9 +282,10 @@ try {
   await page.locator('#world-key-colour').click();
   const picker = page.locator('#world-skin-switch');
   await picker.waitFor({ state: 'visible' });
-  assert.equal(await picker.locator('button[data-field="mine"]').count(), 4);
-  await picker.locator('button[data-field="mine"][data-value="water"]').click();
-  await page.waitForFunction(() => document.querySelector('#world-skin-switch button[data-field="mine"][data-value="water"]')?.getAttribute('aria-pressed') === 'true');
+  // THE SKINS PANE (owner, 2026-11-20): a real skin is one tap for the planet AND the match.
+  assert.equal(await picker.locator('[data-group="planet"] .world-skin-tile').count(), 11);
+  await picker.locator('[data-group="planet"] .world-skin-tile[data-value="water"]').click();
+  await page.waitForFunction(() => document.querySelector('#world-skin-switch [data-group="planet"] .world-skin-tile[data-value="water"]')?.getAttribute('aria-pressed') === 'true');
   await page.waitForTimeout(150);
   assert.deepEqual(posts, ['water']);
   const frames = await page.evaluate(() => (window as any).__severgrow.planet().frames as number);

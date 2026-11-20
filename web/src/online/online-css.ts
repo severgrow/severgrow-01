@@ -1191,6 +1191,31 @@ html.reduce-motion .world-colour-chip { animation:none!important; }
 .world-colour-swatch.current .world-colour-chip { box-shadow: inset 0 1px 0 #ffffff3d, 0 0 0 2px #f6ecd2; }
 .world-colour-swatch:focus { outline: none; }
 .world-colour-swatch:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
+
+/* ---- SKINS (owner, 2026-11-20: "'COLOUR' in submenu is renamed to 'SKINS'") -------------------
+   The pane holds the two appearances as two tile rows (the switch builds them), and the twenty
+   owner colours live in a dark-glass sheet OVER it. The sheet is moved to <body> by
+   online/skin-switch.ts so this window's clipping cannot cut it; it reuses the same glass material
+   as the other panels (accounts sheets / the world window), never a second modal style. */
+.world-colour-sheet { position: fixed; inset: 0; z-index: 96; display: grid; place-items: center; }
+.world-colour-sheet[hidden] { display: none; }
+.world-colour-sheet-scrim { position: absolute; inset: 0; background: rgba(4, 6, 5, .58); }
+.world-colour-sheet-panel {
+  position: relative; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box;
+  width: min(400px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 8px 10px 12px;
+  border-radius: 15px; color: #e8ddc5; background: rgba(9, 12, 10, .9);
+  -webkit-backdrop-filter: blur(10px) saturate(1.06); backdrop-filter: blur(10px) saturate(1.06);
+  box-shadow: inset 0 1px 0 #e8ddc514, 0 22px 54px rgba(0, 0, 0, .5);
+  overflow: hidden;
+}
+.world-colour-sheet-head { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; min-height: 46px; }
+.world-colour-sheet .world-colours { overflow: auto; overscroll-behavior: contain; padding: 2px; }
+.world-colour-done {
+  min-height: 44px; margin: 2px 0 0; border: 0; border-radius: 999px; cursor: pointer;
+  background: #f0e9dc; color: #12100e; font: 700 .78rem/1 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
+  letter-spacing: .06em; text-transform: uppercase;
+}
+.world-colour-done:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 2px; }
 /* the drop on the COLOUR key is filled with the player's own colour (the map's --territory), so
    the row answers "what colour am I?" without opening anything. Mixed toward cream so a dark slot
    still reads on the key's near-black plate. */

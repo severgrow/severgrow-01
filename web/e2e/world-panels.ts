@@ -10,7 +10,7 @@ const world={version:WORLD_VERSION,revision:1,cost:100,challengeStake:0,cells:se
 try{
  const p=await browser.newPage({viewport:{width:320,height:568},hasTouch:true,isMobile:true});
  const errors:string[]=[];p.on('pageerror',e=>errors.push(e.message));
- await p.addInitScript(`window.__name=(f)=>f;localStorage.setItem('futa05-test:futasaku.world.last.v1',${JSON.stringify(JSON.stringify(world))});localStorage.setItem('futa05-test:severgrow.duel.identity.v1',${JSON.stringify(JSON.stringify({token:'local',playerId:me,displayName:'Cedar',kind:'guest'}))});localStorage.setItem('futa05-test:severgrow.settings.v1',JSON.stringify({sound:false,music:false,reduceMotion:false}));`);
+ await p.addInitScript(`window.__name=(f)=>f;localStorage.setItem('futa05-test:futasaku.world.last.v1',${JSON.stringify(JSON.stringify(world))});localStorage.setItem('futa05-test:severgrow.duel.identity.v1',${JSON.stringify(JSON.stringify({token:'local',playerId:me,displayName:'Cedar',kind:'account'}))});localStorage.setItem('futa05-test:severgrow.settings.v1',JSON.stringify({sound:false,music:false,reduceMotion:false}));`);
  await p.goto(fixture.origin+'/test/');await p.waitForFunction(()=>!!(window as any).__severgrow?.ready?.()&&!!(window as any).__severgrow.planet()?.ready);
  await p.locator('#menu-world').click();await p.locator('#online-world-menu').click();await p.locator('#world-key-colour').click();
  const body=p.locator('#online-world-panel .world-panel-body');

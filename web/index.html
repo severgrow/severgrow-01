@@ -477,11 +477,28 @@
                 <p id="world-achievements-empty" class="world-pane-empty" role="status" aria-live="polite" hidden></p>
                 <div id="online-world-achievements" class="world-achievements" role="list" aria-label="Achievements"></div>
               </div>
-              <!-- YOUR COLOUR: the twenty swatches, four to a row, each NAMED for accessibility. -->
+              <!-- SKINS (owner, 2026-11-20: "'COLOUR' in submenu is renamed to 'SKINS'"). Two rows make
+                   the two appearances impossible to confuse: ON THE PLANET (Colour + the ten real
+                   skins) and IN A MATCH (the ten real skins only). The twenty owner colours open in
+                   a dark-glass sheet OVER this pane. The sheet is written here so the established
+                   picker keeps its markup, and mountSkinSwitch (online/skin-switch.ts) moves it to
+                   <body> so the window's clipping can never cut it. -->
               <div class="world-pane" data-pane="colour">
-                <p id="world-colour-label" class="world-pane-label"></p>
-                <div id="world-colour-grid" class="world-colours" role="group" aria-labelledby="world-colour-label"></div>
-                <p id="world-colour-note" class="world-pane-empty" role="status" aria-live="polite"></p>
+                <div id="world-skins" class="world-skins"></div>
+                <section id="world-colour-sheet" class="world-colour-sheet" role="dialog" aria-modal="true" aria-labelledby="world-colour-sheet-title" hidden>
+                  <div class="world-colour-sheet-scrim" data-sheet-close></div>
+                  <div class="world-colour-sheet-panel" data-ix-surface>
+                    <header class="world-colour-sheet-head">
+                      <span class="world-panel-spacer" aria-hidden="true"></span>
+                      <h3 id="world-colour-sheet-title" class="world-panel-title"></h3>
+                      <button id="world-colour-sheet-close" class="world-panel-close" type="button" aria-label="Close"><span class="i" data-icon="close"></span></button>
+                    </header>
+                    <p id="world-colour-label" class="world-pane-label"></p>
+                    <div id="world-colour-grid" class="world-colours" role="group" aria-labelledby="world-colour-label"></div>
+                    <p id="world-colour-note" class="world-pane-empty" role="status" aria-live="polite"></p>
+                    <button id="world-colour-done" class="world-colour-done" type="button"></button>
+                  </div>
+                </section>
               </div>
             </div>
           </section>
