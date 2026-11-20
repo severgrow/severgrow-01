@@ -65,7 +65,19 @@ export type RewardInput = {
   /** Only for a server-verified Territory achievement (receipt `achievement:<id>`): its fixed amount. */
   achievementSeeds?: number;
 };
-export type RewardResult = { awarded: number; reason: string | null; wallet: SeedWallet; replayed: boolean };
+/**
+ * The settled receipt a paying path returns. `serverNow` is filled ONLY on the wire
+ * (`server/src/seeds/router.ts`): the server's clock when it answered, so the finish card can say
+ * how long until the UTC daily cap returns without trusting the device's clock. Stores never set
+ * it, and a client that does not receive it simply omits the countdown.
+ */
+export type RewardResult = {
+  awarded: number;
+  reason: string | null;
+  wallet: SeedWallet;
+  replayed: boolean;
+  serverNow?: number;
+};
 
 /**
  * One recorded settlement receipt, as the achievements page reads it. The receipt table already

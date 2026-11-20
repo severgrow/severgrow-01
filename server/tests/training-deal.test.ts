@@ -130,7 +130,11 @@ describe('the Training route takes a deal', () => {
   it('pays a deal sent whole', async () => {
     const res = await harness().post({ deal: { seed: win.seed, botLevel: OPPONENT }, actions: win.actions, botVersion: CURRENT_BOT_VERSION });
     expect(res.status).toBe(200);
-    expect((res.body as { reward: { awarded: number } }).reward.awarded).toBeGreaterThan(0);
+    const reward = (res.body as { reward: { awarded: number; serverNow?: number } }).reward;
+    expect(reward.awarded).toBeGreaterThan(0);
+    // The finished card words the daily cap's wait from the SERVER's clock (owner ask, 2026-11-20),
+    // so the settle wire carries it rather than letting the device guess.
+    expect(Number.isFinite(reward.serverNow)).toBe(true);
   });
 
   it('pays a deal sent in slices (resume tokens), as a page sends it', async () => {

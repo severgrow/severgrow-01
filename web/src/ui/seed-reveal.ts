@@ -17,6 +17,7 @@
 // is deliberately NO "pending" state (owner report, 2026-10-25): a card that rests on "pending"
 // is a card that is lying about a receipt nobody has written.
 import { EASE } from '../logic/motion.js';
+import { seedCapNotice } from '../logic/seed-cap.js';
 import { seedIcon } from '../online/seed-icon.js';
 
 export type SeedReward =
@@ -53,13 +54,18 @@ export type SettledSeeds = { awarded: number; reason: string | null };
  * means no line, and a denied report is the same calm sentence the campaign card uses rather than a
  * "+0". Pure, so all four states are pinned without a browser.
  */
-export function duelSeedsMessage(settled: SettledSeeds | null | undefined): string {
+export function duelSeedsMessage(settled: SettledSeeds | null | undefined, serverNowMs?: number | null): string {
   if (!settled) return '';
   const awarded = settled.awarded;
   if (!Number.isFinite(awarded) || awarded < 0) return '';
   if (awarded > 0) return `+${Math.floor(awarded)} Seeds`;
-  // A limit is worth saying: the player did everything right and the day's allowance is gone.
-  return settled.reason && /limit/.test(settled.reason) ? 'Seed limit reached today' : '';
+  // A limit is worth saying: the player did everything right and the day's allowance is gone. When
+  // the caller has the server's clock, say how long the wait is too (logic/seed-cap.ts). Without it,
+  // the calm sentence alone — never a countdown from this device's possibly-wrong clock.
+  if (!settled.reason || !/limit/.test(settled.reason)) return '';
+  return typeof serverNowMs === 'number' && Number.isFinite(serverNowMs)
+    ? seedCapNotice(serverNowMs)
+    : 'Seed limit reached today';
 }
 
 /**
@@ -67,11 +73,15 @@ export function duelSeedsMessage(settled: SettledSeeds | null | undefined): stri
  *
  * Same rule as a duel, with one more honest state: `replayed` means this exact first clear was paid
  * before, so the card says NOTHING rather than counting a second `+N` the wallet never received.
- * A `0` whose reason names a cap says so in the calm wording; any other `0` is silence, never "+0".
+ * A `0` whose reason names a cap says so in the calm wording (plus the wait, when the settle wire
+ * carried the server's clock); any other `0` is silence, never "+0".
  */
-export function settledSeedsMessage(settled: { awarded: number; reason: string | null; replayed?: boolean }): string {
+export function settledSeedsMessage(
+  settled: { awarded: number; reason: string | null; replayed?: boolean; serverNow?: number },
+  serverNowMs?: number | null,
+): string {
   if (settled.replayed) return '';
-  return duelSeedsMessage(settled);
+  return duelSeedsMessage(settled, serverNowMs ?? settled.serverNow);
 }
 
 /** The numbers the count passes through: five steps, easing out, always landing on the amount. */

@@ -9335,7 +9335,7 @@ function renderGameOver() {
     // number the client worked out for itself would be a guess. See `duelSeedsMessage`.
     clearGoSeeds();
     const snapshot = os.driver.snapshot();
-    seedRewardMessage = duelSeedsMessage(snapshot.seeds ?? null);
+    seedRewardMessage = duelSeedsMessage(snapshot.seeds ?? null, snapshot.serverNow);
     // A paid duel counts toward today's ceiling in the Seeds forecast (logic/seed-forecast.ts).
     if (snapshot.seeds) noteSeedsPaid(store, `duel:${snapshot.matchId}`, 'queue', snapshot.seeds.awarded);
     paintGoSeeds();

@@ -81,8 +81,9 @@ describe('the shared Seeds paragraph cannot leak between modes', () => {
   });
 
   it('the amount comes from the server payload, never from the mode or the outcome', () => {
-    // A client-side rate table would be a guess: caps and resignations both pay 0.
-    expect(main).toMatch(/duelSeedsMessage\(snapshot\.seeds \?\? null\)/);
+    // A client-side rate table would be a guess: caps and resignations both pay 0. The SERVER's
+    // clock is passed alongside (a wrong phone clock must not word the cap's wait).
+    expect(main).toMatch(/duelSeedsMessage\(snapshot\.seeds \?\? null, snapshot\.serverNow\)/);
     expect(main).not.toMatch(/SEED_ECONOMY/);
     expect(main).not.toMatch(/friend:\s*\{\s*win:/);
   });
