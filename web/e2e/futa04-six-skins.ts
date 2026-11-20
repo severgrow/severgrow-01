@@ -90,7 +90,7 @@ const painted = async (page: Page) => page.evaluate(() => {
 
 try {
   // ---- 1. the DEFAULT board: untouched -----------------------------------------------------------
-  for (const [w, h, dpr] of [[390, 844, 3], [1280, 800, 2]] as const) {
+  for (const [w, h, dpr] of [[390, 844, 3], [1440, 900, 2]] as const) {
     const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: dpr, hasTouch: w < 600, isMobile: w < 600 });
     try {
       await openBoard(page, null);
@@ -113,7 +113,7 @@ try {
 
   // ---- 2. each family, on a whole board ----------------------------------------------------------
   for (const skin of SKINS) {
-    for (const [w, h, dpr] of [[390, 844, 3], [1280, 800, 2]] as const) {
+    for (const [w, h, dpr] of [[390, 844, 3], [1440, 900, 2]] as const) {
       const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: dpr, hasTouch: w < 600, isMobile: w < 600 });
       try {
         await openBoard(page, { tileMine: skin, tileTheirs: skin });

@@ -556,8 +556,14 @@ export class DefaultArtBoardView extends BoardView {
     // The home's art lives on the home layer, above every tile.
     if (tile.root) return group;
     // The territory colour under the art fills its softened corners; the art itself is unclipped.
+    // A SKINNED BASE IS DRAWN 1.2% PROUD (owner, 2026-11-20). Two coincident antialiased hexagons
+    // leave a sub-pixel seam where the board's own light ground shows through — harmless under the
+    // shipped sprites (they overhang and cover it), but a hairline grid on a skinned board, and on
+    // Nero it is exactly the "step" its seams are designed not to have. The overlap closes it in the
+    // skin's OWN base colour; the default path is untouched, so the shipped board cannot change.
     const skin = tileSkinFor(owner);
-    el('path', { d: hexPath(key, S, 'flat'), fill: skin ? TILE_SKIN_BASE[skin] : faBaseColour(owner), class: 'fa-tile-base' }, group);
+    const baseSize = skin ? S * 1.012 : S;
+    el('path', { d: hexPath(key, baseSize, 'flat'), fill: skin ? TILE_SKIN_BASE[skin] : faBaseColour(owner), class: 'fa-tile-base' }, group);
     if (!this.skinUse(group, key, x, y, cellScale(key), owner, false)) {
       this.art(group, faTileSprite(this.fa, key, owner, false), x, y, cellScale(key), 'default-art-sprite');
     }
