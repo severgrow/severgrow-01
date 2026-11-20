@@ -8,12 +8,12 @@ import { describe, expect, it } from 'vitest';
 import { ACCOUNT_BOUND_KEYS, clearAccountBoundProgress } from '../src/accounts/signout-reset.js';
 import { CAMPAIGN_PROGRESS_KEY, CAMPAIGN_SAVE_KEY } from '../../src/campaign/index.js';
 import { ACCOUNT_CLEARS_KEY } from '../src/menu/account-clears.js';
-import { SEED_BALANCE_KEY } from '../src/logic/finish-window.js';
+import { FINISH_PLANET_RUN_KEY, SEED_BALANCE_KEY } from '../src/logic/finish-window.js';
 import { TICKET_SHELF_KEY } from '../src/online/ticket-shelf.js';
 
 describe('sign-out resets the account-bound campaign place', () => {
   it('names every key that carries the account\'s place', () => {
-    expect([...ACCOUNT_BOUND_KEYS].sort()).toEqual([ACCOUNT_CLEARS_KEY, CAMPAIGN_PROGRESS_KEY, CAMPAIGN_SAVE_KEY, SEED_BALANCE_KEY, TICKET_SHELF_KEY].sort());
+    expect([...ACCOUNT_BOUND_KEYS].sort()).toEqual([ACCOUNT_CLEARS_KEY, CAMPAIGN_PROGRESS_KEY, CAMPAIGN_SAVE_KEY, FINISH_PLANET_RUN_KEY, SEED_BALANCE_KEY, TICKET_SHELF_KEY].sort());
   });
 
   it('removes them and nothing else', () => {
@@ -22,9 +22,11 @@ describe('sign-out resets the account-bound campaign place', () => {
       [CAMPAIGN_SAVE_KEY, 'x'],
       [ACCOUNT_CLEARS_KEY, '[1,2,3]'],
       [SEED_BALANCE_KEY, '500'],
+      [FINISH_PLANET_RUN_KEY, '{"v":1,"players":{"p1":2}}'],
       ['severgrow.settings.v3', 'keep'],
     ]);
     clearAccountBoundProgress({ get: (k) => data.get(k) ?? null, set: (k, v) => { data.set(k, v); }, remove: (k) => { data.delete(k); } });
+    expect(data.has(FINISH_PLANET_RUN_KEY)).toBe(false);
     expect([...data.keys()]).toEqual(['severgrow.settings.v3']);
   });
 

@@ -16,6 +16,9 @@ export const ACCOUNT_BOUND_KEYS: readonly string[] = Object.freeze([
   'severgrow.campaign.save.v3',
   'severgrow.campaign.account-clears.v1',
   'severgrow.seeds.balance.v1',
+  // The finish card's planet run (logic/finish-window.ts FINISH_PLANET_RUN_KEY): this player's
+  // window alternation, never the next account's.
+  'severgrow.finish.planet-run.v1',
   // Ready Practice tickets (online/ticket-shelf.ts TICKET_SHELF_KEY): issued to this account.
   'severgrow.seeds.ticket-shelf.v1',
 ]);

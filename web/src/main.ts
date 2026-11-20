@@ -56,7 +56,7 @@ import type { OutcomeLight } from './player/atmosphere.js';
 import { planetSnapshot } from './online/world-planet.js';
 import { gameHighlights } from './logic/highlights.js';
 import { harvestFigure, harvestSvg } from './logic/harvest.js';
-import { FINISH_DECIDE_MS, FINISH_FADE_MS, FINISH_INSTANT_MS, SEED_BALANCE_KEY, decideFinishWindow, finishWindowPlan, parseBalance } from './logic/finish-window.js';
+import { FINISH_DECIDE_MS, FINISH_FADE_MS, FINISH_INSTANT_MS, FINISH_PLANET_RUN_KEY, SEED_BALANCE_KEY, decideFinishWindow, decidePlanetRunAfter, finishChoice, finishWindowPlan, parseBalance, planetRunOf, withPlanetRun } from './logic/finish-window.js';
 import type { FinishWindow } from './logic/finish-window.js';
 import type { HarvestFigure } from './logic/harvest.js';
 import { EMPTY_SEL, futa04OneTap, growControls, heldMoveWord, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, playNowBlast, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
@@ -8891,6 +8891,14 @@ let finishCard = 0;
 let finishWindow: { card: number; won: boolean; teach: boolean; harvest: HarvestFigure | null; view: FinishWindow; decided: boolean; timer: number } | null = null;
 const rememberBalance = (balance: number | null) => { if (balance !== null) store.set(SEED_BALANCE_KEY, String(balance)); };
 /**
+ * THE PLANET RUN, READ AND WRITTEN HERE (owner, 2026-11-20: "never show the planet view and the end
+ * of the game 3 times in a row ... show the winning board view result every 2 planet views"). The
+ * rule itself is pure (logic/finish-window.ts finishChoice); this is the store around it, per player
+ * so another account on the device never inherits the count.
+ */
+const planetRunNow = (): number => planetRunOf(store.get(FINISH_PLANET_RUN_KEY), seedPlayerId());
+const rememberPlanetRun = (run: number) => store.set(FINISH_PLANET_RUN_KEY, withPlanetRun(store.get(FINISH_PLANET_RUN_KEY), seedPlayerId(), run));
+/**
  * THIS GAME'S PAYOUT, AS A BALANCE (owner, 2026-11-13). The proof is sent the instant the game ends
  * (afterPlay, before the card is up); its answer carries the wallet after the payout. The finish
  * window waits on this, so it is chosen once, from the real balance. Null for a game with no proof.
@@ -8946,6 +8954,9 @@ function applyFinishWindow(view: FinishWindow, fade = false): void {
 function syncFinishWindow(show: boolean, won: boolean, teach: boolean, harvest: HarvestFigure | null): void {
   const card = ++finishCard;
   if (finishWindow?.timer) clearTimeout(finishWindow.timer);
+  // A LOSS OR A DRAW ENDS THE WINNING RUN, on every card and in every mode (owner, 2026-11-20): the
+  // player is no longer on a streak of wins, so the next win gets its planet again.
+  if (!won) rememberPlanetRun(0);
   if (!show) {
     finishWindow = null;
     const boardView = document.getElementById('go-boardview');
@@ -8956,7 +8967,10 @@ function syncFinishWindow(show: boolean, won: boolean, teach: boolean, harvest: 
   const plan = finishWindowPlan({ won, teach, hasBoard: !!harvest });
   finishWindow = { card, won, teach, harvest, view: 'board', decided: plan.kind === 'now', timer: 0 };
   if (plan.kind === 'now') {
-    applyFinishWindow(plan.view);
+    // A loss (board, run already reset), a draw, or level 10's teaching win (the planet, no slot).
+    const choice = finishChoice({ won, teach, hasBoard: !!harvest, balance: null, planetRun: planetRunNow() });
+    applyFinishWindow(choice.view);
+    rememberPlanetRun(choice.planetRun);
     return;
   }
   // Hold the place: the board window's frame, invisible, so the card keeps its final height.
@@ -8972,7 +8986,11 @@ function syncFinishWindow(show: boolean, won: boolean, teach: boolean, harvest: 
     clearTimeout(w.timer);
     const remembered = parseBalance(store.get(SEED_BALANCE_KEY));
     if (balance !== null) rememberBalance(balance);
-    const view = decideFinishWindow({ won, teach, hasBoard: !!harvest, payout: balance, remembered });
+    // The run is read before this decision and written after it, so the NEXT finish sees it. Both
+    // outputs come from the same pure rule (finishChoice), never from two separate readings of it.
+    const args = { won, teach, hasBoard: !!harvest, payout: balance, remembered, planetRun: planetRunNow() };
+    const view = decideFinishWindow(args);
+    rememberPlanetRun(decidePlanetRunAfter(args));
     // Ready at once (the payout had already landed): no fade, no artificial delay.
     applyFinishWindow(view, performance.now() - askedAt > FINISH_INSTANT_MS);
   };
