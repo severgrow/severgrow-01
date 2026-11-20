@@ -28,8 +28,9 @@ describe('one quick flick', () => {
   it('has its own short beat: quick, never a chore to watch', () => {
     expect(BOOMERANG.total).toBe(PINNED.boomerang);
     // OWNER CHANGED THE VALUE (2026-11-12: "lighter - snappy" and it "can be quicker"): 500 -> 420.
-    expect(PINNED.boomerang).toBeGreaterThanOrEqual(400);
-    expect(PINNED.boomerang).toBeLessThanOrEqual(470);
+    // OWNER CHANGED IT AGAIN (2026-11-20: every throw flight a fifth quicker): 420 -> 336.
+    expect(PINNED.boomerang).toBeGreaterThanOrEqual(320);
+    expect(PINNED.boomerang).toBeLessThanOrEqual(360);
     const plan = planBoomerang(from, board, to, true, view);
     expect(plan.duration).toBe(PINNED.boomerang);
     expect(plan.landMs).toBe(Math.round(BOOMERANG.total * BOOMERANG.landAt));

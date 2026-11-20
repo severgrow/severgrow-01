@@ -77,6 +77,14 @@ export const throwPileFrames = (dx: number, dy: number, sc: number): Keyframe[] 
   ];
 };
 
+/**
+ * The opponent's throw's beat: a short reveal on their seat, then the arc into the pile. OWNER
+ * CHANGED THE VALUES (2026-11-20: "speed up ALL the throw fly animations"): every leg is 80% of
+ * what it was (reveal 80 -> 64, arc 260 -> 208; the quick catch-up 45/175 -> 36/140), so the shape
+ * — how long it holds the face before it leaves — is exactly the same.
+ */
+export const OPP_THROW = Object.freeze({ reveal: 64, arc: 208, quickReveal: 36, quickArc: 140 });
+
 /** The class for a card's look: its suit (s0-s3), or `fruit` for a v0.6 Fruit card. */
 export const suitClass = (c: Card): string => (c.suit === null ? 'fruit' : `s${c.suit}`);
 
@@ -487,8 +495,8 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     const dx = (landing?.x ?? b.left + b.width / 2) - (a.left + a.width / 2);
     const dy = (landing?.y ?? b.top + b.height / 2) - (a.top + a.height / 2);
     const sc = landing?.scale ?? b.height / Math.max(a.height, 1);
-    const reveal = quick ? 45 : 80;
-    const arc = quick ? 175 : 260;
+    const reveal = quick ? OPP_THROW.quickReveal : OPP_THROW.reveal;
+    const arc = quick ? OPP_THROW.quickArc : OPP_THROW.arc;
     const ms = Math.max(1, Math.round((reveal + arc) * Math.max(f, 0.1)));
     const hold = reveal / (reveal + arc);
     const atSeat = 'translate(0, 0)';

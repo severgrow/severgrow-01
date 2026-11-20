@@ -4,6 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { EASE, EASE_SPECIAL, MOTION, PINNED, TEMPO, motionAllowed, oppDealMs } from '../src/logic/motion.js';
+import { OPP_THROW } from '../src/ui/effects.js';
 import { REPLAY_SPEED, replayDurationScale } from '../src/logic/opponent.js';
 
 const source = readFileSync(new URL('../src/logic/motion.ts', import.meta.url), 'utf8');
@@ -36,8 +37,30 @@ describe('motion tokens', () => {
     expect(MOTION.move).toBe(TEMPO.consequence);
   });
 
-  it('the thrown card lands inside the throw step: a 248 ms flight within the 312 ms wait (fix 32359b5)', () => {
+  it('the thrown card lands inside the throw step: a 200 ms flight within the 312 ms wait (fix 32359b5)', () => {
     expect(PINNED.throwFlight).toBeLessThan(PINNED.throw);
+  });
+
+  // OWNER, 2026-11-20: "also speed up all the throw fly animations - including the new one. keep
+  // them as they are, but theyll feel snappier when theyll be a bit quicker." Every throw flight is
+  // 80% of what it was, with its shape untouched: the flight 248 -> 200 ms (-19.4%) and the human
+  // flick 420 -> 336 ms (-20%). The opponent's reveal+arc (80+260) is 64+208 in ui/effects.ts.
+  it('every throw flight is about a fifth quicker (owner, 2026-11-20)', () => {
+    expect(PINNED.throwFlight).toBe(200);
+    expect(PINNED.boomerang).toBe(336);
+    expect(PINNED.throwFlight / 248).toBeGreaterThan(0.75);
+    expect(PINNED.throwFlight / 248).toBeLessThan(0.85);
+    expect(PINNED.boomerang / 420).toBeCloseTo(0.8, 5);
+    // still visible: a card can never be asked to cross the screen in less than 150 ms
+    expect(PINNED.throwFlight).toBeGreaterThan(150);
+    expect(PINNED.boomerang).toBeGreaterThan(250);
+  });
+
+  it('the opponent\'s throw is the same beat, a fifth quicker (the reveal:arc shape is kept)', () => {
+    expect(OPP_THROW).toEqual({ reveal: 64, arc: 208, quickReveal: 36, quickArc: 140 });
+    expect((OPP_THROW.reveal + OPP_THROW.arc) / (80 + 260)).toBeCloseTo(0.8, 5);
+    expect(OPP_THROW.reveal / OPP_THROW.arc).toBeCloseTo(80 / 260, 3);
+    expect(OPP_THROW.quickReveal / OPP_THROW.quickArc).toBeCloseTo(45 / 175, 3);
   });
 
   // OWNER DIRECTION (2026-11-12): the card dealt to the opponent at the end of a replayed turn was
@@ -65,11 +88,12 @@ describe('motion tokens', () => {
     expect(PINNED).toEqual({
       humanDraw: 312,
       throw: 312,
-      throwFlight: 248,
+      throwFlight: 200,
       // OWNER CHANGED THE VALUE (2026-11-08): the throw's own beat. 620 for the six-leg boomerang, then
       // 500 for the one-flick throw ("quick - but satisfying, not annoying"); OWNER CHANGED IT AGAIN
-      // (2026-11-12): "lighter - snappy" and it "can be quicker" -> 420.
-      boomerang: 420,
+      // (2026-11-12): "lighter - snappy" and it "can be quicker" -> 420. OWNER, 2026-11-20: every
+      // throw flight a fifth quicker -> 336.
+      boomerang: 336,
       // OWNER ADDED THE VALUE (2026-11-12): the wall-clock ceiling for the opponent's dealt card.
       oppDeal: 240,
       liveReveal: 600,

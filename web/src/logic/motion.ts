@@ -26,15 +26,21 @@ export const PINNED = Object.freeze({
   humanDraw: 312,
   /** A human card leaves the hand and reaches the discard pile (the step's wait). */
   throw: 312,
-  /** The thrown card's own flight, which lands inside that wait (32359b5: the snappier beat). */
-  throwFlight: 248,
+  /**
+   * The thrown card's own flight, which lands inside that wait (32359b5: the snappier beat).
+   * OWNER CHANGED THE VALUE (2026-11-20: "speed up all the throw fly animations ... theyll feel
+   * snappier when theyll be a bit quicker"): 248 -> 200 ms, about a fifth quicker. Same shape.
+   */
+  throwFlight: 200,
   /**
    * The human throw's boomerang (owner, 2026-11-08: "doesn't look satisfying and is too quick ... make
    * it 10/10"; owner, 2026-11-12: "make the card feel lighter - snappy, natural, more satisfying",
-   * and it "can be quicker"): one flick, now 420 ms (was 500). A throw ends the turn and own
-   * animation never blocks input (0.8), so it may outlast `throw`.
+   * and it "can be quicker"): one flick, now 336 ms (was 420, and 500 before that). Owner,
+   * 2026-11-20: every throw flight is a fifth quicker, so 420 -> 336; the path, the spin and the
+   * catch are untouched. A throw ends the turn and own animation never blocks input (0.8), so it
+   * may outlast `throw`.
    */
-  boomerang: 420,
+  boomerang: 336,
   /**
    * The CEILING for a card dealt to the opponent seat, in wall-clock ms (owner, 2026-11-12: the deal
    * at the end of a replayed turn took too long; it must be fast and snappy, never slower than the
