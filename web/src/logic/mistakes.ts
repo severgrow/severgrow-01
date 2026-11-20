@@ -58,11 +58,13 @@ export const MISTAKE_MIN_SEVERITY = 1;
 export const MISTAKE_BIG_CUT = 4;
 
 /**
- * How many nudges one match may spend. Rare enough to mean something: the first one or two teach
- * the pattern, and a match that keeps producing blunders is a match where a pulse stops being
- * information. (At most one per turn anyway: the nudge only speaks about the Grow step's end.)
+ * How many nudges one match may spend: ONE (owner direction, 2026-11-20 — "fire at most once per
+ * match, only for top-tier obviousness"). A second pulse in the same match would either repeat a
+ * lesson the player has already seen or spend the budget on a milder blunder; one is the whole
+ * budget, so the single worst moment gets it. (At most one per turn anyway: the nudge only speaks
+ * about the Grow step's end.)
  */
-export const MISTAKE_MAX_PER_MATCH = 3;
+export const MISTAKE_MAX_PER_MATCH = 1;
 
 const SEVERITY: Readonly<Record<MistakeKind, MistakeSeverity>> = {
   'win-skipped': 3,

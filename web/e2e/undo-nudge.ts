@@ -93,12 +93,21 @@ const halo = (page: Page) =>
   });
 const endGrowStep = async (page: Page) => {
   // The player's own "end the Grow step", never the app's auto-skip: this position has a legal
-  // Grow, so autoAdvance cannot fire. In the FUTASAKU 0.4 cockpit the moves row itself is
-  // `visibility: hidden` and the controls are the glass key (#smart-context), which mirrors the
-  // row and calls the real `#moves .end` button — so tap that key, and fall back to the row.
+  // Grow, so autoAdvance cannot fire.
+  //
+  // WHY THIS USED TO FAIL (fixed 2026-11-20): `#smart-context[data-action="skip"]` is the cockpit's
+  // POPUP TRIGGER (`aria-haspopup="menu"`, `aria-expanded`), not the action. Clicking it only opened
+  // `#smart-selector`; the phase never left ACT, so the suite timed out at this wait. The action
+  // itself is the menu item the trigger reveals ("Skip the Grow and throw a card"). Tap the key, tap
+  // the item — the path a player actually takes — and fall back to the hidden moves row when the
+  // cockpit key is absent (a wider layout that shows the row directly).
   const glass = page.locator('#smart-context[data-action="skip"]');
-  if ((await glass.count()) > 0) await glass.click();
-  else await page.evaluate(() => (document.querySelector('#moves .end') as HTMLButtonElement | null)?.click());
+  if ((await glass.count()) > 0) {
+    await glass.click();
+    const skip = page.locator('#smart-selector button', { hasText: 'Skip the Grow' });
+    if (await skip.count()) await skip.first().click();
+    else await page.evaluate(() => (document.querySelector('#moves .end') as HTMLButtonElement | null)?.click());
+  } else await page.evaluate(() => (document.querySelector('#moves .end') as HTMLButtonElement | null)?.click());
   await page.waitForFunction(() => (window as any).__severgrow.state()?.phase === 'DISCARD', undefined, { timeout: 15_000 });
   await page.waitForTimeout(700); // the key only lights once the move stops animating (not busy)
 };
@@ -190,21 +199,30 @@ try {
     await page.screenshot({ path: `${SHOTS}/reduce-motion-390x844.png` });
     await context.close();
   }
-  // 5. Effects Low: the same pulse, quieter.
+  // 5. Effects Low: NOT REACHABLE ON THIS CHANNEL (found 2026-11-20).
+  //
+  // `main.ts` calls `parseSettings(..., IS_FUTA04)`, and the Futasaku product keeps only
+  // ESSENTIAL_SETTINGS: `effects` is forced to 'normal'. Seeding `effects:'low'` is silently
+  // discarded, so the old case here asserted a state the shipping build cannot enter — it could
+  // never pass, and it did not. The half-strength CSS is still defined (pinned by
+  // `web/tests/mistakes.test.ts`); what this case proves instead is the fact that matters for 0.4:
+  // the nudge is at full strength and never marked quiet.
   {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     const page = await context.newPage();
     await seedSettings(page, { sound: false, music: false, speed: 'skip', reduceMotion: false, eyeCandy: false, effects: 'low' });
     await open(page, origin, true);
+    const effects = await page.evaluate(() => (window as any).__severgrow.settings().effects);
+    check('the product channel fixes effects to normal (essentials settings)', effects === 'normal', String(effects));
     await endGrowStep(page);
-    check('effects low: the nudge is marked quiet', await quietClass(page));
+    check('full-strength nudge: not marked quiet', (await quietClass(page)) === false);
     let peak = 0;
     for (let i = 0; i < 6; i++) {
       const h = await halo(page);
       peak = Math.max(peak, h?.opacity ?? 0);
       await page.waitForTimeout(300);
     }
-    check('effects low: the pulse stays under half strength', peak > 0 && peak <= 0.55, String(peak));
+    check('full-strength nudge: the glow reaches its normal peak', peak > 0.7, String(peak));
     await page.screenshot({ path: `${SHOTS}/effects-low-390x844.png` });
     await context.close();
   }

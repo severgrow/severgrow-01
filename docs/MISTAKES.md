@@ -98,7 +98,7 @@ Ten candidates, three shipped. Where in doubt the answer was **no pulse**.
 | `canUndo` | The throw closes the window; a pulse after it would be a lie about the key. |
 | `!lesson` | A lesson, the tutorial, a watched replay, an online duel, or the coach's opening hints already own guidance. This is also why the coach and the detector can never contradict each other: they never speak on the same position. |
 | `severity ≥ MISTAKE_MIN_SEVERITY` (**one number**) | Raising the bar is one edit; every class has a fixed severity (3 win, 2 last door, 1 big cut). |
-| `shownThisMatch < MISTAKE_MAX_PER_MATCH` (**3**) | Rare enough to mean something. One per match would spend the budget on the first marginal blunder and leave the worst one silent; per turn is already structural (one EndAct per turn), so the cap is only about nagging. |
+| `shownThisMatch < MISTAKE_MAX_PER_MATCH` (**1**) | **One nudge per match** (owner direction, 2026-11-20). Rare enough to mean something, and it always falls on the first proven mistake — the worst one the player actually made. Per turn is already structural (one EndAct per turn), so the cap only limits how often the game speaks. |
 
 Also, by construction:
 
@@ -136,13 +136,17 @@ the FUTASAKU 0.4 cockpit). CSS lives beside `.hand-slot` in `web/src/style.css`:
   scale) — no `filter`, no animated `box-shadow`, no per-frame JS;
 - **Reduce motion** (`html.reduce-motion` or the OS preference): the animation stops and the glow
   stays at its bright value — still an affordance, simply still;
-- **Effects Low**: the same pulse at roughly half strength (`--nudge-lo/-hi`), never removed;
+- **Effects Low**: the same pulse at roughly half strength (`--nudge-lo/-hi`), never removed. **Not
+  reachable on the 0.4 product**: the Futasaku channel parses settings with `essentialsOnly`, which
+  fixes `effects` to `normal`, so the quiet class can never be set there. It remains defined for the
+  classic/live line and is pinned by `web/tests/mistakes.test.ts` rather than claimed in the browser
+  suite (which seeded it and could never pass);
 - while lit, the key's `aria-label`/`title` say *why*: "Undo: take back your last move — the win was
   on the table". No banner, no new element, no board overlay.
 
 ## 6. What the tests prove
 
-`web/tests/mistakes.test.ts` (29 tests) — every class fires on a hand-built position that really is
+`web/tests/mistakes.test.ts` (32 tests) — every class fires on a hand-built position that really is
 that mistake (including a real `apply` that wins by Strangle, and a real block that keeps the game
 alive), and every near-miss stays silent:
 
@@ -154,6 +158,15 @@ alive), and every near-miss stays silent:
 - guards: no undo · lesson · cap reached · raised bar · wording;
 - a clean position is silent.
 
-`web/e2e/undo-nudge.ts` (browser, Chromium) — the pulse on a real bad end-of-Grow, the key's size
-unchanged, the aria words, a real Undo press taking the move back, the pulse **gone after the
-throw**, silence on a good move, Reduce motion (static glow) and Effects Low (quieter).
+`web/e2e/undo-nudge.ts` (browser, Chromium, 23 checks) — the pulse on a real bad end-of-Grow, the
+key's size unchanged, the aria words, a real Undo press taking the move back, the pulse **gone after
+the throw**, silence on a good move, Reduce motion (static glow) and the channel fact that Effects is
+fixed to normal on 0.4.
+
+**How the suite drives the Grow step's end (fixed 2026-11-20).** It used to click
+`#smart-context[data-action="skip"]` and wait for `DISCARD`; that timed out every run. The key is the
+cockpit's **popup trigger** (`aria-haspopup="menu"`), so the click only opened `#smart-selector` and
+the phase stayed `ACT`. The action is the menu item the trigger reveals ("Skip the Grow and throw a
+card"). The suite now taps the trigger, then that item — the path a player takes — and falls back to
+the hidden `#moves .end` row when the cockpit key is absent. The nudge was working the whole time;
+the harness was pressing the wrong control.

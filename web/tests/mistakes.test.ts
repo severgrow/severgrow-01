@@ -3,6 +3,8 @@
 // every class has at least two negative cases, and the guards (the throw deadline, lessons, the
 // per-match cap, the severity bar) are each proved on their own.
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { allNeighbors, apply, coordKey, homeCoord, newGame, onBoard, parseKey, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, State, Tile } from '../../src/engine/index.js';
 import { coachAdvice } from '../../src/playtest/coach.js';
@@ -308,5 +310,43 @@ describe('a clean position', () => {
     const { state } = winPosition();
     const input = { before: view(state), after: view(ended(state)), action: endAct, canUndo: true, lesson: false, shownThisMatch: 0 };
     expect(mistakeNudge(input)?.kind).toBe('win-skipped');
+  });
+});
+
+// ---------- the visual contract ----------
+//
+// WHAT CANNOT BE PROVED IN THIS CHANNEL (found 2026-11-20): `main.ts` builds settings with
+// `parseSettings(..., IS_FUTA04)`, and the Futasaku product keeps ESSENTIAL_SETTINGS only — `effects`
+// is fixed to 'normal'. So on a `CHANNEL=futa04` build the "Effects Low" half of the nudge is
+// unreachable, and a browser suite that seeds `effects:'low'` can never see it (the old e2e asserted
+// exactly that and failed). The quiet variant still exists for the classic/live line; these pins keep
+// it honest without claiming the 0.4 product can reach it.
+describe('the glow is compositor-only, and its quiet variant is still defined', () => {
+  const css = readFileSync(fileURLToPath(new URL('../src/style.css', import.meta.url)), 'utf8');
+  const rule = (selector: string): string => {
+    const at = css.indexOf(selector);
+    expect(at).toBeGreaterThan(-1);
+    return css.slice(at, css.indexOf('}', at) + 1);
+  };
+
+  it('the halo animates opacity only — no filter, no animated box-shadow', () => {
+    const pulse = css.slice(css.indexOf('@keyframes undo-nudge-pulse'), css.indexOf('}', css.indexOf('@keyframes undo-nudge-pulse')) + 1);
+    expect(pulse).toContain('opacity');
+    expect(pulse).toContain('transform');
+    expect(pulse).not.toContain('filter');
+    expect(pulse).not.toContain('box-shadow');
+  });
+
+  it('the quiet variant is half strength, never removed', () => {
+    const quiet = rule('.undo-slot.mistake-nudge-quiet {');
+    expect(quiet).toContain('--nudge-lo: 0.18');
+    expect(quiet).toContain('--nudge-hi: 0.5');
+    expect(rule('.undo-slot.mistake-nudge {')).toContain('--nudge-hi: 0.92');
+  });
+
+  it('Reduce motion stops the animation but keeps the glow visible', () => {
+    const reduced = css.slice(css.indexOf('html.reduce-motion .undo-slot.mistake-nudge .nudge-halo'));
+    expect(reduced).toContain('animation: none');
+    expect(reduced).toContain('opacity: var(--nudge-hi, 0.92)');
   });
 });
