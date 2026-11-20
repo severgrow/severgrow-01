@@ -10,13 +10,15 @@
 // `gameSkinFor`, so a stored or half-made choice can never crash a match.
 //
 // ONE PLACE COERCES. `normaliseSkinChoice` is the ONLY code allowed to decide what the model means:
-// a real planet skin forces its game skin to itself, 'colour' keeps a valid game choice (or null),
-// and every unknown/corrupt value falls back without throwing. `chooseSkin`, the stored-value read,
-// another tab's write and the server's answer all go through it.
+// a real planet skin with no match value follows the planet (so old saves and one-tap choices paint
+// both), 'colour' keeps a valid game choice (or null), and every unknown/corrupt value falls back
+// without throwing. `chooseSkin`, the stored-value read, another tab's write and the server's answer
+// all go through it.
 //
 // THE GATE (owner, 2026-11-20): "unlock the skins to all players" — SIGNED-IN ACCOUNTS ONLY. A guest
-// never sees the picker and is pinned to the product look. This is a cosmetic gate, not a security
-// boundary, and it is ONE predicate (`skinPickerVisible`) so it can be narrowed again in one line.
+// is pinned to the product skins and never sees a real-skin tile; they KEEP the twenty owner colours
+// (Colour is not a skin). This is a cosmetic gate, not a security boundary, and it is ONE predicate
+// (`skinPickerVisible`) so it can be narrowed again in one line.
 //
 // THIS MODULE IS A COSMETIC CHOICE, NOT A RULE. src/engine/ is untouched by it.
 import { browserStorage } from '../../../server/src/client.js';
@@ -50,8 +52,8 @@ export const isSkinPickerAdmin = (): boolean =>
 export const skinPickerVisible = (): boolean => signedInNickname() !== null;
 
 // The switch's PLUMBING (storage read, server sync, mount) exists everywhere the product UI does.
-// Seeing and using the pane is the ACCOUNT question above; a guest gets an empty pane, no gap and
-// no announced section. Kept as an exported constant because other modules read it.
+// Seeing and using the pane is the ACCOUNT question above; a guest gets the Colour tile and a
+// "sign in" line, never a real skin. Kept as an exported constant because other modules read it.
 export const SKIN_SWITCH = true;
 
 /** The stored choice's shape. `background` is the board backdrop, deliberately independent. */
@@ -88,7 +90,8 @@ const game = (value: unknown): GameSkin | null => (isSkinId(value) ? value : nul
 /**
  * THE INVARIANT, IN ONE PLACE. Given a (possibly partial, possibly corrupt) choice and the value it
  * is being applied over, return the one valid shape:
- *  - a real planet skin sets that side's game skin to itself;
+ *  - a real planet skin with no valid match value follows the planet (old saves; one-tap choices);
+ *  - an explicit valid game value is kept, so a match can diverge from the planet;
  *  - 'colour' keeps a valid game skin, otherwise null (the picker's required second step);
  *  - invalid planet/game/background values fall back to `base`, never throw.
  * Pure: no storage, no clock, no gate.
@@ -139,15 +142,22 @@ export const awaitingGameSkin = (choice: SkinChoice): boolean =>
   (choice.theirs === SKIN_COLOUR && choice.theirsGame === null);
 
 /**
- * A guest is pinned to the product look, exactly as before the unlock; the board BACKGROUND is left
- * as stored (the owner asked for default skins only, never for the backdrop). Signed-in accounts
- * keep whatever they chose.
+ * A guest is pinned to the product SKINS, exactly as before the unlock, but keeps the plain Colour
+ * appearance: Colour is not a skin, and the twenty colours were always everyone's. The board
+ * BACKGROUND is left as stored too (the owner asked for default skins only, never for the backdrop).
+ * Signed-in accounts keep whatever they chose.
  */
 const valid = (input: Partial<SkinChoice> | null | undefined): SkinChoice => {
   const picked = normaliseSkinChoice(input);
   return skinPickerVisible()
     ? picked
-    : { ...picked, mine: 'forest', theirs: 'ash', mineGame: 'forest', theirsGame: 'ash' };
+    : {
+        ...picked,
+        mine: picked.mine === SKIN_COLOUR ? SKIN_COLOUR : 'forest',
+        theirs: picked.theirs === SKIN_COLOUR ? SKIN_COLOUR : 'ash',
+        mineGame: 'forest',
+        theirsGame: 'ash',
+      };
 };
 
 let current: SkinChoice = DEFAULT_SKIN;
@@ -197,12 +207,12 @@ export const skinRevision = (): number => revision;
 /** Store and apply a new choice; the next board set up (the next match) wears it. */
 export const chooseSkin = (next: Partial<SkinChoice>): SkinChoice => {
   // A REAL SKIN IS ONE TAP FOR BOTH APPEARANCES (owner, 2026-11-20). This is the intent half of
-  // the rule; `normaliseSkinChoice` is the validity half. A call that names a real planet skin must
-  // not keep the previous match skin just because `next` omitted it — unless the same call names a
-  // match skin explicitly (the picker's match row).
+  // the rule; `normaliseSkinChoice` is the validity half. A call that names a real planet skin and
+  // NO match skin must not keep the previous match skin — unless the same call names a match skin
+  // explicitly (a restore of the whole choice, or the picker's match row).
   const merged: Partial<SkinChoice> = { ...current, ...next };
-  if (next.mine !== undefined && isPlanetSkin(next.mine) && next.mine !== SKIN_COLOUR) merged.mineGame = next.mine;
-  if (next.theirs !== undefined && isPlanetSkin(next.theirs) && next.theirs !== SKIN_COLOUR) merged.theirsGame = next.theirs;
+  if (next.mine !== undefined && next.mineGame === undefined && isPlanetSkin(next.mine) && next.mine !== SKIN_COLOUR) merged.mineGame = next.mine;
+  if (next.theirs !== undefined && next.theirsGame === undefined && isPlanetSkin(next.theirs) && next.theirs !== SKIN_COLOUR) merged.theirsGame = next.theirs;
   current = valid(merged);
   revision++;
   apply();

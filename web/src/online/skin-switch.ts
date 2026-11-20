@@ -134,8 +134,8 @@ let note: HTMLElement | null = null;
 let lockNote: HTMLElement | null = null;
 /** The deliberate second step after Colour: true until a real match skin is tapped. */
 let awaitingGame = false;
-/** What the planet wore before the colour sheet opened, so a cancel can put it back. */
-let colourBefore: PlanetSkin = 'forest';
+/** The exact choice the planet had before the colour sheet opened, so a cancel restores it. */
+let choiceBeforeColour: SkinChoice | null = null;
 
 const element = <K extends keyof HTMLElementTagNameMap>(tag: K, className = ''): HTMLElementTagNameMap[K] => {
   const node = document.createElement(tag);
@@ -196,7 +196,7 @@ const prepareSheet = (): void => {
 
 const openColourSheet = (trigger: HTMLElement): void => {
   if (!sheet || !sheetPanel) return;
-  colourBefore = skinChoice().mine;
+  choiceBeforeColour = skinChoice();
   sheetTrigger = trigger;
   // The planet preview changes at once (it is behind the glass); a cancel puts it back.
   chooseSkin({ mine: 'colour' });
@@ -221,14 +221,14 @@ const closeColourSheet = (commit: boolean): void => {
       gameBox?.scrollIntoView?.({ block: 'nearest' });
       gameBox?.querySelector<HTMLElement>('.world-skin-tile')?.focus({ preventScroll: true });
     } else {
-      if (!commit) chooseSkin({ mine: colourBefore });
+      if (!commit && choiceBeforeColour) chooseSkin(choiceBeforeColour);
       if (!commit) trigger?.focus({ preventScroll: true });
       else paint();
     }
   } });
   // Fake-DOM and reduced-motion paths: exitSurface may not animate or call back; the state above
   // must still be correct immediately.
-  if (!sheetPanel) { sheet.hidden = true; if (!commit) chooseSkin({ mine: colourBefore }); }
+  if (!sheetPanel) { sheet.hidden = true; if (!commit && choiceBeforeColour) chooseSkin(choiceBeforeColour); }
 };
 
 const onSheetKey = (event: KeyboardEvent): void => {

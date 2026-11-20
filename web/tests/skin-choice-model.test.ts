@@ -141,6 +141,20 @@ describe('the normaliser is the one place the invariant lives', () => {
     }
   });
 
+  it('a full restore keeps a match skin that had diverged from the planet', async () => {
+    const { model } = await load();
+    model.chooseSkin({ mine: 'carrara' });
+    model.chooseSkin({ mineGame: 'voxel' });
+    const before = model.skinChoice();
+    expect(before.mine).toBe('carrara');
+    expect(before.mineGame).toBe('voxel');
+    // Opening the colour sheet then cancelling restores the whole choice, not just the planet.
+    model.chooseSkin({ mine: 'colour' });
+    model.chooseSkin(before);
+    expect(model.skinChoice().mine).toBe('carrara');
+    expect(model.skinChoice().mineGame).toBe('voxel');
+  });
+
   it('choosing a real skin applies it to the board in one tap', async () => {
     const { model, art } = await load();
     model.chooseSkin({ mine: 'water' });
@@ -166,6 +180,17 @@ describe('the gate: signed-in accounts only', () => {
     expect(model.skinChoice()).toMatchObject({ mine: 'forest', theirs: 'ash', mineGame: 'forest', theirsGame: 'ash' });
     expect([...art.faSides()], 'a guest wears the product board').toEqual(['forest', 'ash']);
     expect(model.planetOwnSkin()).toBeUndefined();
+  });
+
+  it('a guest may choose the plain Colour look, but real skins stay pinned', async () => {
+    const { model } = await load(undefined, false);
+    model.chooseSkin({ mine: 'colour' });
+    expect(model.skinChoice().mine, 'Colour is not a skin').toBe('colour');
+    expect(model.skinChoice().mineGame, 'the guest board stays the product board').toBe('forest');
+    model.chooseSkin({ mine: 'carrara' });
+    expect(model.skinChoice().mine, 'a real skin is still locked').toBe('forest');
+    model.chooseSkin({ mineGame: 'voxel' });
+    expect(model.skinChoice().mineGame, 'a real match skin is still locked').toBe('forest');
   });
 
   it('a signed-in account sees the picker and keeps its stored choice', async () => {
