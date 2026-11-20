@@ -75,6 +75,17 @@ describe('the strike beat', () => {
     expect(size.height).toBeCloseTo(2.15 * 33, 5);
     expect(size.width / size.height).toBeCloseTo(72 / 102, 10);
   });
+
+  it('never makes the landing box wider than the art (a `cover` crop would shave its top and bottom)', () => {
+    // The face is painted `background-size: cover` (player/cards.ts): any box wider than 256:356
+    // loses the printed card's top and bottom edge — the owner's Bomb bug (2026-11-20). A source
+    // box that is wider (a fanned card's bounding box is) must not carry that width to the tile.
+    const squat = strikeCardSize({ left: 0, top: 0, width: 66, height: 57 }, 1);
+    expect(squat.width / squat.height).toBeCloseTo(STRIKE_ART_ASPECT, 10);
+    // A taller-than-the-art source keeps its own (narrower) width: `cover` then fits the height.
+    const tall = strikeCardSize({ left: 0, top: 0, width: 66, height: 57 }, 0.6);
+    expect(tall.width / tall.height).toBeCloseTo(0.6, 10);
+  });
 });
 
 describe('the live landing', () => {
