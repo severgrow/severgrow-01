@@ -1,6 +1,8 @@
 // Fetch-API request handler shared by the Node HTTP server and the Deno Edge entry.
 // Same routes, same MatchService — no rules live here.
 import { pickClientIp } from './client-ip.js';
+import { requestCountry } from './geo.js';
+import type { CountryStore } from './accounts/country.js';
 import { PRODUCTION_CORS_ORIGIN, type ServerConfig } from './config.js';
 import { DEFAULT_SERVER_CONFIG } from './config.js';
 import { corsHeadersForRequest } from './cors.js';
@@ -41,6 +43,18 @@ export type FetchAppDeps = {
   logger?: (line: string) => void;
   /** Live duels router (server/src/live/router.ts); returns null for paths it does not own. */
   live?: (req: Request, path: string) => Promise<Outcome | null>;
+  /**
+   * THE COMBINED PROFILE SHEET (owner, 2026-11-20). `GET /v1/players/:id/card` answers everything
+   * the profile sheet renders in ONE round trip: the public allow-list (online + offline rows and
+   * the stored flag) plus the achievements count and the best online Blitz streak. Both extra reads
+   * already existed as their own route; this only stops a visitor's sheet needing two requests.
+   */
+  card?: {
+    achievementsOf?: (playerId: string) => Promise<{ done: number; total: number } | null>;
+    onlineBlitzBest?: (playerId: string) => Promise<number | null>;
+  };
+  /** Where a new guest's country is remembered (migration 0031). Absent: no flag, never a guess. */
+  country?: CountryStore;
 };
 
 type Outcome = { status: number; body?: unknown; raw?: { contentType: string; text: string } };
@@ -126,6 +140,10 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
       // account. A real player's browser never sends it (DuelClient sets it only outside a browser).
       const testTraffic = req.headers.get('x-futasaku-traffic')?.trim().toLowerCase() === 'test';
       const created = await service.createGuest(null, clientIpOf(req), testTraffic);
+      // The guest's flag comes from the edge's own geo answer, recorded once here (migration 0031).
+      // A platform that reports nothing stores nothing: the profile then shows no flag at all.
+      const country = requestCountry(req.headers);
+      if (country) await deps.country?.save(created.player.id, country, service.serverNow());
       return { status: 201, body: { ok: true, ...created, serverNow: service.serverNow() } };
     }
 
@@ -162,6 +180,44 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
         body: {
           ok: true,
           profile,
+          ...(headToHead !== undefined ? { headToHead } : {}),
+          serverNow: service.serverNow(),
+        },
+      };
+    }
+
+    /**
+     * ONE PLAYER'S WHOLE SHEET (owner, 2026-11-20: "make it load up quickly cheaply"). The SAME
+     * closed allow-list as `/profile`, plus the two facts the sheet also renders — the achievements
+     * count and the best online Blitz streak — so a visitor's sheet costs ONE request instead of
+     * two (and no fan-out for the offline row, which rides the profile read).
+     *
+     * It never widens `PublicPlayerProfile`: the extra two values are numbers the existing
+     * `/record` route already published. Older servers simply have no `/card`, and the page falls
+     * back to `/profile` + `/record` exactly as before.
+     */
+    const cardRoute = /^\/v1\/players\/([^/]+)\/card$/.exec(path);
+    if (method === 'GET' && cardRoute) {
+      const viewer = await service.authenticate(bearer(req.headers.get('authorization')));
+      let playerId = cardRoute[1]!;
+      try {
+        playerId = decodeURIComponent(playerId);
+      } catch {
+        throw new ApiError('NOT_FOUND', 'No such player.');
+      }
+      const profile = await service.publicProfile(playerId);
+      const id = playerId.toLowerCase();
+      // Sequential on purpose: the Edge pool is max: 2 (see publicProfile in seeds/service.ts).
+      const achievements = deps.card?.achievementsOf ? await deps.card.achievementsOf(id) : null;
+      const onlineBlitzBest = deps.card?.onlineBlitzBest ? await deps.card.onlineBlitzBest(id) : null;
+      const headToHead = viewer.id !== id ? await service.headToHead(viewer.id, id) : undefined;
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          profile,
+          achievements,
+          onlineBlitzBest,
           ...(headToHead !== undefined ? { headToHead } : {}),
           serverNow: service.serverNow(),
         },

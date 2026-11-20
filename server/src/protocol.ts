@@ -113,6 +113,28 @@ export type PublicPlayerProfile = {
   colourId: number;
   /** The ONLINE record only: finished duels they took part in, and their best winning run. */
   online: { games: number; wins: number; longestStreak: number };
+  /**
+   * THE OFFLINE ROW (owner, 2026-11-20: "OFFLINE and we have GAMES HARD STREAK and BLITZ streak").
+   * AGGREGATE COUNTS ONLY — no per-device row, no win rate, no game id, no timestamp. OPTIONAL
+   * because a page may talk to a server deployed before this field existed; it then shows em dashes.
+   */
+  offline?: PublicPlayerOffline;
+  /**
+   * ISO 3166-1 alpha-2 of the country this player last signed in from (server/src/geo.ts), or null
+   * when the edge did not report one. Stored once; every viewer sees the same value. OPTIONAL for
+   * the same back-compat reason — a missing country renders NO flag.
+   */
+  country?: string | null;
+};
+
+/** The public OFFLINE aggregate: completed Practice games and the two longest win runs. */
+export type PublicPlayerOffline = {
+  /** Practice games fully completed (win, loss or draw) across every tier and device. */
+  games: number;
+  /** The longest run of WINS on the HARD Practice key. */
+  hardStreak: number;
+  /** The longest run of WINS on the BLITZ Practice key (offline Blitz practice). */
+  blitzStreak: number;
 };
 
 /**
@@ -120,6 +142,27 @@ export type PublicPlayerProfile = {
  * Carried beside `PublicPlayerProfile` on the profile route; never part of the public allow-list.
  */
 export type HeadToHead = { games: number; youWins: number; themWins: number; draws: number };
+
+/**
+ * ONE PLAYER'S WHOLE SHEET, in ONE response (owner, 2026-11-20: "make it load up quickly cheaply
+ * ... COLLAPSE the profile's reads into ONE server request"). This is what the profile sheet
+ * renders: the public allow-list above, plus the two other facts the same sheet shows.
+ *
+ * It adds NOTHING private to `PublicPlayerProfile`: the achievements COUNT was already served by
+ * `/v1/players/:id/record`, and `onlineBlitzBest` is a number that route already published. Keeping
+ * the profile object as the closed allow-list is what makes this one request safe to add.
+ */
+export type PlayerCardResponse = {
+  ok: true;
+  profile: PublicPlayerProfile;
+  /** Achievements unlocked out of all, or null when they cannot be counted right now. */
+  achievements: { done: number; total: number } | null;
+  /** The best ONLINE Blitz streak, from the server's own results; null when unknown. */
+  onlineBlitzBest: number | null;
+  /** Present only when the viewer is looking at somebody else. */
+  headToHead?: HeadToHead;
+  serverNow: number;
+};
 
 export type MatchListEntry = {
   matchId: string;

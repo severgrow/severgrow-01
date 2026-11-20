@@ -12,6 +12,20 @@ export type PracticeGame = { id: string; tier: PracticeTier; result: StreakResul
 /** One finished online Blitz (live) match, from the server's own result, from this player's seat. */
 export type BlitzResultRow = { matchId: string; finishedAt: number; seat: Player; winner: Player | null; reason: OnlineEndReason };
 
+/**
+ * THE PUBLIC OFFLINE ROW (owner, 2026-11-20: "OFFLINE and we have GAMES HARD STREAK and BLITZ
+ * streak"): completed Practice games, and the two longest win runs the account already keeps.
+ *
+ * `games` counts fully completed games (win, loss or draw) across every tier — the same number the
+ * Practice teaser reveals, deduplicated by game id, so a retry never counts twice. `hardStreak` and
+ * `blitzStreak` are the BEST runs on the HARD and BLITZ Practice keys, which is exactly what
+ * `practice_streaks.best_streak` holds: a run is extended by a win and reset by anything else
+ * (./rules.ts). No new tracking, no new writes — this is a read of rows that already exist.
+ *
+ * Counts only. Never a win rate, never a device, never a game id or a timestamp.
+ */
+export type ProfileStreaks = { games: number; hardStreak: number; blitzStreak: number };
+
 export type StreakStore = {
   /** Apply the games not recorded before (by id), in order. Returns the four practice streaks after. */
   recordPractice(playerId: string, games: readonly PracticeGame[], now: number): Promise<PracticeStreaks>;
@@ -28,6 +42,11 @@ export type StreakStore = {
    * results are kept, so a match the retention rule later deletes is never forgotten.
    */
   onlineBlitz(playerId: string, now: number): Promise<Streak>;
+  /**
+   * The public profile's OFFLINE row (`ProfileStreaks`). One read of rows the account already holds;
+   * a database without migration 0028 answers `null` so the sheet keeps its em dashes.
+   */
+  profileStreaks(playerId: string): Promise<ProfileStreaks | null>;
 };
 
 /** A finished live match, from this player's seat, as a streak result. Server results only. */
@@ -80,6 +99,14 @@ export const memoryStreakStore = (deps: {
     },
     async practice(playerId) { return copy(practice.get(playerId) ?? emptyPracticeStreaks()); },
     async completedPractice(playerId) { return completed.get(playerId)?.size ?? 0; },
+    async profileStreaks(playerId) {
+      const state = practice.get(playerId) ?? emptyPracticeStreaks();
+      return {
+        games: completed.get(playerId)?.size ?? 0,
+        hardStreak: state.hard.best,
+        blitzStreak: state.blitz.best,
+      };
+    },
     async onlineBlitz(playerId, now) {
       const held = blitz.get(playerId) ?? { streak: emptyStreak(), at: -1, id: '' };
       const rows = [...await deps.blitzResults(playerId)]

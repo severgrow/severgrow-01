@@ -46,6 +46,8 @@ import { fromEngineResult } from './protocol.js';
 import { actorChanged, gatedRevisionFor, gatedStateFor, turnBoundaryAdvanced } from './turn-boundary.js';
 import { graceSpentBetween } from './grace.js';
 import type { WorldEconomyService } from './seeds/service.js';
+import type { StreakStore } from './streaks/store.js';
+import type { CountryStore } from './accounts/country.js';
 import { playerSummary } from './storage/types.js';
 import type { Decision, MatchRecord, Participant, PlayerRecord, Storage } from './storage/types.js';
 
@@ -79,6 +81,13 @@ export type ServiceOptions = {
   /** Injectable clock (epoch ms). Defaults to the real one. */
   now?: () => number;
   broadcaster?: MatchBroadcaster;
+  /**
+   * The account's Practice streaks (owner, 2026-11-20): the public profile's OFFLINE row is a read
+   * of rows that already exist. Absent means the row is honest em dashes.
+   */
+  streaks?: StreakStore;
+  /** Where a player's stored country lives (migration 0031). Absent means no flag, never a guess. */
+  country?: CountryStore;
 };
 
 /**
@@ -96,6 +105,8 @@ export class MatchService {
   private readonly now: () => number;
   private readonly broadcaster: MatchBroadcaster | undefined;
   private readonly economy: WorldEconomyService | undefined;
+  private readonly streaks: StreakStore | undefined;
+  private readonly country: CountryStore | undefined;
 
   constructor(options: ServiceOptions) {
     this.storage = options.storage;
@@ -103,6 +114,8 @@ export class MatchService {
     this.now = options.now ?? (() => Date.now());
     this.broadcaster = options.broadcaster;
     this.economy = options.economy;
+    this.streaks = options.streaks;
+    this.country = options.country;
   }
 
   get rulesVersion(): string {
@@ -172,7 +185,19 @@ export class MatchService {
    */
   async publicProfile(playerId: string): Promise<PublicPlayerProfile> {
     if (!this.economy) throw new ApiError('DB_UNAVAILABLE', 'Profiles are not available right now.');
-    return await this.economy.publicProfile(playerId);
+    const profile = await this.economy.publicProfile(playerId);
+    // THE TWO ADDED FACTS, each its own cheap indexed read, awaited SEQUENTIALLY (the Edge pool is
+    // max: 2 — see the note in seeds/service.ts; never fan these out in parallel).
+    const id = playerId.toLowerCase();
+    const streaks = this.streaks ? await this.streaks.profileStreaks(id) : null;
+    const country = this.country ? await this.country.read(id) : null;
+    return {
+      ...profile,
+      ...(streaks
+        ? { offline: { games: streaks.games, hardStreak: streaks.hardStreak, blitzStreak: streaks.blitzStreak } }
+        : {}),
+      country: country ?? null,
+    };
   }
 
   /** Finished duels between the viewer and another player, from the viewer's seat. */

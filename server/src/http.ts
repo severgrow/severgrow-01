@@ -6,6 +6,7 @@ import type { IncomingMessage, Server } from 'node:http';
 import { DEFAULT_SERVER_CONFIG } from './config.js';
 import type { ServerConfig } from './config.js';
 import { createFetchApp } from './fetch-app.js';
+import type { FetchAppDeps } from './fetch-app.js';
 import type { MatchService } from './service.js';
 
 export type Logger = (line: string) => void;
@@ -14,7 +15,11 @@ export type HttpDeps = {
   service: MatchService;
   config?: ServerConfig;
   logger?: Logger;
-  live?: import('./fetch-app.js').FetchAppDeps['live'];
+  live?: FetchAppDeps['live'];
+  /** The combined profile sheet's two extra reads (see FetchAppDeps.card). */
+  card?: FetchAppDeps['card'];
+  /** Where a new guest's country is remembered (migration 0031). */
+  country?: FetchAppDeps['country'];
 };
 
 const readRawBody = async (req: IncomingMessage): Promise<Buffer> => {
@@ -36,7 +41,8 @@ const toHeaders = (req: IncomingMessage): Headers => {
 export const createHttpServer = (deps: HttpDeps): Server => {
   const config = deps.config ?? DEFAULT_SERVER_CONFIG;
   const logger: Logger = deps.logger ?? (() => undefined);
-  const app = createFetchApp({ service: deps.service, config, logger, ...(deps.live ? { live: deps.live } : {}) });
+  const app = createFetchApp({ service: deps.service, config, logger, ...(deps.live ? { live: deps.live } : {}),
+    ...(deps.card ? { card: deps.card } : {}), ...(deps.country ? { country: deps.country } : {}) });
 
   return createServer((req, res) => {
     void (async () => {

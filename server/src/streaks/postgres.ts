@@ -10,10 +10,13 @@ import type { Player } from '../../../src/engine/index.js';
 import type { OnlineEndReason } from '../protocol.js';
 import type { PracticeStreaks, Streak } from './rules.js';
 import { PRACTICE_TIERS, applyGame, emptyPracticeStreaks, emptyStreak, isPracticeTier } from './rules.js';
-import type { BlitzResultRow, PracticeGame, StreakStore } from './store.js';
+import type { BlitzResultRow, PracticeGame, ProfileStreaks, StreakStore } from './store.js';
 import { FOLD_SETTLE_MS, blitzResult } from './store.js';
 
 const num = (v: unknown): number => (typeof v === 'number' ? v : Number(v ?? 0) || 0);
+
+/** Postgres "undefined table": the server code arrived before migration 0028. */
+const missingTable = (error: unknown): boolean => (error as { code?: unknown } | null)?.code === '42P01';
 
 /** Fully completed games (win/loss/draw), from the game-id rows the same transaction deduplicates. */
 const readCompleted = async (q: { query: PgPool['query'] }, playerId: string): Promise<number> => {
@@ -34,6 +37,34 @@ const readPractice = async (q: { query: PgPool['query'] }, playerId: string, loc
     if (isPracticeTier(row.tier)) out[row.tier] = { current: num(row.current_streak), best: num(row.best_streak) };
   }
   return out;
+};
+
+/**
+ * THE PUBLIC OFFLINE ROW, in ONE statement (owner, 2026-11-20). The two streaks are the account's
+ * BEST runs on the HARD and BLITZ Practice keys — `practice_streaks.best_streak` is exactly "the
+ * longest consecutive run of wins" (a win extends it, anything else resets it, ./rules.ts), so no
+ * pass over the per-game rows is needed. The games count is the same deduplicated completed-game
+ * count the Practice reveal uses (game ids in `practice_streak_games`).
+ *
+ * The three scalar sub-selects all hit a primary-key prefix (`player_id, …`), so this is one cheap
+ * round trip whatever the player's history. A database without migration 0028 answers null.
+ */
+const readProfileStreaks = async (q: { query: PgPool['query'] }, playerId: string): Promise<ProfileStreaks | null> => {
+  try {
+    const { rows } = await q.query(
+      `select
+         coalesce((select max(best_streak) from practice_streaks where player_id = $1 and tier = 'hard'), 0)::int as hard_streak,
+         coalesce((select max(best_streak) from practice_streaks where player_id = $1 and tier = 'blitz'), 0)::int as blitz_streak,
+         (select count(*) from practice_streak_games where player_id = $1 and result in ('win','loss','draw'))::int as games`,
+      [playerId],
+    );
+    const row = rows[0];
+    if (!row) return { games: 0, hardStreak: 0, blitzStreak: 0 };
+    return { games: num(row.games), hardStreak: num(row.hard_streak), blitzStreak: num(row.blitz_streak) };
+  } catch (error) {
+    if (missingTable(error)) return null;
+    throw error;
+  }
 };
 
 /** Fold every finished live match after the checkpoint into the player's online Blitz streak. */
@@ -132,5 +163,6 @@ export const postgresStreakStore = (pool: PgPool): StreakStore => ({
   },
   practice: (playerId) => readPractice(pool, playerId, false),
   completedPractice: (playerId) => readCompleted(pool, playerId),
+  profileStreaks: (playerId) => readProfileStreaks(pool, playerId),
   onlineBlitz: (playerId, now) => foldOnlineBlitz(pool, playerId, now),
 });
