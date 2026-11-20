@@ -116,6 +116,7 @@ import { DECK_BEAT, SCORE_BEAT, deckMoment, scoreProgress, splashPlan, sporesHom
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
 import { EASE, BREATH, MOTION, PINNED, breathAmpStep, breathPeriodOf, breathPhaseOf, motionAllowed } from './logic/motion.js';
+import { turnGlowMs, turnGlowPlan } from './logic/turn-glow.js';
 import { boardHasSettled, resultHoldStalled, stepResultBreath } from './logic/result-hold.js';
 import { liftOf, settleOvershootOf, shadowOf, weightOf } from './logic/card-weight.js';
 import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface, INTERFACE_MOTION } from './ui/interface-motion.js';
@@ -4635,13 +4636,24 @@ function injectStall(): void {
  * (#hand .card::before) and only its OPACITY animates, which the phone composites on the GPU. The
  * old version animated a drop-shadow filter on the whole hand, repainting every card every frame
  * for 0.9s, right at the turn hand-over (motion pass, owner 2026-10-15).
+ *
+ * 2026-11-20: the light now TRAVELS across the fan (logic/turn-glow.ts) instead of rising on every
+ * card at once. Same 900 ms, same opacity-only layer: the last card's delay is taken out of its own
+ * duration, so the sweep ends exactly where the old wash did and nothing waits on it. The wave is
+ * three style writes (never one per card) and only when it is really my turn with motion on.
  */
 let handGlowTimer: ReturnType<typeof setTimeout> | undefined;
 function glowHand(ms: number): void {
   const hand = $('hand');
   clearTimeout(handGlowTimer);
   hand.classList.remove('turn-glow');
+  // Reduce motion / Speed off: no light at all (it used to glow regardless — a joyful animation
+  // must become NOTHING for a player who asked for stillness).
+  const plan = turnGlowPlan(ms, hand.querySelectorAll('.card').length, motionOn());
+  if (!plan) return;
   hand.style.setProperty('--turn-glow-ms', `${Math.round(ms)}ms`);
+  hand.style.setProperty('--turn-glow-step', `${plan.stepMs}ms`);
+  hand.style.setProperty('--turn-glow-tail', `${plan.tailMs}ms`);
   requestAnimationFrame(() => {
     hand.classList.add('turn-glow');
     handGlowTimer = setTimeout(() => hand.classList.remove('turn-glow'), ms + 50);
@@ -5182,8 +5194,8 @@ async function playStep(step: Step, my: number) {
       announceTurn(step.player, step.player === HUMAN && step.final ? 'Your last turn' : undefined);
       // Only the now-active home answers, with one existing heartbeat; the other stays still.
       beatHome(step.player, my);
-      // My turn starts: a soft glow passes over my hand.
-      if (step.player === HUMAN) glowHand(900 * Math.max(f, 0.5));
+      // My turn starts: a soft glow passes over my hand, card by card (logic/turn-glow.ts).
+      if (step.player === HUMAN) glowHand(turnGlowMs(f));
       // an empty opponent turn starts at once (its quick beats are in its plan)
       const oppQuick = step.player === BOT && session && botPlan?.beats.quick && botPlan.keys[0] === posKey(session.state);
       const quick = oppQuick ? 0 : quickShow && step.player === HUMAN ? quickShow.show.turn : null;

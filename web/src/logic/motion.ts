@@ -106,6 +106,13 @@ export const EASE = Object.freeze({
   spring: SETTLE_EASE,
 });
 
+/**
+ * THE TURN-START GLOW (logic/turn-glow.ts). Its whole beat, unchanged: the light over my hand at
+ * the turn hand-over. It is the most repeated moment in the game, so it lives here with the other
+ * pinned values rather than as a literal in `main.ts`.
+ */
+export const GLOW_BEAT = 900;
+
 /** Continuous marquees are the only place for `linear`; the LED projector is the only `steps(1)`. */
 export const EASE_SPECIAL = Object.freeze({ marquee: 'linear', led: 'steps(1)' });
 
