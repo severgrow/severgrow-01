@@ -27,7 +27,7 @@ import { seedSettings, SETTINGS_PREFIXES } from './helpers/settings-seed.js';
 import { positionSave } from './position.js';
 import { resumeSavedGame } from './helpers/menu-nav.js';
 
-const OUT = process.env.ALT_VIEW_OUT ?? '/tmp/altview/';
+const OUT = process.env.ALT_VIEW_OUT ?? '/tmp/altview-final/';
 const PORT = Number(process.env.PORT ?? 4337);
 
 let failed = 0;
