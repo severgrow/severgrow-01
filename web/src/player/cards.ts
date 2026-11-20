@@ -80,6 +80,22 @@ export function warmCardArtWhenReady(): void {
 // Kick off once the menu is up — never before the first composed frame.
 warmCardArtWhenReady();
 
+/**
+ * THE SUIT INK'S STEP (owner, 2026-11-20: "the color intensity of suits inside cards difference
+ * in hand during GROW and THROW selection. im talking red purple green inside etc. during grow the
+ * colors should be more vibrant, during throw insensity colors way lower, and then as it is now the
+ * selected one grey scale. we have system for that but it isnt set good").
+ *
+ * The step already owned the hand's LIGHT (the Grow glow vs the quieter Throw glow), but the
+ * printed face itself — the suit glyphs' red / purple / blue / green — never changed with it, so
+ * the two steps' ink was identical. These are the values of ONE static veil over the printed face,
+ * set by `data-step` on the root and read by the card's own sheet. GROW is the vibrant hand (no
+ * veil); THROW turns the ink down towards the card's shadow tone; the picked card stays exactly as
+ * it is (its own greyscale, no veil). It is a paint, not a filter: a filter on a card that breathes
+ * would re-rasterise every card on every frame (see player/smart-cockpit.ts).
+ */
+export const CARD_INK = Object.freeze({ grow: 0, throw: 0.34, picked: 0 });
+
 export const CARDS_CSS = `
 /* Card-local ink: never change terrain, ownership or interface colour tokens. */
 .futa04-cards .card.s0, .futa04-cards .futa04-combination .s0 { --suit:#7FCF8D; }
@@ -136,6 +152,19 @@ export const CARDS_CSS = `
   opacity:0; transition:opacity .28s ease;
 }
 .futa04-cards .card :is(.c-num,.c-suit) { transition:opacity .22s ease; }
+/* THE SUIT INK FOLLOWS THE STEP (owner, 2026-11-20: "during grow the colors should be more vibrant,
+   during throw insensity colors way lower"). One static alpha veil over the printed face, in the
+   card's own shadow tone: it mutes the suit glyphs' chroma without a filter (a filter here would
+   re-rasterise every breathing card each frame) and without touching the card's palette. The steps
+   write only the custom property; the picked card opts out and keeps its existing greyscale. */
+.futa04-cards .card > .futa04-card-art::after {
+  content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  background:rgb(14 15 15 / var(--card-ink, 0));
+}
+html.futa04-cards[data-step='grow'] #hand .card { --card-ink:${CARD_INK.grow}; }
+html.futa04-cards[data-step='throw'] #hand .card { --card-ink:${CARD_INK.throw}; }
+/* "as it is now the selected one grey scale": its filter is the whole treatment. */
+html.futa04-cards[data-step='throw'] #hand .card.futa04-throw-picked { --card-ink:${CARD_INK.picked}; }
 /* THE PILE IS A STACK OF CARDS, SO EVERY LAYER WEARS THE CARD'S OWN CORNER (owner, 2026-11-14:
    "on draw pile the corners look wrong"; open request 3 in docs/HANDOFF-0.86.md: "draw pile,
    discard and opponent piles must draw the exact new card shape (radius, no extra frames),
