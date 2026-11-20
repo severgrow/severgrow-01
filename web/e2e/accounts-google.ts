@@ -224,17 +224,20 @@ try {
     await context.close();
   }
   {
-    const d = await device(browser);
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    const page = await context.newPage();
     fake.nextUser = 'retry-callback';
-    await d.page.goto(`${origin}/?code=missing-verifier`);
-    const retry = d.page.locator('[data-acct="google-return-retry"]');
+    // Serve the failed return as a fresh browser document. The recovery UI is the milestone;
+    // unrelated assets can still be loading after WebKit has already rendered the retry.
+    await page.goto(`${origin}/?code=missing-verifier`, { waitUntil: 'commit' });
+    const retry = page.locator('[data-acct="google-return-retry"]');
     const visible = await waitFor(() => retry.isVisible(), 5000);
     check('callback without pending sign-in: visible recovery', visible);
     if (visible) {
       await retry.click();
-      check('callback retry starts a new sign-in', await waitFor(async () => (await identity(d.page))?.kind === 'account', 6000));
+      check('callback retry starts a new sign-in', await waitFor(async () => (await identity(page))?.kind === 'account', 6000));
     }
-    await d.context.close();
+    await context.close();
   }
 
   // ---- 5b. FIRST TRY ALWAYS WORKS (owner, 2026-11-11: "sometimes when logging through Google it's
