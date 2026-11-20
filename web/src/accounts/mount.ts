@@ -1007,6 +1007,11 @@ export const mountAccounts = async (): Promise<void> => {
         connectedTiles: wire.connectedTiles ?? null,
         online: wire.online,
         colour: profileColour(identity.playerId, wire.colourId),
+        // THE FLAG IS THE SERVER'S MEMORY (owner, 2026-11-20: stored once at sign-in from the
+        // request's geo). The first frame may show what the device can infer; once the card answers,
+        // the stored code wins, so your own sheet and a visitor's show the same flag. No row = no
+        // flag, never a guessed one.
+        ...(wire.country ? { country: wire.country } : {}),
         // Your own card also carries the account's offline record (games/wins/draws/longest run), so
         // the "matches won" line and the local record agree without a second request.
         ...(card.ownOffline ? { offline: accountRecord(card.ownOffline) } : {}),

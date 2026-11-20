@@ -271,6 +271,11 @@ const ownMeasure = async (page: Page, withCard: boolean) => {
   const ms = await elapsed(page);
   const reads = playerReads().length;
   const log = summary();
+  const flag = await page.evaluate(() => ({
+    glyph: document.getElementById('profile-flag')?.textContent ?? '',
+    label: document.getElementById('profile-flag')?.getAttribute('aria-label') ?? '',
+  }));
+  if (withCard) check('own sheet: the stored country is the flag (not a device guess)', flag.glyph === '🇵🇱' && flag.label === 'Poland', `${flag.glyph} ${flag.label}`);
   const painted = await page.evaluate(() => [...(document.getElementById('profile-play-offline')?.querySelectorAll('dd') ?? [])].map((d) => d.textContent));
   await closeSheet(page);
   reset();
