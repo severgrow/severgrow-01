@@ -469,6 +469,7 @@ export const mountAccounts = async (): Promise<void> => {
       say(ACCOUNT.unavailable, true);
       return;
     }
+    dropResume();
     if (btn) btn.disabled = true;
     openingGoogle = true;
     if (status) {
@@ -624,8 +625,11 @@ export const mountAccounts = async (): Promise<void> => {
       finally { handoverMs = performance.now() - at; }
       stage = 'success';
     } catch (error) {
-      dropResume();
-      if (error instanceof Error && error.message === 'account-storage-failed') stage = 'storage';
+      const reason = error instanceof Error ? error.message : '';
+      // WebKit can reject a request in the old document before the reload commits. Keep the
+      // verified session on transient hand-over failure so the next document can resume it.
+      if (stage !== 'handover' || reason !== 'account-exchange-failed') dropResume();
+      if (reason === 'account-storage-failed') stage = 'storage';
       idleMenuKey();
       showRecovery(stage === 'missing-pending' ? ACCOUNT.signInExpired : navigator.onLine ? ACCOUNT.failed : ACCOUNT.offline, returnTo);
     } finally {
