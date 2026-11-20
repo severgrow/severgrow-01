@@ -22,6 +22,7 @@ untouched.
 | Two-phone playtest script | [`PLAYTEST-0.5.md`](history/PLAYTEST-0.5.md) |
 | Online vs offline differential audit | [`ONLINE-VS-OFFLINE.md`](history/ONLINE-VS-OFFLINE.md) |
 | Turn-word / gate smoothness evidence | [`ONLINE-SMOOTHNESS.md`](ONLINE-SMOOTHNESS.md) |
+| Web push (turn + challenge notifications) | [`PUSH-NOTIFICATIONS.md`](PUSH-NOTIFICATIONS.md) |
 
 ## What is current (verified)
 
@@ -61,6 +62,9 @@ untouched.
 
 ## Still open (do not report these as fixed)
 
+- **Web push is built but NOT deployed** (owner brief, 2026-11-20): the code and migration 0031 are on
+  `feat/match-notifications`, and the feature stays dark until the owner sets `PUSH_ENABLED` + VAPID
+  secrets and deploys the bundle. See [`PUSH-NOTIFICATIONS.md`](PUSH-NOTIFICATIONS.md).
 - **Presence (Online / Away) is not wired** — the indicator is deliberately hidden rather than faked.
 - A slow **retained-heap drift** (~270 KB per match in a long-lived tab; only a reload releases it).
 - An intermittent **seat-1 Bloom painting stall** (~1 run in 3, cause unidentified).

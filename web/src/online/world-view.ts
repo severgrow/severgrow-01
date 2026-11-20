@@ -40,6 +40,8 @@ import {
 import { stakedCellFor } from '../../../server/src/seeds/stake.js';
 import { stakeName } from './challenge-copy.js';
 import { waitingActionCount } from './territory-attention.js';
+import { setIconCount } from './challenge-reminders.js';
+import { nudgePush } from './push-nudge.js';
 import { SEEDS_WORD, seedBalanceLabel, seedIcon } from './seed-icon.js';
 import type { AchievementView } from '../../../server/src/seeds/achievements.js';
 import { ACHIEVEMENT_COPY, ACHIEVEMENT_GROUP_TITLES, ACHIEVEMENTS_UI } from './achievement-copy.js';
@@ -95,6 +97,8 @@ import { ONLINE, PLANET } from '../../../src/strings.js';
 
 /** A tile grown this recently keeps its halo (the map shows where the world is moving). */
 const FRESH_MS = 6 * 60 * 60 * 1000;
+/** The last number asked of the installed app's icon; a render only calls the badge API on change. */
+let paintedBadgeCount = -1;
 /** The wide-screen layout (online-css.ts, THE DESKTOP STAGE): the same media query. */
 /** One cell's width on the stage at rest: big enough to read, small enough to see a region. */
 const STAGE_CELL_PX = 54;
@@ -2947,6 +2951,13 @@ export class WorldView {
     // (`territory-attention.ts`); nothing here counts "open challenges" any more, because an
     // outgoing challenge and a duel waiting for the opponent must stay quiet.
     const waiting = waitingActionCount(this.challenges);
+    // The installed app's icon count follows the SAME rule (one number, one meaning). Only when it
+    // changes, so a render never becomes a badge call storm; `setIconCount` is silent where the
+    // platform has no Badging API (every iPhone today, desktop installs have it).
+    if (waiting !== paintedBadgeCount) {
+      paintedBadgeCount = waiting;
+      void setIconCount(waiting);
+    }
     for (const count of document.querySelectorAll<HTMLElement>('#world-key-challenges .world-deck-count')) {
       count.hidden = waiting === 0;
       count.textContent = String(waiting);
@@ -4378,6 +4389,8 @@ export class WorldView {
       this.notice(stake ? CHALLENGE.sent(stakeName(stake)) : CHALLENGE.sendFailed);
       this.closeSheet();
       await this.refresh(true, true);
+      // The defender may have the tab closed: the SERVER decides whether they get a push, once.
+      nudgePush(this.client, me.token);
     }, CHALLENGE.sendFailed);
   }
 
@@ -4389,6 +4402,8 @@ export class WorldView {
       const result = await this.client.respondWorldChallenge(me.token, challenge.id, accept, this.sheetRequestId ?? undefined);
       this.closeSheet();
       await this.refresh(true, true);
+      // An ACCEPT is the moment the challenger was never told about (docs/TERRITORY-CHALLENGES.md).
+      nudgePush(this.client, me.token);
       if (accept && result.matchId) this.matchOpener?.(result.matchId);
     }, CHALLENGE.answerFailed);
   }

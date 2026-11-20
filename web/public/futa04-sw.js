@@ -36,7 +36,10 @@ function cachePrefix() {
 // a 150-commit-old shell indefinitely: the worker answered every launch from the saved copy and only
 // refreshed it for the NEXT one, and a home-screen app that is resumed never navigates at all. The
 // new name makes the first launch of a stuck client start from a copy this worker has proved.
-const CACHE = `${PREFIX}v5`;
+// v6 (2026-11-20): WEB PUSH. The worker now shows a server-sent notification when no game window is
+// visible, and opens the game on tap. A new cache name makes every installed app pick the handler up
+// on its next launch (a push that arrives before that simply waits in the push service).
+const CACHE = `${PREFIX}v6`;
 const scope = new URL(self.registration.scope);
 const shell = ['./', './index.html', './manifest.webmanifest', './futasaku-icon-192.png', './futasaku-icon-512.png'];
 self.addEventListener('install', (e) => {
@@ -166,6 +169,7 @@ const isDuelApi = (url) =>
   url.pathname.includes('/v1/guests') ||
   url.pathname.includes('/v1/players') ||
   url.pathname.includes('/v1/health') ||
+  url.pathname.includes('/v1/push') ||
   url.pathname.includes('/v1/sweep');
 self.addEventListener('fetch', (e) => {
   const req = e.request, url = new URL(req.url);
@@ -191,4 +195,70 @@ self.addEventListener('fetch', (e) => {
     // the manifest is asked for with a one-off ?r= (never cached by address): keep one copy for offline
     e.respondWith(networkFirst(req, url.pathname.endsWith('/manifest.json') ? url.pathname : req));
   }
+});
+
+// WEB PUSH (docs/PUSH-NOTIFICATIONS.md). The SERVER decides who is told and what the words are; this
+// worker only decides whether to show it. A VISIBLE game window already tells the player, so the
+// notification is suppressed there — that is the one rule that keeps a live turn from buzzing the
+// phone its owner is already looking at.
+//
+// Everything is optional: a push with no data, a broken payload or a platform that refuses
+// `showNotification` must never surface as an unhandled rejection in the app.
+const PUSH_TITLE = 'FUTASAKU';
+const PUSH_ICON = './futasaku-icon-192.png';
+const pushData = (event) => {
+  try {
+    const parsed = event.data ? event.data.json() : null;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+const visibleWindow = async () => {
+  if (!self.clients || !self.clients.matchAll) return false;
+  try {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    return windows.some((client) => client.visibilityState === 'visible');
+  } catch {
+    return false;
+  }
+};
+self.addEventListener('push', (event) => {
+  const data = pushData(event);
+  const title = typeof data.title === 'string' && data.title ? data.title.slice(0, 80) : PUSH_TITLE;
+  const body = typeof data.body === 'string' ? data.body.slice(0, 200) : '';
+  const tag = typeof data.tag === 'string' && data.tag ? data.tag.slice(0, 64) : 'futasaku';
+  const url = typeof data.url === 'string' && data.url ? data.url : './';
+  event.waitUntil((async () => {
+    if (await visibleWindow()) return;
+    await self.registration.showNotification(title, {
+      body,
+      tag,
+      renotify: false,
+      icon: PUSH_ICON,
+      badge: './futasaku-tab-48.png',
+      data: { url },
+    });
+  })().catch(() => undefined));
+});
+
+// A TAP OPENS THE GAME. Focus an existing window when there is one (never a second copy of the
+// game), otherwise open the app; the notification's `url` is always inside this worker's scope.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const raw = event.notification.data && event.notification.data.url;
+  event.waitUntil((async () => {
+    const target = new URL(typeof raw === 'string' && raw ? raw : './', self.registration.scope).href;
+    const windows = self.clients && self.clients.matchAll
+      ? await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      : [];
+    for (const client of windows) {
+      try {
+        if ('focus' in client) await client.focus();
+        if ('navigate' in client && client.url !== target) await client.navigate(target).catch(() => undefined);
+        return;
+      } catch { /* try the next window */ }
+    }
+    if (self.clients && self.clients.openWindow) await self.clients.openWindow(target);
+  })().catch(() => undefined));
 });

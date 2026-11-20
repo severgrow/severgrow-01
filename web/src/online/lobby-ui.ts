@@ -5,6 +5,8 @@ import type { MatchListEntry, MatchSummary, MatchViewPayload, ReplayPayload, Wor
 import { ONLINE, PLANET, REPLAY } from '../../../src/strings.js';
 import { FEATURES } from '../channel.js';
 import { createIdentityStore, subscribeIdentityChanges } from './identity.js';
+import { mountPushNotifications } from './push-notifications.js';
+import { nudgePush } from './push-nudge.js';
 import { connectSkinSwitch } from './skin-switch.js';
 import type { IdentityStore } from './identity.js';
 import { SEARCH_HEARTBEAT_MS, SEARCH_LIVE_MS, duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
@@ -123,6 +125,8 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 export type OnlineLobbyController = {
   enabled: boolean;
   openHub(): Promise<void>;
+  /** Settings opened: refresh the one push switch against the server (never on a render path). */
+  pushSettings(): void;
   /**
    * The shared world map, opened as its own read-only view. `from` is where the player came from:
    * the main menu (owner direction 2026-10-15 — the world map is a TOP-LEVEL menu entry, never in
@@ -169,6 +173,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     return {
       enabled: false,
       openHub: async () => undefined,
+      pushSettings: () => undefined,
       openWorld: () => undefined,
       mountEndgamePlanet: () => null,
       leaveForMatch: () => undefined,
@@ -201,6 +206,9 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     onReplaced: () => onIdentityReplaced(),
   });
   identityStore = identity;
+  // MATCH NOTIFICATIONS (docs/PUSH-NOTIFICATIONS.md): one Settings switch, off by default. The row
+  // is injected into the existing sheet and only ever shown when the server advertises push.
+  const pushUi = mountPushNotifications({ client, identity, storage: browserStorage() });
   let identityReplaced = false;
   const now = hooks.now ?? (() => Date.now());
 
@@ -831,6 +839,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   // READY BEFORE THE TAP (owner, 2026-11-18): a new visitor's guest arrives after the menu has
   // painted; the moment it does, the menu gets chat and achievements ready for the Planet.
   subscribeIdentityChanges((record) => {
+    // A different account on this phone DROPS this device's push subscription (the previous account
+    // can then receive nothing more) and starts OFF; the server's one-endpoint-one-owner constraint
+    // is the second half. `sync` is a no-op while notifications are off.
+    if (record) void pushUi.sync();
     // THE SKIN BELONGS TO THE ACCOUNT (owner, 2026-11-18): a sign-in reads the account's skin at
     // once, so the next match wears what was chosen on another device. Reading never writes.
     if (record) void connectSkinSwitch(client, record.token);
@@ -873,6 +885,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         renderMatches();
         notice('online-hub-notice', '');
         flashIdentityReplaced();
+        // "Look now" after a list read: if this player just took a turn, the opponent may be the one
+        // who needs telling. The SERVER decides (it never uses this call to choose a recipient), and
+        // the throttle keeps a 4 s poll from becoming a request storm.
+        nudgePush(client, id.token);
       } catch (error) {
         if (identity.peek()?.token === id.token) notice('online-hub-notice', errorMessage(error));
       }
@@ -2021,6 +2037,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
 
   return {
     enabled: true, openHub, openWorld, mountEndgamePlanet, leaveForMatch, handleBootHash, refreshTitle,
+    pushSettings: () => { void pushUi.sync(); },
     openMatch, rematch, trainingSeedTicket, syncSeedRewards, seedBalance,
   };
 };

@@ -525,8 +525,12 @@ Built since the original phases (so no longer "unfinished"):
 
 Still open / deliberately unfinished:
 
-1. **No push while the tab is closed.** An open tab receives the Realtime ping; a closed tab is only
-   updated on the next visit (no web-push notifications). Polling is unchanged as the safety net.
+1. **No push while the tab is closed — BUILT, NOT DEPLOYED (2026-11-20).** Web push (turn + Territory
+   challenge + 12 h/1 h reminders) lives in `server/src/push/`, migration `0031`, and the Settings
+   switch; the feature is dark until the owner sets `PUSH_ENABLED` + VAPID secrets and deploys. See
+   [`PUSH-NOTIFICATIONS.md`](PUSH-NOTIFICATIONS.md). Until then, the behaviour below is what players
+   get: an open tab receives the Realtime ping; a closed tab is only updated on the next visit.
+   Polling is unchanged as the safety net.
 2. **No TLS termination** here (a deployment concern). Tokens are bearer tokens: HTTPS is required.
 3. **No observability** beyond one line per request (method, path, status, duration). No metrics,
    tracing or alerting; logs never contain bodies or tokens.

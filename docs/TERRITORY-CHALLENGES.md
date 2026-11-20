@@ -234,7 +234,9 @@ Everything below describes the build that followed.
 6. **If the contested cell moved on before settlement**, the challenge still resolves and pays out
    but the tile does not move. Safe, but a silent difference worth knowing.
 7. **No challenger push on accept** — the defender opens the duel immediately; the challenger finds
-   it on the 12 s poll and taps `OPEN DUEL`.
+   it on the 12 s poll and taps `OPEN DUEL`. *Web push now covers this when deployed: the challenger
+   gets one "challenge accepted" notification (`docs/PUSH-NOTIFICATIONS.md`); the in-app 12 s poll is
+   unchanged.*
 
 ## What still has to happen before a player sees this
 

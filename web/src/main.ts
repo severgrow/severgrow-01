@@ -27,6 +27,7 @@ import { getOnlineSession, isOnlineDuel, setOnlineSession } from './online/duel-
 import { hideLobbySurfaces } from './online/lobby-exit.js';
 import { TURN_REPLAY } from './online/replay-copy.js';
 import { runRematch } from './online/rematch.js';
+import { nudgePush } from './online/push-nudge.js';
 // Futasaku in the browser. You (player 1) against the computer. All rules come from the
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
@@ -1298,7 +1299,7 @@ function openSheetNow(id: string | null, wasOpen: boolean) {
     closingSheet = null;
     $('scrim').hidden = false;
     next.hidden = false;
-    if (id === 'sheet-settings') { syncSettingsForm(); prefsSync?.now(); }
+    if (id === 'sheet-settings') { syncSettingsForm(); prefsSync?.now(); onlineLobbyCtl?.pushSettings(); }
     if (id === 'sheet-history') renderHistory();
     if (id === 'sheet-howto') renderHowTo();
     // The backdrop only changes density; it never travels. The surface becomes present.
@@ -12006,6 +12007,8 @@ if (SHOW_MENU_TAGLINE) {
 // work even when this module has not mounted (owner report, 2026-10-25 — see `settleSeedsForCard`).
 type OnlineLobbyCtl = {
   openHub(): Promise<void>;
+  /** Settings opened: refresh the one push switch (never on a render path). */
+  pushSettings(): void;
   rematch(finishedMatchId?: string | null): Promise<void>;
   /** The Territory map (the menu's own entry); the finish card's planet pane calls its own mount. */
   openWorld(from: 'hub' | 'menu'): void;
@@ -12108,6 +12111,10 @@ void signInGate.settled.then(() => import('./online/lobby-ui.js')).then(async (m
           const pending = os.driver.pendingEvents();
           os.refresh();
           syncSessionFromOnline();
+          // The turn may have just changed hands. One cheap "look now" at most every 20 s; the
+          // server decides whether the OPPONENT needs a notification. Never awaited: it cannot
+          // delay the replay, the board or the gate.
+          nudgePush(client, token);
           let catchUp: Step[] = [];
           try {
             catchUp = os.consumeCatchUp();
