@@ -471,6 +471,15 @@
                    2026-10-30: "keep it clean lean and elegant"). The key stays hidden on a server
                    that predates them. -->
               <div class="world-pane" data-pane="achievements">
+                <!-- THE SHELF (owner, 2026-11-20: "the newly achieved achievement showed there ... with
+                     button 'COLLECT' by the seed payout"): every earned-and-uncollected achievement is
+                     drawn ONCE, here at the top, at full width, with its payout and its COLLECT key.
+                     Its row in its section is skipped while it waits (achievement-collect.ts), so a
+                     ready reward is never shown twice. Empty and hidden when nothing is waiting. -->
+                <div id="world-achievements-shelf" class="world-achievements-shelf" hidden>
+                  <p id="world-shelf-title" class="world-achievements-shelf-title"></p>
+                  <div id="online-world-achievements-shelf" class="world-achievements world-achievements-shelf-list" role="list" aria-labelledby="world-shelf-title"></div>
+                </div>
                 <!-- The key is always present for a signed-in player (owner, 2026-11-01); this ONE
                      quiet line is the honest waiting state until a real list arrives. No numbers
                      and nothing claimable are drawn before the server answers. -->

@@ -4,7 +4,7 @@
 // What this pins, on the real product build and the real memory economy:
 //   * all 35 rows and five section headings at 320x568, 390x844 and 1280x800;
 //   * no horizontal scroll anywhere (page, panel body, or any row);
-//   * earned vs unearned is structural — a CLAIM key / a tick, never colour alone;
+//   * earned vs unearned is structural — a COLLECT key / a tick, never colour alone;
 //   * a newly claimed row plays its moment once and then settles;
 //   * screenshots land in docs/screens/achievements/.
 //
@@ -137,7 +137,7 @@ try {
         readyText: row?.querySelector('strong')?.textContent ?? '',
       };
     });
-    check(`${viewport.width}: earned and unearned differ without colour (CLAIM vs none)`, ready.readyHasClaim && !ready.openHasClaim, JSON.stringify(ready));
+    check(`${viewport.width}: earned and unearned differ without colour (COLLECT vs none)`, ready.readyHasClaim && !ready.openHasClaim, JSON.stringify(ready));
 
     if (viewport.claim && !claimedOnce) {
       claimedOnce = true;

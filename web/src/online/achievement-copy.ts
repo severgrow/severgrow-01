@@ -6,8 +6,10 @@
  * what to do, never how it is counted.
  *
  * LEAN BY DIRECTION (owner, 2026-10-30): "remove the 'seeds for your first....' under achievments -
- * keep it clean lean and elegant". There is no intro line, no reward teaser and no "earn Seeds"
- * copy on this surface. The amount is spoken once, in the notice after CLAIM, and nowhere before it.
+ * keep it clean lean and elegant". There is no intro line and no reward teaser on an UNEARNED row.
+ * A row you have already earned is different (owner, 2026-11-20: "button 'COLLECT' by the seed
+ * payout"): the card waiting on the shelf names the Seeds it is holding, and the notice repeats the
+ * payment once it lands.
  */
 import type { AchievementGroup, AchievementId } from '../../../server/src/seeds/achievements.js';
 
@@ -60,11 +62,24 @@ export const ACHIEVEMENT_GROUP_TITLES: Readonly<Record<AchievementGroup, string>
 
 export const ACHIEVEMENTS_UI = Object.freeze({
   title: 'Achievements',
-  /** No amount before the claim: the reward is not a teaser on this surface. */
-  claim: 'CLAIM',
+  /** The owner's own word for the one action (2026-11-20): "button 'COLLECT'". */
+  claim: 'COLLECT',
   claimed: 'Claimed',
   claiming: '…',
   paid: (seeds: number) => `+${seeds} Seeds`,
+  /**
+   * The shelf's heading. The amount on a READY card is not a teaser: the reward is already earned,
+   * and this is the moment it is collected. An unearned row still shows no amount at all (owner,
+   * 2026-10-30: "keep it clean lean and elegant" — that rule was about selling the reward, not
+   * about hiding a payout that is now owed).
+   */
+  ready: (count: number) => (count === 1 ? 'Ready to collect' : `${count} ready to collect`),
+  /** The one word above the card's title: this is not a goal, it is a reward you already hold. */
+  kicker: 'Just earned',
+  /** The payout's spoken form, beside the seed glyph on a ready card. */
+  payout: (seeds: number) => `${seeds} Seeds`,
+  /** One accessible name for a COLLECT key: the visible word alone would repeat 35 times. */
+  collectLabel: (title: string, seeds: number) => `${title}: COLLECT ${seeds} Seeds`,
   failed: 'That did not go through. Try again.',
   /**
    * ONE quiet line, never a spinner (owner, 2026-11-01: the key must always be there, and the
