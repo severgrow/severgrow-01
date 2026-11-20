@@ -8,6 +8,7 @@
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { PLAYER_CSS } from '../src/player/player-css.js';
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), 'utf8');
 const css = read('../src/style.css');
@@ -49,5 +50,21 @@ describe('1. a key RETURNS from its press on the shared beat', () => {
 
   it('introduces no new duration or token', () => {
     expect(shared).not.toMatch(/\d+ms|\d+s\b/);
+  });
+});
+
+describe('2. picking a card on the phone fan eases into the air', () => {
+  const thumb = bodyAfter(PLAYER_CSS, 'html[data-thumb] .dock .hand-row > .hand .card {\n  transition: opacity 220ms ease-out, transform');
+
+  it('transitions transform on the shared arrival, so the pick cannot snap', () => {
+    expect(thumb).toContain('opacity 220ms ease-out');
+    expect(thumb).toContain('transform var(--ix-open) var(--ix-ease-open)');
+    // Compositor only: the fan's lift is a transform; nothing here repaints or reflows.
+    expect(thumb).not.toMatch(/box-shadow|filter|width|height|left|top/);
+  });
+
+  it('is still under Reduce motion, both ways of asking', () => {
+    expect(PLAYER_CSS).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*html\[data-thumb\] \.dock \.hand-row > \.hand \.card \{ transition: none; \}/);
+    expect(PLAYER_CSS).toMatch(/\.reduce-motion html\[data-thumb\] \.dock \.hand-row > \.hand \.card \{\s*transition: none;/);
   });
 });
