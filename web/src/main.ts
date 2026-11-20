@@ -33,9 +33,11 @@ import { runRematch } from './online/rematch.js';
 // step always matches the real state, so animations can never leave it wrong.
 import { allNeighbors, apply, bloomGroups, coordKey, hexDistance, homeCoord, isStrangled, legalActions, newGame, newMatch, parseKey, planMegaBomb, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, RulesConfig, State, Tile, View } from '../../src/engine/index.js';
-import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
+import { COACH_STEPS, TUTORIAL_SEED, coachActive, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
 import { cutLoss } from './analysis.js';
+import { mistakeNudge } from './logic/mistakes.js';
+import type { UndoNudge } from './logic/mistakes.js';
 import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
@@ -1900,6 +1902,9 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   releaseThrowSwell();
   session = new Session(state, HUMAN, log, base);
   bloomPick = [];
+  // A new match forgets the previous match's undo nudges (logic/mistakes.ts).
+  undoNudgeShown = null;
+  nudgesThisMatch = 0;
   // A lesson never offers a power before the level that teaches it (Bloom from level 5).
   { const l = lessonNow && campaignLevel?.number === lessonNow.level ? lessonNow : null; session.allow = l ? (a) => lessonAllows(l, a) : null; }
   finalShown = false;
@@ -3541,6 +3546,45 @@ function drainInstallInvite() {
   flushInstallInvite();
 }
 
+// ---------- the undo nudge ----------
+
+/**
+ * A lesson, the tutorial, the coach's opening hints, a watched replay or an online duel already
+ * owns guidance here; a second voice would be noise. It is also the rule that keeps the coach and
+ * this detector from ever contradicting each other: on a position the coach is advising, the nudge
+ * is silent.
+ */
+function guidanceOwnsThisPosition(): boolean {
+  if (isOnlineDuel() || watching) return true;
+  if (coach.tutorial || lessonActive()) return true;
+  return coachActive(coach.step, true);
+}
+
+/** The last nudge, tied to the exact position it was computed for (the next move clears it). */
+let undoNudgeShown: (UndoNudge & { state: State }) | null = null;
+/** Nudges spent this match (`MISTAKE_MAX_PER_MATCH`). */
+let nudgesThisMatch = 0;
+
+/**
+ * Reads the Grow step the player just ended (`web/src/logic/mistakes.ts`). Only a deliberate
+ * EndAct — never the app's own auto-skip — and only while Undo can still take it back: the throw
+ * is the deadline, and after it this says nothing at all.
+ */
+function noteUndoNudge(p: Played, action: Action, auto: boolean) {
+  if (auto || action.t !== 'EndAct' || !session) return;
+  const nudge = mistakeNudge({
+    before: viewFor(p.before, HUMAN),
+    after: viewFor(p.after, HUMAN),
+    action,
+    canUndo: session.canUndo,
+    lesson: guidanceOwnsThisPosition(),
+    shownThisMatch: nudgesThisMatch,
+  });
+  if (!nudge) return;
+  nudgesThisMatch += 1;
+  undoNudgeShown = { ...nudge, state: session.state };
+}
+
 function humanPlay(a: Action, opts: { auto?: boolean; flightFrom?: DOMRect } = {}) {
   bloomPick = [];
 
@@ -3594,6 +3638,8 @@ function humanPlay(a: Action, opts: { auto?: boolean; flightFrom?: DOMRect } = {
     if (opts.flightFrom) dragThrowFrom = opts.flightFrom;
     if (fromPickedPile) holdThrowSwell();
   }
+  // Ending the Grow step is the last instant Undo can still fix a blunder: read it now.
+  noteUndoNudge(p, a, !!opts.auto);
   inspectKey = null;
   guideGoal = null;
   afterPlay(p, HUMAN, advice);
@@ -7594,6 +7640,15 @@ function renderBoard(v: View, advice: Advice | null) {
   // The same slot holds Replay when nothing can be undone: ONLINE its disabled tooltip must say why
   // (the offline words stay exactly as they were).
   if (!replayOk && noReplay && !undoOk && isOnlineDuel()) undoSlot.title = noReplayTip();
+  // The undo nudge: a soft pulse on this same key while the move it would take back is still
+  // undoable (the throw closes the window) and the nudge belongs to the position on screen.
+  const nudged = !!undoNudgeShown && undoNudgeShown.state === session.state && undoOk && !guidanceOwnsThisPosition();
+  undoSlot.classList.toggle('mistake-nudge', nudged);
+  undoSlot.classList.toggle('mistake-nudge-quiet', nudged && settings.effects === 'low');
+  if (nudged) {
+    undoSlot.setAttribute('aria-label', undoNudgeShown!.label);
+    undoSlot.title = undoNudgeShown!.label;
+  }
   // Step 4: the homes (tree, volcano): idle life, a calm worried state, smothered or withered
   // after a Strangle. A home that is being surrounded shows no frame (owner, 2026-11-14).
   {
