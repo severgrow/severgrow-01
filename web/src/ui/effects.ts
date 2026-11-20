@@ -10,6 +10,7 @@ const IS_FUTA04 = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04
 import { FRUIT } from '../../../src/strings.js';
 import { ParticleBudget } from '../logic/juice.js';
 import { EASE, MOTION, PINNED, oppDealMs } from '../logic/motion.js';
+import { STRIKE_TIMING, fitStrikeLanding, strikeCardSize, strikeFlightFrames } from '../logic/strike.js';
 import { planBoomerang } from './throw-boomerang.js';
 import { dustSpecks } from '../logic/impact.js';
 
@@ -313,27 +314,56 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
    * old card is never uncovered: that fade-over-the-old-top was the "previous card flashes again"
    * the owner saw (2026-10-20).
    */
-  function flyCard(c: Card, from: DOMRect, to: DOMRect, f: number, onLand?: () => void, boardTarget = false) {
+  function flyCard(c: Card, from: DOMRect, to: DOMRect, f: number, onLand?: () => void, boardTarget = false, beatMs = 0) {
     // A hidden source has no box: there is nothing to fly from (and the scale would explode).
     if (from.width < 1 || from.height < 1 || to.width < 1 || to.height < 1) { onLand?.(); return; }
     const d = document.createElement('div');
     d.className = `flyer card ${suitClass(c)}`;
     d.innerHTML = cardFace(c);
-    Object.assign(d.style, { left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px` });
+    // A Bomb that lands ON A TILE plays the strike's own beat (logic/strike.ts): the card arrives
+    // with the replay's overshoot, stays whole on the tile while the burst goes, and fades out with
+    // the replay's tiny swell. It used to fly the PILE's curve and then simply vanish — a jump-cut
+    // with nothing underneath it, which read as "not smooth" (owner, 2026-11-20).
+    const strike = boardTarget && IS_FUTA04;
+    // The card's box at the landing is the STRIKE's size — 2.15 hex radii tall, as in the replay —
+    // and carries the hand card's own aspect, so the art is painted exactly as the player picked it
+    // up (no squash, no extra `cover` crop at the top and bottom).
+    const sized = strike ? strikeCardSize(to, from.width / from.height) : null;
+    const landing = sized ? fitStrikeLanding(to, flightViewport(), sized.width, sized.height) : null;
+    const classic = boardTarget && !landing ? fitBombLanding(from, to, flightViewport()) : null;
+    const box = landing ? { width: landing.width, height: landing.height } : { width: from.width, height: from.height };
+    const left = landing ? landing.x - box.width / 2 : from.left;
+    const top = landing ? landing.y - box.height / 2 : from.top;
+    Object.assign(d.style, { left: `${left}px`, top: `${top}px`, width: `${box.width}px`, height: `${box.height}px` });
     document.body.appendChild(d);
-    const landing = boardTarget ? fitBombLanding(from, to, flightViewport()) : null;
-    const dx = (landing?.x ?? to.left + to.width / 2) - (from.left + from.width / 2);
-    const dy = (landing?.y ?? to.top + to.height / 2) - (from.top + from.height / 2);
-    const sc = landing?.scale ?? to.height / from.height;
+    const fromMid = { x: from.left + from.width / 2, y: from.top + from.height / 2 };
+    // A landing card is already centred on its tile: a frame only moves it back to the hand.
+    // Every other flight starts at the hand's own box: a frame moves it to where it lands.
+    const dx = landing ? fromMid.x - (left + box.width / 2) : (classic?.x ?? to.left + to.width / 2) - fromMid.x;
+    const dy = landing ? fromMid.y - (top + box.height / 2) : (classic?.y ?? to.top + to.height / 2) - fromMid.y;
+    const sc = landing ? 1 : classic?.scale ?? to.height / from.height;
     const frames: Keyframe[] = motion() === 0
       ? [{ opacity: 1 }, { opacity: 0 }]
-      : IS_FUTA04
-        ? throwPileFrames(dx, dy, sc)
-        : [{ transform: 'translate(0,0) rotateY(0deg)' }, { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 30}px) rotateY(90deg) scale(${(1 + sc) / 2})`, offset: 0.5 }, { transform: `translate(${dx}px, ${dy}px) rotateY(0deg) scale(${sc})` }];
-    const duration = (IS_FUTA04 ? PINNED.throwFlight : 440) * f;
-    if (onLand && IS_FUTA04) setTimeout(onLand, duration * THROW_PILE.landAt);
+      : landing
+        // `logic/strike.ts` is pure (no DOM types), so its frames are handed to the DOM here
+        ? strikeFlightFrames({ dx, dy, startScale: from.width / box.width, liftPx: Math.max(to.width, to.height) / 2 }) as Keyframe[]
+        : IS_FUTA04
+          ? throwPileFrames(dx, dy, sc)
+          : [{ transform: 'translate(0,0) rotateY(0deg)' }, { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 30}px) rotateY(90deg) scale(${(1 + sc) / 2})`, offset: 0.5 }, { transform: `translate(${dx}px, ${dy}px) rotateY(0deg) scale(${sc})` }];
+    const duration = (landing && beatMs > 0 ? beatMs : IS_FUTA04 ? PINNED.throwFlight : 440) * f;
+    if (onLand && IS_FUTA04) setTimeout(onLand, duration * (landing ? STRIKE_TIMING.landEnd : THROW_PILE.landAt));
     else onLand?.();
-    removeAfter(anim(d, frames, { duration, easing: IS_FUTA04 ? EASE.out : 'ease-in-out', fill: 'forwards' }), d, duration + 40);
+    // A LANDING RUNS LINEAR, ON PURPOSE: an animation-level easing re-times the KEYFRAME OFFSETS
+    // (measured: 312 ms into a 624 ms beat with EASE.out reported progress 0.96, so the card was
+    // already gone at a fifth of its beat). The strike's offsets ARE its timing — the curve is
+    // inside `strikeFlightFrames` — so the only honest easing here is `linear`. Every other flight
+    // keeps the shared out-curve over its own offsets.
+    if (landing) removeAfter(anim(d, frames, { duration, easing: 'linear', fill: 'forwards' }), d, duration + 40);
+    else {
+      const easing = IS_FUTA04 ? EASE.out : 'ease-in-out';
+      removeAfter(anim(d, frames, { duration, easing, fill: 'forwards' }), d, duration + 40);
+    }
+    return duration;
   }
 
   /**

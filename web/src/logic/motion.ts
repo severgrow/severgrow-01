@@ -29,6 +29,13 @@ export const PINNED = Object.freeze({
   /** The thrown card's own flight, which lands inside that wait (32359b5: the snappier beat). */
   throwFlight: 248,
   /**
+   * A Bomb's whole landing beat, ms (= 2 x the throw beat). The card flies in, lands, holds while the
+   * burst goes and fades out on the strike curve (`logic/strike.ts`) — the recorded replay's beat,
+   * played in the game (owner, 2026-11-20). It replaces the old flight + a dead-air hold of the same
+   * length, so the step is no longer than it was.
+   */
+  bombBeat: 624,
+  /**
    * The human throw's boomerang (owner, 2026-11-08: "doesn't look satisfying and is too quick ... make
    * it 10/10"; owner, 2026-11-12: "make the card feel lighter - snappy, natural, more satisfying",
    * and it "can be quicker"): one flick, now 420 ms (was 500). A throw ends the turn and own

@@ -116,6 +116,7 @@ import { DECK_BEAT, SCORE_BEAT, deckMoment, scoreProgress, splashPlan, sporesHom
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
 import { EASE, BREATH, MOTION, PINNED, breathAmpStep, breathPeriodOf, breathPhaseOf, motionAllowed } from './logic/motion.js';
+import { STRIKE_TIMING } from './logic/strike.js';
 import { boardHasSettled, resultHoldStalled, stepResultBreath } from './logic/result-hold.js';
 import { liftOf, settleOvershootOf, shadowOf, weightOf } from './logic/card-weight.js';
 import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface, INTERFACE_MOTION } from './ui/interface-motion.js';
@@ -5000,17 +5001,22 @@ async function playStep(step: Step, my: number) {
         const from = mine ? cardRects.get(step.card.id) : undefined;
         const to = hex?.getBoundingClientRect();
         if (from && to && m > 0) {
-          flyCard(step.card, from, to, f, undefined, true);
-          await wait(380 * f, my);
+          // THE REPLAY'S BEAT, IN THE GAME (owner, 2026-11-20: the recorded replay's Bomb "looks good
+          // and that could be in the game reused"): the card lands whole on the tile with the strike
+          // curve's overshoot, the tile starts answering it at the curve's own `burst` mark, and the
+          // card fades out on the curve's `cardOut` instead of vanishing. `beat` is exactly the
+          // flight + dead-air hold the step already spent here, so no turn gets longer.
+          const beat = PINNED.bombBeat;
+          flyCard(step.card, from, to, f, undefined, true, beat);
+          await wait(beat * STRIKE_TIMING.burst * f, my);
         }
       }
       await anticipate(mo, f, my);
       // the card has just flown onto the tile: the strike adds the glow, not a second Bomb card
       if (IS_FUTA04 && !mine && my === epoch) showLiveStrike(board.fx, step, (MOTION.move + MOTION.quick) * f, m === 0, { cards: false });
-      // the pod swells (a plain fade with Reduce motion)
-      anim(tileEl, m === 0 || b.fadeOnly ? [{ opacity: 1 }, { opacity: 0.85 }] : [{ transform: 'scale(1)' }, { transform: `scale(${1 + 0.14 * m})`, offset: 0.7 }, { transform: `scale(${1 + 0.1 * m})` }], { duration: 300 * f, fill: 'forwards', easing: 'ease-out', transformOrigin: 'center' } as KeyframeAnimationOptions);
-      await wait(300 * f, my);
-      // the burst: spores puff out, a soft thud
+      // THE BURST, AT THE CURVE'S OWN MARK (logic/strike.ts `burst`): the replay's order is card
+      // lands → burst → the tile goes, and the burst is what the tile answers. It used to go off
+      // after the pod had already finished swelling, so the two never read as one moment.
       if (b.particles > 0) sparks(step.target, mine ? 'you' : 'bot', 0, f, Math.max(6, Math.round(b.particles / (mine ? 2 : 3))));
       if (!IS_FUTA04 || mine) flash(step.target, f, false);
       if (settings.sound) sound.fruit(mine);
@@ -5018,8 +5024,10 @@ async function playStep(step: Step, my: number) {
         const hp = hapticFor('throw', settings);
         if (hp && mine) vibrate(true, hp as number | number[]);
       }
-      // Beta 0.8: the Bomb lands heavy: the board settles, the light dips, a little dust; the pod
-      // holds a beat (the freeze) before it goes.
+      // the pod swells (a plain fade with Reduce motion), then the Bomb lands heavy: the board
+      // settles, the light dips, a little dust; the pod holds a beat (the freeze) before it goes.
+      anim(tileEl, m === 0 || b.fadeOnly ? [{ opacity: 1 }, { opacity: 0.85 }] : [{ transform: 'scale(1)' }, { transform: `scale(${1 + 0.14 * m})`, offset: 0.7 }, { transform: `scale(${1 + 0.1 * m})` }], { duration: 300 * f, fill: 'forwards', easing: 'ease-out', transformOrigin: 'center' } as KeyframeAnimationOptions);
+      await wait(300 * f, my);
       if (IS_FUTA04) {
         heavyImpact('bomb', step.target, 1, f);
         await wait(impactPlan('bomb', 1, impactOptions()).hitStopMs * f, my);
@@ -8476,7 +8484,19 @@ function renderHand(v: View, advice: Advice | null) {
 }
 
 const rememberCardRects = () => {
-  cardRects = new Map([...document.querySelectorAll<HTMLElement>('#hand [data-card]')].map((b) => [Number(b.dataset.card), b.getBoundingClientRect()]));
+  // THE CARD'S OWN BOX, NEVER ITS ROTATED BOUNDING BOX (owner, 2026-11-20: the Bomb card on the board
+  // was "ugly not smooth and with cutted top and bottom"). The hand's cards are fanned: each one is
+  // turned a few degrees, so `getBoundingClientRect()` answers the box AROUND the turned card — about
+  // 84 x 113 px for a 72 x 102 card at 5°. A flight built from that box is the wrong shape, so the
+  // card's own art (`background-size: cover`) has its top and bottom shaved, and the card visibly
+  // changes size the moment it leaves the hand. A turn keeps the centre, so the centre plus the
+  // layout size is the card's real, untransformed box at exactly the place the player sees it.
+  cardRects = new Map([...document.querySelectorAll<HTMLElement>('#hand [data-card]')].map((b) => {
+    const r = b.getBoundingClientRect();
+    const width = b.offsetWidth || r.width;
+    const height = b.offsetHeight || r.height;
+    return [Number(b.dataset.card), new DOMRect(r.left + r.width / 2 - width / 2, r.top + r.height / 2 - height / 2, width, height)];
+  }));
 };
 
 /** Part 3 C: the deck count last drawn (-1 before a game is shown) */
