@@ -4,7 +4,7 @@
 import type { Player } from '../../../src/engine/index.js';
 import type { OnlineEndReason } from '../protocol.js';
 import type { PracticeStreaks, PracticeTier, Streak, StreakResult } from './rules.js';
-import { applyGame, emptyPracticeStreaks, emptyStreak, isCompletedResult } from './rules.js';
+import { applyGame, emptyPracticeStreaks, emptyStreak, isCompletedResult, isStreakTier } from './rules.js';
 
 /** One finished practice game, as the page reports it. `id` is the game's own id: it counts once. */
 export type PracticeGame = { id: string; tier: PracticeTier; result: StreakResult };
@@ -13,7 +13,10 @@ export type PracticeGame = { id: string; tier: PracticeTier; result: StreakResul
 export type BlitzResultRow = { matchId: string; finishedAt: number; seat: Player; winner: Player | null; reason: OnlineEndReason };
 
 export type StreakStore = {
-  /** Apply the games not recorded before (by id), in order. Returns the four practice streaks after. */
+  /**
+   * Apply the games not recorded before (by id), in order. Returns the four practice streaks after.
+   * An EASY/MEDIUM game is stored once by id and NOT applied to a streak (owner, 2026-11-20).
+   */
   recordPractice(playerId: string, games: readonly PracticeGame[], now: number): Promise<PracticeStreaks>;
   practice(playerId: string): Promise<PracticeStreaks>;
   /**
@@ -71,7 +74,9 @@ export const memoryStreakStore = (deps: {
         if (ids.has(game.id)) continue;
         ids.add(game.id);
         if (isCompletedResult(game.result)) done.add(game.id);
-        state[game.tier] = applyGame(state[game.tier], game.result);
+        // Only HARD and BLITZ carry a streak (owner, 2026-11-20). An EASY/MEDIUM game is still
+        // accepted and recorded (the id above, the completed count above), never applied.
+        if (isStreakTier(game.tier)) state[game.tier] = applyGame(state[game.tier], game.result);
       }
       practice.set(playerId, state);
       seen.set(playerId, ids);

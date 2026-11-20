@@ -8,6 +8,7 @@
 // gap and a 3ch cell). Nothing else goes inside the key: no icon, no label. The label stays centred
 // whatever the numbers are, so a 9 becoming a 10 never moves it. Values are updated in place.
 import type { PracticeStreaks, PracticeTier } from '../../../server/src/streaks/rules.js';
+import { isStreakTier } from '../../../server/src/streaks/rules.js';
 
 const CSS = `
 /* THE KEY'S THREE CELLS (owner, 2026-11-18: "numbers ... centered under [the legend words] - but with
@@ -39,9 +40,11 @@ const CSS = `
 #levels .practice-streak-key > .practice-streak-current { grid-area: 1 / 1; opacity: .52; }
 #levels .practice-streak-key > .practice-streak-best { grid-area: 1 / 3; opacity: .74; }
 /* THE LEGEND (owner, 2026-11-18: "between easy and practice match make it say 'current streak' and
-   'longest streak' cleanly. All aligned symmetric"). One quiet line above the first key, in the
+   'longest streak' cleanly. All aligned symmetric"). One quiet line above the HARD key, in the
    instrument label style; each word sits exactly over its own column of numbers (the key's 1px
-   border + 16px padding), mirror images of each other. Not spoken: each key says its own numbers. */
+   border + 16px padding), mirror images of each other. Not spoken: each key says its own numbers.
+   Since 2026-11-20 only HARD and BLITZ carry a streak, so the legend sits in the gap before HARD,
+   the first of the two — it belongs to that group, never to EASY. */
 #levels .level-grid > .practice-streak-legend {
   display: flex;
   justify-content: space-between;
@@ -86,6 +89,37 @@ const spoken = (base: string, current: number, best: number): string =>
 /** The legend's two words (owner, 2026-11-18). */
 export const STREAK_LEGEND = Object.freeze({ current: 'Current streak', best: 'Longest streak' });
 
+/** The keys that carry a streak (HARD and BLITZ; owner, 2026-11-20), in grid order. */
+const streakKeys = (grid: HTMLElement): HTMLElement[] =>
+  Array.from(grid.querySelectorAll<HTMLElement>('.difficulty-tile'))
+    .filter((key) => { const tier = tierOfKey(key); return tier !== null && isStreakTier(tier); });
+
+const legendOf = (grid: HTMLElement): HTMLElement | null =>
+  grid.querySelector<HTMLElement>(':scope > .practice-streak-legend');
+
+/**
+ * The legend belongs to the HARD/BLITZ group, so it is the row immediately before the FIRST of those
+ * keys — not the grid's first child any more. Re-positioned on every paint, so a grid rebuild (which
+ * `replaceChildren`s every node) can never leave it above EASY.
+ */
+const placeLegend = (grid: HTMLElement, doc: Document): HTMLElement | null => {
+  const anchor = streakKeys(grid)[0];
+  if (!anchor) { legendOf(grid)?.remove(); return null; }
+  let legend = legendOf(grid);
+  if (!legend) {
+    legend = doc.createElement('div');
+    legend.className = 'practice-streak-legend';
+    legend.setAttribute('aria-hidden', 'true');
+    const current = doc.createElement('span');
+    current.textContent = STREAK_LEGEND.current;
+    const best = doc.createElement('span');
+    best.textContent = STREAK_LEGEND.best;
+    legend.append(current, best);
+  }
+  if (legend.nextElementSibling !== anchor) grid.insertBefore(legend, anchor);
+  return legend;
+};
+
 /**
  * Put a key back exactly as the Practice screen built it: the numbers and legend are removed, the
  * original children return, and its class / inline layout / spoken label are restored. Used when a
@@ -106,8 +140,9 @@ const restoreKey = (key: HTMLElement): void => {
 };
 
 /**
- * Give every Practice key in `grid` its two numbers (once), or refresh them in place. The key's own
- * content becomes the centre cell untouched; its spoken label gains the two numbers.
+ * Give every HARD and BLITZ key in `grid` its two numbers (once), or refresh them in place. The key's
+ * own content becomes the centre cell untouched; its spoken label gains the two numbers. EASY and
+ * MEDIUM are restored to their plain Practice keys (owner, 2026-11-20: no streak there at all).
  *
  * `revealed` is the owner's visibility rule (2026-11-20): guests never see the legend or the
  * numbers, and a signed-in account sees them only after three fully completed Practice matches
@@ -117,26 +152,22 @@ const restoreKey = (key: HTMLElement): void => {
 export const paintPracticeStreakKeys = (grid: HTMLElement, streaks: PracticeStreaks, options: { revealed?: boolean } = {}): void => {
   ensureCss(grid.ownerDocument);
   if (options.revealed === false) {
-    grid.querySelector(':scope > .practice-streak-legend')?.remove();
+    legendOf(grid)?.remove();
     for (const key of grid.querySelectorAll<HTMLElement>('.difficulty-tile')) restoreKey(key);
     grid.style.removeProperty('--streak-col');
     return;
   }
-  if (!grid.querySelector(':scope > .practice-streak-legend') && grid.querySelector('.difficulty-tile')) {
-    const legend = grid.ownerDocument.createElement('div');
-    legend.className = 'practice-streak-legend';
-    legend.setAttribute('aria-hidden', 'true');
-    const current = grid.ownerDocument.createElement('span');
-    current.textContent = STREAK_LEGEND.current;
-    const best = grid.ownerDocument.createElement('span');
-    best.textContent = STREAK_LEGEND.best;
-    legend.append(current, best);
-    grid.prepend(legend);
+  const legend = placeLegend(grid, grid.ownerDocument);
+  if (!legend) {
+    // No HARD/BLITZ key at all (a channel without the tier): nothing to paint and nothing to show.
+    for (const key of grid.querySelectorAll<HTMLElement>('.difficulty-tile')) restoreKey(key);
+    grid.style.removeProperty('--streak-col');
+    return;
   }
   // The number cells take the legend words' exact width (the wider of the two, so both sides match).
   // Measured on every paint (the screen opening, a streak changing) and once the fonts settle.
   const fit = () => {
-    const words = grid.querySelectorAll<HTMLElement>(':scope > .practice-streak-legend > span');
+    const words = legend.querySelectorAll<HTMLElement>(':scope > span');
     const width = Math.max(0, ...Array.from(words, (w) => w.getBoundingClientRect().width));
     if (width > 0) grid.style.setProperty('--streak-col', `${Math.ceil(width * 100) / 100}px`);
   };
@@ -144,7 +175,8 @@ export const paintPracticeStreakKeys = (grid: HTMLElement, streaks: PracticeStre
   void grid.ownerDocument.fonts?.ready.then(fit);
   for (const key of grid.querySelectorAll<HTMLElement>('.difficulty-tile')) {
     const tier = tierOfKey(key);
-    if (!tier) continue;
+    // EASY and MEDIUM keep no streak (owner, 2026-11-20): they stay the plain Practice keys.
+    if (!tier || !isStreakTier(tier)) { restoreKey(key); continue; }
     if (!key.classList.contains('practice-streak-key')) {
       const label = grid.ownerDocument.createElement('span');
       label.className = 'practice-streak-label';

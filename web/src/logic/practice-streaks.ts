@@ -1,5 +1,7 @@
-// PRACTICE STREAKS ON THIS DEVICE (owner, 2026-11-18): the four Practice keys show their current and
+// PRACTICE STREAKS ON THIS DEVICE (owner, 2026-11-18): the Practice keys show their current and
 // best streak, the numbers move the moment a game ends, they work offline, and they follow the account.
+// Since 2026-11-20 only HARD and BLITZ carry a streak; EASY and MEDIUM games are still queued and
+// counted as finished games, but never applied to a streak.
 //
 // This is the CACHE and the QUEUE; the account (server/src/streaks) is the record. Every finished game
 // gets an id when it STARTS (kept with the game, so closing the app and resuming finishes the same
@@ -13,7 +15,7 @@
 // that syncs.
 import type { KeyValue } from '../../../server/src/client.js';
 import type { PracticeStreaks, PracticeTier, StreakResult } from '../../../server/src/streaks/rules.js';
-import { applyGame, emptyPracticeStreaks, isCompletedResult, isPracticeTier, isStreakResult } from '../../../server/src/streaks/rules.js';
+import { applyGame, emptyPracticeStreaks, isCompletedResult, isPracticeTier, isStreakResult, isStreakTier } from '../../../server/src/streaks/rules.js';
 
 /** `severgrow.*`: the channel prefixes it. */
 export const PRACTICE_STREAKS_KEY = 'severgrow.practice.streaks.v1';
@@ -121,7 +123,9 @@ export const createPracticeStreaks = (deps: {
     const saved = read();
     const bucket = bucketOf(saved, who());
     if (bucket.counted.includes(game.id)) return;
-    bucket.tiers[game.tier] = applyGame(bucket.tiers[game.tier], game.result);
+    // Only HARD and BLITZ carry a streak (owner, 2026-11-20). An EASY/MEDIUM game is still kept and
+    // queued (its completed count and its id), never applied to a streak.
+    if (isStreakTier(game.tier)) bucket.tiers[game.tier] = applyGame(bucket.tiers[game.tier], game.result);
     // The reveal counts games that ran to their end (win/loss/draw); a restart, an abandon or a
     // resignation is a finished game too, but never one of the three that unlocks the numbers.
     if (isCompletedResult(game.result)) bucket.completed += 1;
@@ -170,7 +174,7 @@ export const createPracticeStreaks = (deps: {
       const early = read();
       if (early.players['']?.pending.length) {
         const mine = bucketOf(early, id);
-        for (const g of early.players['']!.pending) if (!mine.counted.includes(g.id)) { mine.pending.push(g); mine.counted.push(g.id); mine.tiers[g.tier] = applyGame(mine.tiers[g.tier], g.result); }
+        for (const g of early.players['']!.pending) if (!mine.counted.includes(g.id)) { mine.pending.push(g); mine.counted.push(g.id); if (isStreakTier(g.tier)) mine.tiers[g.tier] = applyGame(mine.tiers[g.tier], g.result); }
         mine.completed += early.players['']!.completed;
         delete early.players[''];
         write(early);
@@ -184,7 +188,7 @@ export const createPracticeStreaks = (deps: {
       bucket.pending = bucket.pending.filter((g) => !sent.has(g.id));
       const account = accountAnswer(answer);
       let tiers = validStreaks(account.practice);
-      for (const g of bucket.pending) tiers = { ...tiers, [g.tier]: applyGame(tiers[g.tier], g.result) };
+      for (const g of bucket.pending) if (isStreakTier(g.tier)) tiers = { ...tiers, [g.tier]: applyGame(tiers[g.tier], g.result) };
       bucket.tiers = tiers;
       // The account's number already includes the batch just sent. Games finished while that answer
       // was on its way are still queued, so they are added on top, never double-counted on a retry.

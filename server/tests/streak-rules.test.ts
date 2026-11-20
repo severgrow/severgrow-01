@@ -4,7 +4,7 @@
 //   counts exactly once. Closing the app during an offline game changes nothing (the page keeps the
 //   game; tested in web/tests/practice-streaks.test.ts).
 import { describe, expect, it } from 'vitest';
-import { PRACTICE_TIERS, applyGame, applyGames, emptyStreak, isPracticeTier, isStreakResult } from '../src/streaks/rules.js';
+import { PRACTICE_TIERS, STREAK_TIERS, applyGame, applyGames, emptyStreak, isPracticeTier, isStreakResult, isStreakTier } from '../src/streaks/rules.js';
 
 describe('the streak rules', () => {
   it('a win adds one, a loss resets to 0, a draw changes nothing; best is the highest ever', () => {
@@ -36,5 +36,15 @@ describe('the streak rules', () => {
     expect(isPracticeTier('campaign')).toBe(false);
     expect(isStreakResult('draw')).toBe(true);
     expect(isStreakResult('maybe')).toBe(false);
+  });
+  it('only HARD and BLITZ carry a streak; EASY and MEDIUM are accepted but not counted (2026-11-20)', () => {
+    expect(STREAK_TIERS).toEqual(['hard', 'blitz']);
+    expect(isStreakTier('hard')).toBe(true);
+    expect(isStreakTier('blitz')).toBe(true);
+    expect(isStreakTier('easy')).toBe(false);
+    expect(isStreakTier('medium')).toBe(false);
+    // Still valid Practice reports, so an older page is never rejected.
+    expect(isPracticeTier('easy')).toBe(true);
+    expect(isPracticeTier('medium')).toBe(true);
   });
 });

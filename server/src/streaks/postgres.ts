@@ -9,7 +9,7 @@ import type { PgPool } from '../storage/postgres.js';
 import type { Player } from '../../../src/engine/index.js';
 import type { OnlineEndReason } from '../protocol.js';
 import type { PracticeStreaks, Streak } from './rules.js';
-import { PRACTICE_TIERS, applyGame, emptyPracticeStreaks, emptyStreak, isPracticeTier } from './rules.js';
+import { PRACTICE_TIERS, applyGame, emptyPracticeStreaks, emptyStreak, isPracticeTier, isStreakTier } from './rules.js';
 import type { BlitzResultRow, PracticeGame, StreakStore } from './store.js';
 import { FOLD_SETTLE_MS, blitzResult } from './store.js';
 
@@ -111,6 +111,9 @@ export const postgresStreakStore = (pool: PgPool): StreakStore => ({
           [playerId, game.id, game.tier, game.result, now],
         );
         if (inserted.rows.length === 0) continue;
+        // HARD and BLITZ only (owner, 2026-11-20): an EASY/MEDIUM report is recorded above, so its
+        // id can never count twice, and then ignored by the streak arithmetic.
+        if (!isStreakTier(game.tier)) continue;
         state[game.tier] = applyGame(state[game.tier], game.result);
         touched.add(game.tier);
       }

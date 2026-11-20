@@ -8,10 +8,10 @@ import type { BlitzResultRow } from '../src/streaks/store.js';
 describe('practice streaks on the account', () => {
   it('the same game sent twice (a retry, a second tab, the offline queue) counts once', async () => {
     const store = memoryStreakStore({ blitzResults: () => [] });
-    await store.recordPractice('p', [{ id: 'g1', tier: 'easy', result: 'win' }], 1);
-    await store.recordPractice('p', [{ id: 'g1', tier: 'easy', result: 'win' }, { id: 'g2', tier: 'easy', result: 'win' }], 2);
-    const after = await store.recordPractice('p', [{ id: 'g2', tier: 'easy', result: 'win' }], 3);
-    expect(after.easy).toEqual({ current: 2, best: 2 });
+    await store.recordPractice('p', [{ id: 'g1', tier: 'hard', result: 'win' }], 1);
+    await store.recordPractice('p', [{ id: 'g1', tier: 'hard', result: 'win' }, { id: 'g2', tier: 'hard', result: 'win' }], 2);
+    const after = await store.recordPractice('p', [{ id: 'g2', tier: 'hard', result: 'win' }], 3);
+    expect(after.hard).toEqual({ current: 2, best: 2 });
   });
   it('each key keeps its own streak, and other players never share it', async () => {
     const store = memoryStreakStore({ blitzResults: () => [] });
@@ -20,6 +20,20 @@ describe('practice streaks on the account', () => {
     expect(mine.hard).toEqual({ current: 1, best: 1 });
     expect(mine.easy).toEqual({ current: 0, best: 0 });
     expect((await store.practice('someone-else')).hard).toEqual({ current: 0, best: 0 });
+  });
+  it('EASY and MEDIUM are accepted and recorded but never move a streak (owner, 2026-11-20)', async () => {
+    const store = memoryStreakStore({ blitzResults: () => [] });
+    await store.recordPractice('p', [
+      { id: 'e1', tier: 'easy', result: 'win' },
+      { id: 'm1', tier: 'medium', result: 'win' },
+      { id: 'e2', tier: 'easy', result: 'loss' },
+    ], 1);
+    const after = await store.practice('p');
+    expect(after).toEqual({ easy: { current: 0, best: 0 }, medium: { current: 0, best: 0 }, hard: { current: 0, best: 0 }, blitz: { current: 0, best: 0 } });
+    // They still count as finished games for the reveal, and their ids still dedupe.
+    expect(await store.completedPractice('p')).toBe(3);
+    await store.recordPractice('p', [{ id: 'h1', tier: 'hard', result: 'win' }, { id: 'b1', tier: 'blitz', result: 'win' }], 2);
+    expect(await store.practice('p')).toMatchObject({ hard: { current: 1, best: 1 }, blitz: { current: 1, best: 1 } });
   });
   it('completed counts win/loss/draw once each and never an abandon or a resignation', async () => {
     const store = memoryStreakStore({ blitzResults: () => [] });
@@ -36,11 +50,11 @@ describe('practice streaks on the account', () => {
   });
   it('two devices: the account holds every game from both, and best never goes back', async () => {
     const store = memoryStreakStore({ blitzResults: () => [] });
-    await store.recordPractice('p', [{ id: 'A1', tier: 'medium', result: 'win' }, { id: 'A2', tier: 'medium', result: 'win' }], 1);
-    const b = await store.recordPractice('p', [{ id: 'B1', tier: 'medium', result: 'loss' }], 2);
-    expect(b.medium).toEqual({ current: 0, best: 2 });
-    const a = await store.recordPractice('p', [{ id: 'A2', tier: 'medium', result: 'win' }], 3);
-    expect(a.medium).toEqual({ current: 0, best: 2 });
+    await store.recordPractice('p', [{ id: 'A1', tier: 'hard', result: 'win' }, { id: 'A2', tier: 'hard', result: 'win' }], 1);
+    const b = await store.recordPractice('p', [{ id: 'B1', tier: 'hard', result: 'loss' }], 2);
+    expect(b.hard).toEqual({ current: 0, best: 2 });
+    const a = await store.recordPractice('p', [{ id: 'A2', tier: 'hard', result: 'win' }], 3);
+    expect(a.hard).toEqual({ current: 0, best: 2 });
   });
 });
 
@@ -80,14 +94,28 @@ describe('the streak route', async () => {
     r(new Request('http://x/v1/players/me/streaks', { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ games }) }), '/v1/players/me/streaks');
   it('records a game and reads it back, with the online Blitz streak beside it', async () => {
     const r = route();
-    const out = await post(r, [{ id: 'g-1', tier: 'easy', result: 'win' }]);
-    expect((out!.body as { practice: { easy: unknown } }).practice.easy).toEqual({ current: 1, best: 1 });
+    const out = await post(r, [{ id: 'g-1', tier: 'hard', result: 'win' }]);
+    expect((out!.body as { practice: { hard: unknown } }).practice.hard).toEqual({ current: 1, best: 1 });
     expect((out!.body as { completed: number }).completed).toBe(1);
     const read = await r(new Request('http://x/v1/players/me/streaks', { headers: { authorization: 'Bearer tok' } }), '/v1/players/me/streaks');
-    expect(read!.body).toMatchObject({ ok: true, practice: { easy: { current: 1, best: 1 } }, onlineBlitz: { current: 0, best: 0 }, completed: 1 });
+    expect(read!.body).toMatchObject({ ok: true, practice: { hard: { current: 1, best: 1 } }, onlineBlitz: { current: 0, best: 0 }, completed: 1 });
     // A retry does not move the count either.
-    const retry = await post(r, [{ id: 'g-1', tier: 'easy', result: 'win' }]);
+    const retry = await post(r, [{ id: 'g-1', tier: 'hard', result: 'win' }]);
     expect((retry!.body as { completed: number }).completed).toBe(1);
+  });
+  it("an older page's EASY/MEDIUM report is accepted (never a 400) and moves no streak", async () => {
+    const r = route();
+    const out = await post(r, [{ id: 'e-1', tier: 'easy', result: 'win' }, { id: 'm-1', tier: 'medium', result: 'win' }]);
+    expect(out!.status).toBe(200);
+    const body = out!.body as { practice: Record<string, unknown>; completed: number };
+    expect(body.practice).toEqual({ easy: { current: 0, best: 0 }, medium: { current: 0, best: 0 }, hard: { current: 0, best: 0 }, blitz: { current: 0, best: 0 } });
+    // Recorded once for the reveal, so nothing is lost and a retry cannot count twice.
+    expect(body.completed).toBe(2);
+    await post(r, [{ id: 'h-1', tier: 'hard', result: 'win' }, { id: 'e-2', tier: 'easy', result: 'win' }]);
+    const after = await post(r, [{ id: 'b-1', tier: 'blitz', result: 'win' }]);
+    expect((after!.body as { practice: Record<string, unknown> }).practice).toMatchObject({
+      easy: { current: 0, best: 0 }, medium: { current: 0, best: 0 }, hard: { current: 1, best: 1 }, blitz: { current: 1, best: 1 },
+    });
   });
   it('a page cannot claim an online result, a bad key or a bad id', async () => {
     const r = route();
