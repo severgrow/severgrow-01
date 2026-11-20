@@ -14,6 +14,7 @@ import { INTERFACE_MOTION } from '../src/ui/interface-motion.js';
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), 'utf8');
 const css = read('../src/style.css');
 const main = read('../src/main.ts');
+const tip = read('../src/ui/card-tip.ts');
 
 /** The body of the first rule that starts at `anchor`. */
 const bodyAfter = (src: string, anchor: string): string => {
@@ -115,5 +116,28 @@ describe('4. the finish card’s score line lands between its title and its verd
   it('is a designed still state under Reduce motion', () => {
     expect(css).toMatch(/\.reduce-motion #gameover\[data-fresh='1'\] \.go-score \{\s*animation: none;/);
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?#gameover\[data-fresh='1'\] \.go-score \{\s*animation: none;/);
+  });
+});
+
+describe('5. the card detail bubble answers on the press beat', () => {
+  it('fades and rises 2px on --ix-press with the shared curve', () => {
+    expect(tip).toContain('duration: INTERFACE_MOTION.press');
+    expect(tip).toContain('easing: INTERFACE_MOTION.easeOpen');
+    expect(tip).toContain("{ opacity: 0, translate: '0 2px' }");
+    expect(tip).toContain("{ opacity: 1, translate: '0 0' }");
+  });
+
+  it('animates only opacity and translate, and never its placement', () => {
+    const reveal = tip.slice(tip.indexOf('const revealTip'), tip.indexOf('const hide ='));
+    expect(reveal).not.toMatch(/left|top|width|height|filter|box-shadow|scale/);
+    // Placement is still written as left/top (not animated) by place().
+    expect(tip).toContain('tip.style.left =');
+    expect(tip).toContain('tip.style.top =');
+  });
+
+  it('is guarded by the one motion switch and leaves nothing running', () => {
+    expect(tip).toContain('interfaceMotionAllowed()');
+    expect(tip).toMatch(/\.finished\.then\(\(anim\) => anim\.cancel\(\)\)/);
+    expect(tip).not.toMatch(/setInterval/);
   });
 });

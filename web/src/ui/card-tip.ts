@@ -15,6 +15,8 @@
  *
  * It is presentation only: no game state, no network, no timer while nothing is hovered.
  */
+import { INTERFACE_MOTION, interfaceMotionAllowed } from './interface-motion.js';
+
 const STYLE_ID = 'card-tip-style';
 const TIP_ID = 'card-tip';
 
@@ -61,6 +63,27 @@ const place = (anchor: Element, text: string) => {
   const top = above >= 6 ? above : Math.min(r.bottom + gap, window.innerHeight - box.height - 6);
   tip.style.left = `${Math.round(left)}px`;
   tip.style.top = `${Math.round(top)}px`;
+  revealTip();
+};
+
+/**
+ * ONE SHORT ARRIVAL (0.8s polish): the bubble used to swap from `display:none` to a fully painted
+ * plate in a single frame. It now fades and rises 2px on the press beat — opacity and `translate`
+ * only, so the bubble's placement (`left`/`top`) is never animated and nothing is repainted per
+ * frame. The words are readable from the first frame of the fade. Reduce motion: it simply appears,
+ * which is the state the old code always had.
+ */
+const revealTip = (): void => {
+  if (!tip) return;
+  for (const running of tip.getAnimations()) running.cancel();
+  if (!interfaceMotionAllowed()) return;
+  tip.animate(
+    [
+      { opacity: 0, translate: '0 2px' },
+      { opacity: 1, translate: '0 0' },
+    ],
+    { duration: INTERFACE_MOTION.press, easing: INTERFACE_MOTION.easeOpen, fill: 'both' },
+  ).finished.then((anim) => anim.cancel()).catch(() => undefined);
 };
 
 const hide = () => {
