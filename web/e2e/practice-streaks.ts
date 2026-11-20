@@ -11,7 +11,7 @@
  *   - EASY and MEDIUM are plain keys: no numbers, no streak in their spoken name;
  *   - the legend sits in the gap before HARD (never above EASY) and its words align to that key's
  *     number columns; the MEDIUM→HARD gap is measurably wider than EASY→MEDIUM, with and without
- *     the legend.
+ *     the legend, and again with the BLITZ key removed (the three-key screen is measured).
  * On Chromium at 390 a real HARD game is played to its end and the key's numbers change on return,
  * with no reload. The signed-in profile shows "Best Blitz streak" as the online row's key tile and
  * "Achievements x/x" (the API is a local stub; nothing real is called).
@@ -135,7 +135,10 @@ const play = async (p: Page) => {
 };
 
 try {
-  const sizes: [string, number, number][] = [['320', 320, 568], ['390', 390, 844], ['430', 430, 932], ['landscape', 844, 390], ['desktop', 1440, 900]];
+  const allSizes: [string, number, number][] = [['320', 320, 568], ['390', 390, 844], ['430', 430, 932], ['landscape', 844, 390], ['desktop', 1440, 900]];
+  /** `STREAK_SIZES=390` re-runs a subset while iterating (the suite is unchanged). */
+  const only = (process.env.STREAK_SIZES ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  const sizes = only.length ? allSizes.filter(([name]) => only.includes(name)) : allSizes;
   for (const [name, width, height] of sizes) {
     const p = await browser.newPage({ viewport: { width, height }, hasTouch: width < 900 });
     await prepare(p, true, 3);
@@ -223,9 +226,63 @@ try {
     assert(Math.abs(gaps.easyMedium - 8) <= 2, `${name}: EASY→MEDIUM stays the grid's own 8px (${gaps.easyMedium.toFixed(1)})`);
     assert(gaps.mediumHard >= gaps.easyMedium + 12, `${name}: MEDIUM→HARD is the group break (${gaps.easyMedium.toFixed(1)} / ${gaps.mediumHard.toFixed(1)})`);
     assert(gaps.mediumHard <= gaps.easyMedium + 70, `${name}: ...a pause, not a void (${gaps.mediumHard.toFixed(1)})`);
+    console.log(`  ${name}: EASY→MEDIUM ${gaps.easyMedium.toFixed(1)}px · MEDIUM→HARD ${gaps.mediumHard.toFixed(1)}px · legend inset ${legend.leftInset.toFixed(1)}/${legend.rightInset.toFixed(1)}px · numbers under words ${legend.under.toFixed(2)}px · mirror ${legend.mirror.toFixed(2)}px · gap above HARD ${legend.above.toFixed(1)}px`);
     await p.screenshot({ path: `${out}/keys-${ios ? 'webkit' : 'chromium'}-${name}.png` });
     console.log('PASS', ios ? 'webkit' : 'chromium', name, 'two groups, HARD/BLITZ numbers, centred labels, 44px, focus ring');
     await p.close();
+  }
+
+  // THE BLITZ-ABSENT CASE (the two groups must read as groups even when BLITZ is not there).
+  // The futa05 build always appends the key, so the key is removed and the LAID-OUT screen measured:
+  // the legend must still sit above HARD, HARD's numbers must stay centred under the words, and the
+  // group pause must still be wider than EASY→MEDIUM. (The paint path itself treats any key outside
+  // HARD/BLITZ as a plain key and anchors the legend to the first streak key — which is HARD — so a
+  // three-key grid paints the same way; there is simply no BLITZ key left to skip.)
+  {
+    const p = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true });
+    try {
+      await prepare(p, true, 3);
+      await openPractice(p);
+      await p.waitForSelector('#level-grid .practice-streak-key');
+      await p.evaluate(() => { document.querySelector('#level-grid .difficulty-tile[data-difficulty="pro"]')?.remove(); });
+      // Let the grid lay out again without the row the key occupied.
+      await p.waitForFunction(() => document.querySelectorAll('#level-grid .difficulty-tile').length === 3, undefined, { timeout: WAIT });
+      await p.waitForTimeout(250);
+      const seen = await p.evaluate(`(() => {
+        const grid = document.getElementById('level-grid');
+        const keys = [...grid.querySelectorAll('.difficulty-tile')];
+        const key = (id) => keys.find((k) => k.dataset.difficulty === id);
+        const box = (id) => key(id).getBoundingClientRect();
+        const easy = box('easy'), medium = box('medium'), hardBox = box('hard');
+        const hard = key('hard');
+        const legend = grid.querySelector(':scope > .practice-streak-legend');
+        const ra = legend?.querySelectorAll('span')[0]?.getBoundingClientRect(), rb = legend?.querySelectorAll('span')[1]?.getBoundingClientRect();
+        const cur = hard && hard.querySelector('.practice-streak-current')?.getBoundingClientRect();
+        const best = hard && hard.querySelector('.practice-streak-best')?.getBoundingClientRect();
+        const c = (b) => (b ? (b.left + b.right) / 2 : 0);
+        return {
+          ids: keys.map((k) => k.dataset.difficulty),
+          numbered: keys.filter((k) => k.classList.contains('practice-streak-key')).map((k) => k.dataset.difficulty),
+          legendBeforeHard: !!legend && legend.nextElementSibling === hard,
+          words: legend ? [...legend.querySelectorAll('span')].map((s) => s.textContent) : [],
+          under: Math.max(Math.abs(c(cur) - c(ra)), Math.abs(c(best) - c(rb))),
+          easyMedium: medium.top - easy.bottom,
+          mediumHard: hardBox.top - medium.bottom,
+        };
+      })()`) as { ids: string[]; numbered: string[]; legendBeforeHard: boolean; words: string[]; under: number; easyMedium: number; mediumHard: number };
+      assert.deepEqual(seen.ids, ['easy', 'medium', 'hard'], 'no BLITZ: the grid has the three training tiers');
+      assert.deepEqual(seen.numbered, ['hard'], 'no BLITZ: only HARD carries the numbers');
+      assert(seen.legendBeforeHard, 'no BLITZ: the legend is the row directly above HARD');
+      assert.deepEqual(seen.words, ['Current streak', 'Longest streak']);
+      assert(seen.under <= 1, `no BLITZ: HARD's numbers stay centred under the words (${seen.under.toFixed(2)}px off)`);
+      assert(Math.abs(seen.easyMedium - 8) <= 2, `no BLITZ: EASY→MEDIUM stays 8px (${seen.easyMedium.toFixed(1)})`);
+      assert(seen.mediumHard >= seen.easyMedium + 12, `no BLITZ: MEDIUM→HARD is still the group break (${seen.easyMedium.toFixed(1)} / ${seen.mediumHard.toFixed(1)})`);
+      console.log(`  no BLITZ: EASY→MEDIUM ${seen.easyMedium.toFixed(1)}px · MEDIUM→HARD ${seen.mediumHard.toFixed(1)}px · numbers under words ${seen.under.toFixed(2)}px`);
+      await p.screenshot({ path: `${out}/keys-no-blitz-${ios ? 'webkit' : 'chromium'}-390.png` });
+      console.log('PASS', ios ? 'webkit' : 'chromium', 'no BLITZ: legend above HARD, one group break, HARD numbers aligned');
+    } finally {
+      await p.close();
+    }
   }
 
   // THE REVEAL RULE (owner, 2026-11-20): guests never see the legend or the numbers; a signed-in
@@ -289,7 +346,10 @@ try {
   await p.waitForFunction("(() => { const k = document.getElementById('menu-login'); return !!k && !k.hidden; })()", undefined, { timeout: WAIT });
   await p.click('#menu-login');
   await p.waitForSelector('#sheet-profile:not([hidden])');
-  await p.waitForFunction("(() => document.getElementById('profile-achievements')?.textContent === '12/35')()", undefined, { timeout: 10_000 });
+  // Wall-clock budget only (a loaded machine's stub read can take a while); the assertion is the text.
+  await p.waitForFunction("(() => document.getElementById('profile-achievements')?.textContent === '12/35')()", undefined, { timeout: WAIT }).catch(() => undefined);
+  const achievementsText = await p.evaluate(() => document.getElementById('profile-achievements')?.textContent ?? '(missing)');
+  assert.equal(achievementsText, '12/35', `the profile's achievements line (${achievementsText})`);
   const key = p.locator('#profile-play-online .sp-tile-key');
   await key.waitFor();
   assert.equal(await key.locator('dt').textContent(), 'Best Blitz streak');
