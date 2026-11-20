@@ -18,16 +18,25 @@ export const deckMoment = (before: number, after: number): 'last' | 'out' | null
 export const DECK_BEAT = Object.freeze({ ms: MOTION.move, lastScale: 1.06 });
 
 /**
- * A score change. The digits ease out over one move, then the number that changed gives a
- * small click. Not a linear count and not a bounce (the old pop reached 1.28).
+ * A score change. The digits ease out over one move, and the number that changed clicks as it
+ * ARRIVES — its pop starts `popLead` before the count lands, so the number snaps into place
+ * instead of clicking in a second, separate beat after everything has already stopped (2026-11-20:
+ * the old `delay: dur` read as two events, and the payoff is every single scoring move).
+ * Not a linear count and not a bounce (the old pop reached 1.28).
  */
-export const SCORE_BEAT = Object.freeze({ countMs: MOTION.move, popMs: MOTION.quick, popScale: 1.06 });
+export const SCORE_BEAT = Object.freeze({ countMs: MOTION.move, popMs: MOTION.quick, popScale: 1.06, popLead: MOTION.ack * 0.8, popRisePx: 1 });
 
 /** Ease-out for a score count: most of the change lands early, then the digits rest. */
 export const scoreProgress = (k: number): number => {
   const t = Math.min(1, Math.max(0, k));
   return 1 - (1 - t) ** 3;
 };
+
+/**
+ * When the landing click starts, ms into the count. Negative would start before the digits move,
+ * so it is floored at 0; it always lands before the count finishes.
+ */
+export const scorePopDelay = (countMs: number): number => Math.max(0, countMs - SCORE_BEAT.popLead);
 
 /** D. Spores returning to my root from tiles I just grew (at most 6, nearest the root first). */
 export const sporesHome = (grown: readonly string[], root: string, max = 6): { from: string; delay: number }[] => {

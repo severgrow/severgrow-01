@@ -112,7 +112,7 @@ import { attachSchedulerPause, scheduler } from './logic/scheduler.js';
 import { mountHiddenPause } from './ui/hidden-pause.js';
 import { mountViewportGuard } from './ui/viewport-guard.js';
 import { clearTiming, mark as markTiming, timingEnabled, timingLog } from './logic/timing.js';
-import { DECK_BEAT, SCORE_BEAT, deckMoment, scoreProgress, splashPlan, sporesHome } from './logic/candy.js';
+import { DECK_BEAT, SCORE_BEAT, deckMoment, scorePopDelay, scoreProgress, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
 import { EASE, BREATH, MOTION, PINNED, breathAmpStep, breathPeriodOf, breathPhaseOf, motionAllowed } from './logic/motion.js';
@@ -5436,10 +5436,18 @@ function countScores(to: [number, number]) {
       scoreUnsub = null;
     }
   });
-  // The digits have arrived: one small click on the number that changed, not a bounce.
-  const pop: Keyframe[] = [{ transform: 'scale(1)' }, { transform: `scale(${SCORE_BEAT.popScale})`, offset: 0.55 }, { transform: 'scale(1)' }];
-  if (target[0] !== start[0]) anim($('score-you'), pop, { duration: SCORE_BEAT.popMs, delay: dur, easing: EASE.settle });
-  if (target[1] !== start[1]) anim($('score-bot'), pop, { duration: SCORE_BEAT.popMs, delay: dur, easing: EASE.settle });
+  // The digits have arrived: one small click on the number that changed, not a bounce. It starts
+  // `popLead` BEFORE the count lands, so the click is the number snapping into place rather than a
+  // second event after the count has already stopped (2026-11-20). It also rises a hair: transform
+  // only, on the compositor, and no extra time.
+  const pop: Keyframe[] = [
+    { transform: 'translateY(0) scale(1)' },
+    { transform: `translateY(-${SCORE_BEAT.popRisePx}px) scale(${SCORE_BEAT.popScale})`, offset: 0.55 },
+    { transform: 'translateY(0) scale(1)' },
+  ];
+  const popDelay = scorePopDelay(dur);
+  if (target[0] !== start[0]) anim($('score-you'), pop, { duration: SCORE_BEAT.popMs, delay: popDelay, easing: EASE.settle });
+  if (target[1] !== start[1]) anim($('score-bot'), pop, { duration: SCORE_BEAT.popMs, delay: popDelay, easing: EASE.settle });
 }
 
 // ---------- rendering ----------

@@ -1,6 +1,6 @@
 // UI overhaul Part 3: the eye-candy decisions.
 import { describe, expect, it } from 'vitest';
-import { DECK_BEAT, SCORE_BEAT, deckMoment, scoreProgress, splashPlan, sporesHome } from '../src/logic/candy.js';
+import { DECK_BEAT, SCORE_BEAT, deckMoment, scorePopDelay, scoreProgress, splashPlan, sporesHome } from '../src/logic/candy.js';
 import { MOTION } from '../src/logic/motion.js';
 
 describe('B. splash', () => {
@@ -30,7 +30,7 @@ describe('the deck and the score click instead of bouncing', () => {
     expect(DECK_BEAT.lastScale).toBeGreaterThan(1);
     expect(DECK_BEAT.lastScale).toBeLessThanOrEqual(1.08);
   });
-  it('a score eases out over one move, then the digit clicks instead of bouncing', () => {
+  it('a score eases out over one move, and the digit clicks as it ARRIVES (not after)', () => {
     expect(SCORE_BEAT.countMs).toBe(MOTION.move);
     expect(SCORE_BEAT.popMs).toBe(MOTION.quick);
     expect(SCORE_BEAT.popScale).toBeGreaterThan(1);
@@ -40,6 +40,20 @@ describe('the deck and the score click instead of bouncing', () => {
     expect(scoreProgress(0.5)).toBeGreaterThan(0.5);
     expect(scoreProgress(-1)).toBe(0);
     expect(scoreProgress(2)).toBe(1);
+  });
+  // 2026-11-20: the click used to start on the very frame the count ended, so the payoff read as
+  // two events (numbers stop, then a small pop). It now starts just before the digits land.
+  it('the landing click overlaps the end of the count', () => {
+    expect(SCORE_BEAT.popLead).toBeGreaterThan(0);
+    expect(SCORE_BEAT.popLead).toBeLessThan(SCORE_BEAT.popMs);
+    const delay = scorePopDelay(MOTION.move);
+    expect(delay).toBeLessThan(MOTION.move);
+    expect(delay).toBeGreaterThan(0);
+    // and it never starts before the digits start moving
+    expect(scorePopDelay(SCORE_BEAT.popLead / 2)).toBe(0);
+    // it is still a click, not a bounce: a hair of lift
+    expect(SCORE_BEAT.popRisePx).toBeGreaterThan(0);
+    expect(SCORE_BEAT.popRisePx).toBeLessThanOrEqual(1.5);
   });
 });
 
