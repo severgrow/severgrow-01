@@ -9,7 +9,10 @@ import { readFileSync } from 'node:fs';
 describe('a word that does not fit scrolls, it is never cut', () => {
   it('keeps the designed shorthands for compact readouts', () => {
     expect(ledCompactMessage('YOU WIN')).toBe('WIN');
-    expect(ledCompactMessage('FINAL TURNS')).toBe('FINALS');
+    // "FINAL TURNS" (two turns left) reads LAST2, then LAST TURN reads LAST: a countdown in five
+    // glyphs each. It used to say FINALS — six glyphs, which never sits still on an 80px glass (with
+    // motion it marquees, without it the first and last columns are clipped).
+    expect(ledCompactMessage('FINAL TURNS')).toBe('LAST2');
     expect(ledCompactMessage('YOU 30 • 12 OPP')).toBe('30:12');
     expect(ledCompactMessage('+16 TILES')).toBe('+16');
   });
@@ -35,7 +38,7 @@ describe('compact LED readouts', () => {
     expect(ledStaticMessage('CUT -7')).toBe('CUT-7');
     expect(ledStaticMessage('BLOOM +4')).toBe('B+4');
     expect(ledStaticMessage('YOU 30 • 12 OPP')).toBe('30:12');
-    expect(ledStaticMessage('FINAL TURNS')).toBe('FINALS');
+    expect(ledStaticMessage('FINAL TURNS')).toBe('LAST2');
   });
 
   it('uses a close separator so the next phrase follows the prior one', () => {

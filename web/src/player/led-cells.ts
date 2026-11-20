@@ -102,6 +102,14 @@ const DOT_X = 2.3;
 const SEPARATOR = ' • ';
 export const ledMessageWidth = (message: string) => Math.max(1, message.length * ADVANCE - 1);
 /**
+ * THE STILL PATH NEVER CUTS. With motion off (Reduce Motion, Speed Off) there is no marquee, so a
+ * readout one or two glyphs wider than the glass is shrunk to fit instead of losing its first and
+ * last columns. Returns 1 for anything that already fits, and the paint path uses it for the cells,
+ * the brightness layer and the bloom alike (one geometry, one sprite).
+ */
+export const ledFitScale = (message: string, windowWidth: number) =>
+  Math.min(1, Math.max(1, windowWidth - 2) / Math.max(1, ledMessageWidth(message)));
+/**
  * The distance one marquee loop travels, in CSS px: a WHOLE number of dot advances.
  *
  * The width formula is 1 px narrower than the advance (the last column of a glyph is inset), and
@@ -171,7 +179,7 @@ function ledShorthand(message: string): string | null {
   if (message.startsWith('CUT -')) return `CUT-${message.slice(5)}`;
   if (message.startsWith('TURN +')) return `T+${message.slice(6)}`;
   if (message.startsWith('OPP +')) return `O+${message.slice(5)}`;
-  if (message.startsWith('FINAL TURNS')) return 'FINALS';
+  if (message.startsWith('FINAL TURNS')) return 'LAST2';
   if (message.startsWith('FINAL TURN')) return 'FINAL';
   if (message.startsWith('LAST TURN')) return 'LAST';
   if (message === 'MEGA BOMB') return 'MEGA';
@@ -217,6 +225,13 @@ export function ledToken(message: string): string | null {
   if (m === 'LAST TURN' || m === 'DRAW PILE OUT: LAST TURN') return 'LAST';
   if (m === 'DRAW PILE RUNNING LOW') return 'LOW';
   if (m.startsWith('REPLAY:')) return 'REPLAY';
+  // The "why nothing happened" answers (TAP_WHY) are whole sentences; the sign answers in one
+  // short word instead of a 5-second marquee. The full sentence stays in the live region.
+  if (m === 'DRAW A CARD FIRST') return 'DRAW';
+  if (m === 'BLOCKED BY ROCK') return 'ROCK';
+  if (m === 'CONNECT TO YOUR TREE') return 'LINK';
+  if (m === 'PICK A CARD') return 'PICK';
+  if (m === 'NOT THIS HEX') return 'NO';
   return null;
 }
 
@@ -260,7 +275,11 @@ export function ledLayout(message: string, repeat = false, mode: LedTone = 'ambe
   // opponent's, so each side takes its own ink (green / red) while the colon stays amber.
   const dots: LedDot[] = [];
   for (let i = 0; i < shown.length; i++) {
-    const rows = GLYPHS[shown[i]!] ?? (shown[i] === ' ' ? '' : GLYPHS['?']!);
+    // The sign has one face: capitals. A lower-case letter (the opponent's voice is written in
+    // sentence case, e.g. "Auch!") used to fall through to the '?' glyph and turn a whole line into
+    // question marks, so a character is looked up as written and then as a capital.
+    const char = shown[i]!;
+    const rows = GLYPHS[char] ?? (char === ' ' ? '' : GLYPHS[char.toUpperCase()] ?? GLYPHS['?']!);
     if (!rows) continue;
     const glyph = rows.split('/');
     for (let y = 0; y < 7; y++) for (let x = 0; x < 5; x++) {
