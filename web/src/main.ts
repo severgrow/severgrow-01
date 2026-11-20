@@ -4,7 +4,7 @@ import { practiceStreaks, practiceStreaksRevealed, syncPracticeStreaks } from '.
 import { paintPracticeStreakKeys } from './menu/practice-streak-keys.js';
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
 import { deferEntryButton } from './ui/deferred-entry.js';
-import { confirmedTurn, mountTurnRim } from './player/turn-rim.js';
+import { confirmedTurn, moveTappable, mountTurnRim } from './player/turn-rim.js';
 import { measureAtRest } from './ui/at-rest.js';
 import { DRAW_PILE_GIVE, DRAW_PILE_GIVE_MS, drawFrames, thudPile } from './ui/feel.js';
 import { mountStartupReveal } from './player/startup.js';
@@ -608,11 +608,38 @@ const board = defaultArt ? new defaultArt.DefaultArtBoardView(boardSvg, boardHan
 /** Material pass 2: the "Your turn" / "Bot's turn" pill and its faint edge wash. */
 const pill = new TurnPill($('turn-pill'), $('edge-wash'));
 const publishTurnRim = mountTurnRim(document.body);
+/**
+ * Would a tap play MY move right now? The page's own input gates, composed into the one predicate
+ * (`player/turn-rim.ts`) instead of a second opinion. Offline `blocking()` is the gate the tap
+ * handlers read (`busy() && !playThrough()`, so my own move's animation never shuts it); online
+ * `onlineGateShut()` is the reveal gate (`isRevealing && !finished`), which is already closed the
+ * instant an enemy turn's events land. It is called only from state transitions, never a timer.
+ */
+function moveTappableNow(): boolean {
+  const os = isOnlineDuel() ? getOnlineSession() : null;
+  const snap = os?.driver.snapshot() ?? null;
+  return moveTappable({
+    // `actor`, not `turnPlayer`: ROT_PICK hands the tap to the other seat.
+    actor: snap ? snap.view.actor : session?.state.actor ?? null,
+    me: snap ? snap.seat : HUMAN,
+    // The server's phase, never a local draft's shadow (which may read GAME_OVER mid-turn).
+    phase: snap ? snap.serverPhase : session?.state.phase ?? null,
+    inputOpen: os ? !onlineGateShut() : !blocking(),
+    ritualHold: pregameHold || isStarterRitualPlaying(),
+    covered: !!openSheet || tutorialGate?.mode() === 'busy',
+    paused,
+  });
+}
+/**
+ * ONE publication of the board rim for every mode (offline practice/campaign/lessons, online
+ * duels, online Blitz, live duels — they all run this page and this board). Offline reads the live
+ * session; online reads the driver's CONFIRMED snapshot, so a replayed frame can never overwrite
+ * it. The light appears only when `moveTappableNow()` says the move is genuinely tappable.
+ */
 function syncTurnRim() {
-  if ($('game').hidden) publishTurnRim(null, HUMAN);
-  else if (!isOnlineDuel()) publishTurnRim(session?.state ?? null, HUMAN);
-  // Online updates reuse the driver's emitted/HUD snapshot below. No extra legal-move or
-  // perspective work just to paint a turn light; replay frames never overwrite confirmed state.
+  const os = isOnlineDuel() ? getOnlineSession() : null;
+  const turn = $('game').hidden ? null : os ? confirmedTurn(os.driver.snapshot()) : session?.state ?? null;
+  publishTurnRim(turn, os ? os.seat : HUMAN, turn !== null && moveTappableNow());
 }
 const announceTurn = (player: Player, label?: string) => {
   const o = bannerOpts(settings);
@@ -1360,6 +1387,9 @@ function openSheetNow(id: string | null, wasOpen: boolean) {
       render();
     }
   }
+  // A sheet covers (or uncovers) the board, and a pause is released on close: the rim's own answer
+  // changes here, so repaint it without waiting for some other render.
+  syncTurnRim();
 }
 
 /**
@@ -3699,6 +3729,8 @@ function paintOnlineHudFromSession() {
   if (!os) return;
   // Waiting on the opponent? Poll faster so their finished turn replays almost at once.
   os.driver.sync().setWaiting(!os.myTurn);
+  // The rim belongs to this same settled-state repaint: one publisher, one rule, every mode.
+  syncTurnRim();
   if (duelHudPaint) {
     duelHudPaint(os);
     return;
@@ -3708,7 +3740,6 @@ function paintOnlineHudFromSession() {
       if (getOnlineSession()?.driver !== s.driver) return;
       const hud = document.getElementById('duel-hud');
       const snap = s.driver.snapshot();
-      publishTurnRim($('game').hidden ? null : confirmedTurn(snap), snap.seat);
       const ui = duelUiFromSnapshot(snap, s.canUndo, s.isRevealing);
       renderDuelHud(hud, ui);
       // The same two words the offline bar reads (You : Opponent) — one source, src/strings.ts.
@@ -5671,6 +5702,8 @@ function render() {
   smartCockpit?.sync();
   syncTutorialChrome();
   renderTutorial();
+  // Last: `renderTutorial` settles the lesson's input gate, which is one of the rim's conditions.
+  syncTurnRim();
   syncFreePlayBulbNudge();
   cueTurnHandOff(v);
   if (glassSurface?.isOpen()) {
@@ -12101,10 +12134,12 @@ void signInGate.settled.then(() => import('./online/lobby-ui.js')).then(async (m
         matchId,
         initial: player,
         channel: matchChannel,
-        onChange: (confirmedSnapshot) => {
+        onChange: () => {
           const os = getOnlineSession();
           if (!os || os.driver !== driver) return;
-          publishTurnRim($('game').hidden ? null : confirmedTurn(confirmedSnapshot), confirmedSnapshot.seat);
+          // The rim follows the CONFIRMED snapshot now (and stays dark while the replay it just
+          // opened drains); the pump's own drain repaints it when the board becomes tappable.
+          syncTurnRim();
           activeMatchChat?.update();
           // Both ends of the replay, read BEFORE the display state is rebuilt: the cockpit's
           // read-out for the enemy's turn needs them, exactly as the offline game does. `pending`
