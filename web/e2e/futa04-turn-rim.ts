@@ -217,6 +217,62 @@ try {
   await page.waitForFunction((k) => !!(window as any).__severgrow.state().board[k], sprout!.key, { timeout: 15000 });
   check(true, 'offline: my Grow committed');
 
+  // ---- A REAL BLOOM PAINT: the other interaction the owner named. The board is still mine while
+  // the shape is being drawn, so the rim must stay lit from pointerdown through the whole stroke.
+  const bloom = await page.evaluate(() => {
+    const a = (window as any).__severgrow.legal().find((x: { t: string; hexes?: { q: number; r: number }[] }) =>
+      x.t === 'Bloom' && (x.hexes?.length ?? 0) >= 2);
+    return a ? {
+      cards: a.cards as number[],
+      hexes: a.hexes.map((c) => `${c.q},${c.r}` as string),
+      kind: `bloom-${a.cards.length}-${[...a.cards].sort((x, y) => x - y).join('.')}`,
+    } : null;
+  });
+  check(!!bloom, 'offline: a real multi-hex Bloom is available for the paint check');
+  if (bloom) {
+    await page.locator(`#hand [data-card="${bloom.cards[0]}"]`).click({ force: true });
+    await sleep(250);
+    let kind = await page.evaluate(() => (window as any).__severgrow.sel()?.kind ?? null);
+    if (!kind) {
+      // futa04 asks which family when a card could be several shapes; the documented test hook picks
+      // the exact one the legal action names (the same one a player taps in the glow control).
+      await page.evaluate((k) => (window as any).__severgrow.pickKind(k), bloom.kind);
+      await sleep(250);
+      kind = await page.evaluate(() => (window as any).__severgrow.sel()?.kind ?? null);
+    }
+    check(typeof kind === 'string' && kind.startsWith('bloom-'), `offline: the Bloom card is picked and painting is armed (${kind})`);
+    const boxes: ({ x: number; y: number; width: number; height: number } | null)[] = [];
+    for (const key of bloom.hexes) boxes.push(await page.locator(`#board .hex-cell[data-key="${key}"]`).boundingBox());
+    if (boxes.every(Boolean)) {
+      // PAINTING, as the game takes it on a phone: a tap on a hex adds that hex to the shape (the
+      // drag gesture starts from the picked card in this build). The first tap on an empty shape
+      // shows the preview; the shape places when it is complete. What the rim must do here is stay
+      // LIT for the whole stroke — that is the owner's regression.
+      for (let i = 0; i < bloom.hexes.length; i++) {
+        await page.locator(`#board .hex-cell[data-key="${bloom.hexes[i]}"]`).click({ force: true });
+        await sleep(200);
+        if (i === 0 || i === 1) {
+          const painting = await page.evaluate(() => ({
+            rim: document.body.dataset.turn,
+            active: document.documentElement.classList.contains('futa04-move-active'),
+            shape: (window as any).__severgrow.drawShape().shape.length,
+          }));
+          check(painting.rim === 'you' && painting.active,
+            `offline: the rim stays lit while painting a Bloom (tap ${i + 1}, rim "${painting.rim}", ${painting.shape} hexes drawn)`);
+          if (i === 1) await shot(page, 'offline-3b-mid-bloom-rim-lit.png');
+        }
+      }
+      // The one-placement shortcut needs the last hex confirmed: tap it again if the shape is still up.
+      const stillPainting = await page.evaluate(() => (window as any).__severgrow.drawShape().shape.length > 0);
+      if (stillPainting) {
+        await page.locator(`#board .hex-cell[data-key="${bloom.hexes[bloom.hexes.length - 1]}"]`).click({ force: true });
+        await sleep(300);
+      }
+      await page.waitForFunction(() => !(window as any).__severgrow.busy(), undefined, { timeout: 30000 });
+      check(true, 'offline: the painted Bloom placed and the board settled');
+    }
+  }
+
   // ---- end the turn and throw, so the opponent takes over
   for (let i = 0; i < 40 && (await phaseOf(page)) === 'ACT'; i++) {
     await page.evaluate(() => {
