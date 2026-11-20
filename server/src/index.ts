@@ -32,6 +32,10 @@ import { postgresStreakStore } from './streaks/postgres.js';
 import { memoryChatStore } from './chat/memory.js';
 import { postgresChatStore } from './chat/postgres.js';
 import { adminRouterNode } from './admin/node.js';
+import { pushConfigFromEnv } from './push/config.js';
+import { memoryPushStore } from './push/memory.js';
+import { postgresPushStore } from './push/postgres.js';
+import { wirePush } from './push/runtime.js';
 
 const buildStorage = (): { storage: Storage; description: string } => {
   const url = databaseUrlFromEnv();
@@ -72,10 +76,22 @@ export const startServer = async (options: { port?: number } = {}): Promise<{ po
     note: description,
   });
   const chatNotifications = chatNotifier(process.env.SUPABASE_URL ?? '', process.env.SUPABASE_ANON_KEY ?? '');
+  // WEB PUSH (docs/PUSH-NOTIFICATIONS.md): dark unless PUSH_ENABLED + a VAPID pair are configured.
+  // The same decision/sender/router the Edge entry uses, so local proving matches production.
+  const pushRuntime = wirePush({
+    config: pushConfigFromEnv(),
+    store: isMemory ? memoryPushStore() : postgresPushStore(poolFromUrl(databaseUrlFromEnv()!)),
+    service,
+    economy,
+    authenticate: (t) => service.authenticate(t),
+    now: () => service.serverNow(),
+    log: (line) => console.log(line),
+  });
   const server = createHttpServer({
     service,
     config,
     logger: (line) => console.log(line),
+    push: pushRuntime.push.publicConfig(),
     live: chainRouters(
       live.router(service),
       createChatRouter({ service, storage: live.storage, ...(chatNotifications ? { notifier: chatNotifications } : {}), store: isMemory
@@ -91,6 +107,7 @@ export const startServer = async (options: { port?: number } = {}): Promise<{ po
       await feedbackRouterNode(storage, service, databaseUrlFromEnv(), memoryFeedback),
       await accountsRouterNode(storage, service, databaseUrlFromEnv(), process.env, memoryLinks),
       admin.router,
+      pushRuntime.router,
     ),
   });
 

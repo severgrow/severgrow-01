@@ -47,7 +47,7 @@ import { actorChanged, gatedRevisionFor, gatedStateFor, turnBoundaryAdvanced } f
 import { graceSpentBetween } from './grace.js';
 import type { WorldEconomyService } from './seeds/service.js';
 import { playerSummary } from './storage/types.js';
-import type { Decision, MatchRecord, Participant, PlayerRecord, Storage } from './storage/types.js';
+import type { Decision, MatchListRow, MatchRecord, Participant, PlayerRecord, Storage } from './storage/types.js';
 
 const MAX_REQUEST_ID = 200;
 const GUEST_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -626,6 +626,20 @@ export class MatchService {
   }
 
   // ---- reading a match ----
+
+  /**
+   * Server-side match rows for the web-push decision (`server/src/push/`). This is the caller's own
+   * participation rows, never a projection: nothing from this method leaves the process. It exists
+   * so the push module never reaches into `storage` itself and never trusts a page's claim.
+   */
+  async matchRowsForPush(playerId: string): Promise<MatchListRow[]> {
+    return this.storage.listMatchesForPlayer(playerId);
+  }
+
+  /** The shared Postgres-backed limiter, for routes outside the game pipeline (web push). */
+  async limit(bucket: string, windowMs: number, max: number): Promise<void> {
+    return this.rateLimit(bucket, windowMs, max);
+  }
 
   async getMatch(player: PlayerRecord, matchId: string): Promise<MatchSummary> {
     const match = await this.requireParticipantFresh(player, matchId);

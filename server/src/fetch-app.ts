@@ -41,6 +41,11 @@ export type FetchAppDeps = {
   logger?: (line: string) => void;
   /** Live duels router (server/src/live/router.ts); returns null for paths it does not own. */
   live?: (req: Request, path: string) => Promise<Outcome | null>;
+  /**
+   * Web push, when configured (server/src/push/). A public block only: the VAPID public key a page
+   * subscribes with. Absent means the feature is dark and `/v1/health` says nothing about it.
+   */
+  push?: { enabled: true; publicKey: string } | null;
 };
 
 type Outcome = { status: number; body?: unknown; raw?: { contentType: string; text: string } };
@@ -105,11 +110,14 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
 
     if (method === 'GET' && path === '/v1/health') {
       const serverNow = service.serverNow();
-      const body: { ok: true; rulesVersion: string; serverNow: number; features: readonly string[]; db?: { ok: true; ms: number } } = {
+      const body: { ok: true; rulesVersion: string; serverNow: number; features: readonly string[]; push?: { enabled: true; publicKey: string }; db?: { ok: true; ms: number } } = {
         ok: true,
         rulesVersion: service.rulesVersion,
         serverNow,
         features: SERVER_FEATURES,
+        // The public VAPID key, when the feature is on. A page needs it to subscribe; the private
+        // key never appears anywhere in a response (server/src/push/webpush.ts holds it).
+        ...(deps.push ? { push: deps.push } : {}),
       };
       if (url.searchParams.get('db') === '1') {
         const startedDb = Date.now();

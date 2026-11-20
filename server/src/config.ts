@@ -179,8 +179,12 @@ export const adminPlayerIdsFromEnv = (): string[] => {
   return fromEnv.length > 0 ? fromEnv : [...DEFAULT_ADMIN_PLAYER_IDS];
 };
 
-/** Reads an environment variable from Node (process.env) or Deno (Deno.env), without logging it. */
-const readEnv = (name: string): string | undefined => {
+/**
+ * Reads an environment variable from Node (process.env) or Deno (Deno.env), without logging it.
+ * Exported for the modules that own their own switches (`push/config.ts`), so there is ONE
+ * Node/Deno reader and no second implementation that could drift.
+ */
+export const readEnv = (name: string): string | undefined => {
   if (typeof process !== 'undefined' && process.env) {
     const fromNode = process.env[name];
     if (fromNode !== undefined) return fromNode;

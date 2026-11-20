@@ -549,6 +549,44 @@ export class DuelClient {
     return Array.isArray(response.features) ? response.features.filter((f): f is string => typeof f === 'string') : [];
   }
 
+  /**
+   * The PUBLIC half of web push (docs/PUSH-NOTIFICATIONS.md): whether the server has it on, and the
+   * VAPID key a browser subscribes with. An older, dark or disabled server sends no `push` block,
+   * which reads as "off" — the page then never shows the Settings switch.
+   */
+  async pushConfig(options: { signal?: AbortSignal } = {}): Promise<{ enabled: boolean; publicKey: string | null }> {
+    const response = await this.request<{ push?: unknown }>('GET', '/v1/health', options.signal ? { signal: options.signal } : {});
+    const push = typeof response.push === 'object' && response.push !== null ? response.push as Record<string, unknown> : null;
+    return {
+      enabled: push?.enabled === true && typeof push.publicKey === 'string' && push.publicKey.length > 0,
+      publicKey: typeof push?.publicKey === 'string' ? push.publicKey : null,
+    };
+  }
+
+  /** Register THIS browser's push endpoint for the token's player (one endpoint, one owner). */
+  async pushSubscribe(
+    token: string,
+    subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
+  ): Promise<number> {
+    const response = await this.request<{ subscribed?: unknown }>('POST', '/v1/push/subscriptions', { token, body: subscription });
+    return typeof response.subscribed === 'number' ? response.subscribed : 0;
+  }
+
+  /** Remove this browser's endpoint. Only the owning token can; a foreign endpoint is a calm false. */
+  async pushUnsubscribe(token: string, endpoint: string): Promise<boolean> {
+    const response = await this.request<{ removed?: unknown }>('DELETE', '/v1/push/subscriptions', { token, body: { endpoint } });
+    return response.removed === true;
+  }
+
+  /**
+   * "Look now": the server reads its own match/challenge state and decides who (if anyone) is told.
+   * Never names a recipient. A failure is not an error the player sees — the caller fires and forgets.
+   */
+  async pushNudge(token: string): Promise<number> {
+    const response = await this.request<{ sent?: unknown }>('POST', '/v1/push/nudge', { token, body: {} });
+    return typeof response.sent === 'number' ? response.sent : 0;
+  }
+
   async accountCampaignLevel(token: string): Promise<number | null> {
     const response = await this.request<{ campaignHighestLevel?: unknown }>('GET', '/v1/seeds/wallet', { token });
     const level = response.campaignHighestLevel;

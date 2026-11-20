@@ -32,6 +32,9 @@ import { WorldEconomyService } from './seeds/service.js';
 import { createWorldEconomyRouter } from './seeds/router.js';
 import { postgresAdminStore } from './admin/postgres.js';
 import { createAdminRouter } from './admin/router.js';
+import { pushConfigFromEnv, pushHealth } from './push/config.js';
+import { postgresPushStore } from './push/postgres.js';
+import { wirePush } from './push/runtime.js';
 import {
   classifyDatabaseUrl,
   edgePoolOptions,
@@ -45,6 +48,10 @@ import type { ConnectionDiagnostics } from './storage/pool-config.js';
 // the comma-separated `CORS_ORIGINS` Edge secret. Read once per isolate at boot, like every other
 // Edge secret — setting the secret is a dashboard/CLI change, never a code rebuild.
 const corsOrigins = productionCorsOrigins();
+
+// WEB PUSH (docs/PUSH-NOTIFICATIONS.md): read once per isolate, like every other Edge secret.
+// `PUSH_ENABLED` + a VAPID pair is the one switch; unset means the feature is dark everywhere.
+const pushConfig = pushConfigFromEnv((name) => Deno.env.get(name));
 
 const edgeConfig: ServerConfig = {
   ...DEFAULT_SERVER_CONFIG,
@@ -170,8 +177,17 @@ const buildRuntime = async (): Promise<EdgeRuntime> => {
     now: () => service.serverNow(),
     merge: (guestId, accountId) => mergeGuestIntoAccount(pool, { guestId, accountId, now: service.serverNow() }),
   });
-  const app = createFetchApp({ service, config: edgeConfig, logger: log, live: chainRouters(live.router(service), createChatRouter({ store: postgresChatStore(pool), service, storage: live.storage,
-    ...(supaUrl && supaKey ? { notifier: chatNotifier(supaUrl, supaKey)! } : {}) }), createTerritoryChatRouter({ store: postgresTerritoryChatStore(pool), service, storage: live.storage }), createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t), worldReadsPerIpPerHour: edgeConfig.rateLimits.worldPerIpPerHour }), createStreakRouter({ store: postgresStreakStore(pool), authenticate: (t) => service.authenticate(t), now: () => service.serverNow(), achievementsOf: achievementsCount(live.storage, economy) }), createFeedbackRouter({ store: postgresFeedbackStore(pool), storage: live.storage, authenticate: (t) => service.authenticate(t), now: () => service.serverNow() }), accounts, createAdminRouter({ store: postgresAdminStore(pool), economy: economyStore, authenticate: (t) => service.authenticate(t), config: edgeConfig, now: () => service.serverNow(), rulesVersion: service.rulesVersion, storage: live.storage, pingDb: () => service.pingStorage(), log })) });
+  const pushRuntime = wirePush({
+    config: pushConfig,
+    store: postgresPushStore(pool),
+    service,
+    economy,
+    authenticate: (t) => service.authenticate(t),
+    now: () => service.serverNow(),
+    log,
+  });
+  const app = createFetchApp({ service, config: edgeConfig, logger: log, push: pushRuntime.push.publicConfig(), live: chainRouters(live.router(service), createChatRouter({ store: postgresChatStore(pool), service, storage: live.storage,
+    ...(supaUrl && supaKey ? { notifier: chatNotifier(supaUrl, supaKey)! } : {}) }), createTerritoryChatRouter({ store: postgresTerritoryChatStore(pool), service, storage: live.storage }), createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t), worldReadsPerIpPerHour: edgeConfig.rateLimits.worldPerIpPerHour }), createStreakRouter({ store: postgresStreakStore(pool), authenticate: (t) => service.authenticate(t), now: () => service.serverNow(), achievementsOf: achievementsCount(live.storage, economy) }), createFeedbackRouter({ store: postgresFeedbackStore(pool), storage: live.storage, authenticate: (t) => service.authenticate(t), now: () => service.serverNow() }), accounts, createAdminRouter({ store: postgresAdminStore(pool), economy: economyStore, authenticate: (t) => service.authenticate(t), config: edgeConfig, now: () => service.serverNow(), rulesVersion: service.rulesVersion, storage: live.storage, pingDb: () => service.pingStorage(), log }), pushRuntime.router) });
   return { app, service, dbInfo: classifyDatabaseUrl(databaseUrl) };
 };
 
@@ -228,9 +244,11 @@ Deno.serve(async (req) => {
   // which pooler the DATABASE_URL secret points at (classification only — never the URL or secret).
   if (req.method === 'GET' && path === '/v1/health') {
     const dbConfigured = Boolean(Deno.env.get('DATABASE_URL'));
+    // The public half only, and only while the feature is on (docs/PUSH-NOTIFICATIONS.md).
+    const push = pushHealth(pushConfig);
     if (url.searchParams.get('db') !== '1') {
       return new Response(
-        JSON.stringify({ ok: true, rulesVersion: CURRENT_RULES_VERSION, serverNow: Date.now(), dbConfigured, features: SERVER_FEATURES }),
+        JSON.stringify({ ok: true, rulesVersion: CURRENT_RULES_VERSION, serverNow: Date.now(), dbConfigured, features: SERVER_FEATURES, ...(push ? { push } : {}) }),
         { status: 200, headers: corsJson },
       );
     }
@@ -243,6 +261,7 @@ Deno.serve(async (req) => {
         rulesVersion: runtime.service.rulesVersion,
         serverNow: runtime.service.serverNow(),
         features: SERVER_FEATURES,
+        ...(push ? { push } : {}),
         db: { ok: true, ms: Date.now() - startedDb, pooler: runtime.dbInfo.kind, port: runtime.dbInfo.port },
       };
       return new Response(JSON.stringify(body), { status: 200, headers: corsJson });

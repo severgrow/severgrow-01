@@ -15,6 +15,7 @@ export type HttpDeps = {
   config?: ServerConfig;
   logger?: Logger;
   live?: import('./fetch-app.js').FetchAppDeps['live'];
+  push?: import('./fetch-app.js').FetchAppDeps['push'];
 };
 
 const readRawBody = async (req: IncomingMessage): Promise<Buffer> => {
@@ -36,7 +37,7 @@ const toHeaders = (req: IncomingMessage): Headers => {
 export const createHttpServer = (deps: HttpDeps): Server => {
   const config = deps.config ?? DEFAULT_SERVER_CONFIG;
   const logger: Logger = deps.logger ?? (() => undefined);
-  const app = createFetchApp({ service: deps.service, config, logger, ...(deps.live ? { live: deps.live } : {}) });
+  const app = createFetchApp({ service: deps.service, config, logger, ...(deps.live ? { live: deps.live } : {}), ...(deps.push ? { push: deps.push } : {}) });
 
   return createServer((req, res) => {
     void (async () => {
