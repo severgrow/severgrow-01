@@ -90,3 +90,30 @@ describe('3. the lesson caption becomes present instead of popping', () => {
     expect(fn).not.toMatch(/\bawait\b/);
   });
 });
+
+describe('4. the finish card’s score line lands between its title and its verdict', () => {
+  it('arrives on the shared beat, 4px and a fade', () => {
+    const rule = bodyAfter(css, "#gameover[data-fresh='1'] .go-score {");
+    expect(rule).toContain('go-score-in var(--ix-open) var(--ix-ease-open) 90ms both');
+    const frames = bodyAfter(css, '@keyframes go-score-in {');
+    expect(frames).toContain('opacity: 0');
+    expect(frames).toContain('translate: 0 4px');
+    expect(frames).not.toMatch(/scale|filter|box-shadow|left|top/);
+  });
+
+  it('is the middle beat of the card: title 60ms < score 90ms < verdict 120ms', () => {
+    const title = bodyAfter(css, "#gameover[data-fresh='1'] .go-title {");
+    const score = bodyAfter(css, "#gameover[data-fresh='1'] .go-score {");
+    const verdict = bodyAfter(css, "#gameover[data-fresh='1'] .go-verdict {");
+    const delay = (body: string) => Number(/(\d+)ms both/.exec(body)?.[1] ?? -1);
+    expect(delay(title)).toBe(60);
+    expect(delay(score)).toBe(90);
+    expect(delay(verdict)).toBe(120);
+    for (const body of [title, score, verdict]) expect(body).toContain('var(--ix-open) var(--ix-ease-open)');
+  });
+
+  it('is a designed still state under Reduce motion', () => {
+    expect(css).toMatch(/\.reduce-motion #gameover\[data-fresh='1'\] \.go-score \{\s*animation: none;/);
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?#gameover\[data-fresh='1'\] \.go-score \{\s*animation: none;/);
+  });
+});

@@ -8061,6 +8061,28 @@ body.result .corner-tools {
     translate: 0 4px;
   }
 }
+/* THE SCORE LINE ARRIVES ON ITS OWN BEAT (0.8s polish). The title rose at 60ms and the verdict at
+   120ms; the big numbers between them used to be simply there from the first frame, so the card's
+   reading order (head → result → detail) had a hole in the middle. It now lands between the two,
+   4px and a fade on the shared arrival, transform/opacity only. It never delays a pixel of the
+   score: the card is up and the numbers are legible throughout. Reduce motion: no entrance. */
+#gameover[data-fresh='1'] .go-score {
+  animation: go-score-in var(--ix-open) var(--ix-ease-open) 90ms both;
+}
+@keyframes go-score-in {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+.reduce-motion #gameover[data-fresh='1'] .go-score {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  #gameover[data-fresh='1'] .go-score {
+    animation: none;
+  }
+}
 .reduce-motion #gameover[data-fresh='1'] .go-title {
   animation: none;
 }
