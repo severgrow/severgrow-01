@@ -175,9 +175,21 @@ export class DisplayMachine {
     return delay;
   }
 
-  /** Resting face — never interrupts sticky idle urgency or a drag hold. */
+  /**
+   * The resting face is asked for on every sync (a poll, a repaint, an idle tick) and it is the SAME
+   * face each time, so it must never STACK in the dwell queue. `emit` dedupes against what is on the
+   * glass, not against what is already waiting, so without this guard every call during a dwell
+   * pushed another copy: the queue grew without bound and each flush repainted the glass, which
+   * turned the idle blink from a composited opacity animation into main-thread work (measured
+   * 2026-11-20: 105-138 begin-main frames / 3 s at 4x CPU against a limit of 90; with this guard,
+   * back inside it). Waiting for the dwell is still what happens — it just waits ONCE.
+   */
   private rest() {
     if (this.urgency || this.held) return;
+    const resting: DisplayFrame = this.ambientWord
+      ? { text: this.ambientWord, mode: this.ambientMode, ambient: true }
+      : { text: this.scoreText, mode: 'score' };
+    if (this.queue.some((frame) => messageKey(frame) === messageKey(resting))) return;
     if (this.ambientWord) {
       // A STATE word is what the glass reads while nothing else owns it. It takes the sign at the
       // next legal moment — never in front of a word that is still inside its 1 s floor, because the
