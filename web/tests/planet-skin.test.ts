@@ -8,13 +8,15 @@
 //  1. the ground shader composites a skinned tile as the PICTURE ALONE — no owner colour under it, no
 //     owner colour mixed into it, and no per-tile choice of picture (so all land of one owner reads as
 //     one sheet, in one orientation);
-//  2. NO owner colour anywhere on a skinned tile, at any radius — not just in the middle;
+//  2. OWNER COLOUR APPEARS ONLY AS THE THIN INNER RIM (owner, 2026-11-20) — a band inside the
+//     hexagon's boundary, never a tint of the art and never a line outside it (the 2026-11-16 rule);
 //  3. the picture fills the tile (its own mask edge never reaches the rim);
 //  4. every tile turns its art by the SAME half hex step, so no tile can sit 60 degrees off its
 //     neighbours on screen.
 // The real pixels are checked on the built page by web/e2e/planet-skins.ts: a magenta owner colour
-// over a water skin must leave no magenta anywhere on a tile's rim, every skinned tile's middle must
-// match the others' at >= .8, and no tile may sit at another's on-screen angle.
+// over a water skin must leave the tile's MIDDLE free of magenta, must show the magenta rim just
+// inside the boundary, and must put no magenta outside it; every skinned tile's middle must match the
+// others' at >= .8, and no tile may sit at another's on-screen angle.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { buildSphere, homeQuat, latticeMap, unit, type Sphere, type V3 } from '../src/sphere/geometry.js';
@@ -52,16 +54,48 @@ describe('a skinned planet tile wears the picture alone', () => {
   });
 });
 
-describe('no owner colour is painted on a skinned tile, at any radius', () => {
-  it('turns the owner line off on skinned tiles and keeps it on plain ones', () => {
+describe('a skinned planet tile carries the owner colour only as a thin inner rim', () => {
+  // OWNER RULE CHANGE (2026-11-20): "the owner's colour on the planet is a thin inner rim on a
+  // skinned tile". This REPLACES the 2026-11-16 rule this block used to guard ("no owner colour
+  // anywhere on a skinned tile, at any radius"). Two things are still forbidden, and are what the
+  // 2026-11-16 complaint was actually about: colour UNDER the art's soft alpha (the coloured margin
+  // and pale halo) and colour OUTSIDE the hexagon (a line on the neighbours). Both are still absent.
+  it('keeps the outer owner line off a skinned tile, and only the inner rim on', () => {
     // The line itself is unchanged for colour-only tiles (`mix(c, cream, .3)`); it is gated OFF by
-    // `(1.0 - skinned)`, so no owner colour reaches a skinned tile at any radius.
+    // `(1.0 - skinned)`, so no owner colour reaches a skinned tile's BOUNDARY.
     expect(rim).toContain('* border * owned * (1.0 - skinned)');
     expect(rim).toContain('mix(colour, mix(c, vec3(.94, .91, .82), .3) * lit, band * .6)');
-    // The old owner-coloured edge (`mix(vColour, cream, .3)`) must not come back.
-    expect(rim).not.toContain('vColour');
+    // The old owner-coloured EDGE (`mix(vColour, cream, .3)`) must not come back.
+    expect(rim).not.toContain('mix(vColour, vec3(.94, .91, .82), .3)');
+    // The rim exists, is drawn from the owner's colour, and only on a skinned tile.
+    expect(rim).toContain('if (skinned > .5) {');
+    expect(rim).toContain('vec3 rimCol = vColour * mix(lit, 1.0, .35);');
   });
-  it('keeps ownership readable without colour: a deeper seam along the territory edge', () => {
+  it('draws the rim INSIDE the boundary, never outside it, and never over the art', () => {
+    // The band's outer edge is `1 - inset`, and `inset` is at least one CSS px, so the ring can
+    // never touch an edge or a neighbour; it is drawn after the grout so it cannot be swallowed.
+    expect(rim).toContain('float inset = max(1.0, radiusPx * RIM_INSET) * w;');
+    expect(rim).toContain('float e1 = 1.0 - inset;');
+    expect(rim).toMatch(/float rimIn = smoothstep\(e0 - w, e0 \+ w, e\).*\(1\.0 - smoothstep\(e1 - w, e1 \+ w, e\)\)/);
+    // Painted after the grout, or the deepest part of the edge would erase it.
+    expect(rim.indexOf('float rimIn')).toBeGreaterThan(rim.indexOf('float grout'));
+  });
+  it('takes its geometry from the shared contract, not from numbers typed into the shader', () => {
+    // ui/owner-rim.ts is identical on the picker branch. The shader is a template literal built at
+    // run time, so the source proves the DERIVATION: each number is interpolated from the contract.
+    expect(source).toContain('const float RIM_INSET = ${OWNER_RIM.insetFraction};');
+    expect(source).toContain('const float RIM_WIDTH = ${OWNER_RIM.widthFraction};');
+    expect(source).toContain('const float RIM_MIN = ${OWNER_RIM.minWidthPx.toFixed(2)};');
+    expect(source).toContain('const float RIM_MAX = ${OWNER_RIM.maxWidthPx.toFixed(2)};');
+    // `e` is an apothem-normalised coordinate, so a circumradius fraction is divided by cos(30°).
+    expect(source).toContain('const float RIM_RADIUS = ${(1 / HEX_APOTHEM_RATIO).toFixed(6)};');
+    expect(source).toContain('const float RIM_ROOM = ${OWNER_RIM.maxBandFraction.toFixed(2)};');
+    // And the shader applies the same "it must fit" rule as ownerRimFor, not just the px clamp.
+    expect(source).toContain('if (inset + wide > room) { float fit = room / (inset + wide); inset *= fit; wide *= fit; }');
+    // And nothing re-types them as literals next to it.
+    expect(source).not.toContain('const float RIM_INSET = 0.06;');
+  });
+  it('keeps ownership readable under the rim too: a deeper seam along the territory edge', () => {
     // The grout widens and deepens only on a skinned tile's border sides: a groove between two
     // plates, never a tint on anyone's art.
     expect(rim).toContain('float frontier = border * owned * skinned;');

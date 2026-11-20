@@ -20,13 +20,17 @@
 // families (the default), from the two homes, and from the seed stones — which is enough on a
 // two-sided in-game board, and is why these never go to the Planet.
 import { assignWeightedVariants, VOXEL_GROUND_WEIGHT } from './forestAsh.js';
+import { RECIPE_SKIN_IDS, SKIN_BASE_COLOUR, SKIN_NAMES, isSkinId } from './skin-ids.js';
+import type { GameSkin } from './skin-ids.js';
 
-export const TILE_SKIN_IDS = ['console', 'voxel', 'brushed', 'carrara', 'nero', 'hypnosis'] as const;
+/** The six recipe families. The ids live in the shared catalogue (ui/skin-ids.ts), never here. */
+export const TILE_SKIN_IDS = RECIPE_SKIN_IDS;
 export type TileSkinId = (typeof TILE_SKIN_IDS)[number];
 
-/** The names the picker shows (owner's own names for the six). */
+/** The names the picker shows (owner's own names for the six), from the shared catalogue. */
 export const TILE_SKIN_NAMES: Record<TileSkinId, string> = {
-  console: 'Console', voxel: 'Voxel', brushed: 'Brushed', carrara: 'Carrara', nero: 'Nero', hypnosis: 'Hypnosis',
+  console: SKIN_NAMES.console, voxel: SKIN_NAMES.voxel, brushed: SKIN_NAMES.brushed,
+  carrara: SKIN_NAMES.carrara, nero: SKIN_NAMES.nero, hypnosis: SKIN_NAMES.hypnosis,
 };
 
 /** How many grounds each family paints, in variant-id order (the design's counts). */
@@ -36,7 +40,8 @@ export const TILE_SKIN_GROUNDS: Record<TileSkinId, number> = {
 
 /** The colour under a skinned tile's art: it shows only at the hex's softened corners. */
 export const TILE_SKIN_BASE: Record<TileSkinId, string> = {
-  console: '#c6d9cd', voxel: '#c05a24', brushed: '#5aa7dd', carrara: '#eef1f4', nero: '#0d0f12', hypnosis: '#c3b6d6',
+  console: SKIN_BASE_COLOUR.console, voxel: SKIN_BASE_COLOUR.voxel, brushed: SKIN_BASE_COLOUR.brushed,
+  carrara: SKIN_BASE_COLOUR.carrara, nero: SKIN_BASE_COLOUR.nero, hypnosis: SKIN_BASE_COLOUR.hypnosis,
 };
 
 /** An id this build knows, or null. A stored value from another build is never trusted. */
@@ -62,8 +67,16 @@ export const tileSkinVariants = (id: TileSkinId, keys: Iterable<string>): Map<st
 
 /** The two sides' families on the board: [mine, theirs]. `null` is the shipped Forest/Ash look. */
 let sides: [TileSkinId | null, TileSkinId | null] = [null, null];
-export const setTileSkins = (mine: TileSkinId | null, theirs: TileSkinId | null): void => {
-  sides = [tileSkinOf(mine), tileSkinOf(theirs)];
+/**
+ * A GAME APPEARANCE AS A TILE FAMILY. The model's game skin is one of the ten (ui/skin-ids.ts): the
+ * four atlas sets paint their pictures through `setFaSides`, the six recipes paint here. This is the
+ * one conversion between the two, so the picker's model and the board's paint cannot disagree about
+ * what a chosen skin means.
+ */
+export const tileSkinForGame = (skin: GameSkin | null | undefined): TileSkinId | null =>
+  isSkinId(skin) && (TILE_SKIN_IDS as readonly string[]).includes(skin) ? (skin as TileSkinId) : null;
+export const setTileSkins = (mine: GameSkin | null, theirs: GameSkin | null): void => {
+  sides = [tileSkinForGame(mine), tileSkinForGame(theirs)];
 };
 export const tileSides = (): readonly [TileSkinId | null, TileSkinId | null] => sides;
 /** The family one side wears, or null for the shipped sprite set. */

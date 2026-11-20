@@ -23,8 +23,10 @@ const signIn = (displayName: string) => data.set('severgrow.duel.identity.v1', J
 signIn('RYK');
 
 const { chooseSkin, skinChoice, DEFAULT_SKIN } = await import('../src/ui/skinChoice.js');
-const { TILE_SKIN_IDS, TILE_SKIN_NAMES, TILE_SKIN_GROUNDS, TILE_SKIN_BASE, setTileSkins, tileSkinFor, tileSkinOf, tileSkinVariants } =
+const { TILE_SKIN_IDS, TILE_SKIN_NAMES, TILE_SKIN_GROUNDS, TILE_SKIN_BASE, setTileSkins, tileSkinFor, tileSkinForGame, tileSkinOf, tileSkinVariants } =
   await import('../src/ui/tileSkins.js');
+const { RECIPE_SKIN_IDS, SKIN_BASE_COLOUR, SKIN_IDS, SKIN_NAMES } = await import('../src/ui/skin-ids.js');
+const { TERRITORY_IDS } = await import('../src/ui/forestAsh.js');
 const { ART_H, ART_W, tileSkinArt, tileSkinVariant } = await import('../src/ui/tileSkinArt.js');
 const { allCoords, coordKey } = await import('../../src/engine/index.js');
 
@@ -37,6 +39,23 @@ describe('the six approved skins', () => {
   it('exist, in the approved order, with the names the picker shows', () => {
     expect([...TILE_SKIN_IDS]).toEqual(['console', 'voxel', 'brushed', 'carrara', 'nero', 'hypnosis']);
     expect(TILE_SKIN_IDS.map((id) => TILE_SKIN_NAMES[id])).toEqual(['Console', 'Voxel', 'Brushed', 'Carrara', 'Nero', 'Hypnosis']);
+    // ONE TABLE FOR BOTH BRANCHES (ui/skin-ids.ts): the ids and names are the shared catalogue's,
+    // not a second copy, so the picker and the paint can never disagree about a skin.
+    expect([...TILE_SKIN_IDS]).toEqual([...RECIPE_SKIN_IDS]);
+    for (const id of TILE_SKIN_IDS) {
+      expect(TILE_SKIN_NAMES[id]).toBe(SKIN_NAMES[id]);
+      expect(TILE_SKIN_BASE[id]).toBe(SKIN_BASE_COLOUR[id]);
+    }
+    expect([...SKIN_IDS].slice(0, 4), 'the four atlas sets come first').toEqual([...TERRITORY_IDS]);
+    expect(SKIN_IDS.length).toBe(10);
+  });
+
+  it('maps a game appearance from the picker to the paint, with the four sets meaning "shipped"', () => {
+    for (const id of TILE_SKIN_IDS) expect(tileSkinForGame(id)).toBe(id);
+    for (const id of TERRITORY_IDS) expect(tileSkinForGame(id), `${id} paints its picture set`).toBeNull();
+    expect(tileSkinForGame(null)).toBeNull();
+    expect(tileSkinForGame('colour' as never), 'Colour is planet-only').toBeNull();
+    expect(tileSkinForGame('slab' as never)).toBeNull();
   });
 
   it('paint the stated number of grounds (9 / 14 / 7 / 6 / 7 / 7), each with a home', () => {
