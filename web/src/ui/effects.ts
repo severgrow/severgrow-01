@@ -89,9 +89,12 @@ export const cardFace = (c: Card) => {
     ? '<span class="futa04-card-art futa04-card-bomb" data-card-art="bomb" aria-hidden="true"></span>'
     : `<span class="futa04-card-art" data-card-art="${c.suit}:${c.rank}" style="background-position:${((c.rank - 1) % 3) * 50}% ${Math.floor((c.rank - 1) / 3) * 50}%" aria-hidden="true"></span>`
     : '';
+  // NO browser-native `title` (owner, 2026-11-20): the suit's name is drawn in the game's own quiet
+  // detail bubble (ui/card-tip.ts), while the card button's aria-label still speaks the full card
+  // name for keyboard and touch.
   return art + (c.suit === null
-    ? `<span class="c-num c-idx" aria-hidden="true">${IS_FUTA04 ? BOMB_INDEX_SVG : FRUIT_SVG}</span><span class="c-suit c-fruit" title="${IS_FUTA04 ? 'Bomb' : FRUIT.print}">${IS_FUTA04 ? BOMB_SVG : FRUIT_SVG}</span>`
-    : `<span class="c-num num">${c.rank}</span><span class="c-suit" title="${SUIT_NAMES[c.suit]}">${SUIT_SVG[c.suit]}</span>`);
+    ? `<span class="c-num c-idx" aria-hidden="true">${IS_FUTA04 ? BOMB_INDEX_SVG : FRUIT_SVG}</span><span class="c-suit c-fruit" data-card-detail="${IS_FUTA04 ? 'Bomb' : FRUIT.print}">${IS_FUTA04 ? BOMB_SVG : FRUIT_SVG}</span>`
+    : `<span class="c-num num">${c.rank}</span><span class="c-suit" data-card-detail="${SUIT_NAMES[c.suit]}">${SUIT_SVG[c.suit]}</span>`);
 };
 
 export const shakeFrames = (a: number): Keyframe[] => [

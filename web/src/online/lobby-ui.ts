@@ -849,7 +849,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   worldView.setCue((name) => hooks.cue?.(name));
   // A rival's tile offers SEE PROFILE; the accounts module owns the sheet and the token, and hears
   // this request through one zero-dependency event (web/src/accounts/profile-request.ts).
-  worldView.setProfileOpener((playerId, trigger) => requestPlayerProfile(playerId, trigger));
+  worldView.setProfileOpener((playerId, trigger, seed) => requestPlayerProfile(playerId, trigger, seed ?? null));
   // The Territory's own-tile level comes from this device's campaign record, not from the server's
   // last paid clear (owner report, 2026-10-24).
   worldView.setMyLevel(() => hooks.campaignLevel?.() ?? null);
@@ -1522,11 +1522,32 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
   };
 
+  /**
+   * THE COPY BUTTON SAYS WHAT JUST HAPPENED (owner, 2026-11-20: show "Copied" directly on the
+   * button). The button's own text and accessible name change for a moment; the existing status
+   * line still announces the same fact to a screen reader, and the blocked-clipboard fallback is
+   * unchanged (the link is shown so it can still be copied by hand).
+   */
+  let copyLabelTimer = 0;
+  const sayCopied = () => {
+    const key = document.getElementById('online-copy') as HTMLButtonElement | null;
+    if (!key) return;
+    window.clearTimeout(copyLabelTimer);
+    key.textContent = ONLINE.copiedKey;
+    key.setAttribute('aria-label', ONLINE.copiedKey);
+    key.classList.add('copied');
+    copyLabelTimer = window.setTimeout(() => {
+      key.textContent = ONLINE.copyLink;
+      key.setAttribute('aria-label', ONLINE.copyLink);
+      key.classList.remove('copied');
+    }, 1600);
+  };
   const copyInvite = async () => {
     if (!waiting) return;
     const link = inviteLink(waiting.inviteCode);
     try {
       await navigator.clipboard.writeText(link);
+      sayCopied();
       notice('online-waiting-notice', ONLINE.copied);
     } catch {
       notice('online-waiting-notice', link);

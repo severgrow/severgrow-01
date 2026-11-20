@@ -108,15 +108,19 @@
     <meta name="format-detection" content="telephone=no" />
     <!-- What the page is, for search (static: never fetched, never executed). -->
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://www.futasaku.com/#website","url":"https://www.futasaku.com/","name":"Futasaku","inLanguage":"en"},{"@type":"VideoGame","@id":"https://www.futasaku.com/#game","name":"Futasaku","url":"https://www.futasaku.com/","description":"A strategy card game for two on a hex board. Grow from your home, keep your land connected and cut your opponent off. Play the campaign, practise against the computer or play friends online.","image":"https://www.futasaku.com/og.jpg","screenshot":"https://www.futasaku.com/og.jpg","potentialAction":{"@type":"PlayAction","target":"https://www.futasaku.com/"},"genre":["Strategy","Card game","Board game"],"gamePlatform":"Web browser","applicationCategory":"Game","operatingSystem":"Any","playMode":["SinglePlayer","MultiPlayer"],"numberOfPlayers":{"@type":"QuantitativeValue","value":2},"inLanguage":"en","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}]}</script>
-    <!-- Tab icon (owner, 2026-11-09): the tree-hex edge to edge, no margin. Cream on a dark browser,
-         FUTASAKU off-black (#0e0f10) on a light one. The light-mode set comes LAST so a browser that
-         ignores `media` still shows a mark that reads on a light tab bar. -->
-    <link rel="icon" type="image/png" sizes="16x16" href="./futasaku-tab-16.png" />
-    <link rel="icon" type="image/png" sizes="32x32" href="./futasaku-tab-32.png" />
-    <link rel="icon" type="image/png" sizes="48x48" href="./futasaku-tab-48.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="./futasaku-tab-dark-16.png" media="(prefers-color-scheme: light)" />
-    <link rel="icon" type="image/png" sizes="32x32" href="./futasaku-tab-dark-32.png" media="(prefers-color-scheme: light)" />
-    <link rel="icon" type="image/png" sizes="48x48" href="./futasaku-tab-dark-48.png" media="(prefers-color-scheme: light)" />
+    <!-- Tab icon (owner, 2026-11-09; dark-chrome precedence 2026-11-20): the tree-hex edge to edge,
+         no margin. Cream on a dark browser, FUTASAKU off-black (#0e0f10) on a light one.
+         THE BRIGHT MARK MUST WIN WHEN THE BROWSER REPORTS A DARK SCHEME: the off-black set is the
+         unconditional light-chrome fallback, and the cream set comes LAST behind
+         `prefers-color-scheme: dark`, so it wins both when the media query is honoured and when a
+         browser ignores `media` and takes the last same-size icon. Incognito has no reliable
+         scheme signal; if it reports light, the off-black fallback is the best we can do. -->
+    <link rel="icon" type="image/png" sizes="16x16" href="./futasaku-tab-dark-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./futasaku-tab-dark-32.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="./futasaku-tab-dark-48.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="./futasaku-tab-16.png" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./futasaku-tab-32.png" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" type="image/png" sizes="48x48" href="./futasaku-tab-48.png" media="(prefers-color-scheme: dark)" />
     <!-- The share card. og:image MUST be ABSOLUTE: the Open Graph spec requires it, and real
          scrapers (WhatsApp, iMessage, Slack) drop a relative path rather than resolving it — which
          is how a link preview ends up with no picture, or with a stale one. The `?v=` is a

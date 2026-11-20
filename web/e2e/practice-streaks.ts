@@ -32,18 +32,21 @@ const browser = await (ios ? webkit : chromium).launch(ios ? {} : { executablePa
 const PREFIX = 'futa05-test:';
 const PLAYER = '33333333-3333-4333-8333-333333333333';
 const cors = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-headers': 'apikey,authorization,content-type,x-futasaku-client-version,x-futasaku-rules-version' };
-const streakSave = (tiers: Record<string, { current: number; best: number }>) => JSON.stringify({ v: 1, players: { [PLAYER]: { tiers, pending: [], counted: [] } } });
+const streakSave = (tiers: Record<string, { current: number; best: number }>, completed: number) => JSON.stringify({ v: 1, players: { [PLAYER]: { tiers, pending: [], counted: [], completed } } });
 const SEEDED = { easy: { current: 2, best: 5 }, medium: { current: 0, best: 0 }, hard: { current: 12, best: 128 }, blitz: { current: 1, best: 3 } };
+const isCompleted = (result: string) => result === 'win' || result === 'loss' || result === 'draw';
 
-const prepare = async (p: Page, signedIn: boolean) => {
+const prepare = async (p: Page, signedIn: boolean, completed = 3) => {
   // The account, as the real server keeps it: each posted game id counted once by the shared rule.
   const account: PracticeStreaks = JSON.parse(JSON.stringify(SEEDED));
+  let completedCount = completed;
   const counted = new Set<string>();
   await p.route('**/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname.replace(/^.*\/duel/, '');
     if (path === '/v1/players/me/streaks' && route.request().method() === 'POST') {
       for (const g of (route.request().postDataJSON() as { games: { id: string; tier: keyof PracticeStreaks; result: StreakResult }[] }).games) {
         if (counted.has(g.id)) continue; counted.add(g.id); account[g.tier] = applyGame(account[g.tier], g.result);
+        if (isCompleted(g.result)) completedCount += 1;
       }
     }
     const body =
@@ -51,7 +54,7 @@ const prepare = async (p: Page, signedIn: boolean) => {
       : path === `/v1/players/${PLAYER}/record` ? { ok: true, onlineBlitzBest: 7, achievements: { done: 12, total: 35 } }
       : path === '/v1/seeds/achievements' ? { ok: true, achievements: Array.from({ length: 35 }, (_, i) => ({ done: i < 12 })) }
       : path === `/v1/players/${PLAYER}/profile` ? { ok: true, profile: { displayName: 'RYK', tag: 'ABCD', level: 23, tiles: 14, connectedTiles: 9, colourId: 3, online: { games: 40, wins: 26, longestStreak: 6 } } }
-      : path === '/v1/players/me/streaks' ? { ok: true, practice: account, onlineBlitz: { current: 2, best: 7 } }
+      : path === '/v1/players/me/streaks' ? { ok: true, practice: account, onlineBlitz: { current: 2, best: 7 }, completed: completedCount }
       : null;
     await route.fulfill({ status: body ? 200 : 503, headers: cors, contentType: 'application/json', body: JSON.stringify(body ?? { error: 'stub' }) });
   });
@@ -62,7 +65,7 @@ const prepare = async (p: Page, signedIn: boolean) => {
     localStorage.setItem(`${prefix}severgrow.duel.identity.v1`, JSON.stringify({ token: 'local', playerId: player, displayName: 'RYK', kind: signedIn ? 'account' : 'guest' }));
     if (signedIn) localStorage.setItem(`${prefix}futasaku.account.v1`, JSON.stringify({ provider: 'email', email: 'ryk@example.invalid', playerId: player }));
     localStorage.setItem(`${prefix}severgrow.practice.streaks.v1`, save);
-  }, { prefix: PREFIX, player: PLAYER, save: streakSave(SEEDED), signedIn });
+  }, { prefix: PREFIX, player: PLAYER, save: streakSave(SEEDED, completed), signedIn });
 };
 
 const openPractice = async (p: Page) => {
@@ -70,8 +73,21 @@ const openPractice = async (p: Page) => {
   await p.waitForFunction('(() => !!window.__severgrow?.ready?.())()', undefined, { timeout: 30_000 });
   if (!(await p.locator('#menu-new').isVisible().catch(() => false))) await p.click('#menu-play');
   await p.click('#menu-new');
-  await p.waitForSelector('#level-grid .practice-streak-key');
+  await p.waitForSelector('#level-grid .difficulty-tile');
 };
+
+/** The reveal rule's first paint: does this screen show the legend and the two numbers at all? */
+const streakVisible = (p: Page) => p.evaluate(`(() => {
+  const grid = document.getElementById('level-grid');
+  const keys = [...grid.querySelectorAll('.difficulty-tile')];
+  return {
+    legend: !!grid.querySelector(':scope > .practice-streak-legend'),
+    numbered: grid.querySelectorAll('.practice-streak-key').length,
+    cells: grid.querySelectorAll('.practice-streak-side').length,
+    labels: keys.map((k) => (k.textContent ?? '').trim()),
+    spoken: keys.map((k) => k.getAttribute('aria-label') ?? ''),
+  };
+})()`) as Promise<{ legend: boolean; numbered: number; cells: number; labels: string[]; spoken: string[] }>;
 
 type KeyGeometry = { tier: string; current: string; best: string; height: number; labelOff: number; gapLeft: number; gapRight: number; inside: boolean; brighter: boolean };
 const measure = (p: Page) => p.evaluate(`(() => [...document.querySelectorAll('#level-grid .difficulty-tile')].map((key) => {
@@ -108,8 +124,9 @@ try {
   const sizes: [string, number, number][] = [['320', 320, 568], ['390', 390, 844], ['430', 430, 932], ['landscape', 844, 390], ['desktop', 1440, 900]];
   for (const [name, width, height] of sizes) {
     const p = await browser.newPage({ viewport: { width, height }, hasTouch: width < 900 });
-    await prepare(p, false);
+    await prepare(p, true, 3);
     await openPractice(p);
+    await p.waitForSelector('#level-grid .practice-streak-key');
     const keys = await measure(p);
     assert.deepEqual(keys.map((k) => k.tier), ['easy', 'medium', 'hard', 'pro'], `${name}: the four Practice keys`);
     assert.deepEqual(keys.map((k) => `${k.current}|${k.best}`), ['2|5', '0|0', '12|128', '1|3'], `${name}: current left, best right, "0" when nothing yet`);
@@ -127,8 +144,21 @@ try {
     // Keyboard focus keeps its ring.
     await p.keyboard.press('Tab');
     await p.locator('#level-grid .difficulty-tile').first().focus();
-    const ring = await p.evaluate("getComputedStyle(document.querySelector('#level-grid .difficulty-tile')).outlineStyle");
-    assert.notEqual(ring, 'none', `${name}: the focus ring stays`);
+    if (ios) {
+      // Headless WebKit never reports :focus-visible for a programmatic focus (the keyboard modality
+      // stays false even after Tab), so the ring's computed outline cannot be observed here. Assert
+      // the two things that ARE the contract: the key takes keyboard focus, and the ring rule exists.
+      const state = await p.evaluate(`(() => {
+        const key = document.querySelector('#level-grid .difficulty-tile');
+        const css = [...document.styleSheets].map((sheet) => { try { return [...sheet.cssRules].map((r) => r.cssText).join(''); } catch { return ''; } }).join('');
+        return { focused: document.activeElement === key, rule: /#levels \.level-grid \.difficulty-tile:focus-visible/.test(css) };
+      })()`) as { focused: boolean; rule: boolean };
+      assert(state.focused, `${name}: the Practice key takes keyboard focus`);
+      assert(state.rule, `${name}: the focus-ring rule is present`);
+    } else {
+      const ring = await p.evaluate("getComputedStyle(document.querySelector('#level-grid .difficulty-tile')).outlineStyle");
+      assert.notEqual(ring, 'none', `${name}: the focus ring stays`);
+    }
     assert.match(await p.locator('#level-grid .difficulty-tile').first().getAttribute('aria-label') ?? '', /Current streak 2, longest streak 5\./, `${name}: the numbers are spoken`);
     // THE LEGEND (owner, 2026-11-18): "current streak" starts 3px inside the key's left border and
     // "longest streak" ends 3px inside its right border; each key's numbers sit centred under their
@@ -154,11 +184,31 @@ try {
     await p.close();
   }
 
-  if (!ios) {
-    // A real game: the numbers change on return, without a reload.
+  // THE REVEAL RULE (owner, 2026-11-20): guests never see the legend or the numbers; a signed-in
+  // account sees them only after three fully completed Practice matches.
+  for (const [label, signedIn, completed] of [['guest', false, 3], ['account with two completed games', true, 2]] as const) {
     const p = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true });
-    await prepare(p, false);
+    await prepare(p, signedIn, completed);
     await openPractice(p);
+    const hidden = await streakVisible(p);
+    assert.equal(hidden.legend, false, `${label}: no streak legend`);
+    assert.equal(hidden.numbered, 0, `${label}: no key wears the numbers`);
+    assert.equal(hidden.cells, 0, `${label}: no number cells at all`);
+    // The keys are exactly the plain Practice keys again: their own labels, no streak suffix.
+    assert.deepEqual(hidden.labels, ['EASY', 'MEDIUM', 'HARD', 'BLITZ'], `${label}: the plain tier labels`);
+    assert(hidden.spoken.every((aria) => !/streak/i.test(aria)), `${label}: nothing about streaks is spoken`);
+    await p.screenshot({ path: `${out}/hidden-${label.replace(/\W+/g, '-')}-${ios ? 'webkit' : 'chromium'}.png` });
+    console.log('PASS', ios ? 'webkit' : 'chromium', `${label}: the legend and the numbers are hidden`);
+    await p.close();
+  }
+
+  if (!ios) {
+    // A real game: the numbers change on return, without a reload. The account has TWO completed
+    // games, so this one is the third and is also the transition from hidden to revealed.
+    const p = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true });
+    await prepare(p, true, 2);
+    await openPractice(p);
+    assert.equal((await streakVisible(p)).legend, false, 'two completed games keep the numbers hidden');
     await p.click('.difficulty-tile[data-difficulty="easy"]');
     await p.waitForFunction('(() => { const s = window.__severgrow?.state?.(); return !!s && s.phase !== "GAME_OVER"; })()', undefined, { timeout: 30_000 });
     const loads = await p.evaluate('performance.getEntriesByType("navigation").length');
@@ -169,6 +219,8 @@ try {
     await p.waitForTimeout(400);
     if (!(await p.locator('#menu-new').isVisible().catch(() => false))) await p.click('#menu-play').catch(() => undefined);
     await p.click('#menu-new');
+    // The third fully completed game crossed the reveal: the keys now carry the numbers.
+    await p.waitForSelector('#level-grid .practice-streak-key');
     const easy = (await measure(p))[0]!;
     const expected = won ? '3|5' : draw ? '2|5' : '0|5';
     assert.equal(`${easy.current}|${easy.best}`, expected, `after a ${won ? 'win' : draw ? 'draw' : 'loss'} the Easy key reads ${expected}`);

@@ -29,8 +29,9 @@ import { EMAIL_ON_KEY, GOOGLE_ON_KEY, paintAccountKey } from './menu-key.js';
 import type { ProfileFacts } from './profile.js';
 import { PLAYER_PROFILE_EVENT } from './profile-request.js';
 import type { PlayerProfileRequest } from './profile-request.js';
-import { visitorFacts } from './visitor-profile.js';
+import { visitorColour, visitorFacts } from './visitor-profile.js';
 import type { HeadToHead, PublicPlayerProfile } from '../../../server/src/protocol.js';
+import type { PlayerProfileSeed } from './profile-request.js';
 import { formatRivalryLine } from '../logic/rivalry.js';
 import type { VisitorFacts } from './profile.js';
 import { STATS_KEY, parseStats } from '../logic/stats.js';
@@ -97,6 +98,10 @@ ${glassBaseCss('.acct-glass')}
 .acct-actions.row { flex-direction:row; justify-content:flex-end; flex-wrap:wrap; }
 .acct-btn { min-height:44px; padding:0 16px; border-radius:999px; cursor:pointer; border:1px solid rgba(214,204,177,.28);
   background:rgba(242, 237, 228,.04); color:#f0e9dc; font:700 .875rem/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.06em; }
+/* The first online welcome's ONE emphasis: Play as guest (owner, 2026-11-20). Cream fill, ink
+   text — the same primary material as the menu's own key, never a second button system. */
+.acct-btn.primary { background:#f0e9dc; border-color:#f0e9dc; color:#12100e; }
+.acct-btn.primary:hover { background:#fff6e5; border-color:#fff6e5; }
 .acct-btn.danger { border-color:rgba(224,115,92,.6); color:#f2b3a3; }
 .acct-btn.danger.solid { background:#c4553f; border-color:#c4553f; color:#fff6ef; }
 .acct-btn:disabled { opacity:.55; cursor:default; }
@@ -729,7 +734,9 @@ export const mountAccounts = async (): Promise<void> => {
     const status = el('p', 'acct-status');
     status.setAttribute('role', 'status');
     const g = googleButton('welcome-google'); g.hidden=!available;
-    const guest = button('acct-btn', ACCOUNT.playAsGuest, 'welcome-guest');
+    // PLAY AS GUEST IS THE FIRST WELCOME'S PRIMARY (owner, 2026-11-20): one cream key, so the
+    // quickest way in is also the visually obvious one. Google and email stay quiet secondary keys.
+    const guest = button('acct-btn primary', ACCOUNT.playAsGuest, 'welcome-guest');
     const actions = el('div', 'acct-actions');
     actions.append(emailButton('online'), g, guest);
     welcome.panel.append(el('h2', '', ACCOUNT.welcomeTitle), el('p', '', ACCOUNT.welcomeBody), actions, status, privacyLink());
@@ -784,6 +791,21 @@ export const mountAccounts = async (): Promise<void> => {
   const profileApi = duelApiUrl();
   const region = duelRegion();
   const profileClient = profileApi ? new DuelClient({ baseUrl: profileApi, ...(region ? { region } : {}) }) : null;
+
+  /**
+   * A PROFILE REOPENS WITHOUT BLANK FACTS (owner, 2026-11-20: "own Profile can show Seeds while the
+   * other server facts remain dashes"). The sheet paints THIS DEVICE's known facts at once and a
+   * recent answer from the account on top, then refreshes anything still missing in parallel. The
+   * entry is identity-scoped (`playerId`) and short-lived, so another account's numbers can never be
+   * painted as this one's, and a stale answer is never shown as current.
+   */
+  const OWN_PROFILE_TTL_MS = 30_000;
+  const ownProfileCache = new Map<string, { at: number; facts: ProfileFacts }>();
+  const VISITOR_PROFILE_TTL_MS = 20_000;
+  type ProfileRecord = { blitzBest: number | null; achievements: { done: number; total: number } | null } | null;
+  const visitorProfileCache = new Map<string, { at: number; facts: VisitorFacts; record: ProfileRecord }>();
+  /** Reads in flight, keyed by viewer+player, so a double tap never spends two requests. */
+  const visitorReads = new Map<string, Promise<{ profile: PublicPlayerProfile; headToHead?: HeadToHead } | null>>();
 
   /** This device's saved record (the game writes it under the same keys); blocked storage reads as none. */
   const readLocal = (key: string): string | null => {
@@ -882,37 +904,62 @@ export const mountAccounts = async (): Promise<void> => {
     const { identity } = s;
     const token = identity.token;
     const seq = ++visitorRequest;
-    let facts = profileFacts(identity);
+    const local = profileFacts(identity);
+    // The last answer for THIS player (not another account) fills anything this device does not
+    // already know, on the first frame. Values the device knows now always win (offline records,
+    // the derived colour, the name), so a cached read can never hide newer local facts.
+    const cached = ownProfileCache.get(identity.playerId);
+    const fresh = cached && Date.now() - cached.at < OWN_PROFILE_TTL_MS ? cached.facts : null;
+    const mergeKnown = (known: ProfileFacts | null): ProfileFacts => {
+      const out: ProfileFacts = { ...local };
+      if (known) {
+        if (out.seeds === null) out.seeds = known.seeds;
+        if (out.tiles === null) out.tiles = known.tiles;
+        if (out.connectedTiles === null) out.connectedTiles = known.connectedTiles ?? null;
+        if (out.online === null) out.online = known.online;
+        if ('blitzBest' in out && out.blitzBest === null) out.blitzBest = known.blitzBest ?? null;
+        if ('achievements' in out && out.achievements === null) out.achievements = known.achievements ?? null;
+      }
+      return out;
+    };
+    let facts = mergeKnown(fresh);
     // One painter for every read: each answer repaints the sheet it is already looking at, and the
     // all-time win total is recomputed from whichever halves are known.
     const paint = (patch: Partial<ProfileFacts>) => {
       if (seq !== visitorRequest || signedIn()?.identity.playerId !== identity.playerId) return;
       facts = { ...facts, ...patch };
       facts.matchesWon = matchesWonEver(facts.offline, facts.online);
+      ownProfileCache.set(identity.playerId, { at: Date.now(), facts });
       profile.show(facts);
     };
     facts.matchesWon = matchesWonEver(facts.offline, facts.online);
+    ownProfileCache.set(identity.playerId, { at: Date.now(), facts });
     profile.open(facts, menuLogin);
 
+    // A fresh cached answer already has these values: refresh in the background only for anything
+    // still missing, so a quick reopen is instant and spends no duplicate request.
     if (FEATURES.practiceStreaks) {
       // These endpoints can succeed independently when the public combined record stalls.
-      void profileClient?.streaks(token, true).then(({ onlineBlitz }) => {
+      if (!fresh || facts.blitzBest === null) void profileClient?.streaks(token, true).then(({ onlineBlitz }) => {
         paint({ blitzBest: onlineBlitz.best });
       }).catch(() => undefined);
-      void profileClient?.achievements(token, true).then((views) => {
+      if (!fresh || facts.achievements === null) void profileClient?.achievements(token, true).then((views) => {
         paint({ achievements: { done: views.filter((view) => view.done).length, total: views.length } });
       }).catch(() => undefined);
     }
-    void profileClient?.playerProfile(token, identity.playerId).then(({ profile: wire }) => {
-      paint({ connectedTiles: wire.connectedTiles ?? null, tiles: wire.tiles,
-        online: wire.online, colour: profileColour(identity.playerId, wire.colourId) });
-    }).catch(() => undefined);
-    const device = deviceId();
-    void syncOffline(token, device).then((offline) => {
+    if (!fresh || facts.tiles === null || facts.online === null || facts.connectedTiles === null) {
+      void profileClient?.playerProfile(token, identity.playerId).then(({ profile: wire }) => {
+        paint({ connectedTiles: wire.connectedTiles ?? null, tiles: wire.tiles,
+          online: wire.online, colour: profileColour(identity.playerId, wire.colourId) });
+      }).catch(() => undefined);
+    }
+    // The offline aggregate both writes this device's totals and reads the account's: keep it fresh
+    // whenever the sheet opens, as it is the one figure a new device can change.
+    void syncOffline(token, deviceId()).then((offline) => {
       if (offline) paint({ offline: accountRecord(offline) });
     });
     if (!profileClient) return;
-    void readTerritoryWallet(identity.playerId, () => profileClient.seedWallet(token)).then((wallet) => {
+    if (!fresh || facts.seeds === null) void readTerritoryWallet(identity.playerId, () => profileClient.seedWallet(token)).then((wallet) => {
       if (wallet) paint({ seeds: wallet.balance });
     });
   };
@@ -939,31 +986,62 @@ export const mountAccounts = async (): Promise<void> => {
       rivalryLine: headToHead ? formatRivalryLine(headToHead, wire?.displayName) : null,
     };
   };
-  const openPlayerProfile = (playerId: string, opener: HTMLElement | null) => {
+  /**
+   * THE PUBLIC FACTS THE TILE ALREADY PAINTS. A visitor profile used to open with every line blank,
+   * even the name, although the Planet had just shown all three. This builds the sheet's first frame
+   * from the tile (public-only by type) with the same em-dash rules as every other painter.
+   */
+  const seedVisitorFacts = (seed: PlayerProfileSeed | null | undefined): VisitorFacts | null => {
+    if (!seed) return null;
+    const name = typeof seed.name === 'string' && seed.name.trim() ? seed.name.trim() : null;
+    const level = typeof seed.level === 'number' && Number.isInteger(seed.level) && seed.level > 0 ? seed.level : null;
+    const colour = visitorColour(seed.colourCss ?? null);
+    if (!name && level === null && !colour) return null;
+    return { name, level, tiles: null, connectedTiles: null, colour, online: null };
+  };
+  const openPlayerProfile = (playerId: string, opener: HTMLElement | null, seed?: PlayerProfileSeed | null) => {
     const seq = ++visitorRequest;
-    profile.openVisitor(null, opener);
     const identity = readIdentity(kv);
+    const cacheKey = identity ? `${identity.playerId}:${playerId}` : null;
+    const cached = cacheKey ? visitorProfileCache.get(cacheKey) : undefined;
+    const known = cached && Date.now() - cached.at < VISITOR_PROFILE_TTL_MS ? cached.facts : null;
+    let facts: VisitorFacts | null = known ?? seedVisitorFacts(seed);
+    let record: ProfileRecord = cached?.record ?? null;
+    // The sheet opens on the FIRST frame with the tile's own public facts (or the last answer for
+    // this exact player), never waiting for the wire. No identity means no read to make, but the
+    // public facts the map already holds still show.
+    profile.openVisitor(facts, opener);
     if (!identity) return;
     // Two reads, painted as each lands: the public profile, and the record (best online Blitz streak,
     // achievements x/x). The record alone never paints a sheet whose profile has not arrived.
-    let facts: VisitorFacts | null = null;
-    let record: Awaited<ReturnType<typeof readRecord>> = null;
     const paintVisitor = () => {
       if (seq !== visitorRequest || !facts) return;
+      if (readIdentity(kv)?.playerId !== identity.playerId) return; // another account took over
+      if (cacheKey) visitorProfileCache.set(cacheKey, { at: Date.now(), facts, record });
       profile.showVisitor(FEATURES.practiceStreaks ? { ...facts, blitzBest: record?.blitzBest ?? null, achievements: record?.achievements ?? null } : facts);
     };
-    void readRecord(playerId, identity.token).then((r) => { record = r; paintVisitor(); });
-    void profileClient?.playerProfile(identity.token, playerId).then(({ profile: wire, headToHead }) => {
-      if (seq !== visitorRequest) return;
-      facts = visitorFromWire(wire, headToHead);
+    const key = `${identity.playerId}:${playerId}`;
+    let read = visitorReads.get(key);
+    if (!read) {
+      read = profileClient?.playerProfile(identity.token, playerId).catch(() => null) ?? Promise.resolve(null);
+      visitorReads.set(key, read);
+      void read.finally(() => { if (visitorReads.get(key) === read) visitorReads.delete(key); });
+    }
+    void read.then((answer) => {
+      if (!answer || seq !== visitorRequest) return;
+      facts = visitorFromWire(answer.profile, answer.headToHead);
       if (!facts) { profile.showVisitor(null); return; }
       paintVisitor();
-    }).catch(() => undefined);
+    });
+    // A fresh cached answer already carries the record: no second request on a quick reopen.
+    if (!cached || Date.now() - cached.at >= VISITOR_PROFILE_TTL_MS) {
+      void readRecord(playerId, identity.token).then((r) => { record = r; paintVisitor(); }).catch(() => undefined);
+    }
   };
   window.addEventListener(PLAYER_PROFILE_EVENT, (event) => {
     const detail = (event as CustomEvent<PlayerProfileRequest>).detail;
     if (!detail || typeof detail.playerId !== 'string' || !detail.playerId) return;
-    openPlayerProfile(detail.playerId, detail.trigger ?? null);
+    openPlayerProfile(detail.playerId, detail.trigger ?? null, detail.seed ?? null);
   });
 
   // A finished OFFLINE game (main.ts dispatches this after it saves the record): tell the account, so

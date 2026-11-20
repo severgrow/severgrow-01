@@ -192,11 +192,25 @@ try {
   check('waiting: tapping the code copies the code', clip === codeA, `clip=${clip}`);
   check('waiting: tapping the code confirms briefly', noticeText === ONLINE.codeCopied, noticeText);
 
+  // The copy button confirms ON ITSELF (owner, 2026-11-20), with the same fact in the status line.
+  await A.page.click('#online-copy');
+  await A.page.waitForFunction((label) => (document.getElementById('online-copy')?.textContent ?? '').trim() === label, ONLINE.copiedKey, { timeout: 3000 }).catch(() => undefined);
+  const copiedLabel = await A.page.evaluate(`(() => { const b = document.getElementById('online-copy'); return { text: (b?.textContent ?? '').trim(), aria: b?.getAttribute('aria-label') }; })()`) as { text: string; aria: string | null };
+  check('waiting: the copy button says Copied', copiedLabel.text === ONLINE.copiedKey, copiedLabel.text);
+  check('waiting: its accessible name says Copied too', copiedLabel.aria === ONLINE.copiedKey, copiedLabel.aria ?? '');
+  const linkClip = await A.page.evaluate(() => navigator.clipboard.readText());
+  check('waiting: the link is on the clipboard', linkClip.includes(codeA), 'clipboard');
+  await A.page.waitForTimeout(1800);
+  const copyRestored = (await A.page.locator('#online-copy').textContent())?.trim();
+  check('waiting: the copy button returns to Copy link', copyRestored === ONLINE.copyLink, copyRestored ?? '');
+  const noticeAfterCopy = ((await A.page.locator('#online-waiting-notice').textContent()) ?? '').trim();
+  check('waiting: the status line also says the link was copied', noticeAfterCopy === ONLINE.copied, noticeAfterCopy);
+
   await A.page.evaluate("Object.defineProperty(navigator,'share',{configurable:true,value:async()=>{throw new DOMException('Cancelled','AbortError');}})");
   await A.page.click('#online-share');
   await A.page.waitForTimeout(100);
-  check('cancelled native sharing leaves clipboard unchanged',await A.page.evaluate(()=>navigator.clipboard.readText())===codeA);
-  check('cancelled sharing does not claim a link was copied',((await A.page.locator('#online-waiting-notice').textContent())??'').trim()===noticeText);
+  check('cancelled native sharing leaves clipboard unchanged',await A.page.evaluate(()=>navigator.clipboard.readText())===linkClip);
+  check('cancelled sharing does not claim a link was copied',((await A.page.locator('#online-waiting-notice').textContent())??'').trim()===noticeAfterCopy);
 
   for (const vp of VIEWPORTS) {
     await A.page.setViewportSize({ width: vp.width, height: vp.height });

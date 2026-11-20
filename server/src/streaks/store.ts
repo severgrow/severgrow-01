@@ -4,7 +4,7 @@
 import type { Player } from '../../../src/engine/index.js';
 import type { OnlineEndReason } from '../protocol.js';
 import type { PracticeStreaks, PracticeTier, Streak, StreakResult } from './rules.js';
-import { applyGame, emptyPracticeStreaks, emptyStreak } from './rules.js';
+import { applyGame, emptyPracticeStreaks, emptyStreak, isCompletedResult } from './rules.js';
 
 /** One finished practice game, as the page reports it. `id` is the game's own id: it counts once. */
 export type PracticeGame = { id: string; tier: PracticeTier; result: StreakResult };
@@ -16,6 +16,13 @@ export type StreakStore = {
   /** Apply the games not recorded before (by id), in order. Returns the four practice streaks after. */
   recordPractice(playerId: string, games: readonly PracticeGame[], now: number): Promise<PracticeStreaks>;
   practice(playerId: string): Promise<PracticeStreaks>;
+  /**
+   * How many Practice games this account has FULLY completed (win, loss or draw) — the record behind
+   * the Practice keys' reveal after three (owner, 2026-11-20). Abandons, resignations, forfeits and
+   * timeouts are recorded but do not count. Identity-scoped and deduplicated by game id by the same
+   * store that records them, so retries cannot count twice.
+   */
+  completedPractice(playerId: string): Promise<number>;
   /**
    * The online Blitz streak, after folding in every finished live match since the last fold. Folded
    * results are kept, so a match the retention rule later deletes is never forgotten.
@@ -51,22 +58,28 @@ export const memoryStreakStore = (deps: {
 }): StreakStore => {
   const practice = new Map<string, PracticeStreaks>();
   const seen = new Map<string, Set<string>>();
+  /** Game ids that were fully completed (not an abandon/resign/forfeit/timeout), for the reveal. */
+  const completed = new Map<string, Set<string>>();
   const blitz = new Map<string, { streak: Streak; at: number; id: string }>();
   const copy = (p: PracticeStreaks): PracticeStreaks => JSON.parse(JSON.stringify(p)) as PracticeStreaks;
   return {
     async recordPractice(playerId, games) {
       const state = practice.get(playerId) ?? emptyPracticeStreaks();
       const ids = seen.get(playerId) ?? new Set<string>();
+      const done = completed.get(playerId) ?? new Set<string>();
       for (const game of games) {
         if (ids.has(game.id)) continue;
         ids.add(game.id);
+        if (isCompletedResult(game.result)) done.add(game.id);
         state[game.tier] = applyGame(state[game.tier], game.result);
       }
       practice.set(playerId, state);
       seen.set(playerId, ids);
+      completed.set(playerId, done);
       return copy(state);
     },
     async practice(playerId) { return copy(practice.get(playerId) ?? emptyPracticeStreaks()); },
+    async completedPractice(playerId) { return completed.get(playerId)?.size ?? 0; },
     async onlineBlitz(playerId, now) {
       const held = blitz.get(playerId) ?? { streak: emptyStreak(), at: -1, id: '' };
       const rows = [...await deps.blitzResults(playerId)]

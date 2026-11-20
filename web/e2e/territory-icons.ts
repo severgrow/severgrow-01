@@ -14,7 +14,6 @@ import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { preview } from 'vite';
 import { ONLINE, PROFILE } from '../../src/strings.js';
-import { playerTag } from '../../src/player-tag.js';
 import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
 import { chainRouters } from '../../server/src/feedback/feedback.js';
 import { createHttpServer } from '../../server/src/http.js';
@@ -62,7 +61,6 @@ store.receipts.set('campaign:c1-7', {
   reason: null,
 });
 store.colours.set(rival.player.id, 4);
-const rivalTag = playerTag(rival.player.id);
 
 const me = await guestOf();
 await fund(me.player.id, 3);
@@ -147,6 +145,15 @@ try {
     }
   }, { identity, account });
   await seedSettings(page, { sound: false, music: false, coach: false, speed: 'skip', reduceMotion: true, eyeCandy: false });
+  // The production world read joins the owner's public display name onto each claim (Postgres);
+  // the in-memory fixture stores null. Add the public name to the rival's claims so this suite
+  // measures the same "tile already knows the name" path a real server provides.
+  await page.route('**/v1/world*', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { world?: { claims?: { ownerId: string; ownerName: string | null }[] } };
+    for (const claim of body.world?.claims ?? []) if (claim.ownerId === rival.player.id) claim.ownerName = rival.player.displayName;
+    await route.fulfill({ response, json: body });
+  });
   await page.goto(origin + '/');
   await page.waitForFunction(() => (window as any).__severgrow?.ready?.() === true, undefined, { timeout: 30_000 });
   // The accounts module installs the profile sheet asynchronously; its hub card proves it mounted.
@@ -186,12 +193,27 @@ try {
   await page.screenshot({ path: `${SHOTS}/territory-icons-rival-390.png` });
 
   // ---- opening THEIR profile: the same sheet, visitor mode ----------------------------------
+  // INSTANT FIRST PAINT (owner, 2026-11-20): the tile already carries the owner's public name,
+  // level and colour. Hold the profile read open and prove the sheet shows those before it lands.
+  let releaseProfile!: () => void;
+  const profileGate = new Promise<void>((resolve) => { releaseProfile = resolve; });
+  await page.route('**/v1/players/*/profile*', async (route) => { await profileGate; await route.continue(); });
   await page.click('#online-world-selection .world-claim-button[data-action="profile"]');
   await page.waitForFunction(() => (document.getElementById('sheet-profile') as HTMLElement | null)?.hidden === false);
-  await page.waitForTimeout(250);
+  const firstPaint = await sheetState(page);
+  check('a visitor sheet opens with the tile\'s public name before the read lands',
+    firstPaint.name === (rival.player.displayName ?? ''), firstPaint.name);
+  check('...and with its public level and colour, while the unread tiles stay honest em dashes',
+    firstPaint.level === 'Lvl 7' && !firstPaint.levelHidden && firstPaint.tiles === PROFILE.unknown,
+    `${firstPaint.level} / ${firstPaint.tiles}`);
+  releaseProfile();
+  await page.waitForFunction(() => (document.getElementById('profile-tiles')?.textContent ?? '') === '2', undefined, { timeout: 5_000 });
+  await page.waitForTimeout(150);
   const visitor = await sheetState(page);
   check('the visitor sheet is the SAME sheet in its visitor mode', visitor.mode === 'visitor' && !visitor.hidden, JSON.stringify(visitor));
-  check('it names the other player with their #tag', visitor.name === `${rival.player.displayName} #${rivalTag}`, visitor.name);
+  // The sheet shows the display name WITHOUT the account tag (web/src/accounts/profile.ts: the tag
+  // is spoken/identification detail, not part of the name line).
+  check('it names the other player', visitor.name === rival.player.displayName, visitor.name);
   // OWNER, 2026-11-02: the "viewing another player" caption was removed as clutter — the sheet is
   // identified by the mode, the name and the rows a visitor does not get.
   check('it carries no "viewing another player" caption node', visitor.visitorCaption === false, String(visitor.visitorCaption));

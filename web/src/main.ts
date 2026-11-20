@@ -1,6 +1,6 @@
 // first: the release channel (the test copy keeps its own storage)
 import { signInGate } from './accounts/sign-in-gate.js';
-import { practiceStreaks, syncPracticeStreaks } from './online/practice-streak-sync.js';
+import { practiceStreaks, practiceStreaksRevealed, syncPracticeStreaks } from './online/practice-streak-sync.js';
 import { paintPracticeStreakKeys } from './menu/practice-streak-keys.js';
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
 import { deferEntryButton } from './ui/deferred-entry.js';
@@ -21,6 +21,7 @@ import type { BlitzPractice } from './blitz/practice.js';
 import { showLiveStrike } from './ui/live-strike.js';
 import { readAppViewport } from './ui/app-viewport.js';
 import { mountRootFlags } from './ui/root-flags.js';
+import { mountCardTip } from './ui/card-tip.js';
 import { mountMatchChat } from './online/chat/view.js';
 import { getOnlineSession, isOnlineDuel, setOnlineSession } from './online/duel-runtime.js';
 import { hideLobbySurfaces } from './online/lobby-exit.js';
@@ -275,6 +276,7 @@ if (branding && (window.matchMedia('(display-mode: standalone)').matches ||
 // Page-wide screen flags stand in for page-wide :has() rules (ui/root-flags.ts: those restyled the
 // whole page for every element added while a game opened).
 mountRootFlags();
+mountCardTip();
 branding?.mountBranding();
 const defaultArt = defaultArtLoad ? await defaultArtLoad : null;
 import type { Overlay } from './ui/board.js';
@@ -1492,14 +1494,16 @@ function renderLevelGrid() {
   // PRACTICE STREAKS (owner, 2026-11-18): each key's current and best streak, then the account's own
   // numbers (another device's games) the moment they arrive.
   if (FEATURES.practiceStreaks) {
-    paintPracticeStreakKeys(grid, practiceStreaks().view());
+    paintPracticeStreakKeys(grid, practiceStreaks().view(), { revealed: practiceStreaksRevealed() });
     void syncPracticeStreaks();
   }
 }
 // The keys repaint whenever a streak changes (a finished game, the account's answer), in place.
 if (FEATURES.practiceStreaks) practiceStreaks().onChange(() => {
   const grid = document.getElementById('level-grid');
-  if (grid?.querySelector('.difficulty-tile')) paintPracticeStreakKeys(grid, practiceStreaks().view());
+  if (grid?.querySelector('.difficulty-tile')) {
+    paintPracticeStreakKeys(grid, practiceStreaks().view(), { revealed: practiceStreaksRevealed() });
+  }
 });
 
 // ---------- campaign screen ----------
@@ -8382,8 +8386,10 @@ function renderHand(v: View, advice: Advice | null) {
     ].filter(Boolean).join(' ');
     if (b.className !== cls) b.className = cls;
     b.disabled = held?.id === c.id;
-    if (fs?.reason && myTurn()) b.title = fs.reason;
-    else b.removeAttribute('title');
+    // THE CARD'S OWN DETAIL, in the game's bubble (owner, 2026-11-20): a disabled Fruit card's
+    // reason used to be another browser-native `title`. It is the same quiet treatment as the suit.
+    if (fs?.reason && myTurn()) b.dataset.cardDetail = fs.reason;
+    else delete b.dataset.cardDetail;
     if (thumbLayout) {
       // the test copy's thumb layout: each card on the arc, turned with it; picked: lifted outward.
       // A heavier card comes out a little less (the 22 px sheet lift scaled to the fan's 10 px).
@@ -11717,6 +11723,8 @@ let appReady = false;
     ...blitz.status(),
   } : null),
   busy: () => busy(),
+  /** tests only: repaint the cockpit from the current step (no game input, no state change) */
+  cockpitSync: () => smartCockpit?.sync(),
   /** Read-only sound diagnostics: the pre-rendered bank's size and the last cues played. */
   soundBank: () => sound.bankStats(),
   soundLog: () => [...sound.log()],

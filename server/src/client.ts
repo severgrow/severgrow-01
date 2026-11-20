@@ -602,16 +602,20 @@ export class DuelClient {
 
   // ---- streaks (owner, 2026-11-18: practice streaks + the best online Blitz streak) ----
 
-  /** The account's four practice streaks and its online Blitz streak (server results only). */
-  async streaks(token: string, retry = false): Promise<{ practice: PracticeStreaks; onlineBlitz: Streak }> {
-    const r = await this.requestWithDeadline<{ practice: PracticeStreaks; onlineBlitz: Streak }>('GET', '/v1/players/me/streaks', { token, retry }, 'Streaks read');
-    return { practice: r.practice, onlineBlitz: r.onlineBlitz };
+  /**
+   * The account's four practice streaks, its online Blitz streak, and how many Practice games it has
+   * fully completed (win/loss/draw). `completed` is OPTIONAL: an older server does not send it, and
+   * the page then falls back to the games queued on this device.
+   */
+  async streaks(token: string, retry = false): Promise<{ practice: PracticeStreaks; onlineBlitz: Streak; completed: number | null }> {
+    const r = await this.requestWithDeadline<{ practice: PracticeStreaks; onlineBlitz: Streak; completed?: number | null }>('GET', '/v1/players/me/streaks', { token, retry }, 'Streaks read');
+    return { practice: r.practice, onlineBlitz: r.onlineBlitz, completed: typeof r.completed === 'number' ? r.completed : null };
   }
 
   /** Send finished practice games; each game id counts once on the account however often it arrives. */
-  async recordPracticeGames(token: string, games: readonly { id: string; tier: string; result: string }[]): Promise<PracticeStreaks> {
-    const r = await this.requestWithDeadline<{ practice: PracticeStreaks }>('POST', '/v1/players/me/streaks', { token, body: { games } }, 'Streaks write');
-    return r.practice;
+  async recordPracticeGames(token: string, games: readonly { id: string; tier: string; result: string }[]): Promise<{ practice: PracticeStreaks; completed: number | null }> {
+    const r = await this.requestWithDeadline<{ practice: PracticeStreaks; completed?: number | null }>('POST', '/v1/players/me/streaks', { token, body: { games } }, 'Streaks write');
+    return { practice: r.practice, completed: typeof r.completed === 'number' ? r.completed : null };
   }
 
   async playerProfile(token: string, playerId: string): Promise<{ profile: PublicPlayerProfile; headToHead?: HeadToHead }> {

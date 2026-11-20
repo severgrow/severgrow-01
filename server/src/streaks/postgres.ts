@@ -15,6 +15,15 @@ import { FOLD_SETTLE_MS, blitzResult } from './store.js';
 
 const num = (v: unknown): number => (typeof v === 'number' ? v : Number(v ?? 0) || 0);
 
+/** Fully completed games (win/loss/draw), from the game-id rows the same transaction deduplicates. */
+const readCompleted = async (q: { query: PgPool['query'] }, playerId: string): Promise<number> => {
+  const { rows } = await q.query(
+    `select count(*)::int as n from practice_streak_games where player_id = $1 and result in ('win','loss','draw')`,
+    [playerId],
+  );
+  return num(rows[0]?.n);
+};
+
 const readPractice = async (q: { query: PgPool['query'] }, playerId: string, lock: boolean): Promise<PracticeStreaks> => {
   const { rows } = await q.query(
     `select tier, current_streak, best_streak from practice_streaks where player_id = $1${lock ? ' for update' : ''}`,
@@ -122,5 +131,6 @@ export const postgresStreakStore = (pool: PgPool): StreakStore => ({
     }
   },
   practice: (playerId) => readPractice(pool, playerId, false),
+  completedPractice: (playerId) => readCompleted(pool, playerId),
   onlineBlitz: (playerId, now) => foldOnlineBlitz(pool, playerId, now),
 });

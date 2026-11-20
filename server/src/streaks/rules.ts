@@ -18,6 +18,14 @@ export type StreakResult = (typeof STREAK_RESULTS)[number];
 export const isStreakResult = (value: unknown): value is StreakResult =>
   typeof value === 'string' && (STREAK_RESULTS as readonly string[]).includes(value);
 
+/**
+ * A game that ran to its natural end from the player's side. The Practice keys' numbers are revealed
+ * after three of these (owner, 2026-11-20); a restart/abandon, a resignation, an online forfeit or a
+ * clock timeout all end a game but do not count as "fully completed".
+ */
+export const isCompletedResult = (result: StreakResult): boolean =>
+  result === 'win' || result === 'loss' || result === 'draw';
+
 export type Streak = { current: number; best: number };
 export const emptyStreak = (): Streak => ({ current: 0, best: 0 });
 

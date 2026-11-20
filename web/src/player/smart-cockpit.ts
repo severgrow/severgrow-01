@@ -206,6 +206,11 @@ html.futa04-information #smart-led.led-alarm #smart-led-bloom { animation:smart-
   100% { opacity:var(--light-bloom-op,.286); }
 }
 @keyframes smart-led-pulse { 0%,100% { opacity:0; } 50% { opacity:.62; } }
+/* THE STEADY WAIT (owner, 2026-11-20): a still, dim word while the opponent is thinking. No blink,
+   no bloom wash, no idle re-prompt — a state, not an attention cue. Opacity only, on the two baked
+   layers, so nothing is re-rasterised. */
+html.futa04-information #smart-led.led-ambient #smart-led-ink { opacity:.38; }
+html.futa04-information #smart-led.led-ambient #smart-led-bloom { opacity:calc(var(--light-bloom-op,.286) * .42); }
 /* A flash is one 60 ms breath of at most 35% white on the display's own glass. Never a strobe,
    never a filter on the glyph canvas. */
 html.futa04-information #smart-led-flash {
@@ -894,6 +899,9 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null; gui
     const alarming = !!frame.alarm && !still;
     windowEl.classList.toggle('led-pulse', pulsing);
     windowEl.classList.toggle('led-alarm', alarming);
+    // A steady state word (WAIT) wears its own dim ink, not a blinking attention cue.
+    windowEl.classList.toggle('led-ambient', !!frame.ambient);
+    led.classList.toggle('led-ambient', !!frame.ambient);
     // The blink dims the bloom too, which sits outside the window, so the class rides on #smart-led.
     led.classList.toggle('led-alarm', alarming);
     // The pulse/alarm is the display's own glass now (the baked hot layer inside the window).
@@ -1180,7 +1188,10 @@ export function mountSmartCockpit(options: { heldMove?: () => string | null; gui
         : first?.icon === 'cancel' ? options.heldMove?.() ?? 'CANCEL' : first?.icon === 'bloom' ? 'BLOOM' : '';
       if (hint) machine.hint(hint);
     }
-    if (lastPhase !== phase && phase === 'opp') machine.event({message:'WAIT',priority:20,duration:1050,mode:'red',pulse:true});
+    // THE STEADY WAIT (owner, 2026-11-20): while the opponent is thinking the sign keeps a still,
+    // dim WAIT instead of a 1 s red flash followed by a blank face. It is a STATE, not an event:
+    // an active action message still paints over it, and the Blitz clock is a separate display.
+    machine.setAmbient(phase === 'opp' ? 'WAIT' : null);
     lastPhase = phase; lastAction = first?.key ?? '';
     context.innerHTML = svg(first?.icon ?? 'neutral'); context.disabled = !first;
     // The slot's current action, so CSS can light a key that is the move (e.g. Skip).

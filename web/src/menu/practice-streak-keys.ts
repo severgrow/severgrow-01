@@ -87,11 +87,41 @@ const spoken = (base: string, current: number, best: number): string =>
 export const STREAK_LEGEND = Object.freeze({ current: 'Current streak', best: 'Longest streak' });
 
 /**
+ * Put a key back exactly as the Practice screen built it: the numbers and legend are removed, the
+ * original children return, and its class / inline layout / spoken label are restored. Used when a
+ * guest (or an account with fewer than three completed games) must not see the streaks at all.
+ */
+const restoreKey = (key: HTMLElement): void => {
+  if (!key.classList.contains('practice-streak-key')) return;
+  const label = key.querySelector('.practice-streak-label');
+  if (label) key.replaceChildren(...Array.from(label.childNodes));
+  key.classList.remove('practice-streak-key');
+  // Restore the key's own spoken name: it must not keep "Current streak…" while showing no numbers.
+  const spoken = key.dataset.streakSpoken;
+  if (spoken !== undefined) key.setAttribute('aria-label', spoken);
+  key.removeAttribute('data-streak-spoken');
+  const style = key.dataset.streakStyle;
+  if (style !== undefined) key.setAttribute('style', style);
+  delete key.dataset.streakStyle;
+};
+
+/**
  * Give every Practice key in `grid` its two numbers (once), or refresh them in place. The key's own
  * content becomes the centre cell untouched; its spoken label gains the two numbers.
+ *
+ * `revealed` is the owner's visibility rule (2026-11-20): guests never see the legend or the
+ * numbers, and a signed-in account sees them only after three fully completed Practice matches
+ * across the tiers. When false this is a no-op that also restores any key painted before, so an
+ * account switch or a sign-out can never leave numbers behind.
  */
-export const paintPracticeStreakKeys = (grid: HTMLElement, streaks: PracticeStreaks): void => {
+export const paintPracticeStreakKeys = (grid: HTMLElement, streaks: PracticeStreaks, options: { revealed?: boolean } = {}): void => {
   ensureCss(grid.ownerDocument);
+  if (options.revealed === false) {
+    grid.querySelector(':scope > .practice-streak-legend')?.remove();
+    for (const key of grid.querySelectorAll<HTMLElement>('.difficulty-tile')) restoreKey(key);
+    grid.style.removeProperty('--streak-col');
+    return;
+  }
   if (!grid.querySelector(':scope > .practice-streak-legend') && grid.querySelector('.difficulty-tile')) {
     const legend = grid.ownerDocument.createElement('div');
     legend.className = 'practice-streak-legend';
@@ -126,6 +156,9 @@ export const paintPracticeStreakKeys = (grid: HTMLElement, streaks: PracticeStre
       best.className = 'practice-streak-side practice-streak-best';
       best.setAttribute('aria-hidden', 'true');
       key.dataset.streakSpoken = key.getAttribute('aria-label') ?? '';
+      // Remember the original inline layout (the Blitz key sets one), so a hidden state can put the
+      // key back byte-for-byte if the numbers are hidden again (a sign-out or another account).
+      key.dataset.streakStyle = key.getAttribute('style') ?? '';
       // The key's own inline layout (the Blitz key sets one) yields to the shared three-cell grid.
       key.style.removeProperty('display');
       key.style.removeProperty('justify-content');

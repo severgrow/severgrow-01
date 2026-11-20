@@ -152,6 +152,8 @@ type TileBarAction = {
   working?: boolean;
   /** Profile only: whose sheet the key opens. */
   playerId?: string;
+  /** Profile only: the public facts the tile already paints (name, level, colour). */
+  seed?: { name: string | null; level: number | null; colourCss: string | null };
 };
 
 /**
@@ -772,7 +774,7 @@ export class WorldView {
   /** Set by lobby-ui once `openMatch` exists, so an accepted challenge can open its duel. */
   private matchOpener: ((matchId: string) => void) | null = null;
   /** Set by lobby-ui: opens the accounts sheet for another player (see `setProfileOpener`). */
-  private profileHook: ((playerId: string, trigger: HTMLElement | null) => void) | null = null;
+  private profileHook: ((playerId: string, trigger: HTMLElement | null, seed?: TileBarAction['seed']) => void) | null = null;
   private sheet: {
     root: HTMLElement;
     card: HTMLElement;
@@ -897,7 +899,7 @@ export class WorldView {
    * token, so it is injected here exactly like the match opener; the bar only passes the id and the
    * key that was pressed (so closing the sheet returns focus to it).
    */
-  setProfileOpener(open: (playerId: string, trigger: HTMLElement | null) => void): void {
+  setProfileOpener(open: (playerId: string, trigger: HTMLElement | null, seed?: TileBarAction['seed']) => void): void {
     this.profileHook = open;
   }
 
@@ -2564,7 +2566,12 @@ export class WorldView {
         }
         // A RIVAL'S PROFILE (owner, 2026-11-01). Never your own: the menu's account key already
         // opens that, and duplicating it here would be one more key for nothing.
-        if (!mine) actions.push({ kind: 'profile', label: ONLINE.worldSeeProfile, run: () => undefined, playerId: tile.ownerId });
+        if (!mine) actions.push({
+          kind: 'profile', label: ONLINE.worldSeeProfile, run: () => undefined, playerId: tile.ownerId,
+          // THE TILE ALREADY KNOWS THESE PUBLIC FACTS. Hand them to the sheet so it opens with the
+          // name, level and colour painted, not six em dashes while the read is on its way.
+          seed: { name: tile.ownerName ?? null, level: tile.ownerLevel ?? null, colourCss: tile.colour ?? null },
+        });
       } else {
         const available = !!this.svg?.querySelector(`.world-hex[data-cell-id="${cellId}"]`)?.classList.contains('available') ||
           this.planetGrowable(cellId);
@@ -2650,7 +2657,7 @@ export class WorldView {
       const action = actions[index];
       if (!action) return;
       key.onclick = action.kind === 'profile'
-        ? () => this.profileHook?.(action.playerId!, key)
+        ? () => this.profileHook?.(action.playerId!, key, action.seed)
         : action.run;
       key.disabled = !!action.working;
       key.classList.toggle('armed', !!action.armed);

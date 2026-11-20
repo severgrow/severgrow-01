@@ -13,7 +13,7 @@
 // that syncs.
 import type { KeyValue } from '../../../server/src/client.js';
 import type { PracticeStreaks, PracticeTier, StreakResult } from '../../../server/src/streaks/rules.js';
-import { applyGame, emptyPracticeStreaks, isPracticeTier, isStreakResult } from '../../../server/src/streaks/rules.js';
+import { applyGame, emptyPracticeStreaks, isCompletedResult, isPracticeTier, isStreakResult } from '../../../server/src/streaks/rules.js';
 
 /** `severgrow.*`: the channel prefixes it. */
 export const PRACTICE_STREAKS_KEY = 'severgrow.practice.streaks.v1';
@@ -25,15 +25,39 @@ const COUNTED_KEEP = 200;
 const SEND_BATCH = 50;
 
 export type PracticeGameReport = { id: string; tier: PracticeTier; result: StreakResult };
-type Bucket = { tiers: PracticeStreaks; pending: PracticeGameReport[]; counted: string[] };
+type Bucket = {
+  tiers: PracticeStreaks;
+  pending: PracticeGameReport[];
+  counted: string[];
+  /**
+   * FULLY COMPLETED practice games (win, loss or draw) for this account. It starts as this device's
+   * own record and is replaced by the account's number whenever an answer carries one, so it follows
+   * the account and a retry (or a second tab) can never count the same game twice. Abandons,
+   * resignations, forfeits and timeouts never increment it.
+   */
+  completed: number;
+};
 type Saved = { v: 1; players: Record<string, Bucket> };
 type Open = { id: string; tier: PracticeTier; seed: number };
 
+/** The account's answer. `completed` is absent on an older server; the device's own count stands. */
+export type PracticeAccount = { practice: PracticeStreaks; completed?: number | null };
+/** Backwards-compatible with a plain streaks answer (the unit tests and an old caller). */
+export type PracticeAccountAnswer = PracticeStreaks | PracticeAccount;
+
 export type StreakSync = {
   /** Send queued games; the account's practice streaks after counting them. */
-  send: (games: PracticeGameReport[]) => Promise<PracticeStreaks>;
+  send: (games: PracticeGameReport[]) => Promise<PracticeAccountAnswer>;
   /** Read the account's practice streaks. */
-  read: () => Promise<PracticeStreaks>;
+  read: () => Promise<PracticeAccountAnswer>;
+};
+
+/** Accept either the account shape or the old plain-streaks answer. */
+const accountAnswer = (answer: PracticeAccountAnswer): { practice: PracticeStreaks; completed: number | null } => {
+  if (answer && typeof answer === 'object' && 'practice' in answer) {
+    return { practice: answer.practice, completed: typeof answer.completed === 'number' ? answer.completed : null };
+  }
+  return { practice: answer as PracticeStreaks, completed: null };
 };
 
 const validStreaks = (raw: unknown): PracticeStreaks => {
@@ -63,10 +87,12 @@ export const createPracticeStreaks = (deps: {
       if (raw && raw.v === 1 && raw.players && typeof raw.players === 'object') {
         const players: Record<string, Bucket> = {};
         for (const [id, b] of Object.entries(raw.players)) {
+          const completed = typeof b?.completed === 'number' && Number.isFinite(b.completed) && b.completed > 0 ? Math.floor(b.completed) : 0;
           players[id] = {
             tiers: validStreaks(b?.tiers),
             pending: Array.isArray(b?.pending) ? b.pending.filter((g) => g && typeof g.id === 'string' && isPracticeTier(g.tier) && isStreakResult(g.result)) : [],
             counted: Array.isArray(b?.counted) ? b.counted.filter((x): x is string => typeof x === 'string').slice(-COUNTED_KEEP) : [],
+            completed,
           };
         }
         return { v: 1, players };
@@ -78,7 +104,7 @@ export const createPracticeStreaks = (deps: {
     try { deps.store?.set(PRACTICE_STREAKS_KEY, JSON.stringify(saved)); } catch { /* private mode: this visit only */ }
     for (const listener of listeners) { try { listener(); } catch { /* a repaint never breaks the count */ } }
   };
-  const bucketOf = (saved: Saved, id: string): Bucket => (saved.players[id] ??= { tiers: emptyPracticeStreaks(), pending: [], counted: [] });
+  const bucketOf = (saved: Saved, id: string): Bucket => (saved.players[id] ??= { tiers: emptyPracticeStreaks(), pending: [], counted: [], completed: 0 });
 
   const readOpen = (): Open | null => {
     try {
@@ -96,6 +122,9 @@ export const createPracticeStreaks = (deps: {
     const bucket = bucketOf(saved, who());
     if (bucket.counted.includes(game.id)) return;
     bucket.tiers[game.tier] = applyGame(bucket.tiers[game.tier], game.result);
+    // The reveal counts games that ran to their end (win/loss/draw); a restart, an abandon or a
+    // resignation is a finished game too, but never one of the three that unlocks the numbers.
+    if (isCompletedResult(game.result)) bucket.completed += 1;
     bucket.pending.push(game);
     bucket.counted = [...bucket.counted, game.id].slice(-COUNTED_KEEP);
     write(saved);
@@ -107,6 +136,8 @@ export const createPracticeStreaks = (deps: {
       const b = read().players[who()];
       return b ? b.tiers : emptyPracticeStreaks();
     },
+    /** Fully completed Practice games (win/loss/draw) for whoever plays on this device now. */
+    completedCount: (): number => read().players[who()]?.completed ?? 0,
     pendingCount: (): number => read().players[who()]?.pending.length ?? 0,
     onChange: (listener: () => void): (() => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     /** A game that replaces an unfinished one abandons it (owner: "Restart / start a new game ... reset to 0"). */
@@ -140,19 +171,29 @@ export const createPracticeStreaks = (deps: {
       if (early.players['']?.pending.length) {
         const mine = bucketOf(early, id);
         for (const g of early.players['']!.pending) if (!mine.counted.includes(g.id)) { mine.pending.push(g); mine.counted.push(g.id); mine.tiers[g.tier] = applyGame(mine.tiers[g.tier], g.result); }
+        mine.completed += early.players['']!.completed;
         delete early.players[''];
         write(early);
       }
       const batch = (read().players[id]?.pending ?? []).slice(0, SEND_BATCH);
-      const account = batch.length ? await remote.send(batch) : await remote.read();
+      const answer = batch.length ? await remote.send(batch) : await remote.read();
       if (deps.playerId() !== id) return; // another account took over meanwhile: never cross the streams
       const saved = read();
       const bucket = bucketOf(saved, id);
       const sent = new Set(batch.map((g) => g.id));
       bucket.pending = bucket.pending.filter((g) => !sent.has(g.id));
-      let tiers = validStreaks(account);
+      const account = accountAnswer(answer);
+      let tiers = validStreaks(account.practice);
       for (const g of bucket.pending) tiers = { ...tiers, [g.tier]: applyGame(tiers[g.tier], g.result) };
       bucket.tiers = tiers;
+      // The account's number already includes the batch just sent. Games finished while that answer
+      // was on its way are still queued, so they are added on top, never double-counted on a retry.
+      if (typeof account.completed === 'number') {
+        const queued = bucket.pending.reduce((n, g) => n + (isCompletedResult(g.result) ? 1 : 0), 0);
+        // The ACCOUNT is the record: its number already includes the batch just sent, and the games
+        // still queued are added on top. A local count from before the answer never overrules it.
+        bucket.completed = account.completed + queued;
+      }
       write(saved);
     },
   };

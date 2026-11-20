@@ -21,6 +21,19 @@ describe('practice streaks on the account', () => {
     expect(mine.easy).toEqual({ current: 0, best: 0 });
     expect((await store.practice('someone-else')).hard).toEqual({ current: 0, best: 0 });
   });
+  it('completed counts win/loss/draw once each and never an abandon or a resignation', async () => {
+    const store = memoryStreakStore({ blitzResults: () => [] });
+    await store.recordPractice('p', [
+      { id: 'w1', tier: 'easy', result: 'win' },
+      { id: 'w1', tier: 'easy', result: 'win' }, // the retry cannot count twice
+      { id: 'l1', tier: 'medium', result: 'loss' },
+      { id: 'd1', tier: 'hard', result: 'draw' },
+      { id: 'r1', tier: 'easy', result: 'resign' },
+      { id: 'a1', tier: 'easy', result: 'abandon' },
+    ], 1);
+    expect(await store.completedPractice('p')).toBe(3);
+    expect(await store.completedPractice('someone-else')).toBe(0);
+  });
   it('two devices: the account holds every game from both, and best never goes back', async () => {
     const store = memoryStreakStore({ blitzResults: () => [] });
     await store.recordPractice('p', [{ id: 'A1', tier: 'medium', result: 'win' }, { id: 'A2', tier: 'medium', result: 'win' }], 1);
@@ -69,8 +82,12 @@ describe('the streak route', async () => {
     const r = route();
     const out = await post(r, [{ id: 'g-1', tier: 'easy', result: 'win' }]);
     expect((out!.body as { practice: { easy: unknown } }).practice.easy).toEqual({ current: 1, best: 1 });
+    expect((out!.body as { completed: number }).completed).toBe(1);
     const read = await r(new Request('http://x/v1/players/me/streaks', { headers: { authorization: 'Bearer tok' } }), '/v1/players/me/streaks');
-    expect(read!.body).toMatchObject({ ok: true, practice: { easy: { current: 1, best: 1 } }, onlineBlitz: { current: 0, best: 0 } });
+    expect(read!.body).toMatchObject({ ok: true, practice: { easy: { current: 1, best: 1 } }, onlineBlitz: { current: 0, best: 0 }, completed: 1 });
+    // A retry does not move the count either.
+    const retry = await post(r, [{ id: 'g-1', tier: 'easy', result: 'win' }]);
+    expect((retry!.body as { completed: number }).completed).toBe(1);
   });
   it('a page cannot claim an online result, a bad key or a bad id', async () => {
     const r = route();

@@ -15,8 +15,8 @@ const hashOf = (file: string) => hashes[file] ?? null;
 describe('every icon address carries its contents fingerprint', () => {
   it('stamps tab icons, the home-screen icon, the manifest and the share image', () => {
     const html = [
-      '<link rel="icon" type="image/png" sizes="16x16" href="./futasaku-tab-16.png" />',
-      '<link rel="icon" type="image/png" sizes="16x16" href="./futasaku-tab-dark-16.png" media="(prefers-color-scheme: light)" />',
+      '<link rel="icon" type="image/png" sizes="16x16" href="./futasaku-tab-dark-16.png" />',
+      '<link rel="icon" type="image/png" sizes="16x16" href="./futasaku-tab-16.png" media="(prefers-color-scheme: dark)" />',
       '<link rel="manifest" href="./manifest.webmanifest" />',
       '<link rel="apple-touch-icon" href="./futasaku-icon-180.png" />',
       '<meta property="og:image" content="https://www.futasaku.com/og.jpg?v=7" />',
@@ -24,8 +24,8 @@ describe('every icon address carries its contents fingerprint', () => {
       '<link rel="preload" href="./src/fonts/x.woff2" as="font" />',
     ].join('\n');
     const out = versionHeadAssets(html, hashOf);
-    expect(out).toContain('href="./futasaku-tab-16.png?v=aaaa1111"');
-    expect(out).toContain('href="./futasaku-tab-dark-16.png?v=bbbb2222" media="(prefers-color-scheme: light)"');
+    expect(out).toContain('href="./futasaku-tab-dark-16.png?v=bbbb2222"');
+    expect(out).toContain('href="./futasaku-tab-16.png?v=aaaa1111" media="(prefers-color-scheme: dark)"');
     expect(out).toContain('href="./manifest.webmanifest?v=dddd4444"');
     expect(out).toContain('href="./futasaku-icon-180.png?v=cccc3333"');
     expect(out.match(/og\.jpg\?v=eeee5555/g)).toHaveLength(2); // the hand-bumped ?v=7 is replaced

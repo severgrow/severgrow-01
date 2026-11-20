@@ -89,6 +89,55 @@ describe('every finished game counts exactly once', () => {
   });
 });
 
+describe('the reveal record: fully completed games only', () => {
+  const zero = { current: 0, best: 0 };
+  it('wins, losses and draws count; abandons and resignations do not', () => {
+    const s = make();
+    s.started('easy', 1); s.finished('easy', 'win');
+    s.started('easy', 2); s.finished('easy', 'loss');
+    s.started('easy', 3); s.finished('easy', 'draw');
+    expect(s.completedCount()).toBe(3);
+    s.started('easy', 4); s.finished('easy', 'resign');
+    s.started('easy', 5); s.started('medium', 6); // the easy game is abandoned by the new key
+    expect(s.completedCount()).toBe(3);
+  });
+  it("the account's number replaces this device's, and unsent completions are added on top", async () => {
+    const s = make();
+    s.started('easy', 1); s.finished('easy', 'win');
+    s.started('easy', 2); s.finished('easy', 'win');
+    expect(s.completedCount()).toBe(2);
+    await s.sync({
+      send: async () => {
+        // A third game finishes while the answer is on its way: it stays queued.
+        s.started('hard', 3); s.finished('hard', 'loss');
+        return { practice: { easy: { current: 2, best: 2 }, medium: zero, hard: zero, blitz: zero }, completed: 2 };
+      },
+      read: async () => { throw new Error('unused'); },
+    });
+    expect(s.pendingCount()).toBe(1);
+    expect(s.completedCount()).toBe(3);
+    // The next answer includes that game: the same three, never four.
+    await s.sync({
+      send: async () => ({ practice: { easy: { current: 2, best: 2 }, medium: zero, hard: { current: 0, best: 0 }, blitz: zero }, completed: 3 }),
+      read: async () => { throw new Error('unused'); },
+    });
+    expect(s.completedCount()).toBe(3);
+  });
+  it('is per account: another sign-in starts from its own record', async () => {
+    const store = memory();
+    let who = 'alice';
+    const s = make(store, () => who);
+    s.started('easy', 1); s.finished('easy', 'win');
+    s.started('easy', 2); s.finished('easy', 'win');
+    s.started('easy', 3); s.finished('easy', 'win');
+    expect(s.completedCount()).toBe(3);
+    who = 'bob';
+    expect(s.completedCount()).toBe(0);
+    who = 'alice';
+    expect(s.completedCount()).toBe(3);
+  });
+});
+
 describe('the account is the record; this device is its cache', () => {
   const zero = { current: 0, best: 0 };
   it("another device's games arrive with the account's numbers", async () => {

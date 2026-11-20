@@ -98,7 +98,7 @@ describe('the shared link preview', () => {
     ].map((m) => m[1]!);
     expect(refs.length).toBeGreaterThan(0);
     for (const ref of refs) {
-      // App icons: HEX EMBLEM derivatives (`futasaku-icon-*`). Tab icon: tree-hex (`futasaku-tab-*`, `futasaku-tab-dark-*` for a light browser; `futasaku-favicon-192` for the manifest).
+      // App icons: HEX EMBLEM derivatives (`futasaku-icon-*`). Tab icon: tree-hex (bright `futasaku-tab-*` wins a dark browser, dark `futasaku-tab-dark-*` is the light fallback; `futasaku-favicon-192` for the manifest).
       // Bare `icon-*` files are the legacy build's and must not be named here.
       expect(ref).toMatch(/^futasaku-(?:icon|favicon|tab|tab-dark)-\d+\.png$/);
       const file = resolve(ICONS, ref);

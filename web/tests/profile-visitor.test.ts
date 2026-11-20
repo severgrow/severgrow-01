@@ -344,6 +344,8 @@ describe('the markup and CSS carry the two modes', () => {
     expect(mountSource).toContain('PLAYER_PROFILE_EVENT');
     expect(mountSource).toContain("profileClient?.playerProfile(identity.token, playerId)");
     expect(read('../../server/src/client.ts')).toContain("`/v1/players/${encodeURIComponent(playerId)}/profile`");
-    expect(mountSource).toContain('profile.openVisitor(null, opener)');
+    // The sheet opens on the FIRST frame with what the tile already knows (owner, 2026-11-20).
+    expect(mountSource).toContain('let facts: VisitorFacts | null = known ?? seedVisitorFacts(seed)');
+    expect(mountSource).toContain('profile.openVisitor(facts, opener)');
   });
 });

@@ -60,6 +60,21 @@ const record = (value: unknown): Record3 | null => {
  * from the one shared palette by `colourId` — the wire carries the slot, never a second copy of
  * the palette — so the visitor's swatch and hex are exactly the map's colour.
  */
+/**
+ * THE MAP ALREADY HAS THIS FACT (owner, 2026-11-20: a visitor profile could open with even the name
+ * blank). A tile carries its owner's public name, level and the exact `hsl(...)` the map paints, so
+ * the sheet can show them on the first frame. The palette still owns the swatch's name and hex:
+ * matching the wire colour against `TILE_COLOURS` means no second colour system is invented. A colour
+ * that is not one of the twenty (an older server's own ink) still paints and still gets a hex; its
+ * name is left to the swatch's generic public label rather than guessed.
+ */
+export const visitorColour = (css: string | null | undefined): VisitorFacts['colour'] => {
+  const shown = typeof css === 'string' ? css.trim() : '';
+  if (!shown) return null;
+  const palette = TILE_COLOURS.find((colour) => colour.css === shown);
+  return { css: shown, name: palette?.name ?? 'Tile colour', hex: hslToHex(shown) };
+};
+
 export const visitorFacts = (profile: PublicPlayerProfile | null | undefined): VisitorFacts | null => {
   if (!profile) return null;
   const name = typeof profile.displayName === 'string' ? profile.displayName.trim() : '';

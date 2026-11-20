@@ -185,6 +185,26 @@ describe('match display state', () => {
     expect(frames.at(-1)).toMatchObject({ text: '9:10', mode: 'score' });
   });
 
+  it('holds a steady dim WAIT while the opponent thinks, and a real message still wins', () => {
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('WAIT', 0, 0);
+    sign.setAmbient('WAIT');
+    expect(frames.at(-1)).toMatchObject({ text: 'WAIT', ambient: true });
+    // Steady: no blank beat, no idle alarm, no score after any timer.
+    vi.advanceTimersByTime(30_000);
+    expect(frames.at(-1)).toMatchObject({ text: 'WAIT', ambient: true });
+    expect(frames.some((f) => f.alarm), 'a state word never blinks').toBe(false);
+    // An action message paints over it and the steady word comes back when the message ends.
+    sign.event({ message: 'CUT+3', priority: 90, duration: 900, mode: 'red' });
+    expect(frames.at(-1)?.text).toBe('CUT+3');
+    vi.advanceTimersByTime(2000);
+    expect(frames.at(-1)).toMatchObject({ text: 'WAIT', ambient: true });
+    // Leaving their turn clears it and the score returns.
+    sign.setAmbient(null);
+    expect(frames.at(-1)).toMatchObject({ text: '0:0', mode: 'score' });
+  });
+
   it('passes a waiting pulse through to the frame', () => {
     const frames: DisplayFrame[] = [];
     const sign = new DisplayMachine(frame => frames.push(frame));

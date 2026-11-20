@@ -190,6 +190,20 @@ try {
     });
     await d.page.route('**/auth/v1/token?**', async route => { await tokenGate; await route.continue(); });
     await openMenuEntry(d.page, 'menu-online');
+    // THE FIRST WELCOME'S ONE EMPHASIS (owner, 2026-11-20): Play as guest is the primary key.
+    const welcomeKeys = await d.page.evaluate(`(() => {
+      const guest = document.querySelector('[data-acct="welcome-guest"]');
+      const google = document.querySelector('[data-acct="welcome-google"]');
+      const style = guest ? getComputedStyle(guest) : null;
+      return {
+        guestPrimary: !!guest?.classList.contains('primary'),
+        guestFill: style?.backgroundColor ?? '',
+        guestInk: style?.color ?? '',
+        googlePrimary: !!google?.classList.contains('primary'),
+      };
+    })()`) as { guestPrimary: boolean; guestFill: string; guestInk: string; googlePrimary: boolean };
+    check('welcome: Play as guest is the primary key', welcomeKeys.guestPrimary && !welcomeKeys.googlePrimary && welcomeKeys.guestFill !== 'rgba(0, 0, 0, 0)',
+      JSON.stringify(welcomeKeys));
     await d.page.locator('[data-acct="welcome-google"]').click();
     try {
       check('callback: signing in replaces LOG IN while token exchange is pending', await waitFor(async () =>
@@ -200,6 +214,35 @@ try {
     check('callback: the account key updates in the same document', await waitFor(async () => (await identity(d.page))?.kind === 'account' &&
       !/log in|signing in/i.test((await d.page.locator('#menu-login').textContent()) ?? ''), 6000));
     check('callback: no second game boot', callbackDocuments.length === 1, `${callbackDocuments.length} documents`);
+    // A new account may ask for its nickname (a required sheet, so the scrim blocks the game until
+    // it is answered). Complete it the way a player would, then verify the new identity reaches the
+    // surfaces that read the same storage: Profile and the Planet's always-on line.
+    const nickname = d.page.locator('#acct-nickname input');
+    d.page.on('dialog', () => undefined);
+    if (await waitFor(() => nickname.isVisible(), 2500)) {
+      await nickname.fill('ShellCheck');
+      await d.page.locator('[data-acct="nickname-save"]').click();
+      await waitFor(async () => !(await d.page.locator('#acct-nickname').isVisible()), 5000);
+    }
+    const signed = (await identity(d.page))!;
+    await waitFor(async () => !(await d.page.locator('.acct-scrim:visible').count()), 5000);
+    if (await d.page.locator('#online-hub').isVisible().catch(() => false)) {
+      await d.page.click('#online-back');
+      await waitFor(() => d.page.locator('#menu-login').isVisible(), 5000);
+    }
+    await d.page.click('#menu-login');
+    const profileOpen = await waitFor(() => d.page.locator('#sheet-profile:not([hidden])').isVisible(), 5000);
+    const profileName = profileOpen ? ((await d.page.locator('#profile-name').textContent()) ?? '').trim() : '';
+    check('callback: Profile opens as the new identity', profileOpen && profileName === signed.displayName, `${profileName} / ${signed.displayName}`);
+    await d.page.keyboard.press('Escape');
+    await waitFor(async () => !(await d.page.locator('#sheet-profile').isVisible()), 5000);
+    await openMenuEntry(d.page, 'menu-world');
+    const planet = await waitFor(async () => {
+      const line = ((await d.page.locator('#online-world-wallet').textContent().catch(() => '')) ?? '').trim();
+      return line.includes(signed.displayName ?? '');
+    }, 12_000);
+    check('callback: the Planet line names the new identity', planet, ((await d.page.locator('#online-world-wallet').textContent().catch(() => '')) ?? '').trim());
+    await d.page.click('#online-world-back').catch(() => undefined);
     const elapsed = await d.page.evaluate(() => performance.getEntriesByName('futasaku:google:success')[0]?.startTime ?? null);
     check('callback: the browser records completion timing', elapsed !== null, elapsed === null ? '' : `${Math.round(elapsed)} ms`);
     check('callback: publishes stage timings without account fields', await waitFor(() => result?.stage === 'success' &&

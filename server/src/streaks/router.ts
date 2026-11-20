@@ -58,7 +58,10 @@ export const createStreakRouter = (deps: {
       if (req.method === 'GET') {
         const practice = await deps.store.practice(player.id);
         const onlineBlitz = await deps.store.onlineBlitz(player.id, now);
-        return { status: 200, body: { ok: true, practice, onlineBlitz } };
+        // `completed` is the account's fully-finished games (win/loss/draw), the record behind the
+        // Practice keys' reveal after three. OPTIONAL for old clients; a new page reads it.
+        const completed = await deps.store.completedPractice(player.id);
+        return { status: 200, body: { ok: true, practice, onlineBlitz, completed } };
       }
       if (req.method !== 'POST') throw new ApiError('NOT_FOUND', 'Not found.');
       if (!writes.hit(player.id)) throw new ApiError('RATE_LIMITED', 'Please wait a moment.');
@@ -74,7 +77,8 @@ export const createStreakRouter = (deps: {
         return { id: game.id, tier: game.tier as PracticeTier, result: game.result };
       });
       const practice = await deps.store.recordPractice(player.id, games, now);
-      return { status: 200, body: { ok: true, practice } };
+      const completed = await deps.store.completedPractice(player.id);
+      return { status: 200, body: { ok: true, practice, completed } };
     } catch (error) {
       if (missingTable(error)) throw new ApiError('NOT_FOUND', 'Streaks are not available yet.');
       throw error;

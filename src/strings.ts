@@ -218,6 +218,8 @@ export const ONLINE = Object.freeze({
   share: 'Share invite',
   copyLink: 'Copy link',
   copied: 'Link copied',
+  /** On the copy button itself, not only in the notice line (owner, 2026-11-20). */
+  copiedKey: 'Copied',
   /** The invite code is a tappable fallback: a hint under it, and the tap confirmation. */
   codeTapCopy: 'Tap to copy',
   codeCopied: 'Code copied',

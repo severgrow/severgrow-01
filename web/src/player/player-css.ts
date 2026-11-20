@@ -41,6 +41,20 @@ html.futa04-information #game .dock::before {
 }
 @media (prefers-reduced-motion:reduce) { html.futa04-information #game::before { animation:none; opacity:.025; transform:none; } }
 html.futa04-information.reduce-motion #game::before { animation:none; opacity:.025; transform:none; }
+/* ONE ROOM, EDGE TO EDGE (owner, 2026-11-20: the opponent's Grow reaction showed a vertical seam
+   at the board edge on desktop and an unlit strip at the bottom of an iPhone 15 Pro).
+   The full-screen outcome light and ambient pulse are already one even wash over the viewport.
+   These four local patches sit ABOVE that wash, and each stops at its own box: the board vignette
+   on .play::before, the cream reflection on .board-wrap::before, the contact shadows on
+   .dock::before and the slow warm pass on #game::before. Their rectangles are what cut the colour
+   at the board edge and left the strip under the hand dim. ui/room-light.ts holds the
+   futa04-room-lit class on <html> for exactly the beat's duration, so the same colour reaches under
+   the board, the cockpit and the hand, through the phone's visible bottom edge — while the
+   resting board keeps every layer it had (the class exists only while a light is running). */
+html.futa04-information.futa04-room-lit #game::before,
+html.futa04-information.futa04-room-lit #game .play::before,
+html.futa04-information.futa04-room-lit #game .board-wrap::before,
+html.futa04-information.futa04-room-lit #game .dock::before { opacity:0 !important; }
 /* While a move is animating — including an online enemy turn replay — drop the full-screen
    animated warm wash. It is the phone's most expensive composited layer and it adds nothing
    while tiles are landing. The display's baked bloom KEEPS its light during a move: it is one

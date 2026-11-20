@@ -14,6 +14,11 @@ export type DisplayFrame = {
   compact?: boolean;
   motif?: LedMotif;
   flash?: 'cut' | 'bloom';
+  /**
+   * A steady STATE word, not a message: the cockpit dims it and it does not expire on its own
+   * (owner, 2026-11-20: "a steady, dim WAIT" while the opponent is thinking).
+   */
+  ambient?: boolean;
 };
 
 /** Hard floor: no LED message may be replaced sooner than this in normal play. */
@@ -52,6 +57,12 @@ export class DisplayMachine {
   private idleCycles = 0;
   /** Sticky idle re-prompt: step word keeps blinking until the player acts. */
   private urgency = false;
+  /**
+   * The steady resting word for a state that lasts (the opponent is thinking). It is what `rest()`
+   * paints while it is set; a real message still wins, and the word returns when the message ends.
+   */
+  private ambientWord: string | null = null;
+  private ambientMode: LedTone = 'score';
   /** A drag is holding a word on the sign; timers and idle reminders stay out of the way. */
   private held = false;
   /**
@@ -151,10 +162,36 @@ export class DisplayMachine {
     return delay;
   }
 
-  /** Resting score — never interrupts sticky idle urgency or a drag hold. */
+  /** Resting face — never interrupts sticky idle urgency or a drag hold. */
   private rest() {
     if (this.urgency || this.held) return;
+    if (this.ambientWord) {
+      // A STATE word is not a message with a dwell: it is what the glass reads while nothing else
+      // owns it, so it lands on the frame the state begins.
+      this.emit({ text: this.ambientWord, mode: this.ambientMode, ambient: true }, { force: true });
+      return;
+    }
     this.emit({ text: this.scoreText, mode: 'score' });
+  }
+  /**
+   * Set (or clear) the steady resting word for a lasting state. It paints only when nothing else
+   * owns the sign, so an active action message is preserved exactly as it was; when that message
+   * finishes, `finish()` returns to this word instead of a blank beat. A null clears it and restores
+   * the score.
+   */
+  setAmbient(text: string | null, mode: LedTone = 'score') {
+    if (text === this.ambientWord && mode === this.ambientMode) return;
+    this.ambientWord = text;
+    this.ambientMode = mode;
+    if (this.active || this.held || this.urgency) return;
+    this.clearTimers();
+    this.clearDwellQueue();
+    this.rest();
+    if (text) {
+      // A state word is steady: no idle blink, no 2s blank beat.
+      window.clearTimeout(this.idleTimer);
+      window.clearTimeout(this.idleReturn);
+    } else this.scheduleIdle();
   }
   /** Scale a hold by Speed; never stretch under reduce-motion (caller already shortened). */
   private scaled(ms: number): number {
@@ -392,6 +429,13 @@ export class DisplayMachine {
   private finish(id: number) {
     if (id !== this.epoch) return;
     this.active = null;
+    // THE STEADY STATE WORD OWNS THE GAP. While the opponent thinks, the sign goes straight back to
+    // its dim WAIT instead of a blank beat and a score the player is not looking at.
+    if (this.ambientWord) {
+      this.clearTimers();
+      this.rest();
+      return;
+    }
     if (this.pendingStep) {
       const next = this.pendingStep;
       this.pendingStep = null;

@@ -37,11 +37,13 @@ describe('owner brand pack roles', () => {
     ]) expect(existsSync(join(root, name)), name).toBe(true);
   });
 
-  it('tab icon: edge to edge, cream on a dark browser and off-black on a light one (owner, 2026-11-09)', () => {
+  it('tab icon: edge to edge, cream wins a dark browser and off-black is the light fallback (owner, 2026-11-20)', () => {
     const html = read('index.html');
     for (const size of [16, 32, 48]) {
-      expect(html).toContain(`href="./futasaku-tab-${size}.png"`);
-      expect(html).toMatch(new RegExp(`href="./futasaku-tab-dark-${size}\\.png" media="\\(prefers-color-scheme: light\\)"`));
+      // The bright (cream) mark must win when the browser reports a dark colour scheme.
+      expect(html).toMatch(new RegExp(`href="\\./futasaku-tab-${size}\\.png" media="\\(prefers-color-scheme: dark\\)"`));
+      // The off-black mark is the unconditional light-chrome fallback.
+      expect(html).toMatch(new RegExp(`href="\\./futasaku-tab-dark-${size}\\.png" />`));
       for (const name of [`futasaku-tab-${size}.png`, `futasaku-tab-dark-${size}.png`]) {
         expect(existsSync(join(root, 'public', name)), name).toBe(true);
         // PNG width/height live at bytes 16..23 of the IHDR chunk
@@ -49,8 +51,14 @@ describe('owner brand pack roles', () => {
         expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([size, size]);
       }
     }
-    // the light-mode set comes after the default set, so a browser that ignores `media` still reads
-    expect(html.indexOf('futasaku-tab-dark-16')).toBeGreaterThan(html.indexOf('futasaku-tab-48'));
+    // The bright set is LAST, so a browser that ignores `media` takes it too: the dark-chrome case
+    // (and incognito reporting light) is the one that must never fall back to a mark that vanishes.
+    expect(html.indexOf('futasaku-tab-16.png" media')).toBeGreaterThan(html.indexOf('futasaku-tab-dark-48.png'));
+    // No duplicate unconditional links: each size has one fallback and one dark-scheme entry.
+    for (const size of [16, 32, 48]) {
+      expect(html.match(new RegExp(`futasaku-tab-${size}\\.png"`, 'g')) ?? []).toHaveLength(1);
+      expect(html.match(new RegExp(`futasaku-tab-dark-${size}\\.png"`, 'g')) ?? []).toHaveLength(1);
+    }
   });
 
   it('PAINT and PLAIN SVGs are pure vector (no embedded raster)', () => {

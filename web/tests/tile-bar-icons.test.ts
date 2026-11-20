@@ -137,7 +137,7 @@ describe('44 px at every size, and the same focus ring', () => {
 
 describe('the action set is the same one the bar already had, plus a rival’s profile', () => {
   it('a rival’s tile offers See profile; your own never does', () => {
-    expect(source).toMatch(/if \(!mine\) actions\.push\(\{ kind: 'profile'/);
+    expect(source).toMatch(/if \(!mine\) actions\.push\(\{\s*kind: 'profile',\s*label: ONLINE\.worldSeeProfile/);
     // No profile key is pushed on own ground (the menu's account key already opens that).
     const ownBranch = source.slice(source.indexOf('} else if (mine && !this.busy'), source.indexOf('} else if (!mine && this.isFrontier'));
     expect(ownBranch).not.toContain("kind: 'profile'");
