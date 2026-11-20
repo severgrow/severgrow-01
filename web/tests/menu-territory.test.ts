@@ -207,18 +207,26 @@ describe('the menu show pays ONE wallet read and ONE map read, never a poll', ()
     expect(lobbySource.slice(lobbySource.indexOf('const refreshMenu ='), lobbySource.indexOf("window.addEventListener('futasaku:menu'"))).not.toMatch(/setInterval|setTimeout|requestAnimationFrame/);
   });
 
-  it('hides BOTH numbers on a failed or unknown read, and keeps the stale pair out of another identity', () => {
-    // Failure nulls both reads (so `territoryCounts` answers null) and paints null.
+  it('keeps the last known pair on a failed read, and hides BOTH numbers only when none was ever known', () => {
+    // Failure nulls both reads (so `territoryCounts` answers null), but the paint must fall back
+    // to the pair THIS identity already had (owner, 2026-11-20: returning from the Planet blanked
+    // the key). It never paints null directly; `settledTerritory` decides.
     expect(lobbySource).toMatch(/catch \{\s*\/\/[^\n]*\n\s*wallet = null;\s*\n\s*world = null;/);
-    expect(lobbySource).toMatch(/territoryUI\.paint\(counts\)/);
-    expect(lobbySource).toMatch(/territoryUI\.paint\(null\)/);
+    expect(lobbySource).toMatch(/territoryUI\.paint\(settledTerritory\(id\.playerId, counts\)\)/);
+    expect(lobbySource).not.toMatch(/territoryUI\.paint\(null\)/);
+    // A missing identity cannot blank a known pair either; an unknown identity still paints the
+    // honest blank because `settledTerritory` falls back to `cachedTerritory`, which is null then.
+    expect(lobbySource).toMatch(/territoryUI\.paint\(settledTerritory\(identity\.peek\(\)\?\.playerId \?\? null, null\)\)/);
     // The cached pair carries the identity it was read for, and is only reused for that identity.
     // The one cache is shared with the profile (owner brief, 2026-10-21), so it lives in
     // territory-cache.ts and both surfaces read the same fact.
     const cacheSource = read('../src/online/territory-cache.ts');
     expect(cacheSource).toMatch(/remembered\?\.playerId === playerId/);
+    // A failed read never erases what the identity already knew.
+    expect(cacheSource).toMatch(/if \(!counts\) return;/);
+    expect(cacheSource).toMatch(/counts \?\? cachedTerritory\(playerId\)/);
     expect(lobbySource).toMatch(/rememberTerritory\(id\.playerId, counts\)/);
-    expect(lobbySource).toContain("import { cachedTerritory, readTerritoryWallet, rememberTerritory } from './territory-cache.js'");
+    expect(lobbySource).toContain("import { cachedTerritory, readTerritoryWallet, rememberTerritory, settledTerritory } from './territory-cache.js'");
     expect(lobbySource).toMatch(/territoryUI\.paint\(cachedTerritory\(identity\.peek\(\)\?\.playerId \?\? null\)\)/);
   });
 });
