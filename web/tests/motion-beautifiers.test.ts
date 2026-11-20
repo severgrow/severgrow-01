@@ -9,9 +9,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { PLAYER_CSS } from '../src/player/player-css.js';
+import { INTERFACE_MOTION } from '../src/ui/interface-motion.js';
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), 'utf8');
 const css = read('../src/style.css');
+const main = read('../src/main.ts');
 
 /** The body of the first rule that starts at `anchor`. */
 const bodyAfter = (src: string, anchor: string): string => {
@@ -66,5 +68,25 @@ describe('2. picking a card on the phone fan eases into the air', () => {
   it('is still under Reduce motion, both ways of asking', () => {
     expect(PLAYER_CSS).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*html\[data-thumb\] \.dock \.hand-row > \.hand \.card \{ transition: none; \}/);
     expect(PLAYER_CSS).toMatch(/\.reduce-motion html\[data-thumb\] \.dock \.hand-row > \.hand \.card \{\s*transition: none;/);
+  });
+});
+
+describe('3. the lesson caption becomes present instead of popping', () => {
+  const fn = main.slice(main.indexOf('function showLessonPlate('), main.indexOf('function renderLessonGuide('));
+
+  it('uses the shared arrival primitive, 4px and no scale growth', () => {
+    expect(fn).toContain('enterSurface(plate, { travel: INTERFACE_MOTION.travel, scale: 1 })');
+    expect(INTERFACE_MOTION.travel).toBe(4);
+  });
+
+  it('arrives when the words change or the plate was hidden, and never blocks the words', () => {
+    expect(fn).toContain('const wasHidden = plate.hidden;');
+    expect(fn).toContain('if (wasHidden || fresh) enterSurface(');
+    // The text is written BEFORE the entrance: the caption is legible from frame one.
+    expect(fn.indexOf('copy.textContent = text')).toBeLessThan(fn.indexOf('enterSurface(plate'));
+    // The entrance is synchronous (no timer in front of it); the function's existing 400ms timer
+    // only RE-PLACES the plate after the camera settles, as it always did.
+    expect(fn.indexOf('enterSurface(plate')).toBeLessThan(fn.indexOf('window.setTimeout'));
+    expect(fn).not.toMatch(/\bawait\b/);
   });
 });

@@ -6460,9 +6460,17 @@ function restartStuckLesson() {
 /** Put the explanation in the box. `lift` is what the box must never cover (the lit target). */
 function showLessonPlate(text: string, lift: readonly string[], example: 'bloom' | null = null, restart = false) {
   const plate = lessonPlate();
-  plate.hidden = false;
+  const wasHidden = plate.hidden;
   const copy = plate.querySelector<HTMLElement>('.lesson-copy');
-  if (copy && copy.textContent !== text) copy.textContent = text;
+  const fresh = !copy || copy.textContent !== text;
+  plate.hidden = false;
+  if (copy && fresh) copy.textContent = text;
+  // ONE BEAT WHEN THE WORDS CHANGE (0.8s polish): the caption used to pop into place in one frame
+  // while every other surface in the game becomes present. It now rises 4px and fades on the shared
+  // arrival — translate + opacity only, so it is compositor work, and its placement (`transform`,
+  // written by placeLessonPlate) is a different property and is untouched. The words are legible
+  // from the first frame of the fade, so no beat waits on this. Reduce motion: instant.
+  if (wasHidden || fresh) enterSurface(plate, { travel: INTERFACE_MOTION.travel, scale: 1 });
   setLessonExample(example);
   setLessonRestart(plate, restart);
   (plate as PlateEl)._avoid = lift;
