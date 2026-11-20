@@ -28,6 +28,8 @@ import { MatchService } from '../../server/src/service.js';
 import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { createTerritoryChatRouter, memoryTerritoryChatStore } from '../../server/src/chat/territory.js';
 import { seedSettings } from './helpers/settings-seed.js';
+// The window this suite dispatches against and asserts on — one number, shared with production.
+import { DOUBLE_TAP_MS } from '../src/logic/double-tap.js';
 
 const CHROME = process.env.PW_CHROMIUM ?? undefined;
 const SKIP_BUILD = process.env.SKIP_BUILD === '1';
@@ -138,6 +140,17 @@ try {
   page.on('pageerror', (e) => errors.push(e.message));
   await page.addInitScript((raw) => {
     for (const p of ['', 'main2:', 'futa04:']) localStorage.setItem(`${p}severgrow.duel.identity.v1`, raw);
+    // The same record the WebKit suite keeps: every TRUSTED touch release with the input's own
+    // timestamp, so a dispatched double tap can be measured against the product's window instead
+    // of assumed quick.
+    const w = window as any;
+    w.__tapTrace = [];
+    window.addEventListener('pointerup', (event) => {
+      if (event.isTrusted && (event as PointerEvent).pointerType === 'touch') {
+        w.__tapTrace.push({ input: event.timeStamp, handled: performance.now() });
+        if (w.__tapTrace.length > 32) w.__tapTrace.shift();
+      }
+    }, { capture: true });
   }, identity);
   await seedSettings(page, { sound: false, music: false, coach: false, speed: 'skip', reduceMotion: false, eyeCandy: false });
   await page.goto(origin + '/');
@@ -180,10 +193,21 @@ try {
   };
   // Queue one real native gesture. Host round-trips while a zoom paints can otherwise stretch
   // the intended quick pair past the product's unchanged double-tap window on software graphics.
+  // The four touches go over the one CDP socket in order, so the releases land close together —
+  // and `doubleTap` MEASURES the gap the product will see, against the imported constant, rather
+  // than trusting the dispatch to have been quick enough.
   const doubleTap = async (x: number,y: number) => {
+    await page.evaluate('window.__tapTrace=[]');
     await Promise.all([touch('touchStart',[{x,y}]),touch('touchEnd',[]),
       touch('touchStart',[{x,y}]),touch('touchEnd',[])]);
+    const trace = (await page.evaluate('window.__tapTrace')) as Array<{ input: number; handled: number }>;
+    const [first,second]=trace;
+    return { trace, gap: first && second ? second.input - first.input : Number.NaN };
   };
+  const inWindow = (pair: { gap: number }) => Number.isFinite(pair.gap) && pair.gap >= 0 && pair.gap <= DOUBLE_TAP_MS;
+  const gapNote = (pair: { gap: number; trace: unknown }) => `${Number.isFinite(pair.gap) ? pair.gap.toFixed(1) : '?'} ms release to release, window ${DOUBLE_TAP_MS} ms, input/delivery clocks ${JSON.stringify(pair.trace)}`;
+  /** Comfortably past the product window, so the tap under test is an ordinary single tap. */
+  const PAST_DOUBLE_TAP_MS = DOUBLE_TAP_MS + 170;
 
   const cx = rect.x + rect.width / 2;
   const cy = rect.y + rect.height / 2;
@@ -245,7 +269,7 @@ try {
   // ---- 4. a single tap selects, and does not zoom -----------------------------------------------
   const atTap = await box();
   await tap(cx, cy);
-  await page.waitForTimeout(450); // past the double-tap window
+  await page.waitForTimeout(PAST_DOUBLE_TAP_MS); // past the double-tap window
   const afterTap = await box();
   const selected = await page.evaluate(`!!document.querySelector('.world-hex.selected, .world-hex-cell.selected, [data-selected="true"]')`);
   check('a single tap selects a tile', !!selected);
@@ -264,13 +288,15 @@ try {
   // ---- 6. double tap zooms IN, second double tap zooms OUT -------------------------------------
   // Two QUICK taps on the map are one double tap and toggle the zoom.
   const atDouble = await box();
-  await doubleTap(cx, cy);
+  const firstPair = await doubleTap(cx, cy);
   await page.waitForTimeout(450);
   const zoomedIn = await box();
+  check('the first dispatched double tap is inside the product window', inWindow(firstPair), gapNote(firstPair));
   check('a quick double tap zooms IN', zoomedIn !== null && atDouble !== null && (zoomedIn[2] ?? 0) < (atDouble[2] ?? 0) * 0.75, `view width ${atDouble?.[2]!.toFixed(2)} -> ${zoomedIn?.[2]!.toFixed(2)}`);
-  await doubleTap(cx, cy);
+  const secondPair = await doubleTap(cx, cy);
   await page.waitForTimeout(450);
   const zoomedOut = await box();
+  check('the second dispatched double tap is inside the product window', inWindow(secondPair), gapNote(secondPair));
   check('a second double tap zooms back OUT', zoomedOut !== null && zoomedIn !== null && (zoomedOut[2] ?? 0) > (zoomedIn[2] ?? 0) * 1.2, `view width ${zoomedIn?.[2]!.toFixed(2)} -> ${zoomedOut?.[2]!.toFixed(2)}`);
 
   // Clock-fault integration case, alongside the unchanged trusted-touch cases above. Input
@@ -292,7 +318,7 @@ try {
   // ---- 7. a slow second tap is two taps, not a double tap --------------------------------------
   const atSlow = await box();
   await tap(cx, cy);
-  await page.waitForTimeout(420); // well past DOUBLE_TAP_MS
+  await page.waitForTimeout(PAST_DOUBLE_TAP_MS); // well past DOUBLE_TAP_MS
   await tap(cx, cy);
   await page.waitForTimeout(450);
   const afterSlow = await box();
@@ -314,7 +340,7 @@ try {
   if (tileBox) {
     const atTile = await box();
     await tap(tileBox.x, tileBox.y);
-    await page.waitForTimeout(400); // a normal, deliberate second tap
+    await page.waitForTimeout(PAST_DOUBLE_TAP_MS); // a normal, deliberate second tap
     await tap(tileBox.x, tileBox.y);
     await page.waitForTimeout(450);
     const afterTile = await box();

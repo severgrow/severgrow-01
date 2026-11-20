@@ -37,6 +37,8 @@ import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { createTerritoryChatRouter, memoryTerritoryChatStore } from '../../server/src/chat/territory.js';
 import { seedSettings } from './helpers/settings-seed.js';
 import { captureWebKitTouch } from './helpers/webkit-touch.js';
+// The window this suite dispatches against and asserts on — one number, shared with production.
+import { DOUBLE_TAP_MS } from '../src/logic/double-tap.js';
 
 // ---- REAL WEBKIT TOUCH ------------------------------------------------------------------------
 const proxy = captureWebKitTouch();
@@ -201,8 +203,38 @@ try {
     await touch('touchStart', [{ x, y, id: 1 }]);
     await page.waitForTimeout(holdMs);
     await touch('touchEnd', [{ x, y, id: 1 }]);
-    // A genuinely quick second tap, including on a busy software-WebKit runner.
-    await page.waitForTimeout(16);
+  };
+  /**
+   * A DOUBLE TAP IS A TIME WINDOW, SO THE TEST MUST NOT SPEND THE WINDOW ON ITS OWN DISPATCH.
+   *
+   * The product pairs two releases whose INPUT timestamps are at most `DOUBLE_TAP_MS` apart (see
+   * `logic/double-tap.ts`; the constant used to be private to `world-view.ts`). The old helper
+   * awaited a start, a 30 ms sleep, an end and a 16 ms sleep for EACH tap, so the gap the product
+   * saw was the host's round-trip cost, not a quick gesture: this machine measured 135-203 ms, and
+   * on the CI runner of 9e777d4 (a DOCS-ONLY commit, so not a regression) it measured 285 ms — 5 ms
+   * outside the 280 ms window — and the second double tap was swallowed.
+   *
+   * Only not spending the window on dispatch fixes that: the four touches are QUEUED back to back,
+   * exactly as the Chromium twin's `doubleTap` has done since its own flake. The gap is then
+   * MEASURED from the two trusted pointerups the page recorded (the same quantity the product
+   * compares) and asserted against the imported constant, so a production change that narrows the
+   * window breaks this suite honestly instead of leaving it passing on a lucky run.
+   */
+  const doubleTap = async (x: number, y: number) => {
+    await page.evaluate('window.__tapTrace=[]');
+    const point = [{ x, y, id: 1 }];
+    await Promise.all([
+      touch('touchStart', point),
+      touch('touchEnd', point),
+      touch('touchStart', point),
+      touch('touchEnd', point),
+    ]);
+    await page.waitForTimeout(400);
+    await settle();
+    const trace = (await page.evaluate('window.__tapTrace')) as Array<{ input: number; handled: number }>;
+    const [first, second] = trace;
+    const gap = first && second ? second.input - first.input : Number.NaN;
+    return { trace, gap };
   };
   /** A real one-finger drag. `during` runs after the first move, while the finger is still down. */
   const drag = async (from: { x: number; y: number }, to: { x: number; y: number }, steps = 20, during?: () => Promise<void>) => {
@@ -240,25 +272,23 @@ try {
   check('setPointerCapture is accepted on the SVG in WebKit', (await page.evaluate(`window.__capture.some((c) => c.startsWith('ok'))`)) === true, JSON.stringify(await page.evaluate(`window.__capture.splice(0, 3)`)));
 
   // ---- 2. a real quick double tap zooms, and the same gesture reverses it ---------------------
-  await page.evaluate('window.__tapTrace=[]');
   before = await view();
-  await tap(cx, cy);
-  await tap(cx, cy);
-  await page.waitForTimeout(400);
-  await settle();
+  const firstPair = await doubleTap(cx, cy);
   const afterFirst = await view();
+  const inWindow = (pair: { gap: number }) => Number.isFinite(pair.gap) && pair.gap >= 0 && pair.gap <= DOUBLE_TAP_MS;
+  const gapNote = (pair: { gap: number; trace: unknown }) =>
+    `${fmt(Number.isFinite(pair.gap) ? pair.gap : undefined)} ms release to release, window ${DOUBLE_TAP_MS} ms, input/delivery clocks ${JSON.stringify(pair.trace)}`;
+  check('the first dispatched double tap is inside the product window', inWindow(firstPair), gapNote(firstPair));
   check('a real quick double tap zooms the map', !!before && !!afterFirst && Math.abs(afterFirst[2]! - before[2]!) > 0.5, `view width ${fmt(before?.[2])} -> ${fmt(afterFirst?.[2])}`);
-  await tap(cx, cy);
-  await tap(cx, cy);
-  await page.waitForTimeout(400);
-  await settle();
+  const secondPair = await doubleTap(cx, cy);
   after = await view();
+  check('the second dispatched double tap is inside the product window', inWindow(secondPair), gapNote(secondPair));
   // The toggle picks its direction from how deep the view already is (a quarter of the framed view
   // is as far in as it goes), so the contract is "the same gesture goes the other way", not "the
   // first one always goes in".
   const firstWay = Math.sign(afterFirst![2]! - before![2]!);
   const secondWay = Math.sign(after![2]! - afterFirst![2]!);
-  check('a second double tap zooms the other way (a toggle)', firstWay !== 0 && secondWay === -firstWay, `${fmt(before?.[2])} -> ${fmt(afterFirst?.[2])} -> ${fmt(after?.[2])}; input/delivery clocks ${JSON.stringify(await page.evaluate('window.__tapTrace'))}`);
+  check('a second double tap zooms the other way (a toggle)', firstWay !== 0 && secondWay === -firstWay, `${fmt(before?.[2])} -> ${fmt(afterFirst?.[2])} -> ${fmt(after?.[2])}; input/delivery clocks ${JSON.stringify(secondPair.trace)}`);
 
   // ---- 3. a real pinch zooms -----------------------------------------------------------------
   before = await view();

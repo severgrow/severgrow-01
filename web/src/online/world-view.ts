@@ -17,7 +17,7 @@ import {
   shiftLightness,
 } from '../../../src/tile-colours.js';
 import { CHALLENGE } from './challenge-copy.js';
-import { isDoubleTap } from '../logic/double-tap.js';
+import { DOUBLE_TAP_MS, isDoubleTap } from '../logic/double-tap.js';
 import type { ChallengeMarker } from './challenge-view.js';
 import {
   CHALLENGE_RAIL_MAX,
@@ -210,13 +210,13 @@ const TAKEOVER_MS = 900;
  *
  * - `TAP_SLOP`: how far a finger may travel and still be a TAP. The map does not move at all below
  *   it, so a tap can never nudge the view, and a slightly unsteady tap still selects.
- * - `DOUBLE_TAP_MS` / `DOUBLE_TAP_SLOP`: two taps inside both are ONE double tap (a zoom toggle).
- *   A slower second tap, or one further away, is two ordinary taps and selects twice.
+ * - `DOUBLE_TAP_MS` (imported from `logic/double-tap.ts`) / `DOUBLE_TAP_SLOP`: two taps inside
+ *   both are ONE double tap (a zoom toggle). A slower second tap, or one further away, is two
+ *   ordinary taps and selects twice.
  * - `DOUBLE_TAP_IN` / `DOUBLE_TAP_OUT`: the toggle's two factors. `set()` clamps either way, so the
  *   "in" level can never pass a quarter of the framed view.
  */
 const TAP_SLOP = 6;
-const DOUBLE_TAP_MS = 280;
 const DOUBLE_TAP_SLOP = 30;
 const DOUBLE_TAP_IN = 2.2;
 const DOUBLE_TAP_OUT = 0.46;
