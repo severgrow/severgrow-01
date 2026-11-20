@@ -351,18 +351,19 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
           ? throwPileFrames(dx, dy, sc)
           : [{ transform: 'translate(0,0) rotateY(0deg)' }, { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 30}px) rotateY(90deg) scale(${(1 + sc) / 2})`, offset: 0.5 }, { transform: `translate(${dx}px, ${dy}px) rotateY(0deg) scale(${sc})` }];
     const duration = (landing && beatMs > 0 ? beatMs : IS_FUTA04 ? PINNED.throwFlight : 440) * f;
-    if (onLand && IS_FUTA04) setTimeout(onLand, duration * (landing ? STRIKE_TIMING.landEnd : THROW_PILE.landAt));
-    else onLand?.();
+    if (onLand && IS_FUTA04) {
+      // A pile landing hands the pile over on its own mark; a tile landing on the strike's.
+      if (landing) setTimeout(onLand, duration * STRIKE_TIMING.landEnd);
+      else setTimeout(onLand, duration * THROW_PILE.landAt);
+    } else onLand?.();
     // A LANDING RUNS LINEAR, ON PURPOSE: an animation-level easing re-times the KEYFRAME OFFSETS
     // (measured: 312 ms into a 624 ms beat with EASE.out reported progress 0.96, so the card was
     // already gone at a fifth of its beat). The strike's offsets ARE its timing — the curve is
     // inside `strikeFlightFrames` — so the only honest easing here is `linear`. Every other flight
     // keeps the shared out-curve over its own offsets.
-    if (landing) removeAfter(anim(d, frames, { duration, easing: 'linear', fill: 'forwards' }), d, duration + 40);
-    else {
-      const easing = IS_FUTA04 ? EASE.out : 'ease-in-out';
-      removeAfter(anim(d, frames, { duration, easing, fill: 'forwards' }), d, duration + 40);
-    }
+    removeAfter(anim(d, frames, landing
+      ? { duration, easing: 'linear', fill: 'forwards' }
+      : { duration, easing: IS_FUTA04 ? EASE.out : 'ease-in-out', fill: 'forwards' }), d, duration + 40);
     return duration;
   }
 
