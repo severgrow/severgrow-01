@@ -94,11 +94,18 @@ export const fitStrikeLanding = (hex: StrikeBox, view: StrikeBox, cardW: number,
  * `STRIKE_CARD_HEIGHT` radii is the replay's size; the hex's long side is one diameter (two radii),
  * so the answer is 1.075 long sides — the card overhangs its tile top and bottom exactly as it does
  * in the replay. The WIDTH follows the hand card's own aspect, so the flyer paints the same picture
- * the player picked up (no squash, no extra `background-size: cover` crop).
+ * the player picked up (no squash).
+ *
+ * …CLAMPED TO THE ART'S OWN ASPECT. The flyer paints the face with `background-size: cover`
+ * (`player/cards.ts`), and `cover` fits the WIDTH — shaving the art's top and bottom — the moment
+ * the box is wider than 256:356. That is precisely the owner's "cutted top and bottom"
+ * (2026-11-20), so the landing box can never be wider than the art: at or narrower, `cover` fits
+ * the height and the top and bottom are whole. The shipped hand card is 1.42x tall (≈0.704), just
+ * inside the art's 0.719, so this clamp never fires today; it is the guarantee, not a correction.
  */
 export const strikeCardSize = (hex: StrikeBox, cardAspect: number) => {
   const height = STRIKE_CARD_HEIGHT * (Math.max(hex.width, hex.height) / 2);
-  return { width: height * cardAspect, height };
+  return { width: height * Math.min(cardAspect, STRIKE_ART_ASPECT), height };
 };
 
 /**

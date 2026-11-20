@@ -5004,11 +5004,16 @@ async function playStep(step: Step, my: number) {
           // THE REPLAY'S BEAT, IN THE GAME (owner, 2026-11-20: the recorded replay's Bomb "looks good
           // and that could be in the game reused"): the card lands whole on the tile with the strike
           // curve's overshoot, the tile starts answering it at the curve's own `burst` mark, and the
-          // card fades out on the curve's `cardOut` instead of vanishing. `beat` is exactly the
-          // flight + dead-air hold the step already spent here, so no turn gets longer.
-          const beat = PINNED.bombBeat;
+          // card fades out on the curve's `cardOut` instead of vanishing. The beat is a little
+          // shorter than the flight + dead-air hold it replaces, so no turn gets longer. Older
+          // channels keep their own 380ms beat: they do not read `logic/strike.ts`.
+          const beat = IS_FUTA04 ? PINNED.bombBeat : 0;
           flyCard(step.card, from, to, f, undefined, true, beat);
-          await wait(beat * STRIKE_TIMING.burst * f, my);
+          // The board's pre-burst flinch (`anticipate`, 112ms on a big moment) plays INSIDE the
+          // landing, so the burst still goes off on the curve's own `burst` mark rather than
+          // `anticipationMs` after it — otherwise the card would be nearly gone before the burst.
+          const lead = IS_FUTA04 && mo.first ? mo.budget.anticipationMs * f : 0;
+          await wait(Math.max(0, (IS_FUTA04 ? beat * STRIKE_TIMING.burst : 380) * f - lead), my);
         }
       }
       await anticipate(mo, f, my);
@@ -5016,9 +5021,11 @@ async function playStep(step: Step, my: number) {
       if (IS_FUTA04 && !mine && my === epoch) showLiveStrike(board.fx, step, (MOTION.move + MOTION.quick) * f, m === 0, { cards: false });
       // THE BURST, AT THE CURVE'S OWN MARK (logic/strike.ts `burst`): the replay's order is card
       // lands → burst → the tile goes, and the burst is what the tile answers. It used to go off
-      // after the pod had already finished swelling, so the two never read as one moment.
+      // after the pod had already finished swelling, so the two never read as one moment. On the
+      // strike's channels the glow is on the strike's own clock too — lit by `burst` and gone by
+      // `burstEnd`, exactly the replay's window — instead of outliving the card by half a beat.
       if (b.particles > 0) sparks(step.target, mine ? 'you' : 'bot', 0, f, Math.max(6, Math.round(b.particles / (mine ? 2 : 3))));
-      if (!IS_FUTA04 || mine) flash(step.target, f, false);
+      if (!IS_FUTA04 || mine) flash(step.target, f, false, IS_FUTA04 ? { ms: PINNED.bombBeat * (STRIKE_TIMING.burstEnd - STRIKE_TIMING.burst) * f } : {});
       if (settings.sound) sound.fruit(mine);
       {
         const hp = hapticFor('throw', settings);
