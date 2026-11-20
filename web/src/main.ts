@@ -6,7 +6,7 @@ import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
 import { deferEntryButton } from './ui/deferred-entry.js';
 import { confirmedTurn, mountTurnRim } from './player/turn-rim.js';
 import { measureAtRest } from './ui/at-rest.js';
-import { DRAW_PILE_GIVE, DRAW_PILE_GIVE_MS, drawFrames, thudPile } from './ui/feel.js';
+import { DRAW_PILE_GIVE, DRAW_PILE_GIVE_MS, STRENGTHEN_POP, STRENGTHEN_POP_MS, drawFrames, thudPile } from './ui/feel.js';
 import { mountStartupReveal } from './player/startup.js';
 import { mountMenuZoomLock } from './player/menu-zoom-lock.js';
 import { mountAchievementToast } from './player/achievement-toast.js';
@@ -4969,6 +4969,9 @@ async function playStep(step: Step, my: number) {
       const stone = IS_FUTA04 ? tileEl?.querySelector<SVGGElement>('.seed-stone') ?? null : null;
       // The number brightens and ticks from → to over one "quick" beat; no bounce.
       if (m > 0 && !mo.budget.fadeOnly) anim(stone ?? num ?? tileEl, [{ opacity: 0.5 }, { opacity: 1 }], { duration: MOTION.quick * f, easing: EASE.out, fill: 'both' });
+      // 2026-11-20: the tile under the number answers too (ui/feel.ts). Inside this step's own
+      // hold; gone under Reduce motion / Speed off, like every other piece of this choreography.
+      if (m > 0 && !mo.budget.fadeOnly) anim(tileEl, STRENGTHEN_POP, { duration: STRENGTHEN_POP_MS * f, easing: EASE.settle, transformOrigin: 'center' } as KeyframeAnimationOptions);
       if (m > 0 && !mo.budget.fadeOnly) ring(step.key, f, top);
       if ((num || stone) && step.to > step.from) {
         const setShown = (value: number) => {
