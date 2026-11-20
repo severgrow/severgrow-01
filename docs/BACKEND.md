@@ -392,6 +392,27 @@ real `set role` in `server/tests/live-postgres.integration.test.ts`), nothing in
 publication, one pending challenge per match enforced by a unique partial index. Endpoints and
 tuning: [`LIVE.md`](LIVE.md), [`NETWORK-CONTRACT.md`](NETWORK-CONTRACT.md#live-duels-preview-channels-docslivemd).
 
+## Errors and CORS: the 503 bursts (2026-11-20)
+
+A smoke run on 2026-11-20 saw bursts of **503**s from the Edge function whose responses carried no
+CORS headers; a browser reports that as an opaque "access control" (or plain network) failure rather
+than a status.
+
+The HTTP layer decorates every 500/503 it produces — the shared Fetch app's catch-all
+(`server/src/fetch-app.ts`) and the Edge entry's bootstrap/start failure path
+(`server/src/edge-entry.ts`, `failureResponse`) both attach the shared CORS headers — and the deployed
+bundle does too. These bursts therefore originate in the **Supabase Edge runtime, before the handler
+runs** (cold start, isolate eviction, or a killed request), and our code cannot decorate them.
+**Consequence:** the client cannot distinguish a retryable transport failure from a refusal, so
+screens can look empty rather than wrong.
+
+The one gap that was ours: the Node adapter's last-resort catch in `server/src/http.ts` answered a
+bare 500 with no CORS when an exception escaped the shared app. It is fixed on `fix/api-error-cors`
+(commit `d85ae5ce`, pinned by `server/tests/api-error-cors.test.ts`); that branch is not merged into
+`futa0.5-online`, so the adapter on the release line still sends the bare 500. A typed transport
+error in `server/src/client.ts` — one the UI could retry instead of showing an empty state — is a
+known, unimplemented improvement.
+
 ## Tests and the Supabase quota
 
 Every request to the deployed API is a paid **Edge Function invocation** (Free plan: a hard monthly

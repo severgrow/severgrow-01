@@ -84,6 +84,15 @@ curl -fsSL -H 'Cache-Control: no-cache' https://futasaku.com/BUILD_SHA
 curl -fsSL -H 'Cache-Control: no-cache' https://futasaku.com/test/BUILD_SHA
 ```
 
+**A failed server deploy does not gate the publish (2026-11-20).** `deploy-server.yml` can fail on an
+invalid `SUPABASE_ACCESS_TOKEN` while the page publish stays green: /test/ advances, the site looks
+healthy, and the Edge function silently stops updating. Observed 2026-11-20 — three consecutive
+failures with `401 Invalid access token`, and the same failure again on `292ff029`; the live server
+stayed on `ddf8ec17` while /test advanced.
+The fix is to refresh the repository secret `SUPABASE_ACCESS_TOKEN`, then re-run the job (or deploy by
+hand, above). Check the server job's own result: a green publish says nothing about it, and
+`/v1/health` reports the version the function is actually running.
+
 ## Production environment branch policy
 
 Observed 31 October 2026: the `github-pages` environment accepts publications triggered from
@@ -153,6 +162,11 @@ docs/WORLD-MAP.md: the key stays hidden until the endpoint answers).
   waits for CI on the `futa0.5-online` commit, which runs the **full** browser set.
 - `extra-regressions.yml`: admin-dashboard, online-stale-token-recovery, online-soak-teardown,
   settings-visual, accounts-email, pwa-viewport-layout.
+
+**Suites that exist but no workflow runs (2026-11-20).** `web/e2e/card-tip.ts`,
+`room-light.ts` (+ `room-light-ios.ts`), `tab-icon.ts`, and `cockpit-wait.ts` (+ `cockpit-wait-ios.ts`)
+were added with this pass and are referenced by no workflow, so CI never runs them. They are hand-run
+only until they are wired into `ci.yml` after the demo (workflows are frozen until then).
 
 ## Cold start on the real /test (2026-11-18)
 

@@ -1,4 +1,4 @@
-# FUTASAKU 0.55 — playtest pack (Saturday morning, 10 testers)
+# FUTASAKU 0.55 — playtest pack (Saturday 21 November, ~50 testers)
 
 Two audiences in one file: **Part 1** is what you send the testers. **Part 2** is your own runbook
 for while they play. Part 3 lists what is genuinely not finished, so nothing surprises you.
@@ -64,6 +64,13 @@ Live at **https://www.futasaku.com** — the real thing, a real server, real acc
 3. **The admin dashboard**: https://www.futasaku.com/admin/ — sign in with Google as **RYK**.
 4. **Territory** at https://www.futasaku.com → Territory, to watch claims appear.
 
+### Five minutes before people arrive: warm /test/
+
+Open **/test/** and load the **Planet** and the **achievements list** once, a few minutes before
+people arrive. A cold first read of either can take ~24 s on a slow server moment; a warm one is
+~0.4 s (measured 2026-11-20). The page recovers on its own — warming it just means the projector
+never shows an empty globe while somebody waits.
+
 ### The admin dashboard
 
 **It is live: https://www.futasaku.com/admin/**. Sign in with Google as **RYK** and you are in —
@@ -104,8 +111,8 @@ Know these before they do. None of them should stop a game being played.
 | 4 | **Campaign balance is measured, not felt** | Levels 1–3 are deliberately gentle, then the bot ladder climbs one rung at a time through bots 2–9 (L4–5 bot 2, 6–8 bot 3, 9–11 bot 4, 12–14 bot 5, 15–17 bot 6, 18–20 bot 7, 21–24 bot 8, 25–30 bot 9). Bot-vs-bot, a fixed bot (level 4) now wins **85% / 15% / 15%** across the three chapters — a far steeper step than the old 90/70/40, and the rebalanced numbers replaced that stale figure on 2026-10-16. No human has played it since. Ask testers whether the climb reads as steady, and whether the jump into Chapter III (bots 8–9) is a fair wall rather than a wall. |
 | 5 | **The Territory carries 5 tiles, and all 5 are yours** | All from your own duels (RYK). Every test tile was removed today, so the 183-hex map is otherwise fresh and waiting for the testers. Say the word if you would rather it started completely empty. |
 | 6 | **Four bot test suites are slow enough to flake under load** | Test-only. They pass when the machine is quiet; it does not affect players. One (`bloom-bands`) has a 60s timeout it can exceed on a busy machine — that is the suite, not the game. |
-| 7 | **The public Territory read is metered** | **Fixed** (guard added 2026-11-12; re-verified 2026-11-20). `GET /v1/world` now goes through a read guard (`server/src/seeds/world-read.ts`, wired in `server/src/seeds/router.ts` and the deployed Edge bundle): anonymous polls share a 3-second in-memory cache, and every read counts against `worldPerIpPerHour` — default **1200 per IP per hour**, `RATE_WORLD_PER_IP_PER_HOUR` in `server/src/config.ts`. It is per Edge isolate, so it is a flood guard rather than an exact quota, and generous for ten testers. A fresh (signed-in) read still does real database work, but it is bounded by that budget. |
-| 7b | **The other per-IP limits do apply to the group** | Ten in one house share: **create 120/hour** (12 duels each), **join 400/hour** (40 each), **guests 200/hour**. Generous — and measured tonight: 11 creates + 21 guests + 20 joins from one IP in one hour, no refusals. Only a rematch marathon would reach the create ceiling. |
+| 7 | **The public Territory read is metered** | **Fixed** (guard added 2026-11-12; re-verified 2026-11-20). `GET /v1/world` now goes through a read guard (`server/src/seeds/world-read.ts`, wired in `server/src/seeds/router.ts` and the deployed Edge bundle): anonymous polls share a 3-second in-memory cache, and every read counts against `worldPerIpPerHour` — default **1200 per IP per hour**, `RATE_WORLD_PER_IP_PER_HOUR` in `server/src/config.ts`. It is per Edge isolate, so it is a flood guard rather than an exact quota, and generous for a group this size. A fresh (signed-in) read still does real database work, but it is bounded by that budget. |
+| 7b | **The other per-IP limits do apply to the group** | If fifty shared one network: **create 120/hour** (2 duels each), **join 400/hour** (8 each), **guests 200/hour** (4 each) — so the create ceiling is the one to watch if everyone starts a duel at once. Measured tonight: 11 creates + 21 guests + 20 joins from one IP in one hour, no refusals. |
 | 8 | **No accounts beyond Google, and no password reset by design** | If someone clears their browser data without an account, their guest identity is gone. Sign in with Google first and this cannot happen. |
 | 9 | **A wrong invite code used to say "Something went wrong"** | **Fixed.** The join screen was mapping six error codes the server has never sent and missing all three it does send, so every failed join — the likeliest thing to go wrong tomorrow — read as a broken app. Now: a wrong code says "*That code is wrong or has expired*", a full duel says it is full, a finished one says it has finished. Two regression tests hold it: one drives the real server, one fails if the client ever maps a code the server cannot emit. Tests passed while the feature was broken, which is why this is now guarded rather than trusted. |
 | 10 | **A native browser confirm when you start a new game over a saved one** | Clicking **Practice match** with a saved game asks `window.confirm("Start a new game? The saved game will be lost.")`. It works, but it is the **only** piece of the app that looks like a browser alert instead of FUTASAKU. Cosmetic; not worth risking a change before the playtest. |
