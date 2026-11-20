@@ -282,6 +282,7 @@ const defaultArt = defaultArtLoad ? await defaultArtLoad : null;
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, heavyShakeFrames, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
+import { spinSelected, throwSpinKey } from './ui/throw-boomerang.js';
 import { mountDragLayer } from './ui/drag-layer.js';
 import { PILE_GRAB_PX } from './logic/drag.js';
 import { fillIcons, ICONS } from './ui/icons.js';
@@ -5100,7 +5101,13 @@ async function playStep(step: Step, my: number) {
               if (hp) vibrate(true, hp as number | number[]);
               caughtHaptic = true;
             };
-            const flightMs = throwBoomerang(step.card, from, point, to, f, catchAndThud);
+            const flightMs = throwBoomerang(step.card, from, point, to, f, catchAndThud, {
+              // One throw in five turns a full circle (owner, 2026-11-20). Presentation only and
+              // deterministic: the game, the turn and the card decide it, never Math.random.
+              spin: session
+                ? spinSelected(throwSpinKey(session.state.seed, session.state.turnNumber, step.card.id))
+                : false,
+            });
             await wait(Math.max(PINNED.throw * f, flightMs), my);
           } else if (flight === 'ordinary') {
             flyCard(step.card, from, to, f, land);

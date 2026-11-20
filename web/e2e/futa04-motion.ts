@@ -70,7 +70,8 @@ try {
   const rotations = throwFrames.map(f=>/rotate\((-?[\d.]+)deg\)/.exec(String(f.transform ?? ''))?.[1]);
   assert(rotations.some(r=>r!==undefined && Math.abs(Number(r))>0),'the throw turns on its way out (the boomerang)');
   // 2026-11-08: one flick, no stop on the board; a light turn that straightens for the catch
-  assert.equal(rotations.at(-1),'0','it lands upright on the pile');
+  // 2026-11-20: the 20% spin variant lands after a whole turn, so "upright" is any multiple of 360.
+  assert.equal(Number(rotations.at(-1)) % 360, 0, 'it lands upright on the pile');
   const caught = throwFrames.find(f=>f.offset===BOOMERANG.landAt);
   assert(caught,'the pile is handed the card at the catch, before the fade');
   assert.equal(Number(caught!.opacity),1,'the card is still visible when it reaches the pile');
