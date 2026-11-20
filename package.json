@@ -18,6 +18,7 @@
     "admin:build": "vite build --config admin/vite.config.ts",
     "admin:preview": "vite preview --config admin/vite.config.ts",
     "web:preview": "vite preview --config web/vite.config.ts",
+    "demo:monitor": "tsx scripts/demo-alert.ts",
     "properties": "tsx src/sim/properties.ts",
     "sim": "tsx src/sim/sim.ts",
     "sweep": "tsx src/sim/sweep.ts",
