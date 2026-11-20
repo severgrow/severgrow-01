@@ -211,6 +211,10 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
       const achievements = deps.card?.achievementsOf ? await deps.card.achievementsOf(id) : null;
       const onlineBlitzBest = deps.card?.onlineBlitzBest ? await deps.card.onlineBlitzBest(id) : null;
       const headToHead = viewer.id !== id ? await service.headToHead(viewer.id, id) : undefined;
+      // THE VIEWER'S OWN OFFLINE TOTALS ride the same answer, so opening your own sheet is also one
+      // request (the client used to sync `/v1/players/me/offline` on every open). Only ever the
+      // caller's own record: `viewer` comes from the token, never from the path.
+      const ownOffline = viewer.id === id ? await service.offlineStats(viewer) : undefined;
       return {
         status: 200,
         body: {
@@ -219,6 +223,7 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
           achievements,
           onlineBlitzBest,
           ...(headToHead !== undefined ? { headToHead } : {}),
+          ...(ownOffline !== undefined ? { ownOffline } : {}),
           serverNow: service.serverNow(),
         },
       };

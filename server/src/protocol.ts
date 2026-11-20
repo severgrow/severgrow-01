@@ -159,6 +159,12 @@ export type PlayerCardResponse = {
   achievements: { done: number; total: number } | null;
   /** The best ONLINE Blitz streak, from the server's own results; null when unknown. */
   onlineBlitzBest: number | null;
+  /**
+   * Present only on YOUR OWN card: this account's classic offline totals across its devices (the
+   * same numbers `/v1/players/me/offline` publishes). Folded in so the own sheet is also ONE
+   * request; it is the caller's own record, never another player's.
+   */
+  ownOffline?: OfflineSummary;
   /** Present only when the viewer is looking at somebody else. */
   headToHead?: HeadToHead;
   serverNow: number;

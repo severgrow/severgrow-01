@@ -58,7 +58,11 @@ const profileStubs = (withCard: boolean): Stub[] => [
     online: { games: 9, wins: 4, longestStreak: 3 },
     offline: { games: 24, hardStreak: 5, blitzStreak: 2 },
     country: 'PL',
-  }, achievements: { done: 12, total: 35 }, onlineBlitzBest: 7 } : { ok: false, code: 'NOT_FOUND', message: 'No such player.' } },
+  }, achievements: { done: 12, total: 35 }, onlineBlitzBest: 7,
+    // YOUR OWN card also carries the account's classic offline totals, so the sheet needs no
+    // second read (`/v1/players/me/offline`).
+    ownOffline: { games: 24, wins: 14, draws: 0, longestStreak: 5 },
+  } : { ok: false, code: 'NOT_FOUND', message: 'No such player.' } },
   { path: `/v1/players/${ME}/profile`, body: { ok: true, profile: {
     displayName: 'RYK', tag: 'EFGH', level: 23, tiles: 3, connectedTiles: 2, colourId: 3,
     online: { games: 9, wins: 4, longestStreak: 3 },
@@ -294,6 +298,7 @@ console.log(`  own:     ${ownOld.reads} -> ${ownNew.reads} player request(s); ${
 console.log(`  reopen:  0 requests for both sheets (asserted above)`);
 
 assert.equal(visitorNew.reads, 1, 'the visitor sheet is ONE request');
+assert.equal(ownNew.reads, 1, 'the own sheet is ONE request too (ownOffline rides the card)');
 assert.ok(visitorOld.reads >= 2, 'the old sequence needed more than one');
 assert.ok(visitorNew.reads < visitorOld.reads, 'the collapse removed a round trip');
 assert.ok(ownNew.reads < ownOld.reads, 'the own sheet also asks less');

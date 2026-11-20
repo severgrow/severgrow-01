@@ -834,6 +834,8 @@ export const mountAccounts = async (): Promise<void> => {
     achievements: { done: number; total: number } | null;
     onlineBlitzBest: number | null;
     headToHead?: HeadToHead;
+    /** Your own card only: the account's classic offline totals across its devices. */
+    ownOffline?: { games: number; wins: number; draws: number; longestStreak: number };
   };
   const visitorProfileCache = new Map<string, { at: number; facts: VisitorFacts }>();
   /** Reads in flight, keyed by viewer+player, so a double tap never spends two requests. */
@@ -995,7 +997,8 @@ export const mountAccounts = async (): Promise<void> => {
     // `futasaku:offline-game` listener, not by opening this sheet.
     if (fresh) return;
 
-    // ONE request for tiles, online row, offline row, colour, Blitz streak and achievements.
+    // ONE request for tiles, online row, offline row, colour, Blitz streak, achievements AND this
+    // account's own offline totals (`ownOffline` rides the same answer).
     void readCard(identity.playerId, token).then((card) => {
       if (!card) return;
       const wire = card.profile;
@@ -1004,6 +1007,9 @@ export const mountAccounts = async (): Promise<void> => {
         connectedTiles: wire.connectedTiles ?? null,
         online: wire.online,
         colour: profileColour(identity.playerId, wire.colourId),
+        // Your own card also carries the account's offline record (games/wins/draws/longest run), so
+        // the "matches won" line and the local record agree without a second request.
+        ...(card.ownOffline ? { offline: accountRecord(card.ownOffline) } : {}),
         // Only when the server sent the row: an older answer leaves this device's game count alone
         // and the two streaks as em dashes, which is exactly what it knows.
         ...(wire.offline ? { offlineAggregate: {
@@ -1013,11 +1019,15 @@ export const mountAccounts = async (): Promise<void> => {
       });
     }).catch(() => undefined);
 
-    // The offline aggregate both writes this device's totals and reads the account's: keep it fresh
-    // whenever the sheet opens, as it is the one figure a new device can change.
-    void syncOffline(token, deviceId()).then((offline) => {
-      if (offline) paint({ offline: accountRecord(offline) });
-    });
+    // PUBLISH ONLY WHAT THE SERVER HAS NOT SEEN. A device that has played offline sends its
+    // cumulative counters (the POST both writes and reads, so it is still one request); a device
+    // that has played nothing spends NOTHING — the account's totals already came with the card.
+    // Without this guard every open of your own sheet cost a second round trip for no new fact.
+    if (offlineCounters(parseStats(readLocal(STATS_KEY)), deviceId()).played > 0) {
+      void syncOffline(token, deviceId()).then((offline) => {
+        if (offline) paint({ offline: accountRecord(offline) });
+      });
+    }
     if (!profileClient) return;
     if (facts.seeds === null) void readTerritoryWallet(identity.playerId, () => profileClient.seedWallet(token)).then((wallet) => {
       if (wallet) paint({ seeds: wallet.balance });

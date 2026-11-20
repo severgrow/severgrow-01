@@ -162,14 +162,23 @@ describe('the card is the whole sheet in one answer', () => {
     });
   });
 
-  it('carries no head-to-head on your OWN card', async () => {
+  it('carries no head-to-head on your OWN card, and does carry your own offline totals', async () => {
     const h = await harness();
     const self = await h.service.authenticate(h.caller.token);
     const own = await h.app(new Request(`http://test.local/v1/players/${self.id}/card`, {
       headers: { authorization: `Bearer ${h.caller.token}` },
     }));
     expect(own.status).toBe(200);
-    expect(await own.json()).not.toHaveProperty('headToHead');
+    const body = await own.json() as Record<string, unknown>;
+    expect(body).not.toHaveProperty('headToHead');
+    // One request for your own sheet: the account's classic offline totals ride the card.
+    expect(body.ownOffline).toEqual({ games: 0, wins: 0, draws: 0, longestStreak: 0 });
+  });
+
+  it('a visitor never receives the subject\'s own offline totals', async () => {
+    const h = await harness();
+    const { body } = await get(h, `/v1/players/${SUBJECT}/card`);
+    expect(body).not.toHaveProperty('ownOffline');
   });
 
   it('the stored country is served to a visitor, and nothing else is', async () => {
