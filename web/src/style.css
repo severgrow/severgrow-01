@@ -1892,6 +1892,20 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
      its (transparent) background and the stack's face — exactly the two edges of a pile. */
   isolation: isolate;
 }
+/* THE PILE TAKES THE LANDING (owner, 2026-11-20: "add a small addition of the whole pile feeling
+   small impact of the card landing on it"). A short contact shade at the top of the stack, deepening
+   as the thrown card's weight arrives and fading out with the settle. It is created for the one beat
+   by ui/feel.ts and animates OPACITY only (never a box-shadow or filter), so it composites for free
+   and leaves nothing behind. `.pile-card` is the positioning box (position: relative, isolated). */
+.pile-impact {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 5.9% / 4.2%;
+  background: linear-gradient(180deg, rgba(5, 6, 6, 0.62), rgba(5, 6, 6, 0) 62%);
+  opacity: 0;
+}
 .pile-label {
   font-size: 0.72rem;
   letter-spacing: 0.04em;

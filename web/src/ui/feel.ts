@@ -3,10 +3,38 @@
 // callers skip every one of them under Reduce motion.
 import { PILE_THUD, PILE_THUD_MS } from './throw-boomerang.js';
 
-/** A pile receives a card: the same small thud as the boomerang's catch. */
+/**
+ * A pile receives a card: the pile itself takes a small impact (owner, 2026-11-20: "add a small
+ * addition of the whole pile feeling small impact of the card landing on it").
+ *
+ * It is one shot, played on the pile's own body (`.pile-card`): the stack presses down under the
+ * card's weight and settles back (PILE_THUD, transform only), while a short contact shade deepens
+ * at the top of the stack as the weight arrives (opacity only, removed when it ends). It is
+ * deliberately NOT played on the pile button: that element carries the step's glow, the count and
+ * the Throw swell's CSS transition, and a landing must not move or fight any of those.
+ *
+ * `motionOn` is the single Reduce motion / Speed Off gate (motionAllowed): when it is false there
+ * is no press, no shade and no DOM at all — same as every other feel beat.
+ */
 export const thudPile = (el: Element | null | undefined, f: number, motionOn: boolean, easing: string): void => {
-  if (!el || !motionOn || typeof (el as HTMLElement).animate !== 'function') return;
-  (el as HTMLElement).animate(PILE_THUD, { duration: PILE_THUD_MS * Math.max(f, 0.1), easing });
+  if (!el || !motionOn) return;
+  const body = el.querySelector<HTMLElement>(':scope > .pile-card');
+  const target = body ?? (el as HTMLElement);
+  if (typeof target.animate !== 'function') return;
+  const ms = PILE_THUD_MS * Math.max(f, 0.1);
+  target.animate(PILE_THUD, { duration: ms, easing });
+  if (!body) return; // no stack to carry the shade: the press alone is the whole beat
+  const shade = document.createElement('span');
+  shade.className = 'pile-impact';
+  body.appendChild(shade);
+  const done = () => shade.remove();
+  if (typeof shade.animate === 'function') {
+    const a = shade.animate(
+      [{ opacity: 0 }, { opacity: 0.85, offset: 0.22 }, { opacity: 0 }],
+      { duration: ms * 1.35, easing },
+    );
+    a.finished.then(done, done);
+  } else setTimeout(done, ms * 1.35 + 60);
 };
 
 /** The pile a card is drawn from gives a little as it lets go (a lift, not a thud). */

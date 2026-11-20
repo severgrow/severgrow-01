@@ -322,11 +322,15 @@ export const planBoomerang = (
   return { duration: B.total, frames, landMs: Math.round(B.total * B.landAt) };
 };
 
-/** The pile's own small thud at the catch (transform only; ui/feel.ts plays it on the pile). */
+/** The pile's own small thud at the catch (transform only; ui/feel.ts plays it on the pile).
+ *  OWNER ADDED THE LANDING (2026-11-20: "add a small addition of the whole pile feeling small impact
+ *  of the card landing on it"): the pile used to scale only. It now takes the weight as a press —
+ *  down 2.4px and 4% smaller — and settles back through a hair of rebound, so the whole stack
+ *  answers the card. Still transform only, still one shot, still skipped under Reduce motion. */
 export const PILE_THUD: Keyframe[] = [
-  { transform: 'scale(1)' },
-  { transform: 'scale(0.955)', offset: 0.35 },
-  { transform: 'scale(1.012)', offset: 0.7 },
-  { transform: 'scale(1)' },
+  { transform: 'translateY(0px) scale(1)' },
+  { transform: 'translateY(2.4px) scale(0.962)', offset: 0.3 },
+  { transform: 'translateY(-0.5px) scale(1.009)', offset: 0.66 },
+  { transform: 'translateY(0px) scale(1)' },
 ];
 export const PILE_THUD_MS = 180;
