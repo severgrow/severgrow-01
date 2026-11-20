@@ -15,7 +15,7 @@ import type { Page } from 'playwright-core';
 import { startingPlayerFor } from '../../src/engine/index.js';
 import { servePreview } from './helpers/preview-port.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
-import { endTurnViaPage, openDuel, openSeat, sleep, startLocalDuel, waitIdle } from './helpers/local-duel.js';
+import { endTurnViaPage, openDuel, openSeat, sleep, startLocalDuel, statePhase, tapExposed, waitIdle } from './helpers/local-duel.js';
 
 const SHOTS = '/tmp/turnrim';
 mkdirSync(SHOTS, { recursive: true });
@@ -31,12 +31,13 @@ const check = (ok: unknown, name: string): void => {
 
 // ---- the page probe ---------------------------------------------------------------------------
 // A per-frame sample of what the board says, plus a MutationObserver on the rim's own writes.
-// `PROBE` is installed as an init script offline and evaluated after load online (same function).
-const PROBE = (): void => {
-  const w = window as any;
-  const list: any[] = (w.__rimSamples ??= []);
-  const writes: any[] = (w.__rimWrites ??= []);
-  const snap = (): any => {
+// A STRING, not a function: tsx/esbuild's `__name` helper cannot cross into the page, and a passed
+// function would die on its first inner arrow (this suite's first run proved it: 0 samples).
+const PROBE = `(() => {
+  const w = window;
+  const list = (w.__rimSamples ??= []);
+  const writes = (w.__rimWrites ??= []);
+  const snap = () => {
     const h = w.__severgrow;
     const s = h?.state?.() ?? null;
     const o = h?.online?.() ?? null;
@@ -53,18 +54,18 @@ const PROBE = (): void => {
       serverActor: o ? o.serverActor : null,
     };
   };
-  const observe = (): void => {
+  const observe = () => {
     if (!document.body) return void setTimeout(observe, 10);
     new MutationObserver(() => writes.push(snap())).observe(document.body, { attributes: true, attributeFilter: ['data-turn'] });
   };
   observe();
-  const tick = (): void => {
-    if (w.__severgrow) list.push(snap());
+  const tick = () => {
+    if (w.__severgrow && document.body) list.push(snap());
     if (list.length > 40_000) list.splice(0, 20_000);
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
-};
+})()`;
 
 type Sample = {
   t: number; epoch: number; rim: string; actor: number; phase: string; busy: boolean; ceremony: boolean;
@@ -87,9 +88,10 @@ const snapNow = (page: Page): Promise<Sample> => page.evaluate(() => {
     serverActor: o ? o.serverActor : null,
   };
 });
-const logOf = (page: Page): Promise<{ samples: Sample[]; writes: Sample[] }> => page.evaluate(() => ({
+const logOf = (page: Page): Promise<{ samples: Sample[]; writes: Sample[]; anim: any[] }> => page.evaluate(() => ({
   samples: (window as any).__rimSamples ?? [],
   writes: (window as any).__rimWrites ?? [],
+  anim: (window as any).__severgrow?.animLog?.() ?? [],
 }));
 const dump = (name: string, log: unknown): void => writeFileSync(`${SHOTS}/${name}`, JSON.stringify(log), 'utf8');
 const shot = (page: Page, name: string): Promise<Buffer> => page.screenshot({ path: `${SHOTS}/${name}`, timeout: 120_000 });
@@ -130,6 +132,14 @@ const pickFrame = (frames: CastFrame[], from: number, to: number): CastFrame | n
 };
 const phaseOf = (page: Page): Promise<string> =>
   page.evaluate(() => (window as any).__severgrow?.state()?.phase ?? '').catch(() => '');
+/**
+ * Tap a PILE by activating the element itself. At 430x932 the fanned hand lies over the deck's
+ * centre, so a hit-tested click at that point lands on a hand card instead (measured: the topmost
+ * element there was `#hand .card`). This is the same button a player's tap reaches, without the
+ * fan's z-order deciding whether the test advances.
+ */
+const tapPile = (page: Page, id: 'deck' | 'discard'): Promise<void> =>
+  page.evaluate((pile) => (document.getElementById(pile) as HTMLButtonElement | null)?.click(), id);
 
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
 const cleanup: (() => Promise<unknown>)[] = [];
@@ -148,7 +158,7 @@ try {
   cleanup.push(() => page.close());
   const pageErrors: string[] = [];
   page.on('pageerror', (e) => pageErrors.push(e.message));
-  await page.addInitScript(PROBE);
+  await page.addInitScript({ content: PROBE });
   await page.addInitScript(() => {
     localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({
       sound: false, music: false, coach: false, speed: 'slow', reduceMotion: false, eyeCandy: true, autoSkip: false,
@@ -176,8 +186,8 @@ try {
   check(true, 'offline: it lights at the moment the ceremony lifts and the move is tappable');
 
   // ---- MY move: draw, pick a Grow card, drag on the board (an interaction in progress), commit
-  // The pile carries the idle-hint pulse, so actionability waits would never settle: force it.
-  await page.locator('#deck').click({ force: true });
+  // The pile carries the idle-hint pulse, so actionability waits would never settle: activate it.
+  await tapPile(page, 'deck');
   await page.waitForFunction(() => {
     const h = (window as any).__severgrow;
     return !h.busy() && h.state()?.phase === 'ACT';
@@ -230,7 +240,7 @@ try {
     const h = (window as any).__severgrow;
     return h.state()?.actor === 0 && h.busy();
   }, undefined, { timeout: 60000 }).catch(() => undefined);
-  await page.locator('#discard').click({ force: true });
+  await tapPile(page, 'discard');
   const botTurnAt = await (async () => {
     await page.waitForFunction(() => (window as any).__severgrow.state()?.actor === 1, undefined, { timeout: 30000 });
     return snapNow(page);
@@ -259,7 +269,19 @@ try {
   // The window itself, from the page's own frames: the state says MINE while the queue is still busy.
   const windowSamples = drain.filter((s) => s.actor === 0 && s.busy);
   check(windowSamples.length > 0, `offline: the hand-off window existed (${windowSamples.length} frames with the state mine and the queue busy)`);
-  check(!windowSamples.some((s) => s.rim === 'you'), `offline: every one of those frames was dark (${windowSamples.length})`);
+  // WHAT "THEIR CARDS ARE STILL LANDING" MEANS, from the page's own pump log: the last step whose
+  // player is the opponent. `busy` alone is not that test — the rim legitimately stays lit through
+  // MY OWN move and through the neutral "your turn"/sync steps, where the page's tap gate is open
+  // (`blocking() === false`). The owner's bug is the window BEFORE that, so the assertion is about
+  // the opponent's steps, not about the pump being idle.
+  const opponentSteps = (offlineLog.anim as { ev: string; who?: number; t: number; k?: string }[])
+    .filter((a) => a.ev === 'step' && a.who === 1 && a.t >= botTurnAt.t);
+  const lastOpponentEnd = Math.max(...opponentSteps.map((a) => a.t));
+  check(opponentSteps.length > 0 && Number.isFinite(lastOpponentEnd),
+    `offline: the opponent's last steps were logged (${opponentSteps.map((a) => `${a.k}@${Math.round(a.t)}`).join(', ')})`);
+  const darkWindow = drain.filter((s) => s.t < lastOpponentEnd);
+  check(darkWindow.length > 0, `offline: the hand-off window was observed (${darkWindow.length} frames before their last card landed)`);
+  check(!darkWindow.some((s) => s.rim === 'you'), `offline: every one of those frames was dark (${darkWindow.length})`);
   const opponentFrame = pickFrame(cast.frames, botTurnAt.epoch, (windowSamples[0]?.epoch ?? botTurnAt.epoch + 2000));
   if (opponentFrame) {
     copyFileSync(opponentFrame.file, `${SHOTS}/offline-4-opponent-turn-rim-dark.jpg`);
@@ -273,13 +295,14 @@ try {
   }
   check(!!handoffFrame, 'offline: a compositor frame was captured inside the hand-off window');
   const firstLit = drain.find((s) => s.rim === 'you');
-  check(!!firstLit && !firstLit.busy, 'offline: the first lit frame came after the queue drained (no timer, no polling)');
-  check(!drain.some((s) => s.rim === 'you' && s.busy), 'offline: no frame lit the rim while an opponent animation was still playing');
+  check(!!firstLit && firstLit.t >= lastOpponentEnd,
+    `offline: the first light came after their last card landed (lit ${firstLit ? Math.round(firstLit.t - lastOpponentEnd) : '-'}ms after)`);
+  check(!drain.some((s) => s.rim === 'you' && s.t < lastOpponentEnd), 'offline: no frame lit the rim while the opponent was still animating');
   const ownMoveLit = offlineLog.samples.filter((s) => s.rim === 'you' && s.busy && s.actor === 0 && s.t < botTurnAt.t);
   check(ownMoveLit.length > 0, `offline: it stayed lit through MY OWN move's animation (${ownMoveLit.length} frames)`);
   check(!offlineLog.samples.some((s) => s.ceremony && s.rim === 'you'), 'offline: never lit while the ceremony overlay was up');
-  const offlineLitWrites = offlineLog.writes.filter((w) => w.rim === 'you');
-  check(offlineLitWrites.every((w) => !w.busy), `offline: every write to "you" came with the queue idle (${offlineLitWrites.length} writes)`);
+  const drainWrites = offlineLog.writes.filter((w) => w.t >= botTurnAt.t && w.rim === 'you');
+  check(drainWrites.every((w) => w.t >= lastOpponentEnd), `offline: every write to "you" in the hand-off came after their last card (${drainWrites.length} writes)`);
   check(pageErrors.length === 0, `offline: no page errors${pageErrors.length ? ` (${pageErrors[0]})` : ''}`);
 
   // =============================================================================================
@@ -303,6 +326,12 @@ try {
   waiter.page.on('pageerror', (e) => onlineErrors.push(e.message));
 
   await waitIdle(mover);
+  // A duel's turn opens in DRAW: one deck tap commits the draw, then the Throw control can end it.
+  for (let i = 0; i < 6 && (await statePhase(mover)) !== 'ACT'; i++) {
+    await tapExposed(mover, '#deck');
+    await sleep(400);
+  }
+  check((await statePhase(mover)) === 'ACT', `online: the mover reached its ACT step (${await statePhase(mover)})`);
   const castOnline = await startCast(waiter.page, 'online-cast');
   // The first frame that has the gate shut, sampled inside the page (a round trip later could miss
   // a short reveal on a loaded machine).
@@ -382,9 +411,18 @@ try {
     const s = h.state();
     return !h.busy() && s && s.phase !== 'GAME_OVER';
   }, undefined, { timeout: 45000 });
+  // The ceremony's own hold is released a beat after the lottery hides; wait for that release rather
+  // than sampling the fade (a rim that is correctly dark under the hold would look like a failure).
+  await blitzPage.waitForFunction(() => {
+    const r = document.getElementById('starter-lottery');
+    return !r || r.hidden || !r.getClientRects().length;
+  }, undefined, { timeout: 30_000 }).catch(() => undefined);
+  await sleep(600);
   const blitzIdle = await snapNow(blitzPage);
+  const blitzSheets = await blitzPage.evaluate(() => [...document.querySelectorAll('[id^="sheet-"]:not([hidden])')].map((e) => e.id));
   await shot(blitzPage, 'blitz-2-settled.png');
-  check(blitzIdle.rim === (blitzIdle.actor === 0 ? 'you' : 'opponent'), `blitz: the settled rim follows the tap (actor ${blitzIdle.actor}, rim "${blitzIdle.rim}")`);
+  check(blitzIdle.rim === (blitzIdle.actor === 0 ? 'you' : 'opponent'),
+    `blitz: the settled rim follows the tap (actor ${blitzIdle.actor}, rim "${blitzIdle.rim}", sheets ${JSON.stringify(blitzSheets)})`);
   const blitzLog = await logOf(blitzPage);
   dump('blitz.json', blitzLog);
   check(!blitzLog.samples.some((s) => s.rim === 'you' && s.actor === 1), 'blitz: never lit on the opponent\'s turn');
