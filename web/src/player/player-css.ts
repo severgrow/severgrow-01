@@ -41,22 +41,20 @@ html.futa04-information #game .dock::before {
 }
 @media (prefers-reduced-motion:reduce) { html.futa04-information #game::before { animation:none; opacity:.025; transform:none; } }
 html.futa04-information.reduce-motion #game::before { animation:none; opacity:.025; transform:none; }
-/* THE LOCAL PATCHES ARE NEVER HIDDEN FOR A BEAT. Do not bring back the futa04-room-lit rule.
-   Lineage. Owner, 2026-11-20 morning: the opponent's Grow reaction showed a vertical seam at the
-   board edge on desktop and an unlit strip at the bottom of an iPhone 15 Pro; the four patches above
-   were held to cause it, so a beat hid all four for its own duration. Owner, 2026-11-20 evening, at
-   the same beat: "you can see the border of this highlight/change ... i like it, but looks ugly when
-   you can see its border". Measured at 1440x900 (before/after pixels, not by eye):
-     - the outcome light is one flat wash BELOW these patches and its change is already even: at
-       peak it adds the same 22-23 (summed over R+G+B, out of 765) at the screen corners, in the
-       gutter beside the board, in the board's own tile gaps and on the phone's bottom strip. So
-       hiding the patches let the wash reach nothing new — it only removed a SECOND, shaped light.
-     - that second light is the seam: the dark vignette on .play::before is strongest exactly at the
-       board's right edge, so removing it doubles the change right there (+41 instead of +23) and
-       stops dead on the board's opaque art (the step is at the art's edge, x=716, not at any
-       patch's box edge) — a bright rectangle hugging the board, with the border the owner marked.
-   One wash, no shape: leave every patch at its resting opacity during a beat. */
-
+/* ONE ROOM, EDGE TO EDGE (owner, 2026-11-20: the opponent's Grow reaction showed a vertical seam
+   at the board edge on desktop and an unlit strip at the bottom of an iPhone 15 Pro).
+   The full-screen outcome light and ambient pulse are already one even wash over the viewport.
+   These four local patches sit ABOVE that wash, and each stops at its own box: the board vignette
+   on .play::before, the cream reflection on .board-wrap::before, the contact shadows on
+   .dock::before and the slow warm pass on #game::before. Their rectangles are what cut the colour
+   at the board edge and left the strip under the hand dim. ui/room-light.ts holds the
+   futa04-room-lit class on <html> for exactly the beat's duration, so the same colour reaches under
+   the board, the cockpit and the hand, through the phone's visible bottom edge — while the
+   resting board keeps every layer it had (the class exists only while a light is running). */
+html.futa04-information.futa04-room-lit #game::before,
+html.futa04-information.futa04-room-lit #game .play::before,
+html.futa04-information.futa04-room-lit #game .board-wrap::before,
+html.futa04-information.futa04-room-lit #game .dock::before { opacity:0 !important; }
 /* While a move is animating — including an online enemy turn replay — drop the full-screen
    animated warm wash. It is the phone's most expensive composited layer and it adds nothing
    while tiles are landing. The display's baked bloom KEEPS its light during a move: it is one

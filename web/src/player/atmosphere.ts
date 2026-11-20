@@ -2,6 +2,7 @@
 // noise/blur filter, animation clock, gameplay input, state or per-frame drawing.
 import { cornerPts, S } from '../ui/geom.js';
 import { mountAmbientLight } from '../ui/ambient-light.js';
+import { holdRoomLight } from '../ui/room-light.js';
 import { publishLight, restoreDisplayLight } from './light.js';
 
 export const ATMOSPHERE_CSS = `
@@ -148,6 +149,10 @@ export function mountAtmosphere(): OutcomeLight {
       if (now - lastStart < 380 && strength <= lastStrength) return;
       lastStart = now; lastStrength = strength;
       running?.cancel();
+      // One room: hide the board's local light patches for this beat only (ui/room-light.ts).
+      // The release belongs to this beat, so a newer pulse's window is never closed by an older
+      // beat's queued cancel event.
+      const releaseRoom = holdRoomLight();
       outcome.dataset.tone = tone;
       // One contract: the room's light becomes the outcome's tone (green/red) for this beat,
       // then hands back to whatever the display is showing. Two writes, never a per-frame loop.
@@ -160,6 +165,7 @@ export function mountAtmosphere(): OutcomeLight {
       running = beat;
       const done = () => {
         if (running === beat) restoreDisplayLight();
+        releaseRoom();
       };
       beat.onfinish = done;
       beat.oncancel = done;
