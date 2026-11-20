@@ -351,6 +351,10 @@ export const mountPushNotifications = (hooks: PushMountHooks): { sync: () => Pro
       try {
         const config = await hooks.client.pushConfig();
         if (!config.enabled) { row!.hidden = true; note!.hidden = true; return; }
+        // No registration at all (the /test/ copy registers no worker, or a local http dev page): there
+        // is nothing to receive a push, so do not offer a switch that can only fail.
+        const registered = await navigator.serviceWorker.getRegistration().catch(() => undefined);
+        if (!registered) { row!.hidden = true; note!.hidden = true; return; }
         row!.hidden = false;
         const platform = (hooks.platform ?? platformOf)();
         const support = pushSupport(platform);
