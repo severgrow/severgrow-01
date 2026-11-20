@@ -24,6 +24,7 @@ import type {
   MeResponse,
   OfflineCounters,
   OfflineSummaryResponse,
+  PlayerCardResponse,
   PublicPlayerProfile,
   ReconnectResponse,
   ReplayResponse,
@@ -620,6 +621,16 @@ export class DuelClient {
 
   async playerProfile(token: string, playerId: string): Promise<{ profile: PublicPlayerProfile; headToHead?: HeadToHead }> {
     return this.requestWithDeadline('GET', `/v1/players/${encodeURIComponent(playerId)}/profile`, { token, retry: true }, 'Profile read');
+  }
+
+  /**
+   * THE WHOLE PROFILE SHEET IN ONE REQUEST (owner, 2026-11-20): the public allow-list — online row,
+   * offline row and stored flag — plus the achievements count and the best online Blitz streak.
+   * A server deployed before this route answers 404, and the caller falls back to
+   * `playerProfile` + `playerRecord`.
+   */
+  async playerCard(token: string, playerId: string): Promise<PlayerCardResponse> {
+    return this.requestWithDeadline<PlayerCardResponse>('GET', `/v1/players/${encodeURIComponent(playerId)}/card`, { token, retry: true }, 'Profile card read');
   }
 
   /** A profile's record: the best online Blitz streak and achievements unlocked. */

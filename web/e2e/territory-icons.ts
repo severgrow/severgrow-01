@@ -129,6 +129,8 @@ const sheetState = (p: Page) => p.evaluate(() => {
     visitorCaption: document.getElementById('profile-visitor') !== null,
     playTitle: document.getElementById('profile-play-title')?.textContent ?? '',
     onlineValues: [...(document.getElementById('profile-play-online')?.querySelectorAll('dd') ?? [])].map((dd) => dd.textContent ?? ''),
+    offlineValues: [...(document.getElementById('profile-play-offline')?.querySelectorAll('dd') ?? [])].map((dd) => dd.textContent ?? ''),
+    offlineLabels: [...(document.getElementById('profile-play-offline')?.querySelectorAll('dt') ?? [])].map((dt) => dt.textContent ?? ''),
   };
 });
 
@@ -197,6 +199,7 @@ try {
   // level and colour. Hold the profile read open and prove the sheet shows those before it lands.
   let releaseProfile!: () => void;
   const profileGate = new Promise<void>((resolve) => { releaseProfile = resolve; });
+  await page.route('**/v1/players/*/card*', async (route) => { await profileGate; await route.continue(); });
   await page.route('**/v1/players/*/profile*', async (route) => { await profileGate; await route.continue(); });
   await page.click('#online-world-selection .world-claim-button[data-action="profile"]');
   await page.waitForFunction(() => (document.getElementById('sheet-profile') as HTMLElement | null)?.hidden === false);
@@ -221,11 +224,19 @@ try {
   check('it shows their level, tiles and colour', visitor.level === 'Lvl 7' && !visitor.levelHidden && visitor.tiles === '2', `${visitor.level} / ${visitor.tiles}`);
   // NO HEX CODE (owner: "what's the hashtag and number next to tile in profile? color? remove").
   check('it carries no hex code beside the swatch', visitor.hexHidden && visitor.hex === '', `${visitor.hex} / hidden=${visitor.hexHidden}`);
-  check('it shows the ONLINE record only', visitor.playTitle === PROFILE.theirGames && visitor.onlineShown && visitor.onlineValues[0] === '0', JSON.stringify(visitor.onlineValues));
-  check('it renders NO Seeds row and NO offline row',
-    !visitor.seedsShown && !visitor.offlineShown && !visitor.winsShown, JSON.stringify(visitor));
-  check('no invented numbers, then: the online record is em dashes where there are no games',
-    visitor.onlineValues.slice(1).every((value) => value === PROFILE.unknown), JSON.stringify(visitor.onlineValues));
+  // OWNER, 2026-11-20: BOTH rows are public now — the offline one as COUNTS ONLY (games, hard
+  // streak, blitz streak). This harness wires no streak store, so those counts are honest em dashes.
+  check('it shows BOTH records: the visitor\'s own games and the online record',
+    visitor.playTitle === PROFILE.theirGames && visitor.offlineShown && visitor.onlineShown && visitor.onlineValues[0] === '0', JSON.stringify(visitor));
+  check('it renders NO Seeds row and NO all-time win line',
+    !visitor.seedsShown && !visitor.winsShown, JSON.stringify(visitor));
+  check('no invented numbers, then: every unread record value is the em dash',
+    [...visitor.onlineValues.slice(1), ...visitor.offlineValues].every((value) => value === PROFILE.unknown),
+    JSON.stringify({ online: visitor.onlineValues, offline: visitor.offlineValues }));
+  // THE NEW SECOND ROW'S WORDING (owner, 2026-11-20), measured in a real render.
+  check('the offline row is games / hard streak / blitz streak',
+    JSON.stringify(visitor.offlineLabels) === JSON.stringify([PROFILE.games, PROFILE.hardStreak, PROFILE.blitzStreak]),
+    visitor.offlineLabels.join(' | '));
   await page.screenshot({ path: `${SHOTS}/territory-profile-visitor-390.png` });
 
   // Escape closes, and focus goes back to the key that opened it.
