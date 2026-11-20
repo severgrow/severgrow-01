@@ -61,9 +61,19 @@ untouched.
 
 ## Still open (do not report these as fixed)
 
-- **Presence (Online / Away) is not wired** — the indicator is deliberately hidden rather than faked.
+Two entries that used to sit here are now done (re-verified 2026-11-20):
+
+- **Presence is shown as an icon, not a word.** The real-time **bolt** beside the menu says whether the
+  opponent is here (filled = online, empty = away) and the **chat's dot** carries the same state. The
+  header's "● Online / Away" words stay hidden on purpose (owner, 2026-11-16; `web/src/online/live/bolt.ts`,
+  `web/src/online/chat/view.ts`).
+- **The seat-1 Bloom stall is fixed** (2026-10-14): a mirrored seat enumerated a SET Bloom's hexes in
+  reverse, so a correctly painted Bloom was refused locally. Commit `7127a748`;
+  `web/e2e/online-bloom-multiround.ts` drives five consecutive rounds on both seats.
+
+What is still open:
+
 - A slow **retained-heap drift** (~270 KB per match in a long-lived tab; only a reload releases it).
-- An intermittent **seat-1 Bloom painting stall** (~1 run in 3, cause unidentified).
 - **The opponent's replayed turn carries less cockpit personality online than offline** (verified
   2026-10-14 against the code). The catch-up steps are queued for the shared `AnimQueue` **without**
   `markMoment()` / `displayEventForPlay()`, so the smart-cockpit LED announcements and the "big

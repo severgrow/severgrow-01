@@ -22,9 +22,12 @@ The original proposal (2026-10-14) is kept below the line as history.
 | `futasaku.com/#privacy` | The privacy policy | same |
 | Offline / tutorial / computer games | No change, ever | No change |
 
-Name tags (`src/player-tag.ts`) show in the match list and in Settings ("You are …"). The in-game bar keeps the plain name (short, and the list is where players tell each other apart). They are derived from the
-player id, so they never change and need no storage. (The live-duel challenge pop-up still shows the
-plain name — adding the tag there means changing the live ping payload; left for later.)
+Name tags (`src/player-tag.ts`) show in Settings ("You are …"), **not** in **Your matches** — your
+decision on 2026-11-09 ("in YOUR MATCHES don't show players tags - those are mainly for internal
+identification", recorded in `web/src/online/lobby.ts:218-220`). The in-game bar keeps the plain name
+too. They are derived from the player id, so they never change and need no storage. (The live-duel
+challenge pop-up still shows the plain name — adding the tag there means changing the live ping
+payload; left for later.)
 
 ## How it works (and why it is safe)
 
@@ -65,7 +68,7 @@ browser ──(1) PKCE: verifier stays on the device──▶ Supabase /auth/v1/
 | Migration | `server/migrations/0010_accounts.sql` |
 | Server router, stores, Supabase check | `server/src/accounts/accounts.ts`, `server/src/accounts/node.ts` |
 | Wiring | `server/src/index.ts`, `server/src/edge-entry.ts` (bundle rebuilt) |
-| Name tags | `src/player-tag.ts`; `opponentTag` in the match list; `web/src/online/lobby.ts` |
+| Name tags | `src/player-tag.ts`; Settings only (`web/src/accounts/menu-key.ts`, `web/src/accounts/mount.ts`); not the match list — owner 2026-11-09, `web/src/online/lobby.ts` |
 | Browser: PKCE, records | `web/src/accounts/core.ts` |
 | Browser: screens | `web/src/accounts/mount.ts` (one line in `web/src/main.ts`) |
 | Words, privacy policy | `src/strings.ts` → `ACCOUNT`, `PRIVACY` |
