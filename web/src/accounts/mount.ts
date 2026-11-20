@@ -19,6 +19,7 @@ import { duelApiUrl, duelRegion } from '../online/config.js';
 import { IDENTITY_STORAGE_KEY, notifyIdentityChanged, subscribeIdentityChanges } from '../online/identity.js';
 import { retagSeedProofs } from '../online/seed-rewards.js';
 import { signInWarmer } from './warm.js';
+import { GOOGLE_HANDOVER_BACKOFF_MS, GOOGLE_HANDOVER_MS, GOOGLE_HANDOVER_RETRY_MS, transientHandOver } from './handover.js';
 import { STORAGE_PREFIX } from '../channel.js';
 import { clearAccountBoundProgress } from './signout-reset.js';
 import { DISPLAY_NAME_MAX } from '../../../server/src/display-name.js';
@@ -525,6 +526,7 @@ export const mountAccounts = async (): Promise<void> => {
     const m = raw as Record<string, unknown>;
     return { seeds: n(m.seeds), tiles: n(m.tiles), levels: n(m.levels) };
   };
+  // ---- the hand-over's patience: why 12 s and two retries, in ./handover.ts ----
   type Completion = { identity: Identity; returnTo: ReturnTo; welcome: Parameters<typeof signInMessage>[0]; formerToken: string | null };
   const completeSignIn = async (access: string, provider: 'google' | 'email', returnTo: ReturnTo, active = () => true): Promise<Completion> => {
     const checkActive = () => { if (!active()) throw new Error('account-cancelled'); };
@@ -538,17 +540,29 @@ export const mountAccounts = async (): Promise<void> => {
       if (!identity || !writeIdentity(kv, identity)) throw new Error('account-storage-failed');
       before = identity;
     }
-    const handOver = () => apiRequest('POST', `/v1/auth/${provider}`, { accessToken: access }, before?.token ?? null,
-      provider === 'google' ? 3000 : undefined)
+    const handOver = (timeoutMs?: number) => apiRequest('POST', `/v1/auth/${provider}`, { accessToken: access }, before?.token ?? null, timeoutMs)
       .catch(() => ({ ok: false, status: 0, json: {} as Record<string, unknown> }));
-    let res = await handOver();
+    let res = await handOver(provider === 'google' ? GOOGLE_HANDOVER_MS : undefined);
     checkActive();
-    if (provider === 'google' && (res.status === 0 || [502, 503, 504].includes(res.status))) {
-      res = await handOver();
-      checkActive();
+    if (provider === 'google') {
+      // A transient failure is "no answer at all" (status 0: an abort at the deadline, a silent
+      // network, a failed CORS check) or any 5xx. A 4xx is the server's answer about this sign-in
+      // and is never repeated (./handover.ts).
+      for (const wait of GOOGLE_HANDOVER_BACKOFF_MS) {
+        if (!transientHandOver(res.status)) break;
+        await new Promise((resolve) => setTimeout(resolve, wait));
+        checkActive();
+        res = await handOver(GOOGLE_HANDOVER_RETRY_MS);
+        checkActive();
+      }
     }
     const identity = res.ok ? identityFromSignIn(res.json) : null;
-    if (identity?.kind !== 'account') throw new Error(res.status === 401 ? 'account-session-expired' : 'account-exchange-failed');
+    if (identity?.kind !== 'account') {
+      if (res.status === 401) throw new Error('account-session-expired');
+      // Status 0 means the server never answered, so the sheet must say that (ACCOUNT.signInNoAnswer)
+      // rather than the vague "did not finish", which is for a server that answered and refused.
+      throw new Error(res.status === 0 ? 'account-exchange-silent' : 'account-exchange-failed');
+    }
     const previousAccount = readAccount(kv);
     if (!writeAccount(kv, { provider, email: typeof res.json.email === 'string' ? res.json.email : null, playerId: identity.playerId }))
       throw new Error('account-storage-failed');
@@ -632,11 +646,17 @@ export const mountAccounts = async (): Promise<void> => {
     } catch (error) {
       const reason = error instanceof Error ? error.message : '';
       // WebKit can reject a request in the old document before the reload commits. Keep the
-      // verified session on transient hand-over failure so the next document can resume it.
-      if (stage !== 'handover' || reason !== 'account-exchange-failed') dropResume();
+      // verified session on transient hand-over failure so the next document can resume it
+      // (29aa3cdd). "Silent" is the same transient failure, only reported honestly below.
+      if (stage !== 'handover' || (reason !== 'account-exchange-failed' && reason !== 'account-exchange-silent')) dropResume();
       if (reason === 'account-storage-failed') stage = 'storage';
       idleMenuKey();
-      showRecovery(stage === 'missing-pending' ? ACCOUNT.signInExpired : navigator.onLine ? ACCOUNT.failed : ACCOUNT.offline, returnTo);
+      // A server that never answered (a hand-over that ran out of time, a silent network) is said
+      // plainly; "did not finish" stays for an answer we could not use.
+      showRecovery(stage === 'missing-pending' ? ACCOUNT.signInExpired
+        : !navigator.onLine ? ACCOUNT.offline
+        : reason === 'account-exchange-silent' ? ACCOUNT.signInNoAnswer
+        : ACCOUNT.failed, returnTo);
     } finally {
       const metric = { stage, startedMs: Math.round(started), totalMs: Math.round(performance.now()),
         ...(tokenMs === undefined ? {} : { tokenMs: Math.round(tokenMs) }),

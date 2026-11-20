@@ -325,6 +325,71 @@ try {
     await d.context.close();
   }
 
+  // ---- 5c. A PATIENT HAND-OVER (owner, 2026-11-20, on /test/): after signing out, "Continue with
+  // Google" showed the "Google sign-in did not finish" sheet. The game-API hand-over had a 3 s
+  // deadline and ONE retry, so a slow answer (a cold isolate) or a short burst of 503s failed a
+  // sign-in whose server was merely busy. These cases assert what the PLAYER gets, not the request:
+  //   * a hand-over that takes 3.5 s (past the old 3 s deadline) must still sign the player in;
+  //   * two 503s then success must sign in (the old code retried exactly once, so it did not);
+  //   * one 503 then success — the case the old single retry covered — must keep signing in;
+  //   * a server that never answers must SAY SO, not use the vague "did not finish" line.
+  {
+    type HandOver = (call: number) => 'pass' | 'slow' | '503' | 'abort';
+    const cases: { name: string; user: string; plan: HandOver; signsIn: boolean }[] = [
+      { name: 'a hand-over that takes 3.5 s', user: 'handover-slow', plan: () => 'slow', signsIn: true },
+      { name: 'two 503s then success', user: 'handover-503s', plan: (n) => (n <= 2 ? '503' : 'pass'), signsIn: true },
+      { name: 'one 503 then success', user: 'handover-503', plan: (n) => (n === 1 ? '503' : 'pass'), signsIn: true },
+      { name: 'no answer at all', user: 'handover-silent', plan: () => 'abort', signsIn: false },
+    ];
+    for (const one of cases) {
+      const d = await device(browser);
+      await openMenuEntry(d.page, 'menu-online');
+      await waitFor(() => d.page.locator('#acct-welcome').isVisible());
+      await d.page.click('[data-acct="welcome-guest"]');
+      await hubOpen(d.page);
+      await dismissFirstCard(d.page);
+      await waitFor(async () => (await identity(d.page)) !== null);
+      fake.nextUser = one.user;
+      let calls = 0;
+      let stage = '';
+      d.page.on('request', (request) => {
+        if (new URL(request.url()).pathname !== '/v1/auth/google/metrics') return;
+        stage = String((request.postDataJSON() as { stage?: unknown } | null)?.stage ?? '');
+      });
+      await d.page.route('**/v1/auth/google', async (route) => {
+        calls += 1;
+        const how = one.plan(calls);
+        if (how === 'abort') return route.abort().catch(() => undefined);
+        // CORS headers, as in production: a cross-origin 503 without them is a status 0, not a 503.
+        if (how === '503') return route.fulfill({ status: 503, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{"ok":false}' }).catch(() => undefined);
+        // A slow server is slow on EVERY attempt: a cold isolate does not warm up between them.
+        if (how === 'slow') await new Promise((resolve) => setTimeout(resolve, 3500));
+        return route.continue().catch(() => undefined);
+      });
+      await d.page.click('[data-acct="hub-google"]');
+      const sheet = d.page.locator('#acct-google-return');
+      const settled = await waitFor(async () => (await identity(d.page))?.kind === 'account' || await sheet.isVisible(), 40_000);
+      const text = (await sheet.isVisible().catch(() => false))
+        ? ((await sheet.innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ').trim() : '';
+      const signed = ((await identity(d.page))?.kind === 'account' ? await identity(d.page) : null);
+      const note = `stage ${stage || '(none)'}, ${calls} hand-over call(s)${text ? `, sheet: "${text}"` : ''}`;
+      check(`patient hand-over (${one.name}): ${one.signsIn ? 'the player is signed in' : 'the sheet says the server did not answer'}`,
+        settled && (one.signsIn ? signed !== null : /did not answer/i.test(text)), note);
+      if (one.signsIn) {
+        // SIGNED IN, not merely "no sheet": the server accepts the token and the menu key is live.
+        const me = signed ? await service.authenticate(signed.token).catch(() => null) : null;
+        check(`patient hand-over (${one.name}): the server knows this account`, me?.kind === 'account', me?.kind ?? 'no identity');
+        check(`patient hand-over (${one.name}): the menu key no longer says LOG IN`, await waitFor(async () => {
+          const key = d.page.locator('#menu-login');
+          return !(await key.isVisible().catch(() => false)) || !/log in/i.test((await key.innerText().catch(() => '')) ?? '');
+        }, 10_000));
+      } else {
+        check(`patient hand-over (${one.name}): it is not the vague "did not finish" line`, settled && !/did not finish/i.test(text), note);
+      }
+      await d.context.close();
+    }
+  }
+
   if (!CALLBACK_ONLY) {
 
   // ---- 1. a new player: the welcome, then guest play ----
