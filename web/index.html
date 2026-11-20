@@ -11,6 +11,16 @@
     <style>html[data-startup="waiting"] {background:#0e0f10} html[data-startup="waiting"] body {opacity:0;visibility:hidden;background:#0e0f10}</style>
     <!-- A slow or failed planet import must never expose its retired flat-map underlay. -->
     <style>html.planet-expected .world-grid > .world-map-svg{visibility:hidden!important;pointer-events:none!important}</style>
+    <script data-google-wake="">
+      (function () {
+        var url = document.currentScript.dataset.googleWake;
+        if (!url) return;
+        var query = new URLSearchParams(location.search);
+        if (query.has('artlab') || !/^[A-Za-z0-9._~-]{8,512}$/.test(query.get('code') || '')) return;
+        document.documentElement.dataset.googleReturn = 'pending';
+        fetch(url, { cache: 'no-store', referrerPolicy: 'no-referrer' }).catch(function () {});
+      })();
+    </script>
     <script>
       // Live and test use the same first reveal. A bounded fail-open also works when
       // the main module cannot load; no spinner, network wait or repeat entrance on navigation.
@@ -316,6 +326,16 @@
                construction — no value to keep in sync. -->
           <div id="menu-foot" class="menu-buttons menu-footer" role="group" aria-label="Account and settings">
             <button id="menu-login" class="btn ghost" type="button" aria-label="Log in" hidden>LOG IN</button>
+            <script>
+              if (document.documentElement.dataset.googleReturn === 'pending') {
+                var key = document.getElementById('menu-login');
+                key.textContent = 'Signing in…';
+                key.setAttribute('aria-label', key.textContent);
+                key.setAttribute('aria-busy', 'true');
+                key.disabled = true;
+                key.hidden = false;
+              }
+            </script>
             <button id="menu-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
           </div>
         </div>

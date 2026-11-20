@@ -4042,9 +4042,9 @@ async function syncAccountLevel(opts: { fresh?: boolean } = {}): Promise<void> {
   else if (shownScreen === 'campaign') renderCampaignScreen();
   else if (shownScreen === 'levels') renderLevelGrid();
 }
-// A sign-in finishes by reloading (the accounts module's own flow), so boot covers it; this event is
-// the belt-and-braces path if that flow ever stops reloading.
-window.addEventListener('futasaku:identity', () => { void syncAccountLevel(); });
+// A callback is covered by the initial read below. An identity change later refreshes in place.
+let accountLevelBooted = false;
+window.addEventListener('futasaku:identity', () => { if (accountLevelBooted) void syncAccountLevel(); });
 // Every device knows the highest level (owner, 2026-11-08: "on some devices im at level 59 and some
 // other 60"): ask the account again on start and whenever the app comes back to the foreground (a
 // home-screen app is resumed, not restarted), at most once a minute. The level only ever goes up.
@@ -11971,8 +11971,11 @@ else showScreen('menu');
 // One background read on boot: a signed-in account's place comes from the server (a guest never
 // asks). It repaints the menu if it moves; the first paint is already usable without it.
 // ...then the fresh read: the cached answer painted first, the server's (higher) answer follows.
-void syncAccountLevel().then(() => recheckAccountLevel());
-void syncRandomDeals();
+void signInGate.settled.then(() => {
+  accountLevelBooted = true;
+  void syncAccountLevel().then(() => recheckAccountLevel());
+  void syncRandomDeals();
+});
 
 // The main-menu tagline ("GROW · CONNECT · CONQUER") is NOT on the menu — the owner had it removed
 // on 2026-10-14 (it read as clutter under the wordmark). It is not in `web/index.html` at all, so

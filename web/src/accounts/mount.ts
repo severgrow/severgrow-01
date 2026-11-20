@@ -16,7 +16,7 @@ import { DUEL_CLIENT_VERSION, DuelClient, browserStorage } from '../../../server
 import type { KeyValue } from '../../../server/src/client.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { duelApiUrl, duelRegion } from '../online/config.js';
-import { IDENTITY_STORAGE_KEY, subscribeIdentityChanges } from '../online/identity.js';
+import { IDENTITY_STORAGE_KEY, notifyIdentityChanged, subscribeIdentityChanges } from '../online/identity.js';
 import { retagSeedProofs } from '../online/seed-rewards.js';
 import { signInWarmer } from './warm.js';
 import { STORAGE_PREFIX } from '../channel.js';
@@ -54,7 +54,6 @@ import {
   readCallback,
   redirectTarget,
   savePending,
-  setFlash,
   setNicknamePrompt,
   takeFlash,
   pendingNicknamePrompt,
@@ -63,6 +62,7 @@ import {
   writeAccount,
 } from './core.js';
 import type { ReturnTo } from './core.js';
+import type { GoogleReturnStage } from '../../../src/google-return-metrics.js';
 
 type Identity = { token: string; playerId: string; displayName: string | null; kind: 'guest' | 'account' };
 
@@ -81,6 +81,8 @@ ${glassBaseCss('.acct-glass')}
   max-height:calc(100dvh - 32px); overflow:auto; padding:18px 16px 16px; background:rgba(8,10,10,.88); display:flex; flex-direction:column; gap:12px; }
 .acct-glass[hidden], .acct-scrim[hidden], .acct-toast[hidden], [data-acct][hidden] { display:none !important; }
 .acct-scrim { position:fixed; inset:0; z-index:94; background:rgba(4,6,5,.5); }
+#acct-google-return { z-index:97; }
+.acct-scrim:has(+ #acct-google-return) { z-index:96; }
 .acct-glass h3 { margin:6px 0 0; font:700 14px/1.2 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.04em; color:#e2d4b4; }
 .acct-glass h2 { margin:0; font:700 18px/1.2 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.04em; color:#f6ecd8; }
 .acct-glass p, .acct-glass li { margin:0; color:#e2d4b4; line-height:1.45; }
@@ -226,7 +228,7 @@ const warmSignIn = signInWarmer(async () => {
   const url = apiUrl('/v1/health');
   if (url && navigator.onLine) await fetch(url, { method: 'GET', cache: 'no-store' });
 });
-const apiRequest = async (method: 'POST' | 'PATCH', path: string, body: unknown, token: string | null): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> => {
+const apiRequest = async (method: 'POST' | 'PATCH', path: string, body: unknown, token: string | null, timeoutMs?: number): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> => {
   const url = apiUrl(path);
   if (!url) return { ok: false, status: 0, json: {} };
   return authJson(url, {
@@ -239,7 +241,7 @@ const apiRequest = async (method: 'POST' | 'PATCH', path: string, body: unknown,
       ...(token ? { authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(body),
-  });
+  }, fetch, timeoutMs);
 };
 const apiPost = (path: string, body: unknown, token: string | null) => apiRequest('POST', path, body, token);
 /** Does this identity have any online match at all? null when it cannot be told (offline, error). */
@@ -447,154 +449,13 @@ export const mountAccounts = async (): Promise<void> => {
     } catch { return null; }
   };
 
-  /** The server's "what came across" (keep the best of both, 2026-11-18), read defensively. */
-  const mergedFrom = (raw: unknown): { seeds: number; tiles: number; levels: number } | null => {
-    if (!raw || typeof raw !== 'object') return null;
-    const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
-    const m = raw as Record<string, unknown>;
-    return { seeds: n(m.seeds), tiles: n(m.tiles), levels: n(m.levels) };
-  };
-  const completeSignIn = async (access: string, provider: 'google' | 'email', returnTo: ReturnTo, active:()=>boolean = ()=>true): Promise<void> => {
-    const checkActive=()=>{if(!active())throw new Error('account-cancelled');};
-    checkActive();
-    let before = readIdentity(kv);
-    // Establish the usual local player before an email upgrade. Even a lost FIRST response then
-    // recovers the same player and its required name step; no second identity system is needed.
-    if (provider === 'email' && !before) {
-      const guest = await apiPost('/v1/guests', {}, null);
-      checkActive();
-      const identity = guest.ok ? identityFromSignIn(guest.json) : null;
-      if (!identity || !writeIdentity(kv, identity)) throw new Error('account-storage-failed');
-      before = identity;
-    }
-    // Only for the wording of the welcome line: asked BESIDE the hand-over, never before it
-    // (2026-11-18: it used to cost a whole round trip on the way to "signed in").
-    const guestHadMatchesRead = before ? hasMatches(before.token) : Promise.resolve(null);
-    // FIRST TRY ALWAYS WORKS (owner, 2026-11-11: "sometimes ... I need to log in second time"): a
-    // cold server can fail the Google hand-over once (the player is back from Google, with no form
-    // to retry from). Retry it one time, a moment later, before giving up.
-    const handOver = () => apiPost(`/v1/auth/${provider}`, {accessToken:access}, before?.token ?? null)
-      .catch(() => ({ ok: false, status: 0, json: {} as Record<string, unknown> }));
-    let res = await handOver();
-    checkActive();
-    // Google only: the email form already keeps its code for a visible retry (accounts-email.ts).
-    if (provider === 'google' && !res.ok && res.status !== 401) {
-      await new Promise((r) => setTimeout(r, 1500));
-      checkActive();
-      res = await handOver();
-      checkActive();
-    }
-    const identity = res.ok ? identityFromSignIn(res.json) : null;
-    if (!identity) throw new Error(res.status === 401 ? 'account-session-expired' : 'account-exchange-failed');
-    // The welcome line may wait a moment for its wording; the sign-in itself never does.
-    const guestHadMatches = await Promise.race([guestHadMatchesRead, new Promise<null>((r) => setTimeout(() => r(null), 800))]);
-    // Do not reload onto a forgotten identity if browser storage is blocked.
-    if (!writeAccount(kv, {provider,email:typeof res.json.email === 'string'?res.json.email:null,playerId:identity.playerId}) || !writeIdentity(kv,identity))
-      throw new Error('account-storage-failed');
-    // A guest's queued wins pass to the account it signed into (its progress was merged there).
-    if (kv && before?.kind === 'guest' && before.playerId !== identity.playerId) retagSeedProofs(kv, before.playerId, identity.playerId);
-    window.dispatchEvent(new Event('futasaku:identity'));
-    kv?.set(WELCOME_KEY,'1');
-    if (res.json.outcome === 'created' || res.json.outcome === 'linked' || (before?.kind === 'guest' && before.playerId === identity.playerId)) setNicknamePrompt(kv,identity.playerId);
-    setFlash(kv,{kind:'signed-in',text:signInMessage({outcome:res.json.outcome,name:shownName(identity)??'',beforePlayerId:before?.playerId??null,afterPlayerId:identity.playerId,guestHadMatches,merged:mergedFrom(res.json.merged)}),returnTo});
-    dropResume();
-    // Keep the verified session for a failed exchange's retry. Close it only after success.
-    void authJson(`${supa.url}/auth/v1/logout?scope=local`,{method:'POST',headers:{apikey:supa.key,authorization:`Bearer ${access}`}}).catch(()=>undefined);
-    signInGate.reloading();
-    location.reload();
-  };
-
-  // ---- 0. a sign-in interrupted by a reload: finish it (see saveResume) ----
-  const resumed = readResume();
-  if (resumed && !readCallback(location.search, location.hash)) {
-    try {
-      await completeSignIn(resumed.access, 'google', resumed.returnTo);
-      return;
-    } catch {
-      dropResume();
-      setFlash(kv, { kind: 'failed', text: navigator.onLine ? ACCOUNT.failed : ACCOUNT.offline, returnTo: resumed.returnTo });
-    }
-  }
-
-  // ---- 1. coming back from Google (?code=…) ----
-  const callback = readCallback(location.search, location.hash);
-  if (callback) {
-    const pending = takePending(kv, Date.now());
-    // Drop the code from the address bar at once: it is single-use and must not be bookmarked or shared.
-    history.replaceState(history.state, '', location.pathname + cleanSearch(location.search) + (isCallbackHash(location.hash) ? '' : location.hash));
-    if (pending) {
-      const fail = (text: string, why?: unknown) => {
-        // The reason never reaches the player, so log it: without this, every sign-in failure looks
-        // identical ("did not finish") and the stage that broke is unguessable. Console only, no
-        // player-facing change.
-        if (why !== undefined) console.warn('[FUTASAKU] Google sign-in failed:', why);
-        setFlash(kv, { kind: 'failed', text, returnTo: pending.returnTo });
-      };
-      try {
-        if ('error' in callback) fail(ACCOUNT.failed, { stage: 'callback', error: callback.error });
-        else {
-          const ex = await authJson(`${supa.url}/auth/v1/token?grant_type=pkce`, {
-            method: 'POST',
-            headers: { apikey: supa.key, 'content-type': 'application/json' },
-            body: JSON.stringify({ auth_code: callback.code, code_verifier: pending.verifier }),
-          });
-          const session = ex.ok ? (ex.json as { access_token?: unknown }) : null;
-          const access = typeof session?.access_token === 'string' ? session.access_token : null;
-          if (!access) {
-            const body = ex.ok ? null : String(ex.status);
-            fail(ACCOUNT.failed, { stage: 'token-exchange', status: ex.status, body: body?.slice(0, 300) });
-          } else {
-            // The code is single-use and already spent: keep the verified session for this tab, so
-            // a reload in the middle of the hand-over (an app update swapping in its files) resumes
-            // the sign-in instead of forgetting it.
-            saveResume({ access, returnTo: pending.returnTo, at: Date.now() });
-            await completeSignIn(access, 'google', pending.returnTo);
-            return;
-          }
-        }
-      } catch {
-        dropResume();
-        fail(navigator.onLine ? ACCOUNT.failed : ACCOUNT.offline);
-      }
-    }
-  }
-
-  // No reload is coming (no return from Google, or it failed): the online start-up may begin.
-  signInGate.settle();
-
-  // The main menu's account key (section 4b). Looked up once: the menu's first layout may already have
-  // painted it from the device's memory (./menu-key.ts).
-  const menuLogin = document.getElementById('menu-login') as HTMLButtonElement | null;
-  // ---- 2. Supported sign-in methods (one shared settings request). ----
-  const authSettings = authJson(`${supa.url}/auth/v1/settings`,{headers:{apikey:supa.key}});
-  const [available, emailAvailable] = await Promise.all([
-    probeGoogle(authSettings, kv),
-    (async () => {
-      try {
-        const [server, settings] = await Promise.all([
-          authJson(apiUrl('/v1/auth/methods')!),
-          authSettings,
-        ]);
-        const external = settings.json.external as Record<string,unknown>|undefined;
-        return server.ok && server.json.email === true && settings.ok && external?.email === true;
-      } catch { return false; }
-    })(),
-  ]);
-  try { kv?.set(EMAIL_ON_KEY,emailAvailable?'1':'0'); } catch { /* blocked storage */ }
-  const flash = takeFlash(kv);
-  if (flash) {
-    say(flash.text, flash.kind === 'failed');
-    setTimeout(() => go(flash.returnTo), 0);
-  }
-  if (!available && !emailAvailable && !signedIn()) {
-    // The menu may have painted the key early from the device's memory (./menu-key.ts); Google is
-    // off, so take it away rather than leave a key that cannot work.
-    if (menuLogin) { menuLogin.hidden = true; menuLogin.dataset.owned = '1'; }
-    return;
-  }
-  document.body.classList.add('acct-on');
-
+  const installedOnIOS = () => (navigator as Navigator & { standalone?: boolean }).standalone === true ||
+    (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) &&
+    window.matchMedia('(display-mode: standalone)').matches;
+  let openingGoogle = false;
   const start = async (returnTo: ReturnTo, btn: HTMLButtonElement | null, status: HTMLElement | null) => {
+    if (openingGoogle) return;
+    if (installedOnIOS()) { showRecovery(ACCOUNT.signInSafari, returnTo, true); return; }
     warmSignIn();
     if (!navigator.onLine) {
       if (status) {
@@ -609,24 +470,231 @@ export const mountAccounts = async (): Promise<void> => {
       return;
     }
     if (btn) btn.disabled = true;
+    openingGoogle = true;
     if (status) {
       status.textContent = ACCOUNT.opening;
       status.dataset.tone = '';
     }
-    location.assign(authorizeUrl(supa.url, redirectTarget(location), await challengeFor(verifier)));
+    try {
+      location.assign(authorizeUrl(supa.url, redirectTarget(location), await challengeFor(verifier)));
+    } catch {
+      openingGoogle = false;
+      takePending(kv, Date.now());
+      if (btn) btn.disabled = false;
+      showRecovery(ACCOUNT.unavailable, returnTo);
+    }
   };
+
+  const menuLogin = document.getElementById('menu-login') as HTMLButtonElement | null;
+  const idleMenuKey = () => {
+    delete document.documentElement.dataset.googleReturn;
+    if (menuLogin) paintAccountKey(menuLogin, shownName(signedIn()?.identity ?? null));
+  };
+  const recovery = sheet('acct-google-return', ACCOUNT.signInTitle);
+  const recoveryText = el('p', 'acct-small');
+  recoveryText.setAttribute('role', 'status');
+  const recoveryRetry = button('acct-btn', ACCOUNT.signInRetry, 'google-return-retry');
+  const recoveryEmail = button('acct-btn', ACCOUNT.continueEmail, 'google-return-email');
+  recoveryEmail.hidden = true;
+  const recoveryClose = button('acct-btn', PRIVACY.close, 'google-return-close');
+  const recoveryActions = el('div', 'acct-actions row');
+  recoveryActions.append(recoveryRetry, recoveryEmail, recoveryClose);
+  recovery.panel.append(el('h2', '', ACCOUNT.signInTitle), recoveryText, recoveryActions);
+  let retryDestination: ReturnTo = 'menu';
+  recoveryRetry.addEventListener('click', () => void start(retryDestination, recoveryRetry, recoveryText));
+  recoveryClose.addEventListener('click', () => recovery.close());
+  const showRecovery = (message: string, returnTo: ReturnTo, safari = false) => {
+    retryDestination = returnTo;
+    recoveryText.textContent = message;
+    recoveryRetry.hidden = safari;
+    recoveryEmail.hidden = !safari || !emailAvailable;
+    recoveryRetry.disabled = false;
+    recovery.open();
+  };
+
+  /** The server's "what came across" (keep the best of both, 2026-11-18), read defensively. */
+  const mergedFrom = (raw: unknown): { seeds: number; tiles: number; levels: number } | null => {
+    if (!raw || typeof raw !== 'object') return null;
+    const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
+    const m = raw as Record<string, unknown>;
+    return { seeds: n(m.seeds), tiles: n(m.tiles), levels: n(m.levels) };
+  };
+  type Completion = { identity: Identity; returnTo: ReturnTo; welcome: Parameters<typeof signInMessage>[0]; formerToken: string | null };
+  const completeSignIn = async (access: string, provider: 'google' | 'email', returnTo: ReturnTo, active = () => true): Promise<Completion> => {
+    const checkActive = () => { if (!active()) throw new Error('account-cancelled'); };
+    checkActive();
+    let before = readIdentity(kv);
+    // Establish a guest before an email upgrade so a lost first response can recover the same player.
+    if (provider === 'email' && !before) {
+      const guest = await apiPost('/v1/guests', {}, null);
+      checkActive();
+      const identity = guest.ok ? identityFromSignIn(guest.json) : null;
+      if (!identity || !writeIdentity(kv, identity)) throw new Error('account-storage-failed');
+      before = identity;
+    }
+    const handOver = () => apiRequest('POST', `/v1/auth/${provider}`, { accessToken: access }, before?.token ?? null,
+      provider === 'google' ? 3000 : undefined)
+      .catch(() => ({ ok: false, status: 0, json: {} as Record<string, unknown> }));
+    let res = await handOver();
+    checkActive();
+    if (provider === 'google' && (res.status === 0 || [502, 503, 504].includes(res.status))) {
+      res = await handOver();
+      checkActive();
+    }
+    const identity = res.ok ? identityFromSignIn(res.json) : null;
+    if (identity?.kind !== 'account') throw new Error(res.status === 401 ? 'account-session-expired' : 'account-exchange-failed');
+    const previousAccount = readAccount(kv);
+    if (!writeAccount(kv, { provider, email: typeof res.json.email === 'string' ? res.json.email : null, playerId: identity.playerId }))
+      throw new Error('account-storage-failed');
+    if (!writeIdentity(kv, identity)) {
+      if (previousAccount) writeAccount(kv, previousAccount);
+      else clearAccount(kv);
+      throw new Error('account-storage-failed');
+    }
+    // Commit the hand-over and paint the nickname before optional reads or other surfaces refresh.
+    idleMenuKey();
+    try { kv?.set(WELCOME_KEY, '1'); } catch { /* the identity is already committed */ }
+    if (res.json.outcome === 'created' || res.json.outcome === 'linked' || (before?.kind === 'guest' && before.playerId === identity.playerId))
+      setNicknamePrompt(kv, identity.playerId);
+    if (kv && before?.kind === 'guest' && before.playerId !== identity.playerId) retagSeedProofs(kv, before.playerId, identity.playerId);
+    dropResume();
+    notifyIdentityChanged(identity);
+    window.dispatchEvent(new Event('futasaku:identity'));
+    void authJson(`${supa.url}/auth/v1/logout?scope=local`, { method: 'POST', headers: { apikey: supa.key, authorization: `Bearer ${access}` } }).catch(() => undefined);
+    return { identity, returnTo, formerToken: before?.token ?? null, welcome: {
+      outcome: res.json.outcome, name: shownName(identity) ?? '', beforePlayerId: before?.playerId ?? null,
+      afterPlayerId: identity.playerId, guestHadMatches: null, merged: mergedFrom(res.json.merged),
+    } };
+  };
+  const showWelcome = ({ identity, welcome, formerToken }: Completion) => {
+    say(signInMessage(welcome));
+    if (formerToken && !welcome.merged && welcome.outcome === 'signed-in' && welcome.beforePlayerId !== identity.playerId) {
+      void hasMatches(formerToken).then((guestHadMatches) => {
+        if (guestHadMatches === false && signedIn()?.identity.token === identity.token && !toast.hidden)
+          say(signInMessage({ ...welcome, guestHadMatches }));
+      });
+    }
+  };
+
+  // A verified session can resume after an external reload, even though sign-in itself stays in place.
+  let bootSignIn: Completion | null = null;
+  const callback = readCallback(location.search, location.hash);
+  const resumed = callback ? null : readResume();
+  if (callback || resumed) {
+    const pending = callback ? takePending(kv, Date.now()) : null;
+    const returnTo = pending?.returnTo ?? resumed?.returnTo ?? 'menu';
+    if (menuLogin) {
+      menuLogin.textContent = ACCOUNT.signingIn;
+      menuLogin.setAttribute('aria-label', ACCOUNT.signingIn);
+      menuLogin.setAttribute('aria-busy', 'true');
+      menuLogin.disabled = true;
+      menuLogin.hidden = false;
+    }
+    if (document.documentElement.dataset.googleReturn !== 'pending') warmSignIn();
+    if (callback) history.replaceState(history.state, '', location.pathname + cleanSearch(location.search) + (isCallbackHash(location.hash) ? '' : location.hash));
+    let stage: GoogleReturnStage = 'callback';
+    const started = performance.now();
+    let tokenMs: number | undefined;
+    let handoverMs: number | undefined;
+    try {
+      if (callback && !pending) {
+        stage = 'missing-pending';
+        throw new Error('account-pending-missing');
+      }
+      if (callback && 'error' in callback) throw new Error('account-provider-cancelled');
+      let access = resumed?.access;
+      if (callback && 'code' in callback && pending) {
+        stage = 'token-exchange';
+        const at = performance.now();
+        try {
+          const ex = await authJson(`${supa.url}/auth/v1/token?grant_type=pkce`, {
+            method: 'POST',
+            headers: { apikey: supa.key, 'content-type': 'application/json' },
+            body: JSON.stringify({ auth_code: callback.code, code_verifier: pending.verifier }),
+          }, fetch, 5000);
+          if (ex.ok && typeof ex.json.access_token === 'string') access = ex.json.access_token;
+        } finally { tokenMs = performance.now() - at; }
+        if (!access) throw new Error('account-token-failed');
+        saveResume({ access, returnTo, at: Date.now() });
+      }
+      stage = 'handover';
+      if (!access) throw new Error('account-token-failed');
+      const at = performance.now();
+      try { bootSignIn = await completeSignIn(access, 'google', returnTo); }
+      finally { handoverMs = performance.now() - at; }
+      stage = 'success';
+    } catch (error) {
+      dropResume();
+      if (error instanceof Error && error.message === 'account-storage-failed') stage = 'storage';
+      idleMenuKey();
+      showRecovery(stage === 'missing-pending' ? ACCOUNT.signInExpired : navigator.onLine ? ACCOUNT.failed : ACCOUNT.offline, returnTo);
+    } finally {
+      const metric = { stage, startedMs: Math.round(started), totalMs: Math.round(performance.now()),
+        ...(tokenMs === undefined ? {} : { tokenMs: Math.round(tokenMs) }),
+        ...(handoverMs === undefined ? {} : { handoverMs: Math.round(handoverMs) }) };
+      performance.mark(`futasaku:google:${stage}`);
+      const url = apiUrl('/v1/auth/google/metrics');
+      if (url) void fetch(url, { method: 'POST', body: JSON.stringify(metric), credentials: 'omit', referrerPolicy: 'no-referrer', keepalive: true }).catch(() => undefined);
+    }
+  }
+  signInGate.settle();
+  if (bootSignIn) {
+    showWelcome(bootSignIn);
+    const { returnTo } = bootSignIn;
+    setTimeout(() => go(returnTo), 0);
+  }
+
+  // ---- 2. Supported sign-in methods (one shared settings request). ----
+  const authSettings = authJson(`${supa.url}/auth/v1/settings`,{headers:{apikey:supa.key}});
+  const methods = Promise.all([
+    probeGoogle(authSettings, kv),
+    (async () => {
+      try {
+        const [server, settings] = await Promise.all([
+          authJson(apiUrl('/v1/auth/methods')!),
+          authSettings,
+        ]);
+        const external = settings.json.external as Record<string,unknown>|undefined;
+        return server.ok && server.json.email === true && settings.ok && external?.email === true;
+      } catch { return false; }
+    })(),
+  ]);
+  void methods.then(([, email]) => { try { kv?.set(EMAIL_ON_KEY, email ? '1' : '0'); } catch { /* blocked storage */ } });
+  // A verified Google return already has a usable account. Capability discovery can finish later.
+  let rememberedEmail = false;
+  try { rememberedEmail = kv?.get(EMAIL_ON_KEY) === '1'; } catch { /* blocked storage */ }
+  const [available, emailAvailable] = bootSignIn ? [true, rememberedEmail] : await methods;
+  const flash = takeFlash(kv);
+  if (flash) {
+    say(flash.text, flash.kind === 'failed');
+    setTimeout(() => go(flash.returnTo), 0);
+  }
+  if (!available && !emailAvailable && !signedIn()) {
+    // The menu may have painted the key early from the device's memory (./menu-key.ts); Google is
+    // off, so take it away rather than leave a key that cannot work.
+    if (menuLogin) { menuLogin.hidden = true; menuLogin.dataset.owned = '1'; }
+    return;
+  }
+  document.body.classList.add('acct-on');
 
   const emailSheet = sheet('acct-email', ACCOUNT.emailTitle);
   let emailReturnTo: ReturnTo = 'menu';
   const emailGoogle = googleButton('email-google'); emailGoogle.hidden=!available;
   emailGoogle.addEventListener('click',()=>void start(emailReturnTo,emailGoogle,null));
   const emailPanel = mountEmailPanel(emailSheet.panel,{supabase:supa,alternative:emailGoogle,
-    complete:(access,active)=>completeSignIn(access,'email',emailReturnTo,active),close:()=>emailSheet.close()});
+    complete: async (access, active) => {
+      const completed = await completeSignIn(access, 'email', emailReturnTo, active);
+      emailSheet.close();
+      showWelcome(completed);
+      go(completed.returnTo);
+      if (pendingNicknamePrompt(kv) === completed.identity.playerId) openNickname(true);
+    }, close:()=>emailSheet.close()});
   const openEmail = (returnTo:ReturnTo) => {
     warmSignIn();
     welcome.close(); emailReturnTo=returnTo; emailPanel.reset(); emailSheet.open(()=>emailPanel.cancel());
     emailSheet.panel.querySelector<HTMLInputElement>('input:not([hidden])')?.focus({preventScroll:true});
   };
+  recoveryEmail.addEventListener('click', () => { recovery.close(); openEmail(retryDestination); });
   const emailButton = (returnTo:ReturnTo) => {
     const b=button('acct-btn',ACCOUNT.continueEmail,`${returnTo}-email`);
     b.hidden=!emailAvailable; b.addEventListener('click',()=>openEmail(returnTo)); return b;
@@ -1003,6 +1071,7 @@ export const mountAccounts = async (): Promise<void> => {
       // Keep this device's identity honest, so Settings and the lobby show the NEW name at once.
       // The #tag is derived from the player id, so it is untouched and stays exactly as it was.
       writeIdentity(kv, { ...s.identity, displayName: player.displayName });
+      notifyIdentityChanged({ ...s.identity, displayName: player.displayName });
       clearNicknamePrompt(kv);
       nickSheet.close();
       renderSettings();

@@ -53,9 +53,15 @@ describe('the account key knows what to say before any network', () => {
   });
 
   it('paints the key the one way the accounts module paints it', () => {
-    const btn = { hidden: true, textContent: '', title: '', attrs: {} as Record<string, string>, setAttribute(k: string, v: string) { this.attrs[k] = v; } };
+    const btn = {
+      hidden: true, disabled: true, textContent: '', title: '', attrs: { 'aria-busy': 'true' } as Record<string, string>,
+      setAttribute(k: string, v: string) { this.attrs[k] = v; },
+      hasAttribute(k: string) { return Object.hasOwn(this.attrs, k); },
+      removeAttribute(k: string) { delete this.attrs[k]; },
+    };
     paintAccountKey(btn as never, null);
-    expect(btn).toMatchObject({ hidden: false, textContent: MENU.login, title: MENU.login });
+    expect(btn).toMatchObject({ hidden: false, disabled: false, textContent: MENU.login, title: MENU.login });
+    expect(btn.hasAttribute('aria-busy')).toBe(false);
     expect(btn.attrs['aria-label']).toBe(MENU.login);
     paintAccountKey(btn as never, 'MapleFox #7QK2');
     expect(btn).toMatchObject({ textContent: 'MapleFox #7QK2', title: PROFILE.open('MapleFox #7QK2') });

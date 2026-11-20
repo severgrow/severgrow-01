@@ -253,6 +253,22 @@ describe('POST /v1/auth/google', () => {
   });
 });
 
+it('Google callback telemetry records only bounded stages and milliseconds', async () => {
+  const service = setup().service;
+  const logs: string[] = [];
+  const app = createFetchApp({ service, logger: line => logs.push(line) });
+  const call = (body: unknown) => app(new Request('https://duel.test/v1/auth/google/metrics', { method: 'POST', body: JSON.stringify(body) }));
+  const timing = { startedMs: 225, totalMs: 870, tokenMs: 290, handoverMs: 355 };
+  expect((await call({ stage: 'success', ...timing, email: 'private@example.test', code: 'private-code' })).status).toBe(200);
+  expect(logs.filter(line => line.startsWith('google-return'))).toEqual([
+    `google-return ${JSON.stringify({ stage: 'success', ...timing })}`,
+  ]);
+  expect((await call({ stage: 'private-code', ...timing })).status).toBe(400);
+  expect((await call({ stage: 'callback', ...timing, totalMs: -1 })).status).toBe(400);
+  expect((await call({ stage: 'callback', ...timing, extra: 'a'.repeat(512) })).status).toBe(400);
+  expect(logs.join('\n')).not.toMatch(/private/);
+});
+
 describe('POST /v1/auth/google/delete (delete my account)', () => {
   it('removes the Google link and the Supabase user, signs out other devices, keeps this device playing as a guest', async () => {
     const t = setup();

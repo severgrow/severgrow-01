@@ -10,7 +10,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { chromium } from 'playwright-core';
+import { chromium, webkit } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
 import { preview } from 'vite';
 import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
@@ -25,6 +25,7 @@ import { expandYourMatches } from './helpers/lobby-matches.js';
 
 const PORT = 4243;
 const SHOTS = process.env.SHOTS === '1';
+const CALLBACK_ONLY = process.env.GOOGLE_CALLBACK_ONLY === '1';
 let failed = 0;
 const check = (name: string, ok: boolean, note = '') => {
   if (!ok) failed += 1;
@@ -117,6 +118,7 @@ const accounts = createAccountsRouter({
   links,
   storage,
   auth: supabaseAuthProvider({ url: authBase, anonKey: 'local-anon', serviceRoleKey: 'sb_secret_local' }),
+  emailEnabled: CALLBACK_ONLY,
   authenticate: (t) => service.authenticate(t),
   now: () => Date.now(),
 });
@@ -135,7 +137,7 @@ await new Promise<void>((resolve, reject) => {
 });
 const previewServer = await preview({ configFile: 'web/vite.config.ts', preview: { host: '127.0.0.1', port: PORT, strictPort: true }, logLevel: 'error' });
 const origin = `http://127.0.0.1:${PORT}`;
-const browser = await chromium.launch({ executablePath: CHROME });
+const browser = process.env.GOOGLE_WEBKIT === '1' ? await webkit.launch() : await chromium.launch({ executablePath: process.env.CI ? chromium.executablePath() : CHROME });
 const shot = async (page: Page, name: string) => {
   if (!SHOTS) return;
   mkdirSync('docs/screens/accounts', { recursive: true });
@@ -147,7 +149,7 @@ const identity = async (page: Page): Promise<Identity | null> =>
   (await page.evaluate(`(() => { try { return JSON.parse(localStorage.getItem('severgrow.duel.identity.v1')); } catch { return null; } })()`)) as Identity | null;
 
 const device = async (b: Browser, w = 390, h = 844) => {
-  const context = await b.newContext({ viewport: { width: w, height: h }, hasTouch: true, isMobile: true });
+  const context = await b.newContext({ viewport: { width: w, height: h }, hasTouch: w < 700, isMobile: w < 700 });
   const page = await context.newPage();
   await page.goto(`${origin}/`);
   await waitMenuEntry(page, 'menu-online', { timeout: 40_000 });
@@ -172,6 +174,69 @@ const listText = async (page: Page) => {
 };
 
 try {
+  {
+    const d = await device(browser, 1100, 800);
+    fake.nextUser = 'callback-timing';
+    const callbackDocuments: string[] = [];
+    const started: string[] = [];
+    let result: Record<string, unknown> | null = null;
+    let openToken!: () => void;
+    const tokenGate = new Promise<void>(resolve => { openToken = resolve; });
+    d.page.on('request', request => {
+      const url = new URL(request.url());
+      if (request.isNavigationRequest() && url.origin === origin) callbackDocuments.push(url.pathname);
+      if (callbackDocuments.length && (url.pathname === '/v1/health' || url.pathname === '/auth/v1/token')) started.push(url.pathname);
+      if (url.pathname === '/v1/auth/google/metrics') result = request.postDataJSON() as Record<string, unknown>;
+    });
+    await d.page.route('**/auth/v1/token?**', async route => { await tokenGate; await route.continue(); });
+    await openMenuEntry(d.page, 'menu-online');
+    await d.page.locator('[data-acct="welcome-google"]').click();
+    try {
+      check('callback: signing in replaces LOG IN while token exchange is pending', await waitFor(async () =>
+        /signing in/i.test((await d.page.locator('#menu-login').textContent({ timeout: 1000 })) ?? ''), 3000));
+      const parallel = await waitFor(() => started.includes('/v1/health') && started.includes('/auth/v1/token'), 4000);
+      check('callback: wake starts before token exchange', parallel && started.indexOf('/v1/health') < started.indexOf('/auth/v1/token'), started.join(' → '));
+    } finally { openToken(); }
+    check('callback: the account key updates in the same document', await waitFor(async () => (await identity(d.page))?.kind === 'account' &&
+      !/log in|signing in/i.test((await d.page.locator('#menu-login').textContent()) ?? ''), 6000));
+    check('callback: no second game boot', callbackDocuments.length === 1, `${callbackDocuments.length} documents`);
+    const elapsed = await d.page.evaluate(() => performance.getEntriesByName('futasaku:google:success')[0]?.startTime ?? null);
+    check('callback: the browser records completion timing', elapsed !== null, elapsed === null ? '' : `${Math.round(elapsed)} ms`);
+    check('callback: publishes stage timings without account fields', await waitFor(() => result?.stage === 'success' &&
+      Object.keys(result).sort().join(',') === 'handoverMs,stage,startedMs,tokenMs,totalMs', 2000), JSON.stringify(result));
+    await d.context.close();
+  }
+
+  {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => Object.defineProperty(navigator, 'standalone', { value: true }));
+    const page = await context.newPage();
+    await page.goto(`${origin}/`);
+    await openMenuEntry(page, 'menu-online');
+    await page.locator('[data-acct="welcome-google"]').click();
+    check('Home Screen app: guidance explains signing in with Safari', await waitFor(async () =>
+      /open FUTASAKU in Safari/.test(await page.locator('#acct-google-return').innerText({ timeout: 2000 }))));
+    check('Home Screen app: Google retry is hidden inside the isolated app', !(await page.locator('[data-acct="google-return-retry"]').isVisible()));
+    if (CALLBACK_ONLY) {
+      await page.locator('[data-acct="google-return-email"]').click();
+      check('Home Screen app: email opens inside the app', await waitFor(() => page.locator('#acct-email').isVisible(), 3000));
+    }
+    await context.close();
+  }
+  {
+    const d = await device(browser);
+    fake.nextUser = 'retry-callback';
+    await d.page.goto(`${origin}/?code=missing-verifier`);
+    const retry = d.page.locator('[data-acct="google-return-retry"]');
+    const visible = await waitFor(() => retry.isVisible(), 5000);
+    check('callback without pending sign-in: visible recovery', visible);
+    if (visible) {
+      await retry.click();
+      check('callback retry starts a new sign-in', await waitFor(async () => (await identity(d.page))?.kind === 'account', 6000));
+    }
+    await d.context.close();
+  }
+
   // ---- 5b. FIRST TRY ALWAYS WORKS (owner, 2026-11-11: "sometimes when logging through Google it's
   // not logged in straight away and I need to log in second time"). Two ways the first try was lost:
   //   (a) our server's hand-over fails once (a cold start): the page retries it by itself;
@@ -190,9 +255,14 @@ try {
     await d.page.route('**/v1/auth/google', async (route) => {
       calls += 1;
       if (calls === 1) {
-        if (how === 'server fails once') return route.fulfill({ status: 503, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{"ok":false}' });
-        await route.abort();
-        await d.page.evaluate('location.reload()').catch(() => undefined);
+        if (how === 'server fails once') {
+          await new Promise(resolve => setTimeout(resolve, 700));
+          return route.fulfill({ status: 503, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{"ok":false}' });
+        }
+        const reloaded = d.page.waitForNavigation({ waitUntil: 'commit', timeout: 8000 });
+        await d.page.evaluate('setTimeout(() => location.reload(), 0)');
+        await reloaded;
+        await route.abort().catch(() => undefined);
         return;
       }
       return route.continue();
@@ -204,8 +274,12 @@ try {
       const key = d.page.locator('#menu-login');
       return !(await key.isVisible().catch(() => false)) || !/log in/i.test((await key.innerText().catch(() => '')) ?? '');
     }, 10_000));
+    const elapsed = await d.page.evaluate(() => performance.getEntriesByName('futasaku:google:success')[0]?.startTime ?? null);
+    check(`first try (${how}): completion recorded`, elapsed !== null, elapsed === null ? '' : `${Math.round(elapsed)} ms`);
     await d.context.close();
   }
+
+  if (!CALLBACK_ONLY) {
 
   // ---- 1. a new player: the welcome, then guest play ----
   const d1 = await device(browser);
@@ -349,6 +423,7 @@ try {
   check('Google off: Play online goes straight to the hub', await hubOpen(d5.page));
   check('Google off: no welcome, no Google button anywhere', !(await d5.page.locator('#acct-welcome').isVisible()) && (await d5.page.locator('.acct-google:visible').count()) === 0);
   for (const d of [d1, d2, d3, d4, d5]) await d.context.close();
+  }
 } finally {
   await browser.close().catch(() => undefined);
   await previewServer.close().catch(() => undefined);

@@ -260,6 +260,29 @@ jobs:
           path: ${{ matrix.suite == 'territory-final-polish' && '/tmp/territory-final-polish/' || '/tmp/living-territory/' }}
           retention-days: 7
 
+  google-return:
+    name: Google callback (${{ matrix.engine }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chromium, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: bash scripts/install-browser.sh ${{ matrix.engine }}
+      - run: node --import tsx web/e2e/accounts-google.ts
+        env:
+          GOOGLE_CALLBACK_ONLY: '1'
+          GOOGLE_WEBKIT: ${{ matrix.engine == 'webkit' && '1' || '0' }}
+          # Use the browser installed by this job, rather than the local desktop fallback.
+          CI: 'true'
+
   online-presence-journey:
     name: Fresh guest / account online journey
     runs-on: ubuntu-24.04

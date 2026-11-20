@@ -148,6 +148,25 @@ Never paste the Client Secret anywhere except the Supabase box in B1, and never 
 3. Optional tidy-up: **Sign In / Providers → Email** → off (the game only accepts Google sign-ins;
    the server refuses anything else anyway).
 
+### Google callback checks
+
+The callback shows **Signing in…** immediately while the game starts. It wakes the game API and its
+database connection while the browser exchanges the Google code. After the game API accepts the
+session, the page paints the nickname and releases account-dependent reads. The welcome message can
+change after the nickname is visible. The sign-in flow stays in the same page after the callback.
+
+The Edge logs show `google-return` followed by the outcome and milliseconds for callback startup,
+token exchange, game API hand-over and total time. Count `success` against all recorded outcomes
+to see the completion rate, or group by `stage` to find where returns failed. The event carries no
+account identifier, email, credential or callback URL. Offline returns may not reach the logger.
+
+On iPhone, open `/test/` in Safari and sign in with Google. Confirm **Signing in…** appears on return,
+the nickname replaces it without another page refresh, and Profile and Planet show the account's
+data. For the installed Home Screen app, the Google button explains the Safari option. Use the
+email code inside the app when you want to sign in there. The Safari session and Home Screen app
+keep separate storage. The Google Cloud redirect URI stays on Supabase. If `/test/` redirects to the
+site root after Google, check the **Redirect URLs** in Supabase URL Configuration.
+
 ### C. Release order (a Claude session with access can do C1–C2 and check them)
 
 1. Apply the database changes: `npm run server:migrate` (adds 0009 feedback + 0010 accounts).

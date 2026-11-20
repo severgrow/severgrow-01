@@ -1,7 +1,7 @@
 // SIGN-IN FIRST (owner, 2026-11-18: "Login through Google still takes about 5 or 6 seconds and then
 // page refreshes ... before it was actually instant"). Back from Google, the page used to start every
 // online read as the OLD guest (a dozen requests) beside the sign-in hand-over, which then queued
-// behind them on the server, and the page reloads anyway once signed in. On a return from Google the
+// behind them on the server. On a return from Google the
 // online start-up now waits for the sign-in; on any other visit it starts at once, as before.
 import { describe, expect, it } from 'vitest';
 import { createSignInGate } from '../src/accounts/sign-in-gate.js';
@@ -41,17 +41,5 @@ describe('the sign-in gate', () => {
     expect(await flushed(gate.settled)).toBe(false);
     fire();
     expect(await flushed(gate.settled)).toBe(true);
-  });
-});
-
-describe('a successful sign-in reloads straight into the account', () => {
-  it('nothing starts on the way out; only the safety limit could (the page is gone by then)', async () => {
-    let fire: () => void = () => undefined;
-    const gate = createSignInGate({ search: '?code=abcdefgh1234', hash: '', resumePending: false, setTimer: (f) => { fire = f; } });
-    gate.reloading();
-    gate.settle();
-    expect(await flushed(gate.settled)).toBe(false);
-    fire();
-    expect(await flushed(gate.settled), 'a reload that never happened still lets the game start').toBe(true);
   });
 });

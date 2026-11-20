@@ -1474,6 +1474,11 @@ export const ACCOUNT = Object.freeze({
       : `Signed in as ${name}. Your games from this device are on your account.`;
   },
   failed: 'Google sign-in did not finish. Please try again.',
+  signingIn: 'Signing in…',
+  signInTitle: 'Google sign-in',
+  signInRetry: 'Try Google again',
+  signInExpired: 'This sign-in started in another browser or expired. Start again here.',
+  signInSafari: 'For Google, open FUTASAKU in Safari and sign in there. To sign in inside the Home Screen app, use email.',
   offline: 'You are offline. Connect and try again.',
   unavailable: 'Google sign-in is not available right now. Please try again later.',
 });

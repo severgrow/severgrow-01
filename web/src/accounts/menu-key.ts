@@ -77,6 +77,10 @@ export const accountKeyNow = (kv: KeyValue | null, configured: boolean): { show:
 
 /** LOG IN for a guest, the name for a signed-in player — the one way the key is ever painted. */
 export const paintAccountKey = (btn: HTMLButtonElement, name: string | null): void => {
+  if (btn.hasAttribute('aria-busy')) {
+    btn.removeAttribute('aria-busy');
+    btn.disabled = false;
+  }
   btn.hidden = false;
   btn.textContent = name ?? MENU.login;
   // The spoken label carries the name, so a screen-reader user knows whose profile it opens.
@@ -100,9 +104,11 @@ const localKv = (): KeyValue | null => {
  */
 export const paintEarlyAccountKey = (btn: HTMLButtonElement | null, configured: boolean): void => {
   if (!btn || btn.dataset.owned === '1') return;
-  const now = accountKeyNow(localKv(), configured);
-  if (!now.show) return;
-  paintAccountKey(btn, now.name);
+  if (!btn.hasAttribute('aria-busy')) {
+    const now = accountKeyNow(localKv(), configured);
+    if (!now.show) return;
+    paintAccountKey(btn, now.name);
+  }
   if (btn.dataset.early === '1') return;
   btn.dataset.early = '1';
   btn.addEventListener('click', () => {

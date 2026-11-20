@@ -959,6 +959,26 @@ export class WorldView {
     // A warm-up never throws into the menu: a failed read is simply asked again when the Planet opens.
     if (!fresh) void this.loadAchievements().catch(() => undefined);
   }
+
+  /** The public camera stays put while private data is refreshed for the new account. */
+  accountChanged(identity: Identity): void {
+    if (this.identity?.token === identity.token) return;
+    this.wallet = null;
+    this.achievementsReadAt = -Infinity;
+    if (!this.active) { this.warm(identity); return; }
+    this.identity = identity;
+    this.identityKnown = true;
+    this.challenges = { incoming: [], outgoing: [], serverNow: Date.now() };
+    this.achievements = restoreAchievements(browserStorage(), identity.playerId);
+    this.myColourId = null;
+    this.chat.prefetch();
+    this.paintWallet();
+    this.paintPanel();
+    this.paintSelection();
+    void this.loadColour(identity);
+    void this.loadAchievements();
+    void this.refresh(true);
+  }
   /** When the last achievements answer arrived (the menu warm-up's freshness check). */
   private achievementsReadAt = -Infinity;
 

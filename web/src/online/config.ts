@@ -64,11 +64,9 @@ export const publicAppOrigin = (): string => {
  * Only the project's own Supabase Edge URL is pinned; local/dev/test servers are left alone.
  * Override with VITE_DUEL_REGION (an empty string disables the pin).
  */
-export const duelRegion = (): string | null => {
-  const env = (import.meta as { env?: Record<string, string | undefined> }).env;
+export const duelRegionFrom = (env: Record<string, string | undefined> | undefined, api: string | null): string | null => {
   const override = env?.VITE_DUEL_REGION;
   if (typeof override === 'string') return override.trim() || null;
-  const api = duelApiUrl();
   if (!api) return null;
   try {
     const host = new URL(api).host;
@@ -77,3 +75,4 @@ export const duelRegion = (): string | null => {
     return null;
   }
 };
+export const duelRegion = (): string | null => duelRegionFrom(buildEnv(), duelApiUrl());

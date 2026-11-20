@@ -834,8 +834,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     // THE SKIN BELONGS TO THE ACCOUNT (owner, 2026-11-18): a sign-in reads the account's skin at
     // once, so the next match wears what was chosen on another device. Reading never writes.
     if (record) void connectSkinSwitch(client, record.token);
-    if (menuEl?.hidden !== false || !record) return;
-    worldView?.warm({ token: record.token, playerId: record.playerId, kind: record.kind });
+    if (record?.kind === 'account') worldView?.accountChanged(record);
+    else if (menuEl?.hidden === false && record) worldView?.warm(record);
   });
   // ...and so does opening the game: one read, only for the account the skin picker belongs to.
   { const signedIn = identity.peek(); if (signedIn) void connectSkinSwitch(client, signedIn.token); }
@@ -867,13 +867,14 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       if (!id) return;
       try {
         const res = await client.listMatches(id.token);
+        if (identity.peek()?.token !== id.token) return;
         serverOffset = res.serverNow - now();
         matches = res.matches;
         renderMatches();
         notice('online-hub-notice', '');
         flashIdentityReplaced();
       } catch (error) {
-        notice('online-hub-notice', errorMessage(error));
+        if (identity.peek()?.token === id.token) notice('online-hub-notice', errorMessage(error));
       }
     } finally {
       reloadInFlight = false;
@@ -1653,7 +1654,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       const [readWallet, map, challenges, duels] = await Promise.all([
         readTerritoryWallet(id.playerId, async () => {
           const result = await client.seedWallet(id.token);
-          return identity.peek()?.playerId === id.playerId ? result : null;
+          return identity.peek()?.token === id.token ? result : null;
         }, true),
         publicMap,
         // The menu's own signal: the shared "is anything waiting for me" predicate.
@@ -1662,6 +1663,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         // the read the menu already makes on show: no new endpoint and no poll (owner, 2026-11-01).
         client.listMatches(id.token).catch(() => null),
       ]);
+      if (identity.peek()?.token !== id.token) return null;
       wallet = readWallet;
       world = map.world;
       waiting = waitingActionCount(challenges);
@@ -1683,7 +1685,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     if (wallet && menuEl?.hidden === false && identity.peek()?.playerId === id.playerId)
       worldView?.useMenuWallet(id.playerId, wallet);
     const counts = territoryCounts(wallet, world, id.playerId, waiting);
-    if (identity.peek()?.playerId !== id.playerId) return null;
+    if (identity.peek()?.token !== id.token) return null;
     rememberTerritory(id.playerId, counts);
     if (menuEl?.hidden === false) territoryUI.paint(counts);
     // The SAME list paints the Play online key's live word (and the hub, if it is open). Kept out
@@ -1766,6 +1768,23 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     return menuPass;
   };
   window.addEventListener('futasaku:menu', () => { void refreshMenu(); });
+  window.addEventListener('futasaku:identity', () => {
+    const record = identity.peek();
+    if (!record) return;
+    worldView.accountChanged(record);
+    if (!hub.hidden) {
+      matches = [];
+      renderMatches();
+      void reloadMatches();
+    }
+    if (menuEl?.hidden !== false) return;
+    living?.update();
+    // Clear the former account's numbers now. If a menu read was already in flight, refresh once it is done.
+    territoryUI.paint(cachedTerritory(record.playerId));
+    answerClock.stop();
+    if (menuPass) void menuPass.finally(() => { if (identity.peek()?.token === record.token) void refreshMenu(); });
+    else void refreshMenu();
+  });
   // Coming back to the tab: the polls were silent while it was hidden, so ask once immediately
   // rather than leaving the waiting screen (or the parked search) one tick stale.
   document.addEventListener('visibilitychange', () => {

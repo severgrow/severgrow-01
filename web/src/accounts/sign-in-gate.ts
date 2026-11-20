@@ -5,8 +5,7 @@
 // wallet, challenges, chat, achievements, tickets, the queued Seeds — about a dozen requests) beside
 // the sign-in hand-over. The hand-over then queued behind them on a server isolate with two database
 // connections, and every one of those reads was thrown away by the reload that follows a sign-in.
-// Now, on a return from Google (or a sign-in resumed after a reload), the online start-up waits for
-// the sign-in: a success reloads straight into the account; a failure releases the start-up at once.
+// On a Google return (including a resumed callback), start online reads after the result is known.
 // Any other visit starts exactly as before. A safety limit releases the start-up regardless, so a
 // sign-in that never reports back can never leave the game offline.
 import { readCallback } from './core.js';
@@ -16,10 +15,8 @@ export const SIGN_IN_GATE_MAX_MS = 15_000;
 export type SignInGate = {
   holding: boolean;
   settled: Promise<void>;
-  /** The sign-in is over without a reload: start the online start-up. */
+  /** The callback is over: start online work using the stored identity. */
   settle: () => void;
-  /** The sign-in succeeded and the page is reloading into the account: never start it here. */
-  reloading: () => void;
 };
 
 export const createSignInGate = (where: {
@@ -27,12 +24,11 @@ export const createSignInGate = (where: {
   setTimer?: (fire: () => void, ms: number) => void;
 }): SignInGate => {
   let release!: () => void;
-  let reloading = false;
   const settled = new Promise<void>((resolve) => { release = resolve; });
   const holding = where.resumePending || readCallback(where.search, where.hash) !== null;
   if (!holding) release();
   else (where.setTimer ?? ((f, ms) => { setTimeout(f, ms); }))(() => release(), SIGN_IN_GATE_MAX_MS);
-  return { holding, settled, settle: () => { if (!reloading) release(); }, reloading: () => { reloading = true; } };
+  return { holding, settled, settle: release };
 };
 
 /** The resume key of a sign-in interrupted by a reload (accounts/mount.ts). Per tab. */

@@ -15,7 +15,7 @@ export const subscribeIdentityChanges = (listener: (identity: OnlineIdentityReco
   identityListeners.add(listener);
   return () => { identityListeners.delete(listener); };
 };
-const announceIdentity = (identity: OnlineIdentityRecord | null) => {
+export const notifyIdentityChanged = (identity: OnlineIdentityRecord | null) => {
   for (const listener of identityListeners) {
     try { listener(identity); } catch { /* A presentation listener must not fail a stored identity. */ }
   }
@@ -126,7 +126,7 @@ export const createIdentityStore = (options: {
         message: STORAGE_BLOCKED_MESSAGE,
       };
     }
-    announceIdentity(identity);
+    notifyIdentityChanged(identity);
     return { ok: true, identity };
   };
 
@@ -147,6 +147,8 @@ export const createIdentityStore = (options: {
         if (error instanceof DuelError) throw error;
         return client.createGuest();
       });
+      const current = peek();
+      if (current) return { ok: true, identity: current };
       return write({
         token: created.token,
         playerId: created.player.id,
@@ -167,7 +169,7 @@ export const createIdentityStore = (options: {
     // (creating a guest) instead of handing back the token the server just refused.
     try {
       storage.remove(IDENTITY_STORAGE_KEY);
-      announceIdentity(null);
+      notifyIdentityChanged(null);
     } catch {
       return { ok: false, reason: 'storage_blocked', message: STORAGE_BLOCKED_MESSAGE };
     }

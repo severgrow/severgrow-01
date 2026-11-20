@@ -10,9 +10,9 @@ export const emailCode = (value: string): string | null => {
 
 /** Bound the whole response body, not just receipt of its headers. */
 type AuthFetch = (url:string,init?:RequestInit)=>Promise<Response>;
-export const authJson = async (url: string, init: RequestInit = {}, fetcher:AuthFetch = fetch): Promise<{ok: boolean; status: number; json: Record<string, unknown>}> => {
+export const authJson = async (url: string, init: RequestInit = {}, fetcher:AuthFetch = fetch, timeoutMs = 15_000): Promise<{ok: boolean; status: number; json: Record<string, unknown>}> => {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15_000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetcher(url, {...init, signal:controller.signal});
     let json: Record<string, unknown> = {};

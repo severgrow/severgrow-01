@@ -6,6 +6,7 @@ import { FEEDBACK, PRIVACY } from '../src/strings.js';
 import { TERMS } from './src/terms.js';
 import { writePrivacyPage, writeTermsPage } from './src/privacy-page.js';
 import { contentVersion, versionHeadAssets, versionManifestIcons } from './build-asset-versions.js';
+import { duelApiUrlFrom, duelRegionFrom } from './src/online/config.js';
 
 // The playable web version. Builds to web/dist with relative paths so it works
 // from any GitHub Pages URL.
@@ -58,6 +59,14 @@ export default defineConfig({
     // also means the column's final height is there from the start — PLAY does not jump down when
     // the line arrives. `paintBetaLine` reuses the button and its early-click guard.
     const escapeHtml = (text: string) => text.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
+    const api = duelApiUrlFrom(process.env);
+    const region = duelRegionFrom(process.env, api);
+    const auth = process.env.VITE_SUPABASE_URL?.trim();
+    if (api && auth && process.env.VITE_SUPABASE_ANON_KEY && process.env.VITE_ACCOUNTS !== 'off' &&
+      (process.env.VITE_ACCOUNTS === 'on' || auth.startsWith('https://'))) {
+      const health = api + '/v1/health?db=1' + (region ? '&forceFunctionRegion=' + encodeURIComponent(region) : '');
+      html = html.replace('data-google-wake=""', `data-google-wake="${escapeHtml(health)}"`);
+    }
     const betaLine = `<p id="menu-beta" class="tagline">${escapeHtml(FEEDBACK.betaNote(FEEDBACK.betaVersion))} <button type="button" data-fb="menu-link">${escapeHtml(FEEDBACK.betaLink)}</button></p>`;
     // THE 0.75 SHEET ONLY BELONGS TO A page that carries `html.v075` (the `spaceFirst` build below):
     // all 42 of its rules are scoped to that class, which nothing else ever writes. Shipping it to

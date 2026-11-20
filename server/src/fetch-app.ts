@@ -9,6 +9,7 @@ import type { MatchService } from './service.js';
 import { BOT_VERSIONS } from '../../src/bots/versions.js';
 import { ACCOUNT_CAMPAIGN_PROGRESS_FEATURE } from './account-campaign-progress.js';
 import { ACCOUNT_GUIDE_FEATURE } from './account-guide.js';
+import { googleReturnMetric } from '../../src/google-return-metrics.js';
 
 /**
  * What this server can do that an older one could not; a page checks before relying on it.
@@ -94,6 +95,13 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
     service.assertClientVersion(req.headers.get('x-futasaku-client-version'));
     const liveOutcome = deps.live ? await deps.live(req, path) : null;
     if (liveOutcome) return liveOutcome;
+
+    if (method === 'POST' && path === '/v1/auth/google/metrics') {
+      const metric = googleReturnMetric(await readJson(req, 512));
+      if (!metric) throw new ApiError('INVALID_REQUEST', 'Sign-in metric is invalid.');
+      logger(`google-return ${JSON.stringify(metric)}`);
+      return { status: 200, body: { ok: true } };
+    }
 
     if (method === 'GET' && path === '/v1/health') {
       const serverNow = service.serverNow();
