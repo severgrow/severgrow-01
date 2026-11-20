@@ -18,6 +18,12 @@ describe('the card face no longer uses a browser-native tooltip', () => {
     expect(bomb).toContain('data-card-detail="Bomb"');
     expect(bomb).not.toMatch(/\stitle=/);
   });
+  it('ignores a delegated target that is not an element (document, window, a text node)', () => {
+    // `document.dispatchEvent(new PointerEvent('pointerdown'))` targets the document itself (online
+    // journey: a pointer release that never reached the page). `document.closest` does not exist.
+    const source = read('ui/card-tip.ts');
+    expect(source).toContain('target instanceof Element');
+  });
   it('the bubble is the existing FUTASAKU detail material, and it keeps mouse, touch and keyboard paths', () => {
     const source = read('ui/card-tip.ts');
     expect(source).toContain("className = 'ctool-tip'");

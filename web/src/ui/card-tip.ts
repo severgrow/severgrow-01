@@ -43,8 +43,11 @@ let showTimer = 0;
 let hideTimer = 0;
 let current: Element | null = null;
 
-const detailOf = (target: Element | null): Element | null =>
-  target?.closest<HTMLElement>('[data-card-detail]') ?? null;
+// A delegated listener can see a non-element target: `document`/`window` for an event dispatched by
+// the app itself (a pointer release that never reached the page, per the online journey recovery),
+// or a text node. Only an element can carry the detail.
+const detailOf = (target: EventTarget | null): Element | null =>
+  target instanceof Element ? target.closest<HTMLElement>('[data-card-detail]') : null;
 
 const place = (anchor: Element, text: string) => {
   if (!tip) return;
@@ -131,8 +134,9 @@ export const mountCardTip = (doc: Document = document): void => {
 
   // KEYBOARD: focusing the card (a button) shows the same text; blur hides it.
   doc.addEventListener('focusin', (event) => {
-    const anchor = detailOf(event.target as Element | null)
-      ?? (event.target as Element | null)?.closest<HTMLElement>('.card')?.querySelector('[data-card-detail]');
+    const card = event.target instanceof Element ? event.target : null;
+    const anchor = detailOf(card)
+      ?? card?.closest<HTMLElement>('.card')?.querySelector('[data-card-detail]');
     if (anchor) show(anchor, 0);
   });
   doc.addEventListener('focusout', hide);
