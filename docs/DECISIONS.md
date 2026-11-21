@@ -1,5 +1,44 @@
 # Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
+## 2026-11-20 — The finish card alternates: at most two planet views, then the winning board
+
+Owner: *"never show the planet view and the end of the game 3 times in a row --- if player keeps
+winning, show the winning board view result every 2 planet views to alternate and not bore u get
+me."*
+
+The window rule from 2026-11-12 (the planet on a win with a tile's price in the wallet, the final
+board on everything else) had no memory, so a player who kept winning and could afford tiles saw the
+planet every single time. It now alternates:
+
+**PLANET, PLANET, BOARD, PLANET, PLANET, BOARD, ...**
+
+"Every 2 planet views" can be read as planet/board/planet/board or as planet/planet/board. The
+first clause settles it ("never ... 3 times in a row"), and the second names the board as what
+follows **two** planet views (the one-per-win reading would be a much bigger change), so the cycle
+is two planets and then one winning board. `PLANET_RUN_CYCLE` (3) and `PLANET_RUN_PLANETS` (2) in
+`web/src/logic/finish-window.ts` name it, and `web/tests/finish-window.test.ts` pins the sequence
+from every starting count.
+
+- **What counts.** The run counts consecutive QUALIFYING wins — wins that can afford a tile and so
+  would otherwise have shown the planet. A win short of a tile shows the board (the board was forced
+  by the wallet) and spends no slot. A loss or a draw shows the board and ENDS the run (back to 0):
+  the player is no longer on a streak of wins, and the next win gets its planet.
+- **Teaching is exempt.** Level 10's win always shows the planet (its whole point is to explain
+  the planet) and consumes no slot, so a teaching window can never suppress the next real win's
+  planet. It is the one deliberate exception to "two in a row", and it is tested.
+- **Persisted, per player.** `severgrow.finish.planet-run.v1` (channel-prefixed like every other
+  key) holds one small integer per player id, 0..2, removed at 0. Without persistence the
+  alternation would restart on every reload and the player would never notice it; keying it by
+  player id means another account on the device never inherits the count. Sign-out clears it with
+  the account's other keys (`web/src/accounts/signout-reset.ts`).
+- **One door, every mode.** Offline practice, campaign, a tutorial replay and an online duel all
+  reach the same `syncFinishWindow` window on a planet build, so they all alternate consistently.
+  The classic card (no planet window) has nothing to alternate; its losses still end the run. The
+  Art Lab's watch mode exists only on experiment channels, which have no planet card.
+- **Pure and cheap.** `finishChoice` in `logic/finish-window.ts` takes the run as an input and
+  returns the view AND the run to store; `main.ts` only reads and writes the integer (once per
+  finish). No timer, no new dependency, `src/engine/` untouched.
+
 ## 2026-11-06 — A dark cover in the first paint (no half-built menu on load)
 
 Owner: "in live .com version when opening the website first thing it loads the old logo, the old

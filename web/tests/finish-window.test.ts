@@ -115,3 +115,135 @@ describe('the finish window decision, case by case', () => {
     expect(reset).toContain("'severgrow.seeds.balance.v1'");
   });
 });
+
+// NO THREE PLANETS IN A ROW (owner, 2026-11-20: "never show the planet view and the end of the game 3
+// times in a row ... if player keeps winning, show the winning board view result every 2 planet views
+// to alternate"). The reading chosen is PLANET, PLANET, BOARD, PLANET, PLANET, BOARD ... — two planet
+// views, then the winning board — because the owner's first clause forbids three in a row and his
+// second names the board as what follows TWO planet views. The run is persisted per player by main.ts
+// (FINISH_PLANET_RUN_KEY); the rule and its store helpers here stay pure.
+import {
+  FINISH_PLANET_RUN_KEY,
+  PLANET_RUN_CYCLE,
+  PLANET_RUN_PLANETS,
+  decidePlanetRunAfter,
+  finishChoice,
+  normalizePlanetRun,
+  planetRunOf,
+  withPlanetRun,
+} from '../src/logic/finish-window.js';
+
+/** Play `n` consecutive QUALIFYING wins from an initial run; the views and the final run. */
+const qualifyingWins = (start: number, n: number, balance = 150) => {
+  let planetRun = start;
+  const views: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const choice = finishChoice({ won: true, balance, hasBoard: true, planetRun });
+    views.push(choice.view);
+    planetRun = choice.planetRun;
+  }
+  return { views, planetRun };
+};
+
+describe('no three planet views in a row (owner, 2026-11-20)', () => {
+  it('is the cycle PLANET, PLANET, BOARD, from every starting run', () => {
+    expect(qualifyingWins(0, 7).views).toEqual(['planet', 'planet', 'board', 'planet', 'planet', 'board', 'planet']);
+    expect(qualifyingWins(1, 6).views).toEqual(['planet', 'board', 'planet', 'planet', 'board', 'planet']);
+    expect(qualifyingWins(2, 5).views).toEqual(['board', 'planet', 'planet', 'board', 'planet']);
+  });
+
+  it('never shows three planets in a row, however long the winning run is', () => {
+    for (let start = 0; start < PLANET_RUN_CYCLE; start++) {
+      const { views } = qualifyingWins(start, 31);
+      for (let i = 2; i < views.length; i++) {
+        expect(views.slice(i - 2, i + 1)).not.toEqual(['planet', 'planet', 'planet']);
+      }
+      // ... and the board is only ever the third after two planets, so the run is never starved.
+      expect(views.filter((v) => v === 'planet').length).toBeGreaterThan(views.filter((v) => v === 'board').length);
+    }
+  });
+
+  it('keeps the count inside the cycle (it never grows without bound)', () => {
+    for (let start = 0; start < PLANET_RUN_CYCLE; start++) {
+      let run = start;
+      for (let i = 0; i < 50; i++) {
+        run = finishChoice({ won: true, balance: 150, hasBoard: true, planetRun: run }).planetRun;
+        expect(run).toBeGreaterThanOrEqual(0);
+        expect(run).toBeLessThan(PLANET_RUN_CYCLE);
+      }
+    }
+    expect(PLANET_RUN_PLANETS).toBe(2);
+    expect(PLANET_RUN_CYCLE).toBe(PLANET_RUN_PLANETS + 1);
+    expect(normalizePlanetRun(PLANET_RUN_CYCLE)).toBe(0);
+    expect(normalizePlanetRun(-1)).toBe(0);
+    expect(normalizePlanetRun(1.5)).toBe(0);
+    expect(normalizePlanetRun(Number.NaN)).toBe(0);
+  });
+
+  it('a loss or a draw shows the board and starts the winning run over', () => {
+    expect(finishChoice({ won: false, balance: 5_000, hasBoard: true, planetRun: 2 })).toEqual({ view: 'board', planetRun: 0 });
+    expect(finishChoice({ won: false, balance: null, hasBoard: false, planetRun: 1 })).toEqual({ view: 'board', planetRun: 0 });
+    // A loss with the teaching flag is still a loss: the board, and the run is over.
+    expect(finishChoice({ won: false, teach: true, balance: 500, hasBoard: true, planetRun: 1 })).toEqual({ view: 'board', planetRun: 0 });
+  });
+
+  it('level 10\'s teaching win always shows the planet and never consumes a slot', () => {
+    // Even on the last slot of the cycle: the teaching window is an explained exception, not boredom.
+    expect(finishChoice({ won: true, teach: true, balance: null, hasBoard: true, planetRun: 2 })).toEqual({ view: 'planet', planetRun: 2 });
+    expect(finishChoice({ won: true, teach: true, balance: 0, hasBoard: true, planetRun: 1 })).toEqual({ view: 'planet', planetRun: 1 });
+    // And because it spent no slot, the next real win still alternates as if it never happened.
+    expect(qualifyingWins(2, 2).views).toEqual(['board', 'planet']);
+  });
+
+  it('a win that cannot afford a tile shows the board and spends no slot', () => {
+    expect(finishChoice({ won: true, balance: 99, hasBoard: true, planetRun: 1 })).toEqual({ view: 'board', planetRun: 1 });
+    expect(finishChoice({ won: true, balance: null, hasBoard: true, planetRun: 2 })).toEqual({ view: 'board', planetRun: 2 });
+    // The planet that was due is still due on the next affordable win.
+    expect(finishChoice({ won: true, balance: 100, hasBoard: true, planetRun: 1 })).toEqual({ view: 'planet', planetRun: 2 });
+    expect(finishChoice({ won: true, balance: 100, hasBoard: true, planetRun: 2 })).toEqual({ view: 'board', planetRun: 0 });
+  });
+
+  it('the decided window and the run it records come from the same rule', () => {
+    const win = { won: true, hasBoard: true } as const;
+    for (let planetRun = 0; planetRun < PLANET_RUN_CYCLE; planetRun++) {
+      const args = { ...win, payout: 120, remembered: 90, planetRun };
+      const expected = finishChoice({ won: true, balance: 120, hasBoard: true, planetRun });
+      expect(decideFinishWindow(args)).toBe(expected.view);
+      expect(decidePlanetRunAfter(args)).toBe(expected.planetRun);
+    }
+    // A loss is the board and a fresh run, whatever the wallet and the run were.
+    expect(decidePlanetRunAfter({ won: false, hasBoard: true, payout: 900, remembered: 900, planetRun: 2 })).toBe(0);
+    expect(decidePlanetRunAfter({ won: true, teach: true, hasBoard: true, payout: null, remembered: null, planetRun: 2 })).toBe(2);
+  });
+
+  it('keeps the run in the store, per player, and reads a damaged value as 0', () => {
+    // The key is a `severgrow.*` key: the channel's storage prefix is applied below the app.
+    expect(FINISH_PLANET_RUN_KEY).toBe('severgrow.finish.planet-run.v1');
+    const saved = withPlanetRun(null, 'player-a', 1);
+    expect(planetRunOf(saved, 'player-a')).toBe(1);
+    // Another account on this device never inherits it.
+    expect(planetRunOf(saved, 'player-b')).toBe(0);
+    expect(planetRunOf(saved, null)).toBe(0);
+    expect(planetRunOf(withPlanetRun(saved, 'player-a', 2), 'player-a')).toBe(2);
+    // 0 removes the entry (bounded storage: nothing to prune, and absence reads as 0).
+    const cleared = withPlanetRun(saved, 'player-a', 0);
+    expect(JSON.parse(cleared).players['player-a']).toBeUndefined();
+    expect(planetRunOf(cleared, 'player-a')).toBe(0);
+    // A reload reads back what was written (the same string is the whole store).
+    expect(planetRunOf(JSON.parse(JSON.stringify(cleared)), 'player-a')).toBe(0);
+    // Corrupt, absent or out-of-cycle values fall back to 0, never to a stuck planet/board.
+    for (const bad of [null, '', 'nonsense', '{}', '[]', '{"v":2,"players":{"player-a":1}}',
+      '{"v":1,"players":{"player-a":9}}', '{"v":1,"players":{"player-a":-1}}', '{"v":1,"players":[]}']) {
+      expect(planetRunOf(bad, 'player-a')).toBe(0);
+    }
+  });
+
+  it('main.ts reads and writes the run through these helpers, and sign-out clears it', () => {
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    expect(main).toMatch(/planetRunOf\(store\.get\(FINISH_PLANET_RUN_KEY\)/);
+    expect(main).toMatch(/withPlanetRun\(store\.get\(FINISH_PLANET_RUN_KEY\)/);
+    expect(main).toMatch(/decidePlanetRunAfter\(args\)/);
+    const reset = readFileSync(new URL('../src/accounts/signout-reset.ts', import.meta.url), 'utf8');
+    expect(reset).toContain("'severgrow.finish.planet-run.v1'");
+  });
+});
