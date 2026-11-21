@@ -118,11 +118,19 @@ try{
   assert.equal(await p.locator('#world-style-picker').count(),0,'the rejected materials are absent');
   const pressed=await p.locator('#world-key-colour').evaluate(el=>({after:getComputedStyle(el,'::after').content,shadow:getComputedStyle(el).boxShadow}));
   assert(['none','normal'].includes(pressed.after));assert(pressed.shadow.includes('inset'),'open pane pushes the key inward');
+  // OWNER RENAMED THE PANE (2026-11-20: "'COLOUR' in submenu is renamed to 'SKINS'"): the key now
+  // opens SKINS, and the twenty owner colours live in the dark-glass sheet behind its COLOUR row.
+  await p.locator('#world-skin-switch [data-group="planet"] [data-slot="colour"]').click();
+  await p.locator('#world-colour-sheet').waitFor({state:'visible'});
   const selected=p.locator('.world-colour-swatch.current');await selected.waitFor({state:'visible'}).catch(async e=>{console.error('Colour fixture',colourRequests,await p.locator('#world-colour-grid').evaluate(el=>({count:el.children.length,current:el.querySelector('.current')?.getAttribute('data-colour-id')})));throw e;});
   const selectedFinish=await selected.evaluate(el=>({shadow:getComputedStyle(el).boxShadow,pressed:el.getAttribute('aria-pressed')}));
   assert.equal(selectedFinish.pressed,'true');assert(selectedFinish.shadow.includes('inset'));
   assert(!selectedFinish.shadow.includes('242, 200, 121'),'selected colour uses pressed depth rather than the legacy amber frame');
   await p.screenshot({path:`${shots}/colours-${width}.png`});
+  // Close the sheet (a cancel: it restores the appearance it showed behind the glass) before the
+  // window itself, so the rest of the walk still starts from the Planet as a person left it.
+  await p.locator('#world-colour-sheet-close').click();
+  await p.locator('#world-colour-sheet').waitFor({state:'hidden'});
   await p.locator('#world-panel-close').click();
   await p.waitForSelector('#world-chat-list .world-chat-line',{state:'attached'});
   const warm=reads;assert(warm>0,'chat fetched before its first opening');
