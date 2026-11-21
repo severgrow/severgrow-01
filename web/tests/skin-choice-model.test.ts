@@ -228,3 +228,26 @@ describe('the gate: signed-in accounts only', () => {
     expect([...art.faSides()][0]).toBe('water');
   });
 });
+
+describe('contrast partners reach the board painter', () => {
+  it('a same-skin collision paints the opponent with the fixed partner, without rewriting the choice', async () => {
+    const { model, art, tile } = await load({
+      mine: 'forest', theirs: 'forest', mineGame: 'forest', theirsGame: 'forest', background: 'slate',
+    });
+    // Stored choice stays as chosen — collision is paint-only (skin-contrast.ts).
+    expect(model.skinChoice().mineGame).toBe('forest');
+    expect(model.skinChoice().theirsGame).toBe('forest');
+    expect([...art.faSides()], 'opponent tiles wear Ash in this view').toEqual(['forest', 'ash']);
+    expect(tile.tileSides(), 'atlas collision clears the recipe sides').toEqual([null, null]);
+  });
+
+  it('a recipe collision paints the partner on the tile-skin path', async () => {
+    const { model, art, tile } = await load({
+      mine: 'voxel', theirs: 'voxel', mineGame: 'voxel', theirsGame: 'voxel', background: 'slate',
+    });
+    expect(model.skinChoice().theirsGame).toBe('voxel');
+    // Voxel has no atlas cell; both sides fall back through atlasSkinFor, while recipes paint here.
+    expect([...art.faSides()][0]).toBe('forest');
+    expect([...tile.tileSides()]).toEqual(['voxel', 'brushed']);
+  });
+});

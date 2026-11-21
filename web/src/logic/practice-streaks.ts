@@ -205,3 +205,57 @@ export const createPracticeStreaks = (deps: {
 };
 
 export type PracticeStreaksStore = ReturnType<typeof createPracticeStreaks>;
+
+/**
+ * Move this device's Practice streak bucket from one player id to another (guest → account on
+ * Google sign-in). Mirrors `retagSeedProofs`: a guest who earned HARD/BLITZ games offline must not
+ * leave them stranded under the dead guest id once the account takes over.
+ *
+ * Games already known on the destination (by id) are never double-counted. Pending reports move
+ * across so the next sync can still POST them. Stored choice numbers are kept as the better of the
+ * two buckets' bests and the destination's current (then pending still-unsent games re-apply on sync).
+ */
+export const retagPracticeStreaks = (store: KeyValue | null, from: string, to: string): void => {
+  if (!store || !from || !to || from === to) return;
+  let saved: Saved;
+  try {
+    const raw = JSON.parse(store.get(PRACTICE_STREAKS_KEY) ?? 'null') as Saved | null;
+    if (!raw || raw.v !== 1 || !raw.players || typeof raw.players !== 'object') return;
+    saved = raw;
+  } catch {
+    return;
+  }
+  const src = saved.players[from];
+  if (!src) return;
+  const dst = saved.players[to] ?? { tiers: emptyPracticeStreaks(), pending: [], counted: [], completed: 0 };
+  const known = new Set(dst.counted);
+  for (const game of src.pending) {
+    if (known.has(game.id)) continue;
+    dst.pending.push(game);
+    known.add(game.id);
+  }
+  for (const id of src.counted) {
+    if (!known.has(id)) {
+      dst.counted.push(id);
+      known.add(id);
+    }
+  }
+  dst.counted = dst.counted.slice(-COUNTED_KEEP);
+  // Best-of both buckets for the two streak tiers; current comes from the destination (account)
+  // unless it had none — then take the guest's, so an empty account inherits the guest's run.
+  for (const tier of ['hard', 'blitz'] as const) {
+    const a = dst.tiers[tier];
+    const b = src.tiers[tier];
+    const best = Math.max(a.best, b.best, a.current, b.current);
+    const current = a.best > 0 || a.current > 0 ? a.current : b.current;
+    dst.tiers[tier] = { current, best: Math.max(best, current) };
+  }
+  dst.completed = Math.max(dst.completed, src.completed);
+  saved.players[to] = dst;
+  delete saved.players[from];
+  try {
+    store.set(PRACTICE_STREAKS_KEY, JSON.stringify(saved));
+  } catch {
+    /* private mode: this visit only */
+  }
+};

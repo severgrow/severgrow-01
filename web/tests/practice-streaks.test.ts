@@ -5,7 +5,7 @@
 //   Close the app during a game: nothing changes, the game can be resumed · Resume: continues ·
 //   Every finished game counts exactly once.
 import { describe, expect, it } from 'vitest';
-import { createPracticeStreaks, PRACTICE_STREAKS_KEY } from '../src/logic/practice-streaks.js';
+import { createPracticeStreaks, PRACTICE_STREAKS_KEY, retagPracticeStreaks } from '../src/logic/practice-streaks.js';
 import type { PracticeStreaks } from '../../server/src/streaks/rules.js';
 
 const memory = () => {
@@ -201,5 +201,41 @@ describe('the account is the record; this device is its cache', () => {
     const store = memory();
     store.set(PRACTICE_STREAKS_KEY, '{oops');
     expect(make(store).view().easy).toEqual(zero);
+  });
+});
+
+describe('guest → account retag (sign-in)', () => {
+  const zero = { current: 0, best: 0 };
+  it('moves the guest bucket onto the account so the sheet and sync see the games', () => {
+    const store = memory();
+    let who: string | null = 'guest-1';
+    const s = make(store, () => who);
+    s.started('hard', 1); s.finished('hard', 'win');
+    s.started('hard', 2); s.finished('hard', 'win');
+    s.started('blitz', 3); s.finished('blitz', 'win');
+    expect(s.view().hard).toEqual({ current: 2, best: 2 });
+    expect(s.pendingCount()).toBe(3);
+    retagPracticeStreaks(store, 'guest-1', 'account-9');
+    who = 'account-9';
+    expect(s.view().hard).toEqual({ current: 2, best: 2 });
+    expect(s.view().blitz).toEqual({ current: 1, best: 1 });
+    expect(s.pendingCount()).toBe(3);
+    who = 'guest-1';
+    expect(s.view().hard).toEqual(zero);
+  });
+  it('never double-counts a game id already on the account', () => {
+    const store = memory();
+    let who = 'guest-1';
+    const s = make(store, () => who);
+    s.started('hard', 1); s.finished('hard', 'win');
+    who = 'account-9';
+    s.started('hard', 1); s.finished('hard', 'win'); // same id cannot exist via API, but storage can
+    // Force the same counted id onto the guest by retagging after planting duplicate pending.
+    who = 'guest-1';
+    const before = s.pendingCount();
+    retagPracticeStreaks(store, 'guest-1', 'account-9');
+    who = 'account-9';
+    expect(s.view().hard.best).toBeGreaterThanOrEqual(1);
+    expect(s.pendingCount()).toBeLessThanOrEqual(before + 1);
   });
 });

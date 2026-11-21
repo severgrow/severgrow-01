@@ -9850,7 +9850,10 @@ function renderGameOver() {
     difficulty: !campaign,
   };
   // Level 10's teaching, under the live map: the planet explains itself where it is used.
-  syncFinishWindow(planetCard, won, !!taught && taught.level === FINAL_LESSON.level && won, finishResult.harvest);
+  // The window belongs to the card's entrance (same rule as the online branch above): a later
+  // re-render of an already-open card must not bump the finish card id, restart the decide timer
+  // or re-consume a planet-run slot.
+  if (wasHidden) syncFinishWindow(planetCard, won, !!taught && taught.level === FINAL_LESSON.level && won, finishResult.harvest);
   // A fresh finish starts folded (see the online branch): the card shows the result and the ways
   // forward, and the details wait behind "More" — that is what keeps it on one phone screen.
   if (wasHidden) setGoExtrasOpen(false);

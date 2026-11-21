@@ -56,3 +56,10 @@ export const syncPracticeStreaks = (): Promise<void> => {
   );
   return running;
 };
+
+// A sign-in (or account switch) must refresh the account numbers at once: the sheet and the
+// Practice keys read this device's cache, and a guest→account retag leaves pending games that
+// still need to POST. Quiet on failure — the next menu paint or practice finish tries again.
+if (typeof window !== 'undefined') {
+  window.addEventListener('futasaku:identity', () => { void syncPracticeStreaks(); });
+}

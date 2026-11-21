@@ -33,6 +33,7 @@ import {
   isSkinId,
 } from './skin-catalogue.js';
 import type { GameSkin, PlanetSkin } from './skin-catalogue.js';
+import { resolveSeatSkins } from './skin-contrast.js';
 import { setTileSkins } from './tileSkins.js';
 
 /**
@@ -184,12 +185,17 @@ let revision = 0;
  * (`setFaSides`); the six recipes are painted by the tile-skin path (`setTileSkins`,
  * ui/tileSkins.ts). One side wears one of the two, so a recipe id can never reach an atlas that
  * has no cell for it, and every one of the ten choices paints something real.
+ *
+ * CONTRAST (owner, 2026-11-20): when both seats chose the same game skin, only the opponent's
+ * tiles in THIS view wear the fixed contrast partner (`resolveSeatSkins`). The stored choice is
+ * never rewritten — the collision is paint-only.
  */
 const apply = () => {
   const mine = gameSkinFor(current, 'mine');
   const theirs = gameSkinFor(current, 'theirs');
-  setFaSides(atlasSkinFor(mine, 'forest'), atlasSkinFor(theirs, 'ash'));
-  setTileSkins(mine, theirs);
+  const paint = resolveSeatSkins(mine, theirs);
+  setFaSides(atlasSkinFor(paint.mine, 'forest'), atlasSkinFor(paint.theirs, 'ash'));
+  setTileSkins(paint.mine, paint.theirs);
   setFaBackground(current.background);
 };
 apply();

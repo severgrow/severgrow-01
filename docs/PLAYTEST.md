@@ -15,8 +15,8 @@ Live at **https://www.futasaku.com** — the real thing, a real server, real acc
 >
 > Tap **LOG IN** at the top and sign in with Google — that keeps your games, your Seeds and your
 > territory if you switch phones. On a phone you can also "Add to Home Screen" and it behaves like an
-> app. One catch: a Home Screen app can't finish the Google sign-in — sign in with Google in Safari,
-> and play as a guest inside the Home Screen app (it keeps its own separate saved games).
+> app: **Continue with Google** works there the same way it does in Safari. If sign-in stalls, tap
+> **Try Google again** on the recovery sheet.
 >
 > **What to try, roughly in this order:**
 >

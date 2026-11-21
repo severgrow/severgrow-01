@@ -17,6 +17,7 @@ import type { KeyValue } from '../../../server/src/client.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { duelApiUrl, duelRegion } from '../online/config.js';
 import { IDENTITY_STORAGE_KEY, notifyIdentityChanged, subscribeIdentityChanges } from '../online/identity.js';
+import { retagPracticeStreaks } from '../logic/practice-streaks.js';
 import { retagSeedProofs } from '../online/seed-rewards.js';
 import { signInWarmer } from './warm.js';
 import { GOOGLE_HANDOVER_BACKOFF_MS, GOOGLE_HANDOVER_MS, GOOGLE_HANDOVER_RETRY_MS, transientHandOver } from './handover.js';
@@ -576,7 +577,13 @@ export const mountAccounts = async (): Promise<void> => {
     try { kv?.set(WELCOME_KEY, '1'); } catch { /* the identity is already committed */ }
     if (res.json.outcome === 'created' || res.json.outcome === 'linked' || (before?.kind === 'guest' && before.playerId === identity.playerId))
       setNicknamePrompt(kv, identity.playerId);
-    if (kv && before?.kind === 'guest' && before.playerId !== identity.playerId) retagSeedProofs(kv, before.playerId, identity.playerId);
+    if (kv && before?.kind === 'guest' && before.playerId !== identity.playerId) {
+      // Seeds AND Practice streaks: both were earned under the guest id on this device. Without a
+      // retag they would sit under a dead key while the signed-in sheet reads the empty account
+      // bucket (Seeds already had this; streaks matched it on the post-integration audit).
+      retagSeedProofs(kv, before.playerId, identity.playerId);
+      retagPracticeStreaks(kv, before.playerId, identity.playerId);
+    }
     dropResume();
     notifyIdentityChanged(identity);
     window.dispatchEvent(new Event('futasaku:identity'));
