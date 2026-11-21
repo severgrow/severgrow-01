@@ -89,6 +89,10 @@ describe('motion tokens', () => {
       humanDraw: 312,
       throw: 312,
       throwFlight: 200,
+      // ADDED (2026-11-20): a Bomb's landing beat is the recorded replay's own strike beat
+      // (logic/strike.ts) — 2 x the throw beat — flown, held and faded instead of the old
+      // flight + dead-air hold, so the step is no longer than it was. See ui/effects.ts flyCard.
+      bombBeat: 624,
       // OWNER CHANGED THE VALUE (2026-11-08): the throw's own beat. 620 for the six-leg boomerang, then
       // 500 for the one-flick throw ("quick - but satisfying, not annoying"); OWNER CHANGED IT AGAIN
       // (2026-11-12): "lighter - snappy" and it "can be quicker" -> 420. OWNER, 2026-11-20: every

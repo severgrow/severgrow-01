@@ -4,10 +4,18 @@
 // cells it covers, and only then do the struck tiles go. A Blast is two Bomb cards and a burst over
 // the target and its six neighbours. No words: the card IS the explanation, in the game's own art.
 //
-// One timing curve (pure, tested) drives both the video painter here and the replay screen.
+// One timing curve (pure, tested) drives both the video painter here and the replay screen — and,
+// since the owner asked for the replay's Bomb in the live game (2026-11-20), the live landing too.
+// The curve itself lives in `logic/strike.ts` and is RE-EXPORTED here, so the replay's public
+// surface is unchanged and both sides read one set of numbers.
+import { STRIKE_ART_ASPECT, STRIKE_CARD_HEIGHT, STRIKE_TIMING, strikeLook } from '../logic/strike.js';
+import type { StrikeLook } from '../logic/strike.js';
 import { BOMB_FACE, cardArtUrl } from '../ui/card-art.js';
 import type { BoardLayout } from './board-canvas.js';
 import type { Strike } from './timeline.js';
+
+export { STRIKE_TIMING, strikeLook };
+export type { StrikeLook };
 
 /**
  * The Bomb card's art, as the strike draws it. Derived from `ui/card-art.ts` — the same table the
@@ -16,43 +24,6 @@ import type { Strike } from './timeline.js';
  * time (so a skin swap reaches them); this constant stays exported for callers that name one URL.
  */
 export const BOMB_ART_URL: string = cardArtUrl(BOMB_FACE);
-
-/** When, inside a strike beat (0 … 1 of its duration), each part happens. */
-export const STRIKE_TIMING = Object.freeze({
-  /** The card lands (scale and fade in, with a small overshoot). */
-  landEnd: 0.16,
-  /** The burst goes off; the struck tiles start to go at this moment. */
-  burst: 0.36,
-  /** The burst has faded. */
-  burstEnd: 0.72,
-  /** The card leaves. */
-  cardOutStart: 0.42,
-  cardOutEnd: 0.64,
-});
-
-const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
-const ease = (x: number) => 1 - (1 - clamp01(x)) ** 3;
-
-export type StrikeLook = {
-  /** The card(s): how solid, how big (1 = resting size) and how far above their place (in hex radii). */
-  card: { alpha: number; scale: number; lift: number };
-  /** The burst over the struck cells: 0 … 1. */
-  burst: number;
-};
-
-/** The strike's look at a fraction `p` (0 … 1) of its beat. Pure. */
-export const strikeLook = (p: number): StrikeLook => {
-  const T = STRIKE_TIMING;
-  const land = clamp01(p / T.landEnd);
-  const out = clamp01((p - T.cardOutStart) / (T.cardOutEnd - T.cardOutStart));
-  const cardAlpha = p < T.cardOutStart ? ease(land) : 1 - ease(out);
-  // 0.72 → 1.06 → 1 on the way in, then a slight swell as it goes
-  const inScale = land < 0.7 ? 0.72 + (1.06 - 0.72) * (land / 0.7) : 1.06 - 0.06 * ((land - 0.7) / 0.3);
-  const scale = p < T.cardOutStart ? inScale : 1 + 0.12 * ease(out);
-  const lift = (1 - ease(land)) * 0.5;
-  const b = p < T.burst ? 0 : p < T.burst + 0.06 ? (p - T.burst) / 0.06 : 1 - clamp01((p - T.burst - 0.06) / (T.burstEnd - T.burst - 0.06));
-  return { card: { alpha: clamp01(cardAlpha), scale, lift }, burst: clamp01(b) };
-};
 
 /** One hex outline at (x, y), radius r, in the board's own orientation (`corner` gives its points). */
 type Corner = (x: number, y: number, r: number, i: number) => { x: number; y: number };
@@ -100,8 +71,8 @@ export const paintStrike = (
     g.restore();
   }
   if (art && look.card.alpha > 0.01) {
-    const h = r * 2.15 * look.card.scale;
-    const w = h * (256 / 356);
+    const h = r * STRIKE_CARD_HEIGHT * look.card.scale;
+    const w = h * STRIKE_ART_ASPECT;
     const y = target.y - look.card.lift * r;
     const draw = (dx: number, rot: number) => {
       g.save();

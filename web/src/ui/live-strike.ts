@@ -1,9 +1,12 @@
 import { allNeighbors, coordKey, parseKey } from '../../../src/engine/index.js';
 import type { Step } from '../logic/anim.js';
 import type { Strike } from '../replay/timeline.js';
-import { STRIKE_TIMING, strikeLook } from '../replay/strike.js';
+import { STRIKE_ART_ASPECT, STRIKE_CARD_HEIGHT, STRIKE_TIMING, strikeLook } from '../logic/strike.js';
 import { BOMB_FACE, cardArtUrl } from './card-art.js';
 import { centerOf, el, hexPath, S } from './geom.js';
+
+// The live cue and the recorded replay are ONE beat: both read `logic/strike.ts` (asserted by
+// tests/strike-curve.test.ts, so they can never drift into two similar-but-different curves).
 
 /** Same one-card / two-card vocabulary and footprint as the replay. Presentation only. */
 export const liveStrike = (step: Step): Strike | null => step.k === 'fruit'
@@ -39,7 +42,7 @@ export const showLiveStrike = (
   const anchor = el('g', { transform: `translate(${at.x} ${at.y})` }, root);
   const cards = el('g', { class: 'live-strike-cards' }, anchor);
   cards.style.transformBox = 'fill-box'; cards.style.transformOrigin = 'center';
-  const h = S*2.15, w = h*256/356;
+  const h = S*STRIKE_CARD_HEIGHT, w = h*STRIKE_ART_ASPECT;
   const image = (dx: number, degrees: number) => el('image', {
     class: 'live-strike-card', href: cardArtUrl(BOMB_FACE), x: dx-w/2, y: -h/2, width:w, height:h,
     transform:`rotate(${degrees} ${dx} 0)`, preserveAspectRatio:'xMidYMid meet',
