@@ -1,174 +1,177 @@
-// THE SKIN PICKER'S ADMIN GATE (owner, 2026-11-16): "from the live version - except for my account
-// RYK - hide the skins in the planet for now ... don't show the selection of skins or background in
-// the planet for any players except for the admin account RYK."
-//
-// Guard, not internals: a player who is not the admin must get NO section in the planet's colour
-// pane (skins AND background are the same one section) and the product defaults — Forest (grass +
-// tree) for their own tiles, Ash (ash + volcano) for the opponent's — even when this device (or the
-// account, from before the gate) stored another set. The admin must still see all three rows.
+// THE SKINS GATE (owner, 2026-11-20: "when this and 12 skins are done - we unlock the skins to all
+// players"). The gate is now SIGNED-IN ACCOUNTS, not the owner alone, and guests still never get
+// skins. Guard, not internals:
+//   - a guest gets no section, no gap, no server request, and the product board;
+//   - a signed-in account gets the SKINS pane (Colour first, then the ten real skins) and keeps its
+//     own stored choice;
+//   - the old four-id stored shape still loads, and the default board is unchanged.
 //
 // The /test/ route is stubbed so the switch's plumbing exists regardless of the account: the gate
 // under test is the ACCOUNT, not the route.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { installFakeDom } from './helpers/fake-dom.js';
 
 vi.stubGlobal('location', {
   pathname: '/test/', hostname: 'futasaku.com', search: '', href: 'https://futasaku.com/test/',
 });
-vi.stubGlobal('window', { addEventListener: () => undefined });
 const data = new Map<string, string>();
 vi.stubGlobal('localStorage', {
   getItem: (k: string) => data.get(k) ?? null,
   setItem: (k: string, v: string) => { data.set(k, v); },
   removeItem: (k: string) => { data.delete(k); },
 });
-
-/** A claim stored BEFORE the gate existed: the exact case the owner says must show the new defaults. */
-data.set('severgrow.board-skin.v1', JSON.stringify({ mine: 'water', theirs: 'toxic', background: 'cocoa' }));
-
-// --- the smallest DOM mountSkinSwitch needs (the suite runs in node; no jsdom here) ---------------
-type FakeEl = {
-  tag: string; id: string; className: string; textContent: string; hidden: boolean;
-  dataset: Record<string, string>; style: Record<string, string>; attrs: Record<string, string>;
-  children: FakeEl[];
-  append(...nodes: FakeEl[]): void;
-  appendChild(node: FakeEl): void;
-  setAttribute(key: string, value: string): void;
-  getAttribute(key: string): string | null;
-  addEventListener(): void;
-  classList: { toggle(name: string, on: boolean): void };
-  querySelector(selector: string): FakeEl | null;
-  querySelectorAll(selector: string): FakeEl[];
-};
-const descendants = (node: FakeEl): FakeEl[] => node.children.flatMap((child) => [child, ...descendants(child)]);
-const matches = (node: FakeEl, selector: string): boolean => {
-  const id = /^#([\w-]+)$/.exec(selector);
-  if (id) return node.id === id[1];
-  const attr = /^([\w-]+)\[([\w-]+)\]$/.exec(selector);
-  return !!attr && node.tag === attr[1] && node.dataset[attr[2]!.replace(/^data-/, '')] !== undefined;
-};
-const makeEl = (tag: string): FakeEl => {
-  const el: FakeEl = {
-    tag, id: '', className: '', textContent: '', hidden: false,
-    dataset: {}, style: {}, attrs: {}, children: [],
-    append: (...nodes) => { el.children.push(...nodes); },
-    appendChild: (node) => { el.children.push(node); },
-    setAttribute: (key, value) => { el.attrs[key] = value; },
-    getAttribute: (key) => el.attrs[key] ?? null,
-    addEventListener: () => undefined,
-    classList: {
-      toggle: (name, on) => {
-        const names = new Set(el.className.split(/\s+/).filter(Boolean));
-        if (on) names.add(name); else names.delete(name);
-        el.className = [...names].join(' ');
-      },
-    },
-    querySelector: (selector) => descendants(el).find((node) => matches(node, selector)) ?? null,
-    querySelectorAll: (selector) => descendants(el).filter((node) => matches(node, selector)),
-  };
-  return el;
-};
-const doc = { head: makeEl('head'), createElement: makeEl };
-vi.stubGlobal('document', doc);
-
-const { mountSkinSwitch, connectSkinSwitch } = await import('../src/online/skin-switch.js');
-const { DEFAULT_SKIN, chooseSkin, planetClaimSkin, planetOwnSkin, planetSkinFor, skinChoice, skinPickerVisible } = await import('../src/ui/skinChoice.js');
-const { faSides } = await import('../src/ui/forestAsh.js');
+const { pane } = installFakeDom();
 
 const ME = '11111111-1111-4111-8111-111111111111';
+const STORED = 'severgrow.board-skin.v1';
 const signInAs = (displayName: string) => data.set('severgrow.duel.identity.v1', JSON.stringify({
   token: 'tok', playerId: ME, displayName, kind: 'account',
 }));
 const signOut = () => data.delete('severgrow.duel.identity.v1');
-const pane = () => makeEl('div');
 
-beforeEach(() => signOut());
+/** A fresh module graph for one case, so the module-level stored read runs exactly once. */
+const load = async () => {
+  vi.resetModules();
+  const switchModule = await import('../src/online/skin-switch.js');
+  const model = await import('../src/ui/skinChoice.js');
+  const art = await import('../src/ui/forestAsh.js');
+  const tile = await import('../src/ui/tileSkins.js');
+  return { switchModule, model, art, tile };
+};
 
-describe('the skin picker belongs to the admin account alone', () => {
-  it('shows a player who is not RYK no section at all — no skins, no background, no gap', () => {
-    signInAs('Cedar');
+beforeEach(() => { vi.resetModules(); data.clear(); signOut(); });
+
+describe('the skins picker belongs to signed-in accounts', () => {
+  it('gives a guest the Colour tile only: no real skins, no match row, no request', async () => {
+    data.set(STORED, JSON.stringify({ mine: 'water', theirs: 'toxic', background: 'cocoa' }));
+    const { switchModule, model, art } = await load();
     const box = pane();
-    mountSkinSwitch(box as unknown as HTMLElement);
-    expect(skinPickerVisible(), 'a non-admin may not see the picker').toBe(false);
-    expect(box.children, 'nothing is appended to the colour pane, so there is no gap').toHaveLength(0);
-    expect(box.querySelector('#world-skin-switch'), 'no skin section').toBeNull();
-    expect(descendants(box).some((node) => /Board \(test\)|Your tiles|Their tiles/.test(node.textContent)), 'nothing announced').toBe(false);
-  });
-
-  it('shows the admin RYK all three rows (skins AND background), as before', () => {
-    signInAs('RYK');
-    const box = pane();
-    mountSkinSwitch(box as unknown as HTMLElement);
-    expect(skinPickerVisible()).toBe(true);
+    switchModule.mountSkinSwitch(box as unknown as HTMLElement);
+    expect(model.skinPickerVisible(), 'a guest may not use skins').toBe(false);
     const section = box.querySelector('#world-skin-switch');
-    expect(section, 'the admin keeps the picker').not.toBeNull();
-    const labels = section!.querySelectorAll('button[data-field]').map((b) => b.dataset.field);
-    // The four PLANET sets, the six IN-GAME families (plus "no skin"), and the board backgrounds.
-    expect(new Set(labels), 'your tiles, their tiles, the six skins on each side, the board background')
-      .toEqual(new Set(['mine', 'theirs', 'tileMine', 'tileTheirs', 'background']));
-    expect(labels.filter((field) => field === 'mine')).toHaveLength(4);
-    expect(labels.filter((field) => field === 'theirs')).toHaveLength(4);
-    expect(labels.filter((field) => field === 'tileMine'), 'six skins + the shipped look').toHaveLength(7);
-    expect(labels.filter((field) => field === 'tileTheirs'), 'six skins + the shipped look').toHaveLength(7);
-    expect(labels.filter((field) => field === 'background'), 'classic + the five painted grounds').toHaveLength(6);
-  });
-
-  it('gives a non-admin the product defaults even when this device stored another set', () => {
-    signInAs('Cedar');
-    // The stored choice is the pre-gate case: water / toxic / cocoa. Skins must not win; the
-    // background is deliberately NOT pinned (the owner asked for default skins only).
-    expect(skinChoice()).toEqual({
-      mine: DEFAULT_SKIN.mine, theirs: DEFAULT_SKIN.theirs, background: 'cocoa', tileMine: null, tileTheirs: null,
-    });
-    expect(DEFAULT_SKIN.mine, 'own tiles: Forest, the nine grass grounds + home-tree').toBe('forest');
-    expect(DEFAULT_SKIN.theirs, 'opponent tiles: Ash, the nine ash grounds + home-volcano').toBe('ash');
-    expect([...faSides()], 'the board wears exactly those two').toEqual(['forest', 'ash']);
-  });
-
-  it('never even reads a non-admin\'s stored skin from the server', async () => {
-    signInAs('Cedar');
+    expect(section, 'the key still opens a pane: the twenty colours are not skins').not.toBeNull();
+    const planet = section!.querySelector('[data-group="planet"]')!;
+    expect(planet.querySelectorAll('.world-skin-tile').filter((t) => !t.hidden), 'only Colour is offered').toHaveLength(1);
+    expect(planet.querySelector('.world-skin-tile')!.dataset.value).toBe('colour');
+    expect(section!.querySelector('[data-group="game"]')!.hidden, 'no match skins for a guest').toBe(true);
+    expect(section!.querySelector('[data-group="board"]')!.hidden).toBe(true);
+    expect(section!.querySelector('.world-skin-locked')!.hidden).toBe(false);
+    expect([...art.faSides()], 'a guest wears the product board').toEqual(['forest', 'ash']);
+    expect(model.planetOwnSkin()).toBeUndefined();
     const worldSkin = vi.fn(async () => 'water');
-    await connectSkinSwitch({ worldSkin } as unknown as Parameters<typeof connectSkinSwitch>[0], 'tok', () => undefined);
-    expect(worldSkin, 'no request is spent on a picker this player cannot see').not.toHaveBeenCalled();
-    expect(skinChoice().mine, 'the stored server skin can never pull the board off Forest').toBe('forest');
+    await switchModule.connectSkinSwitch({ worldSkin } as unknown as Parameters<typeof switchModule.connectSkinSwitch>[0], 'tok');
+    expect(worldSkin, 'no request is spent on a guest').not.toHaveBeenCalled();
   });
 
-  // OWNER CHANGED THE RULE (2026-11-16: "random skins on all players tiles - should never happen";
-  // asked, he chose "everyone sees chosen skins"). The planet shows each player's CHOSEN skin to every
-  // viewer, and plain colour for a player who chose none. No Forest/Ash defaults on anyone's land.
-  // This replaces the 2026-11-15 rule (non-admins: own Forest, everyone else Ash).
-  it('paints every player\'s land in the skin THAT player chose, for every viewer', () => {
+  it('gives a signed-in account the SKINS pane: Colour first, then the ten real skins', async () => {
     signInAs('Cedar');
-    expect(planetSkinFor(ME, ME, 'water'), 'my own chosen Water').toBe('water');
-    expect(planetSkinFor('other-owner', ME, 'toxic'), 'their chosen Toxic').toBe('toxic');
-    expect(planetSkinFor('other-owner', ME, undefined), 'nobody chose: plain colour').toBeNull();
-    expect(planetSkinFor('other-owner', ME, null)).toBeNull();
-    signInAs('RYK');
-    expect(planetSkinFor('other-owner', ME, 'water'), 'the admin sees the same').toBe('water');
-    expect(planetSkinFor('other-owner', ME, undefined)).toBeNull();
-    signOut();
-    expect(planetSkinFor('other-owner', null, 'ash'), 'a signed-out visitor sees the same').toBe('ash');
-    expect(planetSkinFor('other-owner', null, undefined)).toBeNull();
+    const { switchModule, model } = await load();
+    expect(model.skinPickerVisible()).toBe(true);
+    const box = pane();
+    switchModule.mountSkinSwitch(box as unknown as HTMLElement);
+    const section = box.querySelector('#world-skin-switch');
+    expect(section, 'a signed-in account keeps the picker').not.toBeNull();
+    expect(section!.getAttribute('aria-label')).toBe('Skins');
+    const planet = section!.querySelector('[data-group="planet"]')!;
+    const tiles = planet.querySelectorAll('.world-skin-tile');
+    expect(tiles, 'Colour + ten real skins').toHaveLength(11);
+    expect(tiles[0]!.dataset.value, 'COLOUR comes first, as the plain option').toBe('colour');
+    expect(tiles.slice(1).map((t) => t.dataset.value)).toEqual([
+      'forest', 'ash', 'water', 'toxic', 'console', 'voxel', 'brushed', 'carrara', 'nero', 'hypnosis',
+    ]);
+    const game = section!.querySelector('[data-group="game"]')!;
+    expect(game.querySelectorAll('.world-skin-tile'), 'ten real skins, never Colour').toHaveLength(10);
+    expect(game.querySelectorAll('.world-skin-tile').some((t) => t.dataset.value === 'colour'), 'Colour is planet-only').toBe(false);
+    expect(section!.querySelector('[data-group="board"]')!.querySelectorAll('.world-skin-tile'), 'the backdrop keeps its own row').toHaveLength(6);
   });
 
-  it('fills only the ADMIN\'s own unchosen land from this device (a choice not yet saved); never anyone else\'s', () => {
+  it('shows the two appearances as distinct states with their own labels', async () => {
     signInAs('Cedar');
-    expect(planetOwnSkin(), 'a non-admin\'s own land is never filled with the board default').toBeUndefined();
-    signOut();
-    expect(planetOwnSkin()).toBeUndefined();
-    signInAs('RYK');
-    expect(planetOwnSkin(), 'the admin sees the pick he just made').toBe(skinChoice().mine);
+    const { switchModule, model } = await load();
+    const box = pane();
+    switchModule.mountSkinSwitch(box as unknown as HTMLElement);
+    const section = box.querySelector('#world-skin-switch')!;
+    expect(section!.querySelector('[data-group="planet"]')!.querySelector('.world-skin-value')!.textContent).toBe('Land: Forest');
+    expect(section!.querySelector('[data-group="game"]')!.querySelector('.world-skin-value')!.textContent).toBe('Tiles: Forest');
+    model.chooseSkin({ mine: 'water' });
+    expect(section!.querySelector('[data-group="planet"]')!.querySelector('.world-skin-value')!.textContent).toBe('Land: Water');
+    expect(section!.querySelector('[data-group="game"]')!.querySelector('.world-skin-value')!.textContent, 'one tap, both').toBe('Tiles: Water');
   });
 
-  it('the admin\'s pick wins over the skin stored for his own land, so the planet shows it at once', () => {
-    signInAs('RYK');
-    chooseSkin({ mine: 'toxic' });
-    expect(planetClaimSkin(ME, ME, 'water'), 'his own tile wears the pick, not the stored Water').toBe('toxic');
-    expect(planetClaimSkin('other-owner', ME, 'water'), 'someone else\'s tile keeps their own').toBe('water');
-    expect(planetClaimSkin('other-owner', ME, undefined)).toBeNull();
+  it('a real skin sets the planet AND the match; the colour tile is planet-only', async () => {
     signInAs('Cedar');
-    expect(planetClaimSkin(ME, ME, 'water'), 'a non-admin\'s own land shows what is stored').toBe('water');
-    expect(planetClaimSkin(ME, ME, undefined), 'and plain colour when nothing is').toBeNull();
+    const { switchModule, model, art, tile } = await load();
+    const box = pane();
+    switchModule.mountSkinSwitch(box as unknown as HTMLElement);
+    model.chooseSkin({ mine: 'carrara' });
+    expect(model.skinChoice().mine).toBe('carrara');
+    expect(model.skinChoice().mineGame, 'one tap, both appearances').toBe('carrara');
+    expect(sectionPlanetPressed(box, 'carrara')).toBe(true);
+    expect(sectionGamePressed(box, 'carrara'), 'the match row follows the same tap').toBe(true);
+    // THE MERGE'S SEAM: a recipe paints through tileSkins, never through the four-set atlas.
+    expect(['forest', 'ash', 'water', 'toxic']).toContain([...art.faSides()][0]);
+    expect(tile.tileSkinFor(0)).toBe('carrara');
+  });
+
+  it('a signed-in account keeps a stored six-id choice (the unlock must not pin it away)', async () => {
+    data.set(STORED, JSON.stringify({ mine: 'carrara', theirs: 'ash', mineGame: 'carrara', theirsGame: 'ash', background: 'slate' }));
+    signInAs('Cedar');
+    const { model } = await load();
+    expect(model.skinChoice().mine).toBe('carrara');
+    expect(model.skinChoice().mineGame).toBe('carrara');
+  });
+
+  it('still loads the old four-id choice, unchanged', async () => {
+    data.set(STORED, JSON.stringify({ mine: 'water', theirs: 'toxic', background: 'cocoa' }));
+    signInAs('Cedar');
+    const { model, art } = await load();
+    expect(model.skinChoice()).toEqual({
+      mine: 'water', theirs: 'toxic', mineGame: 'water', theirsGame: 'toxic', background: 'cocoa',
+    });
+    expect([...art.faSides()]).toEqual(['water', 'toxic']);
+  });
+
+  it('never pins a signed-in account back to Forest/Ash', async () => {
+    data.set(STORED, JSON.stringify({ mine: 'toxic', theirs: 'water', background: 'cocoa' }));
+    signInAs('Cedar');
+    const { model, art } = await load();
+    expect(model.skinChoice().mine).toBe('toxic');
+    expect([...art.faSides()]).toEqual(['toxic', 'water']);
+    expect(art.faBackground()).toBe('cocoa');
+  });
+
+  it('syncs the account\'s own four-id skin for any signed-in player', async () => {
+    signInAs('Cedar');
+    const { switchModule, model } = await load();
+    const worldSkin = vi.fn(async () => 'water');
+    await switchModule.connectSkinSwitch({ worldSkin } as unknown as Parameters<typeof switchModule.connectSkinSwitch>[0], 'tok');
+    expect(worldSkin).toHaveBeenCalledTimes(1);
+    expect(model.skinChoice().mine).toBe('water');
+  });
+
+  // OWNER RULE (2026-11-16: "random skins on all players tiles - should never happen"): the planet
+  // shows each player's CHOSEN skin to every viewer, and plain colour for a player who chose none.
+  it('paints every player\'s land in the skin THAT player chose, for every viewer', async () => {
+    signInAs('Cedar');
+    const { model } = await load();
+    expect(model.planetSkinFor(ME, ME, 'water')).toBe('water');
+    expect(model.planetSkinFor('other-owner', ME, 'toxic')).toBe('toxic');
+    expect(model.planetSkinFor('other-owner', ME, undefined)).toBeNull();
     signOut();
+    expect(model.planetSkinFor('other-owner', null, 'ash')).toBe('ash');
+    expect(model.planetSkinFor('other-owner', null, undefined)).toBeNull();
+  });
+
+  it('fills only the signed-in viewer\'s own planet land, and only with a set the planet paints', async () => {
+    signInAs('Cedar');
+    const { model } = await load();
+    model.chooseSkin({ mine: 'toxic' });
+    expect(model.planetClaimSkin(ME, ME, 'water'), 'the pick wins over the stored Water').toBe('toxic');
+    expect(model.planetClaimSkin('other-owner', ME, 'water')).toBe('water');
+    model.chooseSkin({ mine: 'carrara' });
+    expect(model.planetOwnSkin(), 'six-id art is not in the planet renderer yet').toBeUndefined();
+    signOut();
+    expect(model.planetOwnSkin()).toBeUndefined();
   });
 
   it('is applied by the shared planet itself, so every planet view follows it', async () => {
@@ -177,6 +180,27 @@ describe('the skin picker belongs to the admin account alone', () => {
     expect(src, 'claims pass through the rule inside the planet').toMatch(/planetClaimSkin\(/);
     expect(src, 'a pick repaints the planet').toMatch(/onSkinChoice\(/);
     expect(src, 'the own-land fill comes from the rule').toMatch(/planetOwnSkin\(\)/);
-    expect(src, 'no unconditional board-default fill').not.toMatch(/ownSkin:\s*faSides\(\)\[0\]/);
+  });
+
+  it('announces a change to the pane so its marks can never lie', async () => {
+    signInAs('Cedar');
+    const { switchModule, model } = await load();
+    const box = pane();
+    switchModule.mountSkinSwitch(box as unknown as HTMLElement);
+    const section = box.querySelector('#world-skin-switch')!;
+    model.chooseSkin({ mineGame: 'toxicon' as never }); // unknown value is coerced, never crashes
+    expect(section!.querySelector('[data-group="game"]')!.querySelector('.world-skin-value')).not.toBeNull();
+    model.chooseSkin({ mineGame: 'voxel' });
+    expect(sectionPlanetPressed(box, 'voxel'), 'a match-only change does not pretend to change the planet').toBe(false);
+    expect(sectionGamePressed(box, 'voxel')).toBe(true);
   });
 });
+
+const sectionPlanetPressed = (box: ReturnType<typeof pane>, value: string): boolean => {
+  const group = box.querySelector('#world-skin-switch')?.querySelector('[data-group="planet"]');
+  return group?.querySelector(`.world-skin-tile[data-value="${value}"]`)?.getAttribute('aria-pressed') === 'true';
+};
+const sectionGamePressed = (box: ReturnType<typeof pane>, value: string): boolean => {
+  const group = box.querySelector('#world-skin-switch')?.querySelector('[data-group="game"]');
+  return group?.querySelector(`.world-skin-tile[data-value="${value}"]`)?.getAttribute('aria-pressed') === 'true';
+};

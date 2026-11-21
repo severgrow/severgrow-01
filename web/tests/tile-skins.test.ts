@@ -6,7 +6,8 @@
 //  - Voxel's ground is weighted (the picker's own stream, not the hash sort — see voxel-weighting);
 //  - Nero's three road ribbons are all exactly 0.07 H wide, which is what makes the seams join.
 //
-// The picker belongs to the admin account, so these run signed in as it (see skin-picker-gate).
+// The picker belongs to any SIGNED-IN ACCOUNT (the owner unlocked it on 2026-11-20; guests are
+// pinned to the product look), so these run signed in (see skin-picker-gate).
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.stubGlobal('location', { pathname: '/test/', hostname: 'futasaku.com', search: '', href: 'https://futasaku.com/test/' });
@@ -32,7 +33,7 @@ const { allCoords, coordKey } = await import('../../src/engine/index.js');
 
 beforeEach(() => {
   signIn('RYK');
-  chooseSkin({ mine: 'forest', theirs: 'ash', background: 'slate', tileMine: null, tileTheirs: null });
+  chooseSkin({ mine: 'forest', theirs: 'ash', mineGame: 'forest', theirsGame: 'ash', background: 'slate' });
 });
 
 describe('the six approved skins', () => {
@@ -167,37 +168,40 @@ describe('Console: one pastel per tile, three clusters', () => {
 
 describe('the default look is untouched', () => {
   it('is Forest against Ash, with no tile skin at all', () => {
-    expect(DEFAULT_SKIN).toEqual({ mine: 'forest', theirs: 'ash', background: 'slate', tileMine: null, tileTheirs: null });
-    setTileSkins(DEFAULT_SKIN.tileMine, DEFAULT_SKIN.tileTheirs);
+    expect(DEFAULT_SKIN).toEqual({
+      mine: 'forest', theirs: 'ash', mineGame: 'forest', theirsGame: 'ash', background: 'slate',
+    });
+    setTileSkins(DEFAULT_SKIN.mineGame, DEFAULT_SKIN.theirsGame);
     expect(tileSkinFor(0)).toBeNull();
     expect(tileSkinFor(1)).toBeNull();
-    expect(skinChoice().tileMine).toBeNull();
-    expect(skinChoice().tileTheirs).toBeNull();
+    expect(skinChoice().mineGame).toBe('forest');
+    expect(skinChoice().theirsGame).toBe('ash');
   });
 
   it('a chosen family paints only the side that chose it', () => {
-    chooseSkin({ tileMine: 'voxel' });
+    chooseSkin({ mineGame: 'voxel' });
     expect(tileSkinFor(0)).toBe('voxel');
     expect(tileSkinFor(1), 'the other side keeps Forest/Ash').toBeNull();
-    chooseSkin({ tileTheirs: 'nero' });
+    chooseSkin({ theirsGame: 'nero' });
     expect(tileSkinFor(0)).toBe('voxel');
     expect(tileSkinFor(1)).toBe('nero');
   });
 
   it('survives storage that names a skin this build does not know', () => {
-    chooseSkin({ tileMine: 'slab' as never });
+    chooseSkin({ mineGame: 'slab' as never });
     expect(tileSkinFor(0), 'an unknown id is no choice, not a crash').toBeNull();
-    chooseSkin({ tileTheirs: '' as never });
+    chooseSkin({ theirsGame: '' as never });
     expect(tileSkinFor(1)).toBeNull();
     expect(tileSkinOf('voxel')).toBe('voxel');
     expect(tileSkinOf(42)).toBeNull();
     expect(tileSkinOf(null)).toBeNull();
   });
 
-  it('never lets a player who is not the admin wear a skin, even from storage', () => {
-    signIn('Cedar');
-    chooseSkin({ tileMine: 'hypnosis', tileTheirs: 'carrara' });
-    expect(tileSkinFor(0), 'the picker is hidden, so its choices are too').toBeNull();
+  it('never lets a guest wear a skin, even from storage', () => {
+    // The gate is a SIGNED-IN ACCOUNT (owner, 2026-11-20); a guest is pinned, an account is not.
+    data.delete('severgrow.duel.identity.v1');
+    chooseSkin({ mineGame: 'hypnosis', theirsGame: 'carrara' });
+    expect(tileSkinFor(0), 'the guest gate pins the product look').toBeNull();
     expect(tileSkinFor(1)).toBeNull();
     setTileSkins('voxel', 'nero');
     expect(tileSkinFor(1)).not.toBeNull(); // the setter itself is mechanical: the gate is in valid()

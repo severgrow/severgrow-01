@@ -364,6 +364,7 @@ try {
   await page.click('#menu-world');await page.waitForSelector('.world-map-svg');await page.waitForTimeout(350);
   check('reloading also restores the Territory camera',await sameCamera(),JSON.stringify({before:cameraBefore,after:await page.getAttribute('.world-map-svg','viewBox')}));
   await page.click('#online-world-menu');await page.click('#world-key-colour');
+  await page.click('#world-skin-switch [data-group="planet"] [data-slot="colour"]');
   await page.waitForSelector('.world-colour-swatch');
   check('colour picker has no instructional filler', (await page.textContent('#world-colour-note')) === '');
   const drop=await page.evaluate(()=>{

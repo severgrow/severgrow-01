@@ -79,17 +79,24 @@ export const SKIN_BASE_COLOUR: Readonly<Record<SkinId, string>> = {
 };
 
 /**
- * The skins this build's BOARD can paint. The four atlas sets, everywhere. The recipe branch widens
- * this to all ten by importing `RECIPE_SKIN_IDS` itself (ui/tileSkins.ts); the picker branch has no
- * procedural recipes, so a recipe game skin paints the seat's product fallback rather than crashing
- * the board — the MODEL still keeps the real choice, and the merge point is one constant.
+ * The skins this build's BOARD can paint: ALL TEN. The merge of the recipe branch and the picker
+ * makes the board two painters — the four atlas sets through `setFaSides`, the six recipes through
+ * `setTileSkins` (ui/tileSkins.ts) — so every picker id has a board behind it. `atlasSkinFor` is
+ * the narrower question the territory painter must ask: only four ids have a picture atlas.
  */
-export const BOARD_READY_SKIN_IDS: readonly SkinId[] = TERRITORY_IDS;
+export const BOARD_READY_SKIN_IDS: readonly SkinId[] = SKIN_IDS;
 
 /**
- * The id the board paints for a game appearance. On a build with the six recipes this is identity;
- * on the picker branch a recipe falls back to the seat's product set so a match always has a real
- * board. Never returns 'colour': a game appearance is always a real skin.
+ * The id the board paints for a game appearance, or the seat's product fallback when this build
+ * cannot paint it. Never returns 'colour': a game appearance is always a real skin.
  */
-export const boardSkinFor = (skin: GameSkin | null | undefined, fallback: TerritoryId): TerritoryId =>
-  skin && (BOARD_READY_SKIN_IDS as readonly string[]).includes(skin) ? (skin as TerritoryId) : fallback;
+export const boardSkinFor = (skin: GameSkin | null | undefined, fallback: TerritoryId): SkinId =>
+  skin && (BOARD_READY_SKIN_IDS as readonly string[]).includes(skin) ? skin : fallback;
+
+/**
+ * The ATLAS set the territory painter wears for a game appearance. Only the four shipped sets are
+ * pictures in the ground atlas; a recipe is painted by the tile-skin path instead and must never
+ * reach `setFaSides`, whose atlas has no cell for it.
+ */
+export const atlasSkinFor = (skin: GameSkin | null | undefined, fallback: TerritoryId): TerritoryId =>
+  skin && (TERRITORY_IDS as readonly string[]).includes(skin) ? (skin as TerritoryId) : fallback;

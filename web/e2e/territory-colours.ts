@@ -87,6 +87,10 @@ const openPicker = async (p: Page) => {
   }
   await p.click('#world-key-colour');
   await p.waitForFunction(() => document.querySelector<HTMLElement>('#online-world-panel')?.dataset.pane === 'colour');
+  // SKINS (owner, 2026-11-20): the twenty owner colours live in the glass sheet over the pane,
+  // opened by the COLOUR tile. Every colour is still reachable, including for a guest.
+  await p.click('#world-skin-switch [data-group="planet"] [data-slot="colour"]');
+  await p.waitForFunction(() => !document.getElementById('world-colour-sheet')!.hasAttribute('hidden'));
 };
 
 const browser = await chromium.launch(CHROME ? { executablePath: CHROME } : {});

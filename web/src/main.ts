@@ -268,9 +268,9 @@ const brandingLoad = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'fut
   ? import('./player/branding.js') : null;
 // V3 art is archived on this branch; always use the default painted board for Futa04.
 const defaultArtLoad = IS_FUTA04 ? import('./ui/defaultArtBoard.js') : null;
-// /test/ only (and a localhost dev host): the board skin switch in the planet's colour pane
-// (online/skin-switch.ts). The condition names the SAME gate the switch itself reads — `IS_FUTA04`
-// is true on the live product root too, where this switch must never exist.
+// THE SKINS PANE (owner, 2026-11-20): inside the planet's SKINS key. Built for everyone — a guest
+// gets the Colour tile, a signed-in account gets the ten real skins — and the ACCOUNT gate lives in
+// online/skin-switch.ts / ui/skinChoice.ts, not in the route.
 if (IS_FUTA04 && SKIN_SWITCH) mountSkinSwitch(document.querySelector<HTMLElement>('.world-pane[data-pane="colour"]'));
 const branding = brandingLoad ? await brandingLoad : null;
 if (branding && (window.matchMedia('(display-mode: standalone)').matches ||

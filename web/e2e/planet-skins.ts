@@ -1,9 +1,9 @@
 // The public Planet paints each owner's chosen set; the local picker saves only the signed-in
 // owner's preference. An older map response with no skin field still opens normally.
 //
-// THE ADMIN GATE (owner, 2026-11-16): the picker is the admin account "RYK"'s alone, so this suite
-// signs in as that account. A non-admin viewer's planet defaults are covered by the unit guard
-// (web/tests/skin-picker-gate.test.ts), not by this browser suite.
+// THE ACCOUNT GATE (owner, 2026-11-20: the skins are unlocked to signed-in accounts): this suite
+// signs in as one, because the picker saves only a signed-in owner's preference. A guest's planet
+// defaults are covered by the unit guard (web/tests/skin-picker-gate.test.ts), not here.
 //
 // THE PIXELS ARE THE PROOF (owner, 2026-11-16: "theres still pink visible under it - it should be
 // replacing the color and fitting in the hex nicely. also some of the skins tiles are rotated").
@@ -84,8 +84,8 @@ try {
   await page.addInitScript(({ world, me }) => {
     // MOTION ON: the pose the player gets (the landing flight sets the roll).
     localStorage.setItem('futa05-test:severgrow.settings.v1', JSON.stringify({ sound: false, music: false, reduceMotion: false }));
-    // RYK: since ae5ee76a the skin picker (and therefore the planet's skin) is the admin account's
-    // alone, so this suite signs in as that account. `kind: 'account'` is what the gate reads.
+    // The picker is a signed-in account's (owner, 2026-11-20); this suite signs in so the SKINS
+    // pane exists and can save. `kind: 'account'` is what the gate reads.
     localStorage.setItem('futa05-test:severgrow.duel.identity.v1', JSON.stringify({ token: 'skin-token', playerId: me, displayName: 'RYK', kind: 'account' }));
     localStorage.setItem('futa05-test:futasaku.world.last.v1', JSON.stringify(world));
   }, { world, me });
@@ -331,9 +331,10 @@ try {
   await page.locator('#world-key-colour').click();
   const picker = page.locator('#world-skin-switch');
   await picker.waitFor({ state: 'visible' });
-  assert.equal(await picker.locator('button[data-field="mine"]').count(), 4);
-  await picker.locator('button[data-field="mine"][data-value="water"]').click();
-  await page.waitForFunction(() => document.querySelector('#world-skin-switch button[data-field="mine"][data-value="water"]')?.getAttribute('aria-pressed') === 'true');
+  // THE SKINS PANE (owner, 2026-11-20): a real skin is one tap for the planet AND the match.
+  assert.equal(await picker.locator('[data-group="planet"] .world-skin-tile').count(), 11);
+  await picker.locator('[data-group="planet"] .world-skin-tile[data-value="water"]').click();
+  await page.waitForFunction(() => document.querySelector('#world-skin-switch [data-group="planet"] .world-skin-tile[data-value="water"]')?.getAttribute('aria-pressed') === 'true');
   await page.waitForTimeout(150);
   assert.deepEqual(posts, ['water']);
   const frames = await page.evaluate(() => (window as any).__severgrow.planet().frames as number);

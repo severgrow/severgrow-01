@@ -49,20 +49,20 @@ const fullBoard = (): State => {
 const SKINS = ['console', 'voxel', 'brushed', 'carrara', 'nero', 'hypnosis'] as const;
 const GROUNDS: Record<string, number> = { console: 9, voxel: 14, brushed: 7, carrara: 6, nero: 7, hypnosis: 7 };
 
-const openBoard = async (page: Page, choice: { tileMine?: string | null; tileTheirs?: string | null } | null) => {
+const openBoard = async (page: Page, choice: { mineGame?: string | null; theirsGame?: string | null } | null) => {
   await page.addInitScript((saved) => {
     (window as unknown as { __name: unknown }).__name = (f: unknown) => f;
     localStorage.setItem('main2:severgrow.save.v7', saved.save);
     localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({
       coach: false, sound: false, music: false, reduceMotion: true, speed: 'skip', vibration: false,
     }));
-    // The picker belongs to the admin account alone (ui/skinChoice.ts); these shots are its.
+    // Skins need a SIGNED-IN ACCOUNT (ui/skinChoice.ts, owner 2026-11-20); these shots use one.
     localStorage.setItem('main2:severgrow.duel.identity.v1', JSON.stringify({
       token: 'e2e', playerId: '11111111-1111-4111-8111-111111111111', displayName: 'RYK', kind: 'account',
     }));
     if (saved.skin) localStorage.setItem('main2:severgrow.board-skin.v1', saved.skin);
     else localStorage.removeItem('main2:severgrow.board-skin.v1');
-  }, { save: positionSave({ state: fullBoard() }), skin: choice ? JSON.stringify({ mine: 'forest', theirs: 'ash', background: 'slate', ...choice }) : null });
+  }, { save: positionSave({ state: fullBoard() }), skin: choice ? JSON.stringify({ mine: 'forest', theirs: 'ash', mineGame: 'forest', theirsGame: 'ash', background: 'slate', ...choice }) : null });
   await page.goto(BASE, { waitUntil: 'domcontentloaded' });
   await resumeSavedGame(page);
   await page.waitForFunction(() => document.querySelectorAll('#board .hex-cell').length >= 30, undefined, { timeout: 60_000 });
@@ -116,7 +116,7 @@ try {
     for (const [w, h, dpr] of [[390, 844, 3], [1440, 900, 2]] as const) {
       const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: dpr, hasTouch: w < 600, isMobile: w < 600 });
       try {
-        await openBoard(page, { tileMine: skin, tileTheirs: skin });
+        await openBoard(page, { mineGame: skin, theirsGame: skin });
         const art = await painted(page);
         check(art.uses >= 33, `${skin} ${w}x${h}: every ground is skinned (${art.uses} of ${art.cells})`);
         // Both homes wear the family's mark. One <def> serves both sides when they share a family.
@@ -194,7 +194,7 @@ try {
   {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, hasTouch: true, isMobile: true });
     try {
-      await openBoard(page, { tileMine: 'voxel', tileTheirs: 'nero' });
+      await openBoard(page, { mineGame: 'voxel', theirsGame: 'nero' });
       const art = await painted(page);
       check(art.defs.some((id) => id.startsWith('tileskin-voxel-')), 'my side wears Voxel');
       check(art.defs.some((id) => id.startsWith('tileskin-nero-')), 'their side wears Nero');

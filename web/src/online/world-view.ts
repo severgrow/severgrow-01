@@ -853,7 +853,7 @@ export class WorldView {
     row?.style.setProperty('--key-count', String(rowKeys.length));
     const names: Record<Pane | 'chat', string> = {
       ranking: ONLINE.worldRanking, challenges: ONLINE.worldChallenges,
-      achievements: ACHIEVEMENTS_UI.title, colour: ONLINE.worldColour, chat: ONLINE.worldChat,
+      achievements: ACHIEVEMENTS_UI.title, colour: ONLINE.worldSkins, chat: ONLINE.worldChat,
     };
     for (const key of rowKeys) {
       const pane = key.dataset.pane as Pane | undefined;
@@ -2985,7 +2985,7 @@ export class WorldView {
     panel.dataset.pane = this.pane ?? '';
     if (!this.pane) return;
     const title = document.getElementById('world-panel-title');
-    if (title) title.textContent = { ranking: ONLINE.worldRanking, challenges: ONLINE.worldChallenges, achievements: ACHIEVEMENTS_UI.title, colour: ONLINE.worldColour }[this.pane];
+    if (title) title.textContent = { ranking: ONLINE.worldRanking, challenges: ONLINE.worldChallenges, achievements: ACHIEVEMENTS_UI.title, colour: ONLINE.worldSkins }[this.pane];
     if (this.pane === 'challenges') {
       const history = this.allChallenges.filter((c) => !isOpen(c));
       const empty = document.getElementById('world-challenges-empty');

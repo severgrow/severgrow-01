@@ -96,12 +96,34 @@ export const ONLINE = Object.freeze({
   worldNoHistory: 'No past challenges yet.',
   worldMenu: 'Planet menu',
   /**
+   * SKINS (owner, 2026-11-20: "'COLOUR' in submenu is renamed to 'SKINS'"). The key and the panel
+   * title are the same word; the pane holds the PLANET and MATCH rows, and the twenty colours live
+   * in a dark-glass sheet over it. `worldSkin*` are the picker's own copy, kept beside the others
+   * so a test can prove the labels without reaching into the DOM.
+   */
+  worldSkins: 'Skins',
+  worldSkinPlanet: 'On the planet',
+  worldSkinGame: 'In a match',
+  worldSkinColourOnly: 'Planet only',
+  worldSkinBoth: 'Planet + match',
+  worldSkinGameOnly: 'Match only',
+  worldSkinPlanetValue: (name: string) => `Land: ${name}`,
+  worldSkinGameValue: (name: string) => `Tiles: ${name}`,
+  /** The deliberate second step after Slab: impossible to miss, one line, imperative. */
+  worldSkinPickGame: 'Now pick how your tiles look in a match.',
+  worldSkinGamePending: 'Not chosen yet',
+  worldSkinSaved: (planet: string, game: string) => `Planet: ${planet} · Match: ${game}`,
+  worldSkinBoard: 'Board',
+  worldSkinLocked: 'Sign in to choose a skin.',
+  /**
    * YOUR COLOUR (owner, 2026-10-30). The swatches' names live in `src/tile-colours.ts` with the
    * colours themselves, so the picker, the map and the server can never name a colour differently.
    */
   worldColour: 'Colour',
-  worldColourLabel: 'Your tiles',
+  worldColourTitle: 'Colour',
+  worldColourLabel: 'Your colour',
   worldColourHint: 'Tap a colour. Your tiles change at once.',
+  worldColourDone: 'Use this colour',
   worldColourSaving: 'Changing colour…',
   /** The 24 h rule (owner, 2026-10-30), shown BEFORE a press and after a refusal. */
   worldColourCooldown: (left: string) => `Changes again in ${left}.`,
