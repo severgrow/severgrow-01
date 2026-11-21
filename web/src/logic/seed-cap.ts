@@ -1,7 +1,7 @@
 // HOW LONG UNTIL THE SEEDS LIMIT COMES BACK (owner ask, 2026-11-20): "when 'seeds limit reached'
 // says how many hours left round up to 23h, 15h, 1h etc -- smart."
 //
-// WHERE THE RESET COMES FROM. The cap is the server's UTC DAILY ceiling
+// WHERE THE RESET COMES FROM. The cap is the server's UTC-day ceiling
 // (`SEED_ECONOMY.utcDailyRepeatableCap`, server/src/seeds/config.ts) and every receipt is filed under
 // `utcDay(input.now)` (server/src/seeds/postgres.ts, memory.ts), where `utcDay` is
 // `new Date(ms).toISOString().slice(0, 10)`. So this is NOT a rolling 24-hour window: the allowance

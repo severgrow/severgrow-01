@@ -173,7 +173,10 @@ describe('one leader per screen: the menu and the PLAY submenu', () => {
 
 describe('the difficulty tiles are the same button as the menu', () => {
   it('share the menu key height and never invent their own corner', () => {
-    const shared = rulesFor(styleCss, '#levels .level-grid .difficulty-tile');
+    // The BUTTON's own declarations only: a `::before/::after` wash may legitimately inherit the
+    // tile's corner (`border-radius: inherit`) to stay inside it, which does not give the key a
+    // corner of its own. The invariant is about the element the player taps.
+    const shared = rulesFor(styleCss, '#levels .level-grid .difficulty-tile').filter((r) => !r.prelude.includes('::'));
     expect(shared.length).toBeGreaterThan(0);
     const body = shared.map((r) => r.body).join('\n');
     // Owner, 2026-11-07: BLITZ + bolt must match EASY/MEDIUM/HARD metrics — same --menu-key-h.
