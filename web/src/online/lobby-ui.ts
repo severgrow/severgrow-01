@@ -35,7 +35,7 @@ import type { TerritoryCounts } from './menu-territory.js';
 import { mountAnswerClock } from './menu-territory-clock.js';
 import { correctedNow, emptyClock, noteServerNow } from './clock.js';
 import { waitingActionCount } from './territory-attention.js';
-import { cachedTerritory, readTerritoryWallet, rememberTerritory } from './territory-cache.js';
+import { cachedTerritory, readTerritoryWallet, rememberTerritory, settledTerritory } from './territory-cache.js';
 import { seedIcon } from './seed-icon.js';
 import type { SeedFlushResult } from './seed-rewards.js';
 import { settlePendingSeeds } from './seed-settle.js';
@@ -1661,7 +1661,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     void publicMap.catch(() => undefined);
     const id = await ensureIdentity();
     if (!id) {
-      if (menuEl?.hidden === false) territoryUI.paint(null);
+      // No identity this moment: never blank a pair this device already knows for it (a returning
+      // menu show can race a guest mint or a slow ensure). An identity with no known pair still
+      // reads as an honest blank.
+      if (menuEl?.hidden === false) territoryUI.paint(settledTerritory(identity.peek()?.playerId ?? null, null));
       answerClock.stop();
       return null;
     }
@@ -1708,7 +1711,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     const counts = territoryCounts(wallet, world, id.playerId, waiting);
     if (identity.peek()?.token !== id.token) return null;
     rememberTerritory(id.playerId, counts);
-    if (menuEl?.hidden === false) territoryUI.paint(counts);
+    // A failed wallet/map read keeps the pair this identity already had on screen instead of
+    // blanking it (the owner's disappearing numbers on the way back from the Planet). Only an
+    // identity that never had a known pair paints the honest blank.
+    if (menuEl?.hidden === false) territoryUI.paint(settledTerritory(id.playerId, counts));
     // The SAME list paints the Play online key's live word (and the hub, if it is open). Kept out
     // of the try above: a paint can never be mistaken for a failed wallet/map read.
     if (duelList) {
@@ -1760,8 +1766,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   /**
    * ONE pass per menu show: settle queued proofs, read the wallet ONCE and the world ONCE, paint
    * the two read-outs, then use that same wallet for the invitation card. Single-flight, so a
-   * burst of `futasaku:menu` events can never stack requests. Any failure hides both numbers (a
-   * stale or invented value is worse than no value); the label and the entry stay untouched.
+   * burst of `futasaku:menu` events can never stack requests. The read-outs are STICKY per
+   * identity: a failed read keeps the pair that identity already had on screen (owner report,
+   * 2026-11-20 — returning from the Planet must never blank the key), and only an identity that
+   * never had a known pair shows the honest blank. The label and the entry stay untouched.
    */
   const refreshMenu = (): Promise<void> => {
     if (menuEl?.hidden !== false) return Promise.resolve();
