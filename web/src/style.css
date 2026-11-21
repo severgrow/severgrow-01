@@ -7522,6 +7522,61 @@ html.align-overlay::before {
   position: absolute;
   inset: -8px;
 }
+/* ---------- THE UNDO NUDGE (logic/mistakes.ts) ---------- */
+/* "The Grow step you just ended was obviously wrong, and Undo can still take it back." A soft
+   pulse around the Undo key in the game's own grow-glow language (a cream halo, like the guide's
+   `.gd-halo`), never a ring and never on the board. The halo is its own painted layer with ONE
+   fixed box-shadow; the animation moves opacity and transform only, so nothing re-rasterises the
+   shadow per frame. It takes no taps (pointer-events: none), takes no room (absolute, inset: 0)
+   and never changes the key's size or place. */
+.undo-slot .nudge-halo {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow:
+    0 0 0 1px rgba(255, 226, 170, 0.42),
+    0 0 16px 2px rgba(255, 226, 170, 0.52);
+  transform-origin: 50% 50%;
+  transition: opacity 180ms ease-out;
+}
+.undo-slot.mistake-nudge {
+  --nudge-lo: 0.34;
+  --nudge-hi: 0.92;
+}
+/* Effects Low: the pulse is offered, just quieter (the setting is about intensity, not presence) */
+.undo-slot.mistake-nudge-quiet {
+  --nudge-lo: 0.18;
+  --nudge-hi: 0.5;
+}
+.undo-slot.mistake-nudge .nudge-halo {
+  animation: undo-nudge-pulse 1.9s ease-in-out infinite;
+}
+@keyframes undo-nudge-pulse {
+  0%,
+  100% {
+    opacity: var(--nudge-lo, 0.34);
+    transform: scale(0.97);
+  }
+  50% {
+    opacity: var(--nudge-hi, 0.92);
+    transform: scale(1.05);
+  }
+}
+/* Reduce motion: the glow stays — it is an affordance, not decoration — it simply stops breathing */
+html.reduce-motion .undo-slot.mistake-nudge .nudge-halo {
+  animation: none;
+  opacity: var(--nudge-hi, 0.92);
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .undo-slot.mistake-nudge .nudge-halo {
+    animation: none;
+    opacity: var(--nudge-hi, 0.92);
+    transform: none;
+  }
+}
 /* a slot keeps its place when its button is away: nothing moves */
 .dock .hand-row > .hand-slot[hidden] {
   display: grid;
