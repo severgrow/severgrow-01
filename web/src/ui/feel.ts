@@ -60,8 +60,26 @@ export const drawFrames = (dx: number, dy: number, fromScale: number): Keyframe[
   ];
 };
 
-/** "Not allowed": a short head-shake that settles (was one 3px nudge). */
-export const DENY_SHAKE: Keyframe[] = [
+/**
+ * STRENGTHEN: the tile itself answers (owner, 2026-11-20: another animation "easily improved for max
+ * satisfaction joy dopamine"). A Strengthen used to change only the number on the stone — the tile
+ * under it never moved, so the one grow move that keeps your tile read as a label swap. This is the
+ * smallest physical answer in the vocabulary: the tile rises a hair over 1.6 px, swells 3.5 %, and
+ * settles — the same family as a grown tile's pop, at a third of the size, because the tile was
+ * already there.
+ *
+ * Transform only, and it fits INSIDE the Strengthen step's existing hold (MOTION.quick + 230 ms), so
+ * the move is not a millisecond longer. Reduce motion skips it entirely (a still number).
+ */
+export const STRENGTHEN_POP: Keyframe[] = [
+  { transform: 'translateY(0) scale(1)' },
+  { transform: 'translateY(-1.6px) scale(1.035)', offset: 0.34 },
+  { transform: 'translateY(0.6px) scale(0.996)', offset: 0.7 },
+  { transform: 'translateY(0) scale(1)' },
+];
+export const STRENGTHEN_POP_MS = 220;
+
+/** "Not allowed": a short head-shake that settles (was one 3px nudge). */export const DENY_SHAKE: Keyframe[] = [
   { transform: 'translateX(0px)' },
   { transform: 'translateX(-5px)', offset: 0.18 },
   { transform: 'translateX(4px)', offset: 0.42 },

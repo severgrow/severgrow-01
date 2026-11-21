@@ -7712,7 +7712,14 @@ html.align-overlay::before {
 }
 
 /* My turn starts: a soft light passes over my hand (main.ts glowHand). Each card's glow is drawn
-   once and only its opacity animates (GPU-cheap); it sits behind the card's own face. */
+   once and only its opacity animates (GPU-cheap); it sits behind the card's own face.
+
+   THE LIGHT TRAVELS (owner, 2026-11-20). It used to rise on every card at the same instant, so the
+   most repeated moment of a game read as one flat wash. Now the cards light in turn, left to right:
+   `--turn-glow-step` is the beat between neighbours and `--turn-glow-tail` is the head start the
+   last card spends, which `glowHand` also takes out of every card's own duration — the sweep ends
+   exactly on the beat it replaced, so no turn is a millisecond longer. Three vars on the hand, no
+   per-card style writes, and still nothing but opacity on the compositor. */
 #hand .card::before {
   content: '';
   position: absolute;
@@ -7723,12 +7730,27 @@ html.align-overlay::before {
   box-shadow: 0 -4px 10px color-mix(in srgb, var(--c-text) 30%, transparent);
   opacity: 0;
 }
+#hand .card:nth-child(1) { --glow-i: 0; }
+#hand .card:nth-child(2) { --glow-i: 1; }
+#hand .card:nth-child(3) { --glow-i: 2; }
+#hand .card:nth-child(4) { --glow-i: 3; }
+#hand .card:nth-child(5) { --glow-i: 4; }
+#hand .card:nth-child(6) { --glow-i: 5; }
+#hand .card:nth-child(7) { --glow-i: 6; }
+#hand .card:nth-child(8) { --glow-i: 7; }
+#hand .card:nth-child(n + 9) { --glow-i: 7; }
 #hand.turn-glow .card::before {
-  animation: hand-turn-glow var(--turn-glow-ms, 900ms) ease-in-out 1;
+  animation: hand-turn-glow calc(var(--turn-glow-ms, 900ms) - var(--turn-glow-tail, 0ms))
+    ease-in-out calc(var(--turn-glow-step, 0ms) * var(--glow-i, 0)) 1;
 }
 @keyframes hand-turn-glow {
   0%, 100% { opacity: 0; }
   40% { opacity: 1; }
+}
+/* Reduce motion: the light is simply not there (never a slow or faint version of it). */
+.reduce-motion #hand.turn-glow .card::before { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  #hand.turn-glow .card::before { animation: none; }
 }
 
 /* ---------- wide screens: even margins, a centred cockpit (owner, 2026-10-15) ----------

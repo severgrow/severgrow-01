@@ -6,7 +6,7 @@ import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
 import { deferEntryButton } from './ui/deferred-entry.js';
 import { confirmedTurn, mountTurnRim } from './player/turn-rim.js';
 import { measureAtRest } from './ui/at-rest.js';
-import { DRAW_PILE_GIVE, DRAW_PILE_GIVE_MS, drawFrames, thudPile } from './ui/feel.js';
+import { DRAW_PILE_GIVE, DRAW_PILE_GIVE_MS, STRENGTHEN_POP, STRENGTHEN_POP_MS, drawFrames, thudPile } from './ui/feel.js';
 import { mountStartupReveal } from './player/startup.js';
 import { mountMenuZoomLock } from './player/menu-zoom-lock.js';
 import { mountAchievementToast } from './player/achievement-toast.js';
@@ -112,10 +112,11 @@ import { attachSchedulerPause, scheduler } from './logic/scheduler.js';
 import { mountHiddenPause } from './ui/hidden-pause.js';
 import { mountViewportGuard } from './ui/viewport-guard.js';
 import { clearTiming, mark as markTiming, timingEnabled, timingLog } from './logic/timing.js';
-import { DECK_BEAT, SCORE_BEAT, deckMoment, scoreProgress, splashPlan, sporesHome } from './logic/candy.js';
+import { DECK_BEAT, SCORE_BEAT, deckMoment, scorePopDelay, scoreProgress, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
 import { EASE, BREATH, MOTION, PINNED, breathAmpStep, breathPeriodOf, breathPhaseOf, motionAllowed } from './logic/motion.js';
+import { turnGlowMs, turnGlowPlan } from './logic/turn-glow.js';
 import { boardHasSettled, resultHoldStalled, stepResultBreath } from './logic/result-hold.js';
 import { liftOf, settleOvershootOf, shadowOf, weightOf } from './logic/card-weight.js';
 import { enterSurface, exitSurface, interfaceMotionAllowed, resetSurface, INTERFACE_MOTION } from './ui/interface-motion.js';
@@ -4636,13 +4637,24 @@ function injectStall(): void {
  * (#hand .card::before) and only its OPACITY animates, which the phone composites on the GPU. The
  * old version animated a drop-shadow filter on the whole hand, repainting every card every frame
  * for 0.9s, right at the turn hand-over (motion pass, owner 2026-10-15).
+ *
+ * 2026-11-20: the light now TRAVELS across the fan (logic/turn-glow.ts) instead of rising on every
+ * card at once. Same 900 ms, same opacity-only layer: the last card's delay is taken out of its own
+ * duration, so the sweep ends exactly where the old wash did and nothing waits on it. The wave is
+ * three style writes (never one per card) and only when it is really my turn with motion on.
  */
 let handGlowTimer: ReturnType<typeof setTimeout> | undefined;
 function glowHand(ms: number): void {
   const hand = $('hand');
   clearTimeout(handGlowTimer);
   hand.classList.remove('turn-glow');
+  // Reduce motion / Speed off: no light at all (it used to glow regardless — a joyful animation
+  // must become NOTHING for a player who asked for stillness).
+  const plan = turnGlowPlan(ms, hand.querySelectorAll('.card').length, motionOn());
+  if (!plan) return;
   hand.style.setProperty('--turn-glow-ms', `${Math.round(ms)}ms`);
+  hand.style.setProperty('--turn-glow-step', `${plan.stepMs}ms`);
+  hand.style.setProperty('--turn-glow-tail', `${plan.tailMs}ms`);
   requestAnimationFrame(() => {
     hand.classList.add('turn-glow');
     handGlowTimer = setTimeout(() => hand.classList.remove('turn-glow'), ms + 50);
@@ -4958,6 +4970,9 @@ async function playStep(step: Step, my: number) {
       const stone = IS_FUTA04 ? tileEl?.querySelector<SVGGElement>('.seed-stone') ?? null : null;
       // The number brightens and ticks from → to over one "quick" beat; no bounce.
       if (m > 0 && !mo.budget.fadeOnly) anim(stone ?? num ?? tileEl, [{ opacity: 0.5 }, { opacity: 1 }], { duration: MOTION.quick * f, easing: EASE.out, fill: 'both' });
+      // 2026-11-20: the tile under the number answers too (ui/feel.ts). Inside this step's own
+      // hold; gone under Reduce motion / Speed off, like every other piece of this choreography.
+      if (m > 0 && !mo.budget.fadeOnly) anim(tileEl, STRENGTHEN_POP, { duration: STRENGTHEN_POP_MS * f, easing: EASE.settle, transformOrigin: 'center' } as KeyframeAnimationOptions);
       if (m > 0 && !mo.budget.fadeOnly) ring(step.key, f, top);
       if ((num || stone) && step.to > step.from) {
         const setShown = (value: number) => {
@@ -5189,8 +5204,8 @@ async function playStep(step: Step, my: number) {
       announceTurn(step.player, step.player === HUMAN && step.final ? 'Your last turn' : undefined);
       // Only the now-active home answers, with one existing heartbeat; the other stays still.
       beatHome(step.player, my);
-      // My turn starts: a soft glow passes over my hand.
-      if (step.player === HUMAN) glowHand(900 * Math.max(f, 0.5));
+      // My turn starts: a soft glow passes over my hand, card by card (logic/turn-glow.ts).
+      if (step.player === HUMAN) glowHand(turnGlowMs(f));
       // an empty opponent turn starts at once (its quick beats are in its plan)
       const oppQuick = step.player === BOT && session && botPlan?.beats.quick && botPlan.keys[0] === posKey(session.state);
       const quick = oppQuick ? 0 : quickShow && step.player === HUMAN ? quickShow.show.turn : null;
@@ -5428,10 +5443,18 @@ function countScores(to: [number, number]) {
       scoreUnsub = null;
     }
   });
-  // The digits have arrived: one small click on the number that changed, not a bounce.
-  const pop: Keyframe[] = [{ transform: 'scale(1)' }, { transform: `scale(${SCORE_BEAT.popScale})`, offset: 0.55 }, { transform: 'scale(1)' }];
-  if (target[0] !== start[0]) anim($('score-you'), pop, { duration: SCORE_BEAT.popMs, delay: dur, easing: EASE.settle });
-  if (target[1] !== start[1]) anim($('score-bot'), pop, { duration: SCORE_BEAT.popMs, delay: dur, easing: EASE.settle });
+  // The digits have arrived: one small click on the number that changed, not a bounce. It starts
+  // `popLead` BEFORE the count lands, so the click is the number snapping into place rather than a
+  // second event after the count has already stopped (2026-11-20). It also rises a hair: transform
+  // only, on the compositor, and no extra time.
+  const pop: Keyframe[] = [
+    { transform: 'translateY(0) scale(1)' },
+    { transform: `translateY(-${SCORE_BEAT.popRisePx}px) scale(${SCORE_BEAT.popScale})`, offset: 0.55 },
+    { transform: 'translateY(0) scale(1)' },
+  ];
+  const popDelay = scorePopDelay(dur);
+  if (target[0] !== start[0]) anim($('score-you'), pop, { duration: SCORE_BEAT.popMs, delay: popDelay, easing: EASE.settle });
+  if (target[1] !== start[1]) anim($('score-bot'), pop, { duration: SCORE_BEAT.popMs, delay: popDelay, easing: EASE.settle });
 }
 
 // ---------- rendering ----------
