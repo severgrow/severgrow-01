@@ -22,7 +22,6 @@
 // amber. Nothing here publishes a tone: the board's own effects keep the room they had.
 import { LIGHT_TONES } from '../player/light.js';
 import type { LightTone } from '../player/light.js';
-import { holdRoomLight } from './room-light.js';
 
 export const AMBIENT_LIGHT_ID = 'futa04-ambient-light';
 
@@ -155,9 +154,6 @@ export function pulseAmbientLight(action: AmbientAction, o: AmbientPulseOptions 
   // only its opacity moves on the compositor.
   el.style.setProperty('--ambient-tint', plan.tint);
   running?.cancel();
-  // One room: the same beat hides the board's local light patches (ui/room-light.ts). The release
-  // belongs to this beat, so an older beat's queued cancel cannot close the new window.
-  const releaseRoom = holdRoomLight();
   const beat = el.animate([
     { opacity: 0 },
     { opacity: plan.peak, offset: 0.16 },
@@ -167,7 +163,6 @@ export function pulseAmbientLight(action: AmbientAction, o: AmbientPulseOptions 
   running = beat;
   const settle = () => {
     if (running === beat) running = null;
-    releaseRoom();
   };
   beat.addEventListener('finish', settle);
   beat.addEventListener('cancel', settle);
