@@ -83,6 +83,45 @@ try {
     await page.waitForFunction(()=>document.getElementById('smart-led-text')?.textContent?.trim()==='0:0',undefined,{timeout:4000});
     await page.locator('#futa04-box > .piles').evaluate(el => Promise.all(el.getAnimations().map(animation => animation.finished)));
     let start=await rects(page); aligned(start,`${name} Draw`);
+    // OWNER, 2026-11-20: "during DRAW the piles size up — make them size up a tiny bit more, like 8%
+    // more, so it's even more tappable and obvious. unless it doesn't leave margin from the optional
+    // bloom button in middle — can't overlayer it". So the drawn face must be measurably bigger
+    // (58px was the old 1.16 swell) AND the cockpit must still reserve its margin to the middle
+    // control column, where the Bloom button is laid out once the Draw is over. Draw's own travel
+    // toward the hand is removed from the measurement: the reservation is what the next step
+    // inherits, and the travel only ever happens into an empty middle.
+    const drawn=await page.evaluate(()=>{
+      const box=document.querySelector<HTMLElement>('#futa04-box')!;
+      const style=getComputedStyle(box);
+      const cols=style.gridTemplateColumns.split(' ').map(parseFloat);
+      const gap=parseFloat(style.columnGap)||0;
+      const pad=parseFloat(style.paddingLeft)||0;
+      const boxPiles=parseFloat(style.getPropertyValue('--box-piles'))||0;
+      const pile=parseFloat(style.getPropertyValue('--box-pile'))||0;
+      const frame=box.getBoundingClientRect();
+      const piles=box.querySelector<HTMLElement>(':scope > .piles')!;
+      const shift=parseFloat(getComputedStyle(piles).getPropertyValue('--futa04-draw-shift'))||0;
+      const faces=[...document.querySelectorAll<HTMLElement>('#futa04-box .pile-card')].map(el=>el.getBoundingClientRect());
+      const first=faces[0]!;
+      const pilesLeft=Math.min(...faces.map(face=>face.left))-shift;
+      const pilesRight=Math.max(...faces.map(face=>face.right))-shift;
+      // The piles sit either side of the middle track depending on the hand (col 3 for a right
+      // hand, col 1 for the mirrored one), so the reservation is the gap on the piles' own side.
+      const middleLeft=cols.length===3?frame.left+pad+cols[0]!+gap:null;
+      const middleRight=cols.length===3?middleLeft!+cols[1]!:null;
+      return { faceW:first.width, faceH:first.height,
+        // Both readings of the same reservation: the slot's own arithmetic, and the measured pile.
+        slotClearance:boxPiles-pile-18+6-first.width,
+        rectClearance:middleRight===null?null:Math.max(pilesLeft-middleRight,middleLeft!-pilesRight),
+        tappable:[...document.querySelectorAll<HTMLElement>('#futa04-box > .piles > .pile')].every(el=>{
+          const r=el.getBoundingClientRect();
+          return document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)?.closest('.pile')===el;
+        }) };
+    });
+    check(drawn.faceW>=62&&drawn.faceH>=88,`${name}: Draw swells each pile 8% bigger than the old 58x82 swell (${drawn.faceW.toFixed(2)}x${drawn.faceH.toFixed(2)})`);
+    check(drawn.slotClearance>=8&&(drawn.rectClearance??8)>=8,
+      `${name}: the drawn pile keeps its 8px margin to the middle control column (${drawn.slotClearance.toFixed(2)}px reserved, ${drawn.rectClearance?.toFixed(2)}px measured)`);
+    check(drawn.tappable,`${name}: each drawn pile owns its own centre as a tap target`);
     check(await page.locator('#smart-led-text').innerText()==='0:0',`${name}: score rests in the LED during Draw`);
     check(await page.locator('#smart-led-cells').evaluate(el => (el as HTMLCanvasElement).width > 0),`${name}: phase text uses real LED cells`);
     const materials=await page.evaluate(()=>['hand-sort','deck-count','smart-led'].map(id=>getComputedStyle(document.getElementById(id)!,'::before').backgroundImage));
