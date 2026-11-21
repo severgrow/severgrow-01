@@ -819,13 +819,27 @@ export const mountAccounts = async (): Promise<void> => {
    * entry is identity-scoped (`playerId`) and short-lived, so another account's numbers can never be
    * painted as this one's, and a stale answer is never shown as current.
    */
-  const OWN_PROFILE_TTL_MS = 30_000;
+  const OWN_PROFILE_TTL_MS = 60_000;
   const ownProfileCache = new Map<string, { at: number; facts: ProfileFacts }>();
-  const VISITOR_PROFILE_TTL_MS = 20_000;
-  type ProfileRecord = { blitzBest: number | null; achievements: { done: number; total: number } | null } | null;
-  const visitorProfileCache = new Map<string, { at: number; facts: VisitorFacts; record: ProfileRecord }>();
+  /**
+   * THE VISITOR SHEET IS READ ONCE, THEN REMEMBERED (owner, 2026-11-20: "once profiles load - they
+   * shouldnt reload when going back to it"). Keyed by VIEWER + PLAYER, so two players on one device
+   * never share an answer. Inside the TTL a reopen paints the remembered facts and spends NO
+   * request at all — not the card, not the profile, not the record.
+   */
+  const VISITOR_PROFILE_TTL_MS = 60_000;
+  /** Everything the visitor sheet renders, as ONE answer (`GET /v1/players/:id/card`). */
+  type VisitorCard = {
+    profile: PublicPlayerProfile;
+    achievements: { done: number; total: number } | null;
+    onlineBlitzBest: number | null;
+    headToHead?: HeadToHead;
+    /** Your own card only: the account's classic offline totals across its devices. */
+    ownOffline?: { games: number; wins: number; draws: number; longestStreak: number };
+  };
+  const visitorProfileCache = new Map<string, { at: number; facts: VisitorFacts }>();
   /** Reads in flight, keyed by viewer+player, so a double tap never spends two requests. */
-  const visitorReads = new Map<string, Promise<{ profile: PublicPlayerProfile; headToHead?: HeadToHead } | null>>();
+  const visitorReads = new Map<string, Promise<VisitorCard | null>>();
 
   /** This device's saved record (the game writes it under the same keys); blocked storage reads as none. */
   const readLocal = (key: string): string | null => {
@@ -903,6 +917,9 @@ export const mountAccounts = async (): Promise<void> => {
       tiles: pair?.tiles ?? null,
       matchesWon: matchesWonEver(offline, null),
       offline,
+      // THE OFFLINE ROW (owner, 2026-11-20). This device's own game count is a fact the sheet has
+      // before any request; the two streaks arrive with the card and are dashes until then.
+      offlineAggregate: { games: offline.games, hardStreak: null, blitzStreak: null },
       online: null,
       // The best online Blitz streak and achievements unlocked (owner, 2026-11-18): unknown until read.
       ...(FEATURES.practiceStreaks ? { blitzBest: null, achievements: null } : {}),
@@ -916,6 +933,22 @@ export const mountAccounts = async (): Promise<void> => {
     const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : null);
     const done = n(body.achievements?.done); const total = n(body.achievements?.total);
     return { blitzBest: n(body.onlineBlitzBest), achievements: done !== null && total !== null ? { done, total } : null };
+  };
+
+  /**
+   * THE WHOLE SHEET IN ONE REQUEST (owner, 2026-11-20: "make it load up quickly cheaply"). `/card`
+   * answers the profile allow-list (identity, online row, offline row, stored flag) plus the two
+   * facts the sheet also shows. A server from before the route answers 404, and this falls back to
+   * the two requests it does have — the same order, one at a time (never a fan-out).
+   */
+  const readCard = async (playerId: string, token: string): Promise<VisitorCard | null> => {
+    if (!profileClient) return null;
+    const card = await profileClient.playerCard(token, playerId).catch(() => null);
+    if (card) return card;
+    const answer = await profileClient.playerProfile(token, playerId).catch(() => null);
+    if (!answer) return null;
+    const record = await readRecord(playerId, token).catch(() => null);
+    return { profile: answer.profile, ...(answer.headToHead ? { headToHead: answer.headToHead } : {}), achievements: record?.achievements ?? null, onlineBlitzBest: record?.blitzBest ?? null };
   };
 
   const openProfile = () => {
@@ -937,6 +970,9 @@ export const mountAccounts = async (): Promise<void> => {
         if (out.tiles === null) out.tiles = known.tiles;
         if (out.connectedTiles === null) out.connectedTiles = known.connectedTiles ?? null;
         if (out.online === null) out.online = known.online;
+        // The account's offline aggregate beats this device's partial one (it is the same numbers
+        // a visitor sees, so the two sheets can never disagree).
+        if (known.offlineAggregate) out.offlineAggregate = known.offlineAggregate;
         if ('blitzBest' in out && out.blitzBest === null) out.blitzBest = known.blitzBest ?? null;
         if ('achievements' in out && out.achievements === null) out.achievements = known.achievements ?? null;
       }
@@ -956,30 +992,49 @@ export const mountAccounts = async (): Promise<void> => {
     ownProfileCache.set(identity.playerId, { at: Date.now(), facts });
     profile.open(facts, menuLogin);
 
-    // A fresh cached answer already has these values: refresh in the background only for anything
-    // still missing, so a quick reopen is instant and spends no duplicate request.
-    if (FEATURES.practiceStreaks) {
-      // These endpoints can succeed independently when the public combined record stalls.
-      if (!fresh || facts.blitzBest === null) void profileClient?.streaks(token, true).then(({ onlineBlitz }) => {
-        paint({ blitzBest: onlineBlitz.best });
-      }).catch(() => undefined);
-      if (!fresh || facts.achievements === null) void profileClient?.achievements(token, true).then((views) => {
-        paint({ achievements: { done: views.filter((view) => view.done).length, total: views.length } });
-      }).catch(() => undefined);
+    // REOPENING WITHIN THE TTL SPENDS NO REQUEST AT ALL (owner: "once profiles load - they
+    // shouldnt reload when going back to it"). The device's own game result is published by the
+    // `futasaku:offline-game` listener, not by opening this sheet.
+    if (fresh) return;
+
+    // ONE request for tiles, online row, offline row, colour, Blitz streak, achievements AND this
+    // account's own offline totals (`ownOffline` rides the same answer).
+    void readCard(identity.playerId, token).then((card) => {
+      if (!card) return;
+      const wire = card.profile;
+      paint({
+        tiles: wire.tiles,
+        connectedTiles: wire.connectedTiles ?? null,
+        online: wire.online,
+        colour: profileColour(identity.playerId, wire.colourId),
+        // THE FLAG IS THE SERVER'S MEMORY (owner, 2026-11-20: stored once at sign-in from the
+        // request's geo). The first frame may show what the device can infer; once the card answers,
+        // the stored code wins, so your own sheet and a visitor's show the same flag. No row = no
+        // flag, never a guessed one.
+        ...(wire.country ? { country: wire.country } : {}),
+        // Your own card also carries the account's offline record (games/wins/draws/longest run), so
+        // the "matches won" line and the local record agree without a second request.
+        ...(card.ownOffline ? { offline: accountRecord(card.ownOffline) } : {}),
+        // Only when the server sent the row: an older answer leaves this device's game count alone
+        // and the two streaks as em dashes, which is exactly what it knows.
+        ...(wire.offline ? { offlineAggregate: {
+          games: wire.offline.games, hardStreak: wire.offline.hardStreak, blitzStreak: wire.offline.blitzStreak,
+        } } : {}),
+        ...(FEATURES.practiceStreaks ? { blitzBest: card.onlineBlitzBest, achievements: card.achievements } : {}),
+      });
+    }).catch(() => undefined);
+
+    // PUBLISH ONLY WHAT THE SERVER HAS NOT SEEN. A device that has played offline sends its
+    // cumulative counters (the POST both writes and reads, so it is still one request); a device
+    // that has played nothing spends NOTHING — the account's totals already came with the card.
+    // Without this guard every open of your own sheet cost a second round trip for no new fact.
+    if (offlineCounters(parseStats(readLocal(STATS_KEY)), deviceId()).played > 0) {
+      void syncOffline(token, deviceId()).then((offline) => {
+        if (offline) paint({ offline: accountRecord(offline) });
+      });
     }
-    if (!fresh || facts.tiles === null || facts.online === null || facts.connectedTiles === null) {
-      void profileClient?.playerProfile(token, identity.playerId).then(({ profile: wire }) => {
-        paint({ connectedTiles: wire.connectedTiles ?? null, tiles: wire.tiles,
-          online: wire.online, colour: profileColour(identity.playerId, wire.colourId) });
-      }).catch(() => undefined);
-    }
-    // The offline aggregate both writes this device's totals and reads the account's: keep it fresh
-    // whenever the sheet opens, as it is the one figure a new device can change.
-    void syncOffline(token, deviceId()).then((offline) => {
-      if (offline) paint({ offline: accountRecord(offline) });
-    });
     if (!profileClient) return;
-    if (!fresh || facts.seeds === null) void readTerritoryWallet(identity.playerId, () => profileClient.seedWallet(token)).then((wallet) => {
+    if (facts.seeds === null) void readTerritoryWallet(identity.playerId, () => profileClient.seedWallet(token)).then((wallet) => {
       if (wallet) paint({ seeds: wallet.balance });
     });
   };
@@ -1006,6 +1061,14 @@ export const mountAccounts = async (): Promise<void> => {
       rivalryLine: headToHead ? formatRivalryLine(headToHead, wire?.displayName) : null,
     };
   };
+  /** The same facts, from the ONE combined answer the card route gives. */
+  const visitorFromCard = (card: VisitorCard): VisitorFacts | null => {
+    const facts = visitorFromWire(card.profile, card.headToHead);
+    if (!facts) return null;
+    return FEATURES.practiceStreaks
+      ? { ...facts, blitzBest: card.onlineBlitzBest, achievements: card.achievements }
+      : facts;
+  };
   /**
    * THE PUBLIC FACTS THE TILE ALREADY PAINTS. A visitor profile used to open with every line blank,
    * even the name, although the Planet had just shown all three. This builds the sheet's first frame
@@ -1024,39 +1087,35 @@ export const mountAccounts = async (): Promise<void> => {
     const identity = readIdentity(kv);
     const cacheKey = identity ? `${identity.playerId}:${playerId}` : null;
     const cached = cacheKey ? visitorProfileCache.get(cacheKey) : undefined;
+    // A remembered answer is the WHOLE sheet (name, rows, streaks, achievements, flag), so a reopen
+    // inside the TTL paints it and returns before any request is made.
     const known = cached && Date.now() - cached.at < VISITOR_PROFILE_TTL_MS ? cached.facts : null;
-    let facts: VisitorFacts | null = known ?? seedVisitorFacts(seed);
-    let record: ProfileRecord = cached?.record ?? null;
+    const facts: VisitorFacts | null = known ?? seedVisitorFacts(seed);
     // The sheet opens on the FIRST frame with the tile's own public facts (or the last answer for
     // this exact player), never waiting for the wire. No identity means no read to make, but the
     // public facts the map already holds still show.
     profile.openVisitor(facts, opener);
     if (!identity) return;
-    // Two reads, painted as each lands: the public profile, and the record (best online Blitz streak,
-    // achievements x/x). The record alone never paints a sheet whose profile has not arrived.
-    const paintVisitor = () => {
-      if (seq !== visitorRequest || !facts) return;
-      if (readIdentity(kv)?.playerId !== identity.playerId) return; // another account took over
-      if (cacheKey) visitorProfileCache.set(cacheKey, { at: Date.now(), facts, record });
-      profile.showVisitor(FEATURES.practiceStreaks ? { ...facts, blitzBest: record?.blitzBest ?? null, achievements: record?.achievements ?? null } : facts);
-    };
+    if (known) return;
+    // ONE request for the whole sheet (profile + offline row + flag + achievements + Blitz streak).
+    // A double tap joins the read already in flight instead of spending a second one.
     const key = `${identity.playerId}:${playerId}`;
     let read = visitorReads.get(key);
     if (!read) {
-      read = profileClient?.playerProfile(identity.token, playerId).catch(() => null) ?? Promise.resolve(null);
+      read = readCard(playerId, identity.token);
       visitorReads.set(key, read);
       void read.finally(() => { if (visitorReads.get(key) === read) visitorReads.delete(key); });
     }
-    void read.then((answer) => {
-      if (!answer || seq !== visitorRequest) return;
-      facts = visitorFromWire(answer.profile, answer.headToHead);
-      if (!facts) { profile.showVisitor(null); return; }
-      paintVisitor();
+    void read.then((card) => {
+      // `visitorRequest` is the guard that a late answer from an older tile can never repaint a
+      // newer sheet; the identity check covers another account taking over this device.
+      if (!card || seq !== visitorRequest) return;
+      if (readIdentity(kv)?.playerId !== identity.playerId) return;
+      const next = visitorFromCard(card);
+      if (!next) { profile.showVisitor(null); return; }
+      if (cacheKey) visitorProfileCache.set(cacheKey, { at: Date.now(), facts: next });
+      profile.showVisitor(next);
     });
-    // A fresh cached answer already carries the record: no second request on a quick reopen.
-    if (!cached || Date.now() - cached.at >= VISITOR_PROFILE_TTL_MS) {
-      void readRecord(playerId, identity.token).then((r) => { record = r; paintVisitor(); }).catch(() => undefined);
-    }
   };
   window.addEventListener(PLAYER_PROFILE_EVENT, (event) => {
     const detail = (event as CustomEvent<PlayerProfileRequest>).detail;

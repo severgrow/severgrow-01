@@ -45,16 +45,28 @@ export type ProfileFacts = {
   matchesWon: number | null;
   /** The offline record: this device plus, signed in, the account's other devices. */
   offline: Record3 | null;
+  /**
+   * THE OFFLINE ROW (owner, 2026-11-20): completed Practice games and the two longest win runs, as
+   * the account reports them. Absent/null while unknown, and each value may be unknown on its own —
+   * the sheet then paints the em dash for it rather than borrowing a number.
+   */
+  offlineAggregate?: OfflineFacts | null;
   /** The online record, from the server's public aggregate. */
   online: Record3 | null;
   /**
    * The best online Blitz streak (owner, 2026-11-18). Present (a number, or null while unknown) only
-   * where the feature is on: it then takes the online row's third tile, shown as the key number.
+   * where the feature is on: it then takes the online row's third tile.
    */
   blitzBest?: number | null;
   /** Achievements unlocked out of all of them; present only where the feature is on. */
   achievements?: { done: number; total: number } | null;
 };
+
+/**
+ * THE OFFLINE ROW'S THREE FACT VALUES. Each is a fact or `null` (unknown, painted as the em dash):
+ * a count is never invented, and a real zero stays 0.
+ */
+export type OfflineFacts = { games: number | null; hardStreak: number | null; blitzStreak: number | null };
 
 export type ProfileRow = Readonly<{ label: string; value: string }>;
 
@@ -89,6 +101,13 @@ export type VisitorFacts = {
   /** The colour as the map draws it, plus its palette name and its hex for the visitor's line. */
   colour: { css: string; name: string; hex: string | null } | null;
   online: Record3 | null;
+  /** The OFFLINE row's public aggregate (counts only): games, hard streak, blitz streak. */
+  offline?: OfflineFacts | null;
+  /**
+   * ISO alpha-2 of the country this player last signed in from, stored by the server. `null`/absent
+   * paints NO flag — never a guessed one.
+   */
+  country?: string | null;
   /** Personal head-to-head, when the server knows one (`YOU 4 — 3 NAME`). */
   rivalryLine?: string | null;
   /** As on the own profile (owner, 2026-11-18: "add to profiles x/x achievements unlocked"). */
@@ -197,12 +216,13 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
     setText('profile-achievements', a && a.total > 0 ? PROFILE.achievementsValue(Math.max(0, Math.min(a.done, a.total)), a.total) : PROFILE.unknown);
   };
 
-  const fillGrid = (grid: HTMLElement, record: Record3 | null, blitz?: { best: number | null }) => {
-    // THE COMPETITIVE NUMBER takes the third tile (owner, 2026-11-18: "replace longest streak, but
-    // make it look more important"): its own label and value, and the key tile's weight.
-    const rows = recordRows(record).map((row, i) => (i === 2 && blitz
-      ? { label: PROFILE.bestBlitzStreak, value: count(blitz.best), key: true }
-      : { ...row, key: false }));
+  /**
+   * THE TWO ROWS (owner, 2026-11-20: "ONLINE row GAMES WIN RATE BLITZ STREAK ... and then below
+   * OFFLINE and we have GAMES HARD STREAK and BLITZ streak"). Both are three tiles of one shape;
+   * only the labels and the sources differ. One tile builder means the two rows can never drift in
+   * weight, digit style or the em dash rule.
+   */
+  const fillTiles = (grid: HTMLElement, rows: readonly Readonly<{ label: string; value: string; key?: boolean }>[]) => {
     grid.replaceChildren(
       ...rows.map((row) => {
         const tile = doc.createElement('div');
@@ -215,6 +235,45 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
         return tile;
       }),
     );
+  };
+
+  /** The OFFLINE row: completed Practice games, then the HARD and BLITZ win runs. */
+  const offlineRows = (offline: OfflineFacts | null | undefined) => [
+    { label: PROFILE.games, value: count(offline?.games ?? null) },
+    { label: PROFILE.hardStreak, value: count(offline?.hardStreak ?? null) },
+    { label: PROFILE.blitzStreak, value: count(offline?.blitzStreak ?? null) },
+  ];
+
+  /**
+   * The ONLINE row: games and win rate from the server's aggregate, and the Blitz streak as its
+   * third tile (the key number). `blitz` is absent where the feature is off or an older server did
+   * not send it — the third tile then stays the record's own longest streak, exactly as before.
+   */
+  const onlineRows = (record: Record3 | null, blitz?: { best: number | null }) =>
+    recordRows(record).map((row, i) => (i === 2 && blitz
+      ? { label: PROFILE.blitzStreak, value: count(blitz.best), key: true }
+      : { ...row, key: false }));
+
+  /**
+   * THE FLAG, one painter for BOTH modes (owner, 2026-11-20: a visitor sees each player's country
+   * "just like in the player profile on main menu"). The own sheet derives it on the device; the
+   * visitor sheet receives the country the server stored at sign-in. An unknown country is NOTHING
+   * — no glyph, no box, no guessed flag.
+   */
+  const paintFlag = (code: string | null | undefined) => {
+    if (!flag) return;
+    const glyph = flagOf(code ?? null);
+    flag.textContent = glyph;
+    flag.hidden = glyph === '';
+    if (glyph) {
+      flag.setAttribute('role', 'img');
+      flag.setAttribute('aria-label', countryName(code ?? null) || code || '');
+      flag.setAttribute('title', countryName(code ?? null) || code || '');
+    } else {
+      flag.removeAttribute('role');
+      flag.removeAttribute('aria-label');
+      flag.removeAttribute('title');
+    }
   };
 
   const fill = (facts: ProfileFacts) => {
@@ -232,27 +291,18 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
 
     // The flag: decoration, so it never says anything the name line does not — but it is named for
     // a screen reader rather than left as an unlabelled glyph.
-    if (flag) {
-      const glyph = flagOf(facts.country);
-      flag.textContent = glyph;
-      flag.hidden = glyph === '';
-      if (glyph) {
-        flag.setAttribute('role', 'img');
-        flag.setAttribute('aria-label', countryName(facts.country) || facts.country || '');
-        flag.setAttribute('title', countryName(facts.country) || facts.country || '');
-      } else {
-        flag.removeAttribute('role');
-        flag.removeAttribute('aria-label');
-        flag.removeAttribute('title');
-      }
-    }
+    paintFlag(facts.country);
 
     // The player's own tile colour, drawn as the MAP draws a hex (flat left/right edges, a point
     // top and bottom), so the profile shows the same object as the board.
     paintSwatch(facts.colour);
 
-    fillGrid(offlineGrid!, facts.offline);
-    fillGrid(onlineGrid!, facts.online, 'blitzBest' in facts ? { best: facts.blitzBest ?? null } : undefined);
+    fillTiles(offlineGrid!, offlineRows(facts.offlineAggregate ?? {
+      // Before the account answers, this device's own game count is still a fact; the two streaks
+      // are not known yet, and say so rather than showing an invented 0.
+      games: facts.offline?.games ?? null, hardStreak: null, blitzStreak: null,
+    }));
+    fillTiles(onlineGrid!, onlineRows(facts.online, 'blitzBest' in facts ? { best: facts.blitzBest ?? null } : undefined));
     fillAchievements(facts);
     if (rivalryLine) {
       rivalryLine.textContent = '';
@@ -306,21 +356,16 @@ export const installProfileUI = (doc: Document = document): ProfileUI => {
     // tile in profile? color? remove"). The `#2C7A5B` code was a designer's label, not something a
     // player reads: the swatch already shows it, and its name is the swatch's own aria-label.
     paintSwatch(facts?.colour ?? null);
-    // No country is derivable without an IP lookup, so a visitor never gets a flag.
-    if (flag) {
-      flag.textContent = '';
-      flag.hidden = true;
-      flag.removeAttribute('role');
-      flag.removeAttribute('aria-label');
-      flag.removeAttribute('title');
-    }
+    // The stored country, served by the server (never looked up per viewer). Unknown = no flag.
+    paintFlag(facts?.country ?? null);
     // The rows a visitor must not see carry no value at all — the CSS hides them by mode, and
     // these em dashes mean even a style-less render can never expose a number that was there for
-    // an own profile a moment ago. The online record is the only record rendered.
+    // an own profile a moment ago. BOTH records are rendered: since 2026-11-20 the offline row is
+    // public too, as COUNTS ONLY (games, hard streak, blitz streak — never a win rate).
     if (seedsValue) seedsValue.textContent = PROFILE.unknown;
     if (winsValue) winsValue.textContent = PROFILE.unknown;
-    fillGrid(offlineGrid!, null);
-    fillGrid(onlineGrid!, facts?.online ?? null, facts && 'blitzBest' in facts ? { best: facts.blitzBest ?? null } : undefined);
+    fillTiles(offlineGrid!, offlineRows(facts?.offline ?? null));
+    fillTiles(onlineGrid!, onlineRows(facts?.online ?? null, facts && 'blitzBest' in facts ? { best: facts.blitzBest ?? null } : undefined));
     fillAchievements(facts ?? {});
     if (playTitle) playTitle.textContent = PROFILE.theirGames;
     const rivalry = facts?.rivalryLine && facts.rivalryLine.trim() ? facts.rivalryLine.trim() : '';

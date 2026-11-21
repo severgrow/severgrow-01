@@ -202,7 +202,7 @@ describe('one sheet, two modes: the mode is a single attribute', () => {
     expect(env.byId['profile-rivalry']!.getAttribute?.('hidden')).toBeNull();
   });
 
-  it('visitor mode carries NO Seeds row and NO offline value, even if an own profile painted first', () => {
+  it('visitor mode carries NO Seeds row and NO all-time win line, even if an own profile painted first', () => {
     const env = fakeDocument();
     const ui = installProfileUI(env.doc);
     ui.open(own());
@@ -210,9 +210,39 @@ describe('one sheet, two modes: the mode is a single attribute', () => {
     ui.openVisitor(visitor());
     expect(env.byId['profile-seeds']!.textContent).toBe(PROFILE.unknown);
     expect(env.byId['profile-wins']!.textContent).toBe(PROFILE.unknown);
-    // The offline grid is emptied to em dashes and is hidden by the visitor CSS rule.
+    // THE OFFLINE ROW IS PUBLIC NOW (owner, 2026-11-20) but this payload has no counts, so every
+    // tile is the honest em dash — never a zero borrowed from the own sheet.
     const offline = env.byId['profile-play-offline']!.children.map((tile) => tile.children.at(-1)?.textContent);
     expect(offline).toEqual([PROFILE.unknown, PROFILE.unknown, PROFILE.unknown]);
+  });
+
+  it('paints the public OFFLINE row: games, hard streak, blitz streak (counts only)', () => {
+    const env = fakeDocument();
+    const ui = installProfileUI(env.doc);
+    ui.openVisitor(visitor({ offline: { games: 60, hardStreak: 12, blitzStreak: 3 } }));
+    const tiles = env.byId['profile-play-offline']!.children.map((tile) => tile.children.map((part) => part.textContent).join(':'));
+    expect(tiles).toEqual([
+      `${PROFILE.games}:60`, `${PROFILE.hardStreak}:12`, `${PROFILE.blitzStreak}:3`,
+    ]);
+    // No win rate reaches this row: the record shape (the only thing carrying one) is not involved.
+    expect(tiles.join(' ')).not.toContain('%');
+  });
+
+  it('paints the stored country as a flag, and NOTHING when it is unknown', () => {
+    const env = fakeDocument();
+    const ui = installProfileUI(env.doc);
+    ui.openVisitor(visitor({ country: 'PL' }));
+    expect(env.byId['profile-flag']!.textContent).toBe('🇵🇱');
+    expect(env.byId['profile-flag']!.hidden).toBe(false);
+    expect(env.byId['profile-flag']!.getAttribute?.('aria-label')).toBe('Poland');
+    // The same painter serves own mode, so the own sheet keeps its own flag.
+    ui.open(own());
+    expect(env.byId['profile-flag']!.textContent).toBe('🇵🇱');
+    // Unknown: no glyph, no role, no label, and the element stays hidden — never a placeholder.
+    ui.openVisitor(visitor({ country: null }));
+    expect(env.byId['profile-flag']!.textContent).toBe('');
+    expect(env.byId['profile-flag']!.hidden).toBe(true);
+    expect(env.byId['profile-flag']!.getAttribute?.('aria-label')).toBeNull();
   });
 });
 
@@ -266,7 +296,34 @@ describe('the wire becomes panel facts in one pure place', () => {
       connectedTiles: 1,
       colour: { css: 'hsl(341 42% 53%)', name: 'Rose', hex: '#b95575' },
       online: { games: 5, wins: 3, longestStreak: 2 },
+      // OPTIONAL on the wire: an older server omits both, and neither becomes an invented value.
+      offline: null,
+      country: null,
     });
+  });
+
+  it('maps the new public facts: the offline COUNTS and the stored country', () => {
+    const facts = visitorFacts({
+      displayName: 'BloomHeron', tag: 'ABCD', level: 7, tiles: 2, colourId: 0,
+      online: { games: 5, wins: 3, longestStreak: 2 },
+      offline: { games: 60, hardStreak: 12, blitzStreak: 3 },
+      country: 'pl',
+    })!;
+    expect(facts.offline).toEqual({ games: 60, hardStreak: 12, blitzStreak: 3 });
+    expect(facts.country).toBe('PL');
+  });
+
+  it('never prints an impossible count or an unplaceable country from the new fields', () => {
+    const facts = visitorFacts({
+      displayName: 'BloomHeron', tag: 'ABCD', level: 7, tiles: 2, colourId: 0,
+      online: { games: 0, wins: 0, longestStreak: 0 },
+      offline: { games: -1, hardStreak: Number.NaN, blitzStreak: Infinity },
+      country: 'XX',
+    })!;
+    // Each value is its own fact: a broken one is unknown, it does not take the others with it.
+    expect(facts.offline).toEqual({ games: null, hardStreak: null, blitzStreak: null });
+    // 'XX' is the edge's "unplaceable" marker, not a country: no flag.
+    expect(facts.country).toBeNull();
   });
 
   it('names the colour in hex from the palette’s own hsl, and invents none for an unknown slot', () => {
@@ -318,11 +375,14 @@ describe('the markup and CSS carry the two modes', () => {
     expect(profileSection).not.toContain('profile-colour-hex');
   });
 
-  it('tags the three private rows so one attribute can hide them', () => {
+  it('tags the private rows so one attribute can hide them', () => {
     expect(profileSection).toContain('class="sp-row sp-row-seeds"');
     expect(profileSection).toContain('class="sp-row sp-row-wins"');
     expect(profileSection).toContain('class="sp-play-row" data-play-row="offline"');
-    expect(css).toMatch(/#sheet-profile\[data-mode='visitor'\] \.sp-row-seeds,\s*#sheet-profile\[data-mode='visitor'\] \.sp-row-wins,\s*#sheet-profile\[data-mode='visitor'\] \.sp-play-row\[data-play-row='offline'\] \{\s*display: none;/);
+    // Seeds and all-time wins only: since 2026-11-20 the OFFLINE row is public counts, so it is
+    // NOT in the visitor hiding rule any more.
+    expect(css).toMatch(/#sheet-profile\[data-mode='visitor'\] \.sp-row-seeds,\s*#sheet-profile\[data-mode='visitor'\] \.sp-row-wins \{\s*display: none;/);
+    expect(css).not.toMatch(/data-mode='visitor'\] \.sp-play-row\[data-play-row='offline'\]/);
   });
 
   it('shows the quiet line only in visitor mode, and the level only when known', () => {
@@ -342,10 +402,13 @@ describe('the markup and CSS carry the two modes', () => {
     const bridge = read('../src/accounts/profile-request.ts');
     expect(bridge).toContain("export const PLAYER_PROFILE_EVENT = 'futasaku:player-profile'");
     expect(mountSource).toContain('PLAYER_PROFILE_EVENT');
-    expect(mountSource).toContain("profileClient?.playerProfile(identity.token, playerId)");
+    expect(mountSource).toContain('profileClient.playerProfile(token, playerId)');
     expect(read('../../server/src/client.ts')).toContain("`/v1/players/${encodeURIComponent(playerId)}/profile`");
     // The sheet opens on the FIRST frame with what the tile already knows (owner, 2026-11-20).
-    expect(mountSource).toContain('let facts: VisitorFacts | null = known ?? seedVisitorFacts(seed)');
+    expect(mountSource).toContain('const facts: VisitorFacts | null = known ?? seedVisitorFacts(seed)');
     expect(mountSource).toContain('profile.openVisitor(facts, opener)');
+    // And the ONE combined read (owner, 2026-11-20): no second request for the record.
+    expect(mountSource).toContain('readCard(playerId, identity.token)');
+    expect(read('../../server/src/client.ts')).toContain("`/v1/players/${encodeURIComponent(playerId)}/card`");
   });
 });

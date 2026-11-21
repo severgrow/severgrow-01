@@ -12,6 +12,7 @@ import type { PublicPlayerProfile } from '../../../server/src/protocol.js';
 import type { Record3 } from '../logic/match-record.js';
 import { TILE_COLOURS } from '../../../src/tile-colours.js';
 import type { VisitorFacts } from './profile.js';
+import type { OfflineFacts } from './profile.js';
 
 /** A public count is a whole, non-negative number — otherwise it is not a fact. */
 const count = (value: unknown): number | null =>
@@ -55,6 +56,32 @@ const record = (value: unknown): Record3 | null => {
 };
 
 /**
+ * THE PUBLIC OFFLINE ROW: counts only. Each value is its own fact, so a server that sends the
+ * games count but not a streak (an older shape) still paints the games and an em dash for the rest.
+ * A non-numeric, negative or non-finite number is not a fact and becomes `null`.
+ */
+const offlineRow = (value: unknown): OfflineFacts | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  const offline = value as { games?: unknown; hardStreak?: unknown; blitzStreak?: unknown };
+  return {
+    games: count(offline.games),
+    hardStreak: count(offline.hardStreak),
+    blitzStreak: count(offline.blitzStreak),
+  };
+};
+
+/**
+ * The stored country, or null. Two letters only — the same alphabet the flag renderer can draw —
+ * and never the edge's own "unplaceable" markers. An unknown country renders NO flag.
+ */
+const storedCountry = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const code = value.trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code) || code === 'XX' || code === 'T1') return null;
+  return code;
+};
+
+/**
  * `null` in, `null` out: the panel's honest loading/failed state. Profiles show the display name
  * without the account tag. The colour is resolved
  * from the one shared palette by `colourId` — the wire carries the slot, never a second copy of
@@ -87,5 +114,9 @@ export const visitorFacts = (profile: PublicPlayerProfile | null | undefined): V
     connectedTiles: count(profile.connectedTiles),
     colour: palette ? { css: palette.css, name: palette.name, hex: hslToHex(palette.css) } : null,
     online: record(profile.online),
+    // The new public facts. Both are OPTIONAL on the wire (an older server omits them) and both
+    // render honestly when absent: dashes for the row, nothing at all for the flag.
+    offline: offlineRow(profile.offline),
+    country: storedCountry(profile.country),
   };
 };

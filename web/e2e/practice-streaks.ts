@@ -13,7 +13,7 @@
  *     number columns; the MEDIUM→HARD gap is measurably wider than EASY→MEDIUM, with and without
  *     the legend, and again with the BLITZ key removed (the three-key screen is measured).
  * On Chromium at 390 a real HARD game is played to its end and the key's numbers change on return,
- * with no reload. The signed-in profile shows "Best Blitz streak" as the online row's key tile and
+ * with no reload. The signed-in profile shows "Blitz streak" as the online row's key tile and
  * "Achievements x/x" (the API is a local stub; nothing real is called).
  *
  * Build: the planet-login fixture (CHANNEL=futa05, VITE_DUEL_API_URL=http://127.0.0.1:65530/...,
@@ -64,6 +64,13 @@ const prepare = async (p: Page, signedIn: boolean, completed = 3) => {
     }
     const body =
       path === '/v1/auth/methods' ? { ok: true, email: true }
+      // THE ONE COMBINED READ (owner, 2026-11-20). The own profile now asks for this first; the
+      // separate /profile and /record stubs below stay so the OLD-server fallback is still exercised
+      // if this route is ever removed.
+      : path === `/v1/players/${PLAYER}/card` ? { ok: true,
+        profile: { displayName: 'RYK', tag: 'ABCD', level: 23, tiles: 14, connectedTiles: 9, colourId: 3,
+          online: { games: 40, wins: 26, longestStreak: 6 }, offline: { games: 60, hardStreak: 12, blitzStreak: 3 }, country: 'PL' },
+        achievements: { done: 12, total: 35 }, onlineBlitzBest: 7 }
       : path === `/v1/players/${PLAYER}/record` ? { ok: true, onlineBlitzBest: 7, achievements: { done: 12, total: 35 } }
       : path === '/v1/seeds/achievements' ? { ok: true, achievements: Array.from({ length: 35 }, (_, i) => ({ done: i < 12 })) }
       : path === `/v1/players/${PLAYER}/profile` ? { ok: true, profile: { displayName: 'RYK', tag: 'ABCD', level: 23, tiles: 14, connectedTiles: 9, colourId: 3, online: { games: 40, wins: 26, longestStreak: 6 } } }
@@ -338,7 +345,7 @@ try {
     await p.close();
   }
 
-  // The signed-in profile: Best Blitz streak as the online row's key tile, and Achievements x/x.
+  // The signed-in profile: Blitz streak as the online row's key tile, and Achievements x/x.
   const p = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true });
   await prepare(p, true);
   await p.goto(fixture.origin + '/test/', { waitUntil: 'domcontentloaded', timeout: WAIT });
@@ -352,14 +359,14 @@ try {
   assert.equal(achievementsText, '12/35', `the profile's achievements line (${achievementsText})`);
   const key = p.locator('#profile-play-online .sp-tile-key');
   await key.waitFor();
-  assert.equal(await key.locator('dt').textContent(), 'Best Blitz streak');
+  assert.equal(await key.locator('dt').textContent(), 'Blitz streak');
   assert.equal(await key.locator('dd').textContent(), '7');
   const sizes2 = await p.evaluate(`(() => { const k = document.querySelector('#profile-play-online .sp-tile-key dd'); const o = document.querySelector('#profile-play-online .sp-tile:not(.sp-tile-key) dd');
     return { key: parseFloat(getComputedStyle(k).fontSize), other: parseFloat(getComputedStyle(o).fontSize) }; })()`) as { key: number; other: number };
   assert(sizes2.key > sizes2.other, 'the Blitz record reads as the more important number');
   await p.waitForTimeout(300);
   await p.screenshot({ path: `${out}/profile-${ios ? 'webkit' : 'chromium'}-390.png` });
-  console.log('PASS', ios ? 'webkit' : 'chromium', 'profile: Best Blitz streak 7 as the key tile, Achievements 12/35');
+  console.log('PASS', ios ? 'webkit' : 'chromium', 'profile: Blitz streak 7 as the key tile, Achievements 12/35');
   await p.close();
 } finally {
   await browser.close();

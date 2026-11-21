@@ -6,6 +6,8 @@
 // The one rule that matters: signing in attaches Google to an EXISTING players row and never splits
 // a player in two. A guest who signs in keeps the same id, so every match and the history stay.
 import { pickClientIp } from '../client-ip.js';
+import { requestCountry } from '../geo.js';
+import type { CountryStore } from './country.js';
 import { ApiError } from '../errors.js';
 import { hashToken, newId, newToken } from '../ids.js';
 import { natureName } from '../nature-names.js';
@@ -156,6 +158,12 @@ export const createAccountsRouter = (deps: {
    * without migration 0029: sign-in then behaves exactly as before.
    */
   merge?: (guestId: string, accountId: string) => Promise<{ seeds: number; tiles: number; levels: number } | null>;
+  /**
+   * WHERE THIS PLAYER IS (owner, 2026-11-20): one row written at sign-in from the edge's own geo
+   * header (server/src/geo.ts, migration 0031), then served to every profile viewer. Absent means
+   * the flag is simply unknown — the profile renders nothing rather than a guess.
+   */
+  country?: CountryStore;
 }): AccountsRouter => {
   const limits = deps.limits ?? ACCOUNT_LIMITS;
   const hour = 60 * 60 * 1000;
@@ -188,6 +196,10 @@ export const createAccountsRouter = (deps: {
   const signIn = async (req: Request, method: 'google' | 'email') => {
     if (method === 'email' && !deps.emailEnabled) throw new ApiError('FORBIDDEN', 'Email sign-in is not switched on yet.');
     if (!deps.auth) throw new ApiError('FORBIDDEN', 'Sign-in is not switched on yet.');
+    // The ONE moment a player's country is recorded: the edge tells us where this sign-in came
+    // from, we keep the code, and every profile read afterwards serves it (never a per-viewer
+    // lookup). A platform that reports nothing writes nothing.
+    const country = requestCountry(req.headers);
     await limit(`auth:google:ip:${pickClientIp(req.headers) ?? 'unknown'}`, limits.signInPerIpPerHour);
     let body: Record<string, unknown> = {};
     try {
@@ -222,6 +234,7 @@ export const createAccountsRouter = (deps: {
           }
         }
         const token = await issueToken(player.id);
+        if (country) await deps.country?.save(player.id, country, deps.now());
         return {
           status: 200,
           body: { ok: true, player: playerSummary(player), token, email: user.email, outcome: current && current.id === player.id ? 'same' : 'signed-in', ...(merged ? { merged } : {}), serverNow: deps.now() },
@@ -243,6 +256,7 @@ export const createAccountsRouter = (deps: {
       if ((await deps.links.link({ provider: 'google', subject: user.id, playerId: player.id, createdAt: deps.now() })) === 'taken') continue;
       player = await asAccount(player);
       const token = await issueToken(player.id);
+      if (country) await deps.country?.save(player.id, country, deps.now());
       return { status: 200, body: { ok: true, player: playerSummary(player), token, email: user.email, outcome, serverNow: deps.now() } };
     }
     throw new ApiError('INTERNAL', 'Google sign-in did not work. Please try again.');

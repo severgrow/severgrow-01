@@ -606,12 +606,12 @@ try {
     check(`${label}: unknown connected tiles are an em dash`, rows.values[4] === PROFILE.unknown, rows.values[4] ?? '');
     check(`${label}: unknown tiles are an em dash`, rows.values[2] === PROFILE.unknown, rows.values[2] ?? '');
     check(`${label}: an unknowable matches-won count is an em dash (never an invented 0)`, rows.values[3] === PROFILE.unknown, rows.values[3] ?? '');
-    // Two records of the same three tiles: offline above, online below, each with its word on the edge.
-    const labels3 = [PROFILE.games, PROFILE.winRate, PROFILE.longestStreak];
-    check(`${label}: the offline row is games / win rate / longest streak`,
-      JSON.stringify(rows.offline.map((t) => t[0])) === JSON.stringify(labels3), JSON.stringify(rows.offline));
+    // Two records: offline above, online below. Since 2026-11-20 the offline row is public COUNTS
+    // ONLY (games, hard streak, blitz streak) and the online row's third tile is the Blitz streak.
+    check(`${label}: the offline row is games / hard streak / blitz streak`,
+      JSON.stringify(rows.offline.map((t) => t[0])) === JSON.stringify([PROFILE.games, PROFILE.hardStreak, PROFILE.blitzStreak]), JSON.stringify(rows.offline));
     check(`${label}: the online row includes the Blitz record`,
-      JSON.stringify(rows.online.map((t) => t[0])) === JSON.stringify([PROFILE.games, PROFILE.winRate, PROFILE.bestBlitzStreak]), JSON.stringify(rows.online));
+      JSON.stringify(rows.online.map((t) => t[0])) === JSON.stringify([PROFILE.games, PROFILE.winRate, PROFILE.blitzStreak]), JSON.stringify(rows.online));
     check(`${label}: each row is named down its edge`,
       JSON.stringify(rows.sides.map((s) => s.text)) === JSON.stringify([PROFILE.offline, PROFILE.online]), rows.sides.map((s) => s.text).join(' | '));
     check(`${label}: the row words stay inside the sheet`,

@@ -1530,11 +1530,12 @@ export const PROFILE = Object.freeze({
   /** The longest winning run ever, not the current one: the tile says what its value means. */
   longestStreak: 'Longest streak',
   /**
-   * THE COMPETITIVE NUMBER (owner, 2026-11-18): the online row's third tile is the best online Blitz
-   * streak, against real players only, from the server's own results ("replace longest streak, but
-   * make it look more important").
+   * THE TWO STREAKS (owner, 2026-11-20): the ONLINE row's third tile is the online Blitz streak,
+   * and the OFFLINE row carries the Practice HARD and BLITZ streaks. The word "best" is gone from
+   * the label at the owner's direction — the tile already says the number is a record.
    */
-  bestBlitzStreak: 'Best Blitz streak',
+  blitzStreak: 'Blitz streak',
+  hardStreak: 'Hard streak',
   /** "add to profiles x/x achievements unlocked" (owner, 2026-11-18). */
   achievements: 'Achievements',
   achievementsValue: (done: number, total: number): string => `${done}/${total}`,

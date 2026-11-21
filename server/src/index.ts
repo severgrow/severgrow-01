@@ -18,6 +18,7 @@ import { chainRouters } from './feedback/feedback.js';
 import { MemoryFeedbackStore } from './feedback/feedback.js';
 import { feedbackRouterNode } from './feedback/node.js';
 import { MemoryIdentityLinkStore } from './accounts/accounts.js';
+import { memoryCountryStore, postgresCountryStore } from './accounts/country.js';
 import { accountsRouterNode } from './accounts/node.js';
 import { WorldEconomyService } from './seeds/service.js';
 import { createWorldEconomyRouter } from './seeds/router.js';
@@ -59,7 +60,15 @@ export const startServer = async (options: { port?: number } = {}): Promise<{ po
   const economy = new WorldEconomyService(economyStore, live.storage, () => Date.now(), {
     resumeSecret: process.env.SEED_PROOF_SECRET ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? crypto.randomUUID() + crypto.randomUUID(),
   });
-  const service = new MatchService({ storage: live.storage, config, economy });
+  // Practice streaks (0028) and the stored country (0031): read by every profile, written at sign-in.
+  // ONE instance of each is shared with the routers below, so the dev server stores and reads the
+  // same rows (two memory stores would silently disagree).
+  const streakStore = isMemory
+    ? memoryStreakStore({ blitzResults: memoryBlitzResults(live.storage) })
+    : postgresStreakStore(poolFromUrl(databaseUrlFromEnv()!));
+  const countryStore = isMemory ? memoryCountryStore() : postgresCountryStore(poolFromUrl(databaseUrlFromEnv()!));
+  const achievementsOf = achievementsCount(live.storage, economy);
+  const service = new MatchService({ storage: live.storage, config, economy, streaks: streakStore, country: countryStore });
   // The admin router (docs/ADMIN.md) shares the dev server's OWN in-memory stores, so the dashboard
   // shows the same reports/matches the running server serves. Postgres deployments get the SQL store.
   const admin = await adminRouterNode({
@@ -85,13 +94,16 @@ export const startServer = async (options: { port?: number } = {}): Promise<{ po
         ? memoryTerritoryChatStore(storage)
         : postgresTerritoryChatStore(poolFromUrl(databaseUrlFromEnv()!)) }),
       createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t), worldReadsPerIpPerHour: config.rateLimits.worldPerIpPerHour }),
-      createStreakRouter({ authenticate: (t) => service.authenticate(t), now: () => service.serverNow(), achievementsOf: achievementsCount(live.storage, economy), store: isMemory
-        ? memoryStreakStore({ blitzResults: memoryBlitzResults(live.storage) })
-        : postgresStreakStore(poolFromUrl(databaseUrlFromEnv()!)) }),
+      createStreakRouter({ authenticate: (t) => service.authenticate(t), now: () => service.serverNow(), achievementsOf, store: streakStore }),
       await feedbackRouterNode(storage, service, databaseUrlFromEnv(), memoryFeedback),
-      await accountsRouterNode(storage, service, databaseUrlFromEnv(), process.env, memoryLinks),
+      await accountsRouterNode(storage, service, databaseUrlFromEnv(), process.env, memoryLinks, countryStore),
       admin.router,
     ),
+    country: countryStore,
+    card: {
+      achievementsOf,
+      onlineBlitzBest: async (id) => (await streakStore.onlineBlitz(id, service.serverNow())).best,
+    },
   });
 
   const port = options.port ?? Number(process.env.PORT ?? 8787);

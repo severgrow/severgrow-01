@@ -171,6 +171,8 @@ describe('the public facts beside the record', () => {
       connectedTiles: 2,
       colourId: 4,
       online: { games: 0, wins: 0, longestStreak: 0 },
+      // This harness wires no country store, so the flag is honestly unknown (never guessed).
+      country: null,
     });
   });
 
@@ -193,14 +195,18 @@ describe('the allow-list is closed: nothing private can appear', () => {
     expect(body.headToHead).toEqual({ games: 0, youWins: 0, themWins: 0, draws: 0 });
     const profile = body.profile as Record<string, unknown>;
     expect(Object.keys(profile).sort()).toEqual([
-      'colourId', 'connectedTiles', 'displayName', 'level', 'online', 'tag', 'tiles',
+      // `country` is the stored flag (null when the edge reported none); `offline` is absent here
+      // because this harness wires no streak store — the page then keeps its honest em dashes.
+      'colourId', 'connectedTiles', 'country', 'displayName', 'level', 'online', 'tag', 'tiles',
     ]);
     expect(Object.keys(profile.online as Record<string, unknown>).sort()).toEqual([
       'games', 'longestStreak', 'wins',
     ]);
-    // A blunt second net: no private noun anywhere in the serialised answer.
+    // A blunt second net: no private noun anywhere in the serialised answer. (`offline` IS public
+    // now — aggregate counts only, pinned by server/tests/profile-card.test.ts — so the net no
+    // longer forbids the word itself, only the per-device and per-game detail behind it.)
     const json = JSON.stringify(body).toLowerCase();
-    for (const forbidden of ['email', 'token', 'wallet', 'seed', 'device', 'offline', 'identity']) {
+    for (const forbidden of ['email', 'token', 'wallet', 'seed', 'device', 'identity', 'recorded_at']) {
       expect(json, `the profile body must never carry "${forbidden}"`).not.toContain(forbidden);
     }
   });

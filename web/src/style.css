@@ -3012,16 +3012,12 @@ html.futasaku-product #profile-scrim { background: color-mix(in srgb, var(--c-bg
 #sheet-profile .sp-rivalry[hidden] {
   display: none;
 }
+/* A VISITOR SEES BOTH RECORDS (owner, 2026-11-20: "adding second row on 'their games' ... make it
+   visible for all players"). The offline row is now PUBLIC as COUNTS ONLY (games, hard streak,
+   blitz streak), so it is no longer hidden by mode; only the private identity rows are. */
 #sheet-profile[data-mode='visitor'] .sp-row-seeds,
-#sheet-profile[data-mode='visitor'] .sp-row-wins,
-#sheet-profile[data-mode='visitor'] .sp-play-row[data-play-row='offline'] {
+#sheet-profile[data-mode='visitor'] .sp-row-wins {
   display: none;
-}
-/* The online row is the first (only) visible row in visitor mode, so it loses the neighbour air it
-   carried as the second row. */
-#sheet-profile[data-mode='visitor'] .sp-play-row[data-play-row='online'] {
-  margin-top: 0;
-  padding-top: 0;
 }
 /* The visitor's level, set as a quiet neighbour of the name. Hidden with the attribute, so own mode
    keeps the name line it always had (the flag and the colour tile keep their places). */

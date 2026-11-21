@@ -99,14 +99,36 @@ describe('two records: offline on top, online below, the same three tiles', () =
     expect(profileSection).toMatch(/class="sp-play-side"/g);
   });
 
-  it('uses the same three metrics for both halves, and no other section', () => {
+  it('uses the owner’s two rows of metrics, and no other section', () => {
+    // OWNER, 2026-11-20: "ONLINE row GAMES WIN RATE BLITZ STREAK (drop 'best' from it) and then
+    // below OFFLINE and we have GAMES HARD STREAK and BLITZ streak".
     expect(PROFILE.games).toBe('Games');
     expect(PROFILE.winRate).toBe('Win rate');
-    expect(PROFILE.longestStreak).toBe('Longest streak');
+    expect(PROFILE.blitzStreak).toBe('Blitz streak');
+    expect(PROFILE.hardStreak).toBe('Hard streak');
     expect([PROFILE.offline, PROFILE.online]).toEqual(['Offline', 'Online']);
-    // The tiles the owner no longer shows are gone from the strings, not merely unrendered.
+    // The word "best" is gone from the label at the owner's direction, and the strings module has
+    // no second spelling of it.
     const strings = read('../../src/strings.ts');
+    expect(strings).not.toContain('Best Blitz');
+    // The tiles the owner no longer shows are gone from the strings, not merely unrendered.
     expect(strings).not.toMatch(/bestScore|favourite|longestBloom|streakBest|tilesCount/);
+  });
+
+  it('fills the offline row with COUNTS ONLY: games, hard streak, blitz streak (never a win rate)', () => {
+    const source = read('../src/accounts/profile.ts');
+    // One builder per row, both three tiles, and the offline row never sees a record (which is the
+    // only shape that carries a win rate).
+    expect(source).toMatch(/const offlineRows = \(offline: OfflineFacts/);
+    expect(source).toMatch(/const onlineRows = \(record: Record3/);
+    expect(source.match(/PROFILE\.hardStreak/g) ?? []).toHaveLength(1);
+    expect(source.match(/PROFILE\.blitzStreak/g) ?? []).toHaveLength(2);
+    expect(source.match(/PROFILE\.winRate/g) ?? []).toHaveLength(0); // recordRows owns that word
+    const offline = /const offlineRows = \(offline: OfflineFacts[\s\S]*?\];/.exec(source)?.[0] ?? '';
+    expect(offline).toContain('PROFILE.games');
+    expect(offline).toContain('PROFILE.hardStreak');
+    expect(offline).toContain('PROFILE.blitzStreak');
+    expect(offline).not.toContain('winRate');
   });
 
   it('has removed the old footer note and put nothing in its place', () => {

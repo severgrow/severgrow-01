@@ -9,11 +9,14 @@ import type { PgPool } from '../storage/postgres.js';
 import type { Player } from '../../../src/engine/index.js';
 import type { OnlineEndReason } from '../protocol.js';
 import type { PracticeStreaks, Streak } from './rules.js';
-import { PRACTICE_TIERS, applyGame, emptyPracticeStreaks, emptyStreak, isPracticeTier, isStreakTier } from './rules.js';
-import type { BlitzResultRow, PracticeGame, StreakStore } from './store.js';
+import { PRACTICE_TIERS, STREAK_TIERS, applyGame, emptyPracticeStreaks, emptyStreak, isPracticeTier, isStreakTier } from './rules.js';
+import type { BlitzResultRow, PracticeGame, ProfileStreaks, StreakStore } from './store.js';
 import { FOLD_SETTLE_MS, blitzResult } from './store.js';
 
 const num = (v: unknown): number => (typeof v === 'number' ? v : Number(v ?? 0) || 0);
+
+/** Postgres "undefined table": the server code arrived before migration 0028. */
+const missingTable = (error: unknown): boolean => (error as { code?: unknown } | null)?.code === '42P01';
 
 /** Fully completed games (win/loss/draw), from the game-id rows the same transaction deduplicates. */
 const readCompleted = async (q: { query: PgPool['query'] }, playerId: string): Promise<number> => {
@@ -34,6 +37,50 @@ const readPractice = async (q: { query: PgPool['query'] }, playerId: string, loc
     if (isPracticeTier(row.tier)) out[row.tier] = { current: num(row.current_streak), best: num(row.best_streak) };
   }
   return out;
+};
+
+/**
+ * THE PUBLIC OFFLINE ROW, in ONE statement (owner, 2026-11-20). The two streaks are the account's
+ * BEST runs on the HARD and BLITZ Practice keys — `practice_streaks.best_streak` is exactly "the
+ * longest run of wins" as the shared rule keeps it (a win extends it, a loss resets it, a draw leaves
+ * it alone, ./rules.ts), so no pass over the per-game rows is needed. The games count is the same
+ * deduplicated completed-game count the Practice reveal uses (game ids in `practice_streak_games`).
+ *
+ * THE TIERS ARE NOT A SECOND OPINION. HARD and BLITZ are read through `profileTierSql`, which only
+ * builds a sub-select for a tier `STREAK_TIERS` still writes. If the streaks rule ever stops counting
+ * one, the server refuses to start instead of serving a number that can never move again — the one
+ * failure mode a profile merge could hide for ever.
+ *
+ * The three scalar sub-selects all hit a primary-key prefix (`player_id, …`), so this is one cheap
+ * round trip whatever the player's history. A database without migration 0028 answers null.
+ */
+const PROFILE_TIERS = Object.freeze(['hard', 'blitz'] as const);
+
+const profileTierSql = (tier: (typeof PROFILE_TIERS)[number]): string => {
+  if (!isStreakTier(tier)) {
+    throw new Error(`the profile reads streak tier "${tier}" but STREAK_TIERS is [${STREAK_TIERS.join(', ')}]`);
+  }
+  return `coalesce((select max(best_streak) from practice_streaks where player_id = $1 and tier = '${tier}'), 0)::int as ${tier}_streak`;
+};
+
+/** Built once, at module load: a disagreement with STREAK_TIERS fails the server at boot, not a read. */
+const PROFILE_TIER_SQL = PROFILE_TIERS.map(profileTierSql).join(',\n         ');
+
+const readProfileStreaks = async (q: { query: PgPool['query'] }, playerId: string): Promise<ProfileStreaks | null> => {
+  try {
+    const { rows } = await q.query(
+      `select
+         ${PROFILE_TIER_SQL},
+         (select count(*) from practice_streak_games where player_id = $1 and result in ('win','loss','draw'))::int as games`,
+      [playerId],
+    );
+    const row = rows[0];
+    if (!row) return { games: 0, hardStreak: 0, blitzStreak: 0 };
+    return { games: num(row.games), hardStreak: num(row.hard_streak), blitzStreak: num(row.blitz_streak) };
+  } catch (error) {
+    if (missingTable(error)) return null;
+    throw error;
+  }
 };
 
 /** Fold every finished live match after the checkpoint into the player's online Blitz streak. */
@@ -135,5 +182,6 @@ export const postgresStreakStore = (pool: PgPool): StreakStore => ({
   },
   practice: (playerId) => readPractice(pool, playerId, false),
   completedPractice: (playerId) => readCompleted(pool, playerId),
+  profileStreaks: (playerId) => readProfileStreaks(pool, playerId),
   onlineBlitz: (playerId, now) => foldOnlineBlitz(pool, playerId, now),
 });
