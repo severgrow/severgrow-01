@@ -165,10 +165,18 @@ account identifier, email, credential or callback URL. Offline returns may not r
 
 On iPhone, open `/test/` in Safari and sign in with Google. Confirm **Signing in…** appears on return,
 the nickname replaces it without another page refresh, and Profile and Planet show the account's
-data. For the installed Home Screen app, the Google button explains the Safari option. Use the
-email code inside the app when you want to sign in there. The Safari session and Home Screen app
-keep separate storage. The Google Cloud redirect URI stays on Supabase. If `/test/` redirects to the
+data. The installed **Home Screen app signs in exactly the same way** — the same button, the same
+flow, no special case. The Google Cloud redirect URI stays on Supabase. If `/test/` redirects to the
 site root after Google, check the **Redirect URLs** in Supabase URL Configuration.
+
+**No display-mode branch (owner, 2026-11-21).** A refusal ("open FUTASAKU in Safari…") was briefly
+added on 2026-11-20 for Home Screen apps, on an assumption that iOS could not finish OAuth inside a
+standalone app. That was wrong: live, which never had the check, signs in from the Home Screen
+without trouble. The check was removed, and `web/tests/accounts-standalone.test.ts` fails if anyone
+re-adds a `navigator.standalone` (or display-mode) branch to `start()`. If a real device ever fails
+to keep the sign-in in the Home Screen app, capture it as evidence FIRST (which browser finished the
+Google page, and where the app returns to); only then is a different design — carrying a one-time
+code back to the app — justified.
 
 ### C. Release order (a Claude session with access can do C1–C2 and check them)
 
@@ -177,9 +185,11 @@ site root after Google, check the **Redirect URLs** in Supabase URL Configuratio
 3. Then B1 (switch Google on). Then test on your own phone: Play online → Continue with Google →
    create a duel → open futasaku.com on a second device → Continue with Google → the duel is there.
    Settings → Delete my account → check **Authentication → Users** in Supabase: your user is gone.
-4. Things only a real phone can prove (not testable here): the iPhone **home-screen** app. iOS may
-   finish the Google page in a Safari sheet; if the sign-in does not stick in the home-screen app,
-   tell Claude — the fix is a small change to open sign-in in Safari and come back.
+4. Things only a real phone can prove (not testable here): the iPhone **home-screen** app. It uses
+   the ordinary flow, so the expected result is the normal one — the Google page, then back in the
+   app already signed in. If it stalls or returns signed out, note which browser showed Google and
+   what the app showed on return, and send that: an evidenced failure is what would justify a
+   different design, not a guess.
 
 **Before release, not after:** the policy names "Report a problem" as the contact. Data-protection law
 in the UK/EU also expects a contact email and who runs the game — give Claude the email and name you

@@ -250,21 +250,62 @@ try {
     await d.context.close();
   }
 
+  // ---- H. THE HOME SCREEN APP SIGNS IN LIKE ANY BROWSER (owner, 2026-11-21) ----
+  // CHANGED FROM: 'Home Screen app: guidance explains signing in with Safari' and 'Home Screen app:
+  // Google retry is hidden inside the isolated app'. Those pinned a REFUSAL added on 2026-11-20 on
+  // an assumption that iOS could not finish Google in a standalone app. The owner showed that live
+  // — which has no such check — signs in fine from the Home Screen, so those checks asserted our own
+  // regression. This now proves what he asked for: the tap STARTS Google inside the Home Screen app,
+  // the callback lands back in the app, and the app ends up signed in with nothing left over.
   {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     await context.addInitScript(() => Object.defineProperty(navigator, 'standalone', { value: true }));
     const page = await context.newPage();
+    fake.nextUser = 'homescreen-alice';
+    const navigations: string[] = [];
+    page.on('request', (request) => {
+      if (!request.isNavigationRequest()) return;
+      const url = new URL(request.url());
+      if (url.pathname === '/auth/v1/authorize' || url.searchParams.has('code')) navigations.push(url.pathname);
+    });
     await page.goto(`${origin}/`);
     await openMenuEntry(page, 'menu-online');
     await page.locator('[data-acct="welcome-google"]').click();
-    check('Home Screen app: guidance explains signing in with Safari', await waitFor(async () =>
-      /open FUTASAKU in Safari/.test(await page.locator('#acct-google-return').innerText({ timeout: 2000 }))));
-    check('Home Screen app: Google retry is hidden inside the isolated app', !(await page.locator('[data-acct="google-return-retry"]').isVisible()));
-    if (CALLBACK_ONLY) {
-      await page.locator('[data-acct="google-return-email"]').click();
-      check('Home Screen app: email opens inside the app', await waitFor(() => page.locator('#acct-email').isVisible(), 3000));
+    const startedInside = await waitFor(() => navigations.includes('/auth/v1/authorize'), 10_000);
+    check('Home Screen app: Continue with Google STARTS the flow (no Safari refusal)', startedInside, navigations.join(' → ') || 'no navigation');
+    check('Home Screen app: the Safari guidance is never shown', !(await page.locator('#acct-google-return').isVisible()));
+    const signed = await waitFor(async () => (await identity(page))?.kind === 'account', 25_000);
+    // The SAME identity shape any browser sign-in writes: token, player id, name, kind.
+    const me = signed ? await identity(page) : null;
+    check('Home Screen app: signed in, in the app itself', signed && me !== null && me.token.length > 0 &&
+      me.playerId.length > 0 && typeof me.displayName === 'string', me ? `${me.playerId} · ${me.kind}` : 'no identity');
+    check('Home Screen app: the callback did not leave ?code= in the address', !((await page.evaluate('location.search')) as string).includes('code'));
+    check('Home Screen app: the menu key names the player, not LOG IN', await waitFor(async () => {
+      const key = page.locator('#menu-login');
+      return !(await key.isVisible().catch(() => false)) || !/log in|signing in/i.test((await key.innerText().catch(() => '')) ?? '');
+    }, 10_000));
+    // The nickname step is the same one every first sign-in asks; answer it like a player would.
+    if (await waitFor(() => page.locator('#acct-nickname input').isVisible(), 5000)) {
+      await page.locator('#acct-nickname input').fill('HomeScreen');
+      await page.locator('[data-acct="nickname-save"]').click();
+      check('Home Screen app: the nickname step saves like any sign-in', await waitFor(async () =>
+        !(await page.locator('#acct-nickname').isVisible()), 5000));
     }
+    const known = me ? await service.authenticate(me.token).catch(() => null) : null;
+    check('Home Screen app: the server knows this account', known?.kind === 'account', known?.kind ?? 'no identity');
     await context.close();
+    if (CALLBACK_ONLY) {
+      // Email is the other way into a Home Screen app, and it must keep opening in place.
+      const emailContext = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+      await emailContext.addInitScript(() => Object.defineProperty(navigator, 'standalone', { value: true }));
+      const emailPage = await emailContext.newPage();
+      await emailPage.goto(`${origin}/`);
+      await openMenuEntry(emailPage, 'menu-online');
+      await waitFor(() => emailPage.locator('#acct-welcome').isVisible(), 5000);
+      await emailPage.locator('#acct-welcome [data-acct="online-email"]').click();
+      check('Home Screen app: email still opens inside the app', await waitFor(() => emailPage.locator('#acct-email').isVisible(), 3000));
+      await emailContext.close();
+    }
   }
   {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });

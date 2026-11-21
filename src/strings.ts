@@ -1506,7 +1506,6 @@ export const ACCOUNT = Object.freeze({
    *  happened instead of the vague "did not finish". Owner report 2026-11-20. */
   signInNoAnswer: 'The FUTASAKU server did not answer just now. Please try again in a moment.',
   signInExpired: 'This sign-in started in another browser or expired. Start again here.',
-  signInSafari: 'For Google, open FUTASAKU in Safari and sign in there. To sign in inside the Home Screen app, use email.',
   offline: 'You are offline. Connect and try again.',
   unavailable: 'Google sign-in is not available right now. Please try again later.',
 });

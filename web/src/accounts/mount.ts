@@ -455,13 +455,14 @@ export const mountAccounts = async (): Promise<void> => {
     } catch { return null; }
   };
 
-  const installedOnIOS = () => (navigator as Navigator & { standalone?: boolean }).standalone === true ||
-    (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) &&
-    window.matchMedia('(display-mode: standalone)').matches;
   let openingGoogle = false;
+  // NO STANDALONE SPECIAL CASE (owner, 2026-11-21): a Home Screen app signs in with Google exactly
+  // like the browser does. A refusal here ("open FUTASAKU in Safari") was added on 2026-11-20 on an
+  // ASSUMPTION that iOS could not finish OAuth in a standalone app; the owner then showed that live
+  // — which has no such check — signs in fine from the Home Screen. The block was our own
+  // regression, not a platform limit. Do not reintroduce one without a device-verified failure.
   const start = async (returnTo: ReturnTo, btn: HTMLButtonElement | null, status: HTMLElement | null) => {
     if (openingGoogle) return;
-    if (installedOnIOS()) { showRecovery(ACCOUNT.signInSafari, returnTo, true); return; }
     warmSignIn();
     if (!navigator.onLine) {
       if (status) {
@@ -501,20 +502,19 @@ export const mountAccounts = async (): Promise<void> => {
   const recoveryText = el('p', 'acct-small');
   recoveryText.setAttribute('role', 'status');
   const recoveryRetry = button('acct-btn', ACCOUNT.signInRetry, 'google-return-retry');
-  const recoveryEmail = button('acct-btn', ACCOUNT.continueEmail, 'google-return-email');
-  recoveryEmail.hidden = true;
   const recoveryClose = button('acct-btn', PRIVACY.close, 'google-return-close');
   const recoveryActions = el('div', 'acct-actions row');
-  recoveryActions.append(recoveryRetry, recoveryEmail, recoveryClose);
+  recoveryActions.append(recoveryRetry, recoveryClose);
   recovery.panel.append(el('h2', '', ACCOUNT.signInTitle), recoveryText, recoveryActions);
   let retryDestination: ReturnTo = 'menu';
   recoveryRetry.addEventListener('click', () => void start(retryDestination, recoveryRetry, recoveryText));
   recoveryClose.addEventListener('click', () => recovery.close());
-  const showRecovery = (message: string, returnTo: ReturnTo, safari = false) => {
+  // ONE recovery sheet for every unfinished sign-in: a missing or expired callback, a provider that
+  // refused, a server that did not answer. It always offers "Try Google again", because that is the
+  // only thing that can help — including inside a Home Screen app, which signs in like any browser.
+  const showRecovery = (message: string, returnTo: ReturnTo) => {
     retryDestination = returnTo;
     recoveryText.textContent = message;
-    recoveryRetry.hidden = safari;
-    recoveryEmail.hidden = !safari || !emailAvailable;
     recoveryRetry.disabled = false;
     recovery.open();
   };
@@ -723,7 +723,6 @@ export const mountAccounts = async (): Promise<void> => {
     welcome.close(); emailReturnTo=returnTo; emailPanel.reset(); emailSheet.open(()=>emailPanel.cancel());
     emailSheet.panel.querySelector<HTMLInputElement>('input:not([hidden])')?.focus({preventScroll:true});
   };
-  recoveryEmail.addEventListener('click', () => { recovery.close(); openEmail(retryDestination); });
   const emailButton = (returnTo:ReturnTo) => {
     const b=button('acct-btn',ACCOUNT.continueEmail,`${returnTo}-email`);
     b.hidden=!emailAvailable; b.addEventListener('click',()=>openEmail(returnTo)); return b;
