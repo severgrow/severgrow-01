@@ -310,8 +310,13 @@ try {
         online: { games: 8, wins: 4, longestStreak: 3 },
       } } });
     });
-    await page.route('**/v1/players/me/streaks*', route => route.fulfill({ json: { onlineBlitz: { best: 3 } } }));
-    await page.route('**/v1/seeds/achievements*', route => route.fulfill({ json: { achievements: [{ done: true }, { done: false }] } }));
+    // THE COMBINED RECORD (owner, 2026-11-20): the client asks `/card` first (this fake server has
+    // no such route, so the answer is a 503), then this old-server fallback pair. Achievements and
+    // the Blitz streak live together in `/record` now; the separate `/seeds/achievements` and
+    // `/me/streaks` reads are gone, so a test that stubs only those would fill neither field.
+    await page.route('**/v1/players/fixture-player/record*', route => route.fulfill({ json: {
+      onlineBlitzBest: 3, achievements: { done: 1, total: 2 },
+    } }));
     await page.route('**/v1/seeds/wallet*', route => route.fulfill({ json: { wallet: {
       balance: 128, lifetimeEarned: 128, lifetimeSpent: 0, worldInvitationSeen: true,
     } } }));
@@ -325,7 +330,7 @@ try {
       && document.getElementById('profile-achievements')?.textContent === achievementValue
       && document.querySelector('#profile-play-online .sp-tile-key dd')?.textContent === '3'
     ), PROFILE.achievementsValue(1, 2)));
-    check('Profile fills every server field after a transient failure without the map or combined record', data);
+    check('Profile fills every server field after a transient failure on the old-server fallback', data);
     await context.close();
   }
 
