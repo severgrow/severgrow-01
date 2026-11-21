@@ -164,9 +164,15 @@ describe('the halo is a static box-shadow, never a filter and never a loop', () 
     expect(glowBlock).not.toMatch(/animation-name:|transition:|@keyframes/);
   });
 
-  it('adds no movement at all, so Reduce motion has nothing to remove', () => {
+  it('the halo itself never moves; the key still answers its press', () => {
     expect(keyBlock).toMatch(/animation:\s*none/);
-    expect(keyBlock).toMatch(/transition:\s*none/);
+    // The halo is painted once (its own `::after` box carries no transition), while the KEY eases
+    // the two properties the delegated press owns — so the release cannot snap home.
+    expect(keyBlock).toContain('translate var(--ix-press) var(--ix-ease-open)');
+    expect(keyBlock).toContain('scale var(--ix-press) var(--ix-ease-open)');
+    expect(glowBlock).not.toMatch(/transition:/);
+    // An explicit still state for Reduce motion, in both the class and the media query.
+    expect(styleCss).toMatch(/\.reduce-motion #menu \.menu-buttons > \.btn\.suggest[\s\S]{0,240}?transition: none/);
     // No keyframe is declared for the suggestion anywhere in the sheet.
     expect(styleCss).not.toMatch(/@keyframes\s+[\w-]*suggest/);
   });

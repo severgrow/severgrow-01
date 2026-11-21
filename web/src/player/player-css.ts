@@ -592,6 +592,18 @@ html[data-thumb] .dock .table-row > .piles > .pile,
 html[data-thumb] .dock .hand-row > .hand-slot {
   transition: opacity 220ms ease-out;
 }
+/* PICKING A CARD EASES (0.8s polish). On the phone fan the pick is a 'transform' swap
+   (translate(var(--lx),var(--ly)) + scale 1.04); the rule above only transitioned 'opacity', so the
+   card snapped into the air in a single frame — the most-touched control in the game had no answer
+   between the finger and the card. Transform is compositor-only, it composes with the hand's breath
+   ('scale', its own property) and the delegated press ('translate'), and the fan's rotation and tilt
+   ride along untouched. 150ms on the shared arrival curve is the same beat every surface uses. */
+html[data-thumb] .dock .hand-row > .hand .card {
+  transition: opacity 220ms ease-out, transform var(--ix-open) var(--ix-ease-open);
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-thumb] .dock .hand-row > .hand .card { transition: none; }
+}
 /* The hand's cards: +8 points over the piles' 0.6 (owner, 2026-11-17: hand opacity +8% everywhere). */
 html.cam-under[data-focus='map']:not(.fan-awake) .dock .hand-row > .hand .card:not(.lifted),
 html.cam-under.cam-touch:not(.fan-awake) .dock .hand-row > .hand .card:not(.lifted) {
