@@ -3939,6 +3939,31 @@ html.futasaku-product #profile-scrim { background: color-mix(in srgb, var(--c-bg
   cursor: pointer;
   transition: transform var(--dur-ack) var(--ease-standard), border-color var(--ix-open), background var(--ix-open), color var(--ix-open);
 }
+/* THE TWO GROUPS (owner, 2026-11-20: "make a subtle space between 'easy' and 'medium' and 'hard' and
+   'blitz' to indicate that hard and blitz is the real deal"). EASY + MEDIUM are training; HARD +
+   BLITZ are the real thing. The pause is the grid's own 8px gap plus one more quiet step, carried by
+   the HARD key itself (a margin, not a separator node), so it survives `replaceChildren` and it is
+   there with or without the BLITZ key. When the streak legend sits in the seam it already holds the
+   pause, and the key only keeps a thread of it — otherwise the break would read as a hole. */
+#levels .level-grid:has(.difficulty-tile) > .difficulty-tile[data-difficulty="hard"] {
+  margin-top: 10px;
+}
+#levels .level-grid:has(> .practice-streak-legend) > .difficulty-tile[data-difficulty="hard"] {
+  margin-top: 2px;
+}
+/* The second, quieter signal: a very faint cream wash across the top of the two real-deal keys. It is
+   a static overlay, not a frame — the live 0.75 material has no frames at all (polish-075.css sets
+   every key's border transparent), and a wash layers cleanly over its matte glass without fighting
+   it. Never on the selected key (it is already the lit one), and no motion. */
+#levels .level-grid .difficulty-tile[data-difficulty="hard"]:not(.on):not(.primary)::before,
+#levels .level-grid .difficulty-tile[data-difficulty="pro"]:not(.on):not(.primary)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--fu-cream) 8%, transparent), transparent 58%);
+}
 .go-sub {
   margin: 6px 0 0;
   color: var(--c-muted);

@@ -5,12 +5,30 @@
 // The owner-approved table:
 //   Win +1 · Loss 0 · Draw unchanged · Resign 0 · Abandon (a new game over an unfinished one) 0 ·
 //   Online Blitz forfeit or timeout 0 · Best = the highest current ever reached.
+// Since 2026-11-20 only HARD and BLITZ carry a streak; EASY and MEDIUM reports are accepted and
+// ignored (see STREAK_TIERS below).
 
 /** The four Practice keys: EASY / MEDIUM / HARD / BLITZ. Campaign, lessons and online never count. */
 export const PRACTICE_TIERS = Object.freeze(['easy', 'medium', 'hard', 'blitz'] as const);
 export type PracticeTier = (typeof PRACTICE_TIERS)[number];
 export const isPracticeTier = (value: unknown): value is PracticeTier =>
   typeof value === 'string' && (PRACTICE_TIERS as readonly string[]).includes(value);
+
+/**
+ * THE KEYS THAT CARRY A STREAK (owner, 2026-11-20: "divide easy and medium and hard and streak ...
+ * and no longer count streaks for levels easy and medium at all"). HARD and BLITZ are the real deal;
+ * EASY and MEDIUM are training and keep no streak.
+ *
+ * `PRACTICE_TIERS` stays the four keys, because it is what a page may REPORT and what the account
+ * stores: an older page still sends EASY/MEDIUM games, and rejecting them would break it (the release
+ * flow keeps older pages working). Those reports are ACCEPTED, recorded once by game id (so the
+ * completed-games record and dedupe stay right) and IGNORED by the streak arithmetic. No stored row
+ * is deleted: history is left exactly where it is, it is simply never read or written for a streak.
+ */
+export const STREAK_TIERS = Object.freeze(['hard', 'blitz'] as const);
+export type StreakTier = (typeof STREAK_TIERS)[number];
+export const isStreakTier = (value: unknown): value is StreakTier =>
+  typeof value === 'string' && (STREAK_TIERS as readonly string[]).includes(value);
 
 /** How a game ended, from the player's side. Everything but a win and a draw is a loss. */
 export const STREAK_RESULTS = Object.freeze(['win', 'loss', 'draw', 'resign', 'abandon', 'forfeit', 'timeout'] as const);

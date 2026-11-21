@@ -45,10 +45,24 @@ describe.skipIf(!enabled)('streaks on real Postgres', () => {
   it('two devices in turn: a loss on one resets, best is kept, a replayed old game changes nothing', async () => {
     const store = postgresStreakStore(pool);
     const p = await newPlayer();
-    await store.recordPractice(p, [{ id: 'A1', tier: 'easy', result: 'win' }, { id: 'A2', tier: 'easy', result: 'win' }], 1);
-    await store.recordPractice(p, [{ id: 'B1', tier: 'easy', result: 'abandon' }], 2);
-    await store.recordPractice(p, [{ id: 'A2', tier: 'easy', result: 'win' }], 3);
-    expect((await store.practice(p)).easy).toEqual({ current: 0, best: 2 });
+    await store.recordPractice(p, [{ id: 'A1', tier: 'hard', result: 'win' }, { id: 'A2', tier: 'hard', result: 'win' }], 1);
+    await store.recordPractice(p, [{ id: 'B1', tier: 'hard', result: 'abandon' }], 2);
+    await store.recordPractice(p, [{ id: 'A2', tier: 'hard', result: 'win' }], 3);
+    expect((await store.practice(p)).hard).toEqual({ current: 0, best: 2 });
+  });
+
+  it('an EASY/MEDIUM game is stored (its id dedupes) but never moves a streak (owner, 2026-11-20)', async () => {
+    const store = postgresStreakStore(pool);
+    const p = await newPlayer();
+    await store.recordPractice(p, [
+      { id: 'E-1', tier: 'easy', result: 'win' },
+      { id: 'M-1', tier: 'medium', result: 'win' },
+    ], 1);
+    expect(await store.practice(p)).toEqual({ easy: { current: 0, best: 0 }, medium: { current: 0, best: 0 }, hard: { current: 0, best: 0 }, blitz: { current: 0, best: 0 } });
+    expect(await store.completedPractice(p)).toBe(2);
+    await store.recordPractice(p, [{ id: 'E-1', tier: 'easy', result: 'win' }, { id: 'H-1', tier: 'hard', result: 'win' }], 2);
+    expect((await store.practice(p)).hard).toEqual({ current: 1, best: 1 });
+    expect(await store.completedPractice(p)).toBe(3);
   });
 
   it('the online Blitz streak folds server results only: wins, a draw, a timeout, a forfeit; non-live games never count', async () => {
