@@ -224,7 +224,7 @@ try {
       x.t === 'Bloom' && (x.hexes?.length ?? 0) >= 2);
     return a ? {
       cards: a.cards as number[],
-      hexes: a.hexes.map((c) => `${c.q},${c.r}` as string),
+      hexes: a.hexes.map((c: { q: number; r: number }) => `${c.q},${c.r}` as string),
       kind: `bloom-${a.cards.length}-${[...a.cards].sort((x, y) => x - y).join('.')}`,
     } : null;
   });
