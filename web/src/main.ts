@@ -7157,6 +7157,17 @@ let drawPileAnchorKey = '';
 let drawPileGeometry = '';
 let drawPileRetries = 0;
 let drawPileSettles = 0;
+/** When this Draw anchor was first placed; a short settle window follows (see alignDrawPiles). */
+let drawPilePlacedAt = 0;
+/**
+ * THE SETTLE WINDOW (merge fix, 2026-11-21). The cockpit's entrance, the Draw track's 240ms growth
+ * and the hand's own arrival move the layout AFTER the first shift is computed, while the three
+ * offsetWidths in `geometryKey` can already match. A value cached from that half-settled frame
+ * survived for the whole turn — the Draw piles then snapped 1px when a later render recomputed it
+ * (320x568, futa04-sort-layout: -18px -> -19px mid-sort). So the anchor is recomputed every frame
+ * for this long, then cached; nothing moves after it, and no sort can shift it.
+ */
+const DRAW_PILE_SETTLE_MS = 1200;
 /** Draw brings the two pile instruments toward the first hand card, without moving
  * their counters separately or letting them cover the cockpit's action buttons. */
 function alignDrawPiles() {
@@ -7168,6 +7179,7 @@ function alignDrawPiles() {
     drawPileGeometry = '';
     drawPileRetries = 0;
     drawPileSettles = 0;
+    drawPilePlacedAt = 0;
     piles.style.setProperty('--futa04-draw-shift', '0px');
     return;
   }
@@ -7181,7 +7193,8 @@ function alignDrawPiles() {
   // because the box still read its pre-thumb width). So the anchor is only final once the inputs it
   // was computed from hold still — bounded retries, then trust what we have.
   const geometryKey = `${box.clientWidth}|${piles.offsetWidth}|${actions?.offsetWidth ?? 0}`;
-  if (drawPileAnchorKey === anchorKey && drawPileGeometry === geometryKey) {
+  const settling = drawPilePlacedAt > 0 && performance.now() - drawPilePlacedAt < DRAW_PILE_SETTLE_MS;
+  if (!settling && drawPileAnchorKey === anchorKey && drawPileGeometry === geometryKey) {
     // The anchor is only re-checked for a bounded burst (~0.4s) after it was placed, so the track
     // transition below cannot lock a travel computed against Grow's narrower slot.
     if (drawPileSettles > 0 && drawPileSettles++ < 24) requestAnimationFrame(alignDrawPiles);
@@ -7197,15 +7210,41 @@ function alignDrawPiles() {
   }
   drawPileRetries = 0;
   // offsetLeft is layout geometry, so the calculation stays steady while the group animates.
-  const baseLeft = box.getBoundingClientRect().left + piles.offsetLeft;
+  // It is accumulated to the page root because the piles live in the cockpit and the hand beside
+  // it: one transform-free coordinate space for both (an ancestor's entrance/rise transform moves
+  // their screen rects, but never an offsetLeft).
+  const offsetX = (el: HTMLElement): number => {
+    let x = 0;
+    for (let node: HTMLElement | null = el; node; node = node.offsetParent as HTMLElement | null) x += node.offsetLeft;
+    return x;
+  };
+  const baseLeft = offsetX(piles);
   // Hand sorting uses a FLIP animation on the individual card's `translate`.
   // Its screen rect includes that temporary travel, while the piles must align
   // with the card's resting slot throughout the sort.
+  //
+  // MEASURED FROM THE LAYOUT SLOT, NOT THE ANIMATED BOX (merge fix, 2026-11-21). A card's
+  // `getBoundingClientRect` also includes the idle breath's `scale` and its fan rotation, and the
+  // breath's phase (so its sub-pixel size) depends on WHICH card sits in the slot. Sorting the hand
+  // therefore changed the measured right edge by ~0.2px, which was enough to flip the rounded shift
+  // by 1px mid-turn (320x568, futa04-sort-layout: -18px -> -19px). `offsetLeft/offsetWidth` and the
+  // `--rot` are layout/geometry values: they never breathe, never FLIP and never depend on the card,
+  // so the anchor is stable across a sort. The rotation's own overhang is added back from the angle,
+  // about the layout's real transform origin (the thumb fan turns about the card's centre, the
+  // desktop hand about its bottom edge), so the piles still follow the visible edge of the fan.
+  const thumb = document.documentElement.hasAttribute('data-thumb');
   const resting = handCards.map((card) => {
-    const travelX = parseFloat(getComputedStyle(card).translate);
-    const r = card.getBoundingClientRect();
-    const t = Number.isFinite(travelX) ? travelX : 0;
-    return { left: r.left - t, right: r.right - t };
+    const layoutLeft = offsetX(card);
+    const w = card.offsetWidth;
+    const h = card.offsetHeight;
+    const rot = ((parseFloat(getComputedStyle(card).getPropertyValue('--rot')) || 0) * Math.PI) / 180;
+    const cos = Math.abs(Math.cos(rot));
+    const sin = Math.abs(Math.sin(rot));
+    const cx = layoutLeft + w / 2;
+    const half = thumb
+      ? (w / 2) * cos + (h / 2) * sin   // transform-origin: 50% 50%
+      : (w / 2) * cos + h * sin;        // transform-origin: 50% 100%
+    return { left: cx - half, right: cx + half };
   });
   const pileWidth = Math.max(0, ...Array.from(piles.children, el => (el as HTMLElement).offsetWidth));
   // The visual overflow of ONE drawn pile, from the same --draw-pile-scale the swell uses: the
@@ -7227,10 +7266,11 @@ function alignDrawPiles() {
     const toolsRight = actions.offsetLeft + actions.offsetWidth;
     const room = Math.max(0, contentLeft - overflow - toolsRight - 8);
     piles.style.setProperty('--futa04-draw-shift', `${-Math.round(Math.max(0, Math.min(-desired, room)))}px`);
+    if (drawPileAnchorKey !== anchorKey) drawPilePlacedAt = performance.now();
     drawPileAnchorKey = anchorKey;
     drawPileGeometry = geometryKey;
     drawPileSettles = Math.max(1, drawPileSettles);
-    if (drawPileSettles++ < 24) requestAnimationFrame(alignDrawPiles);
+    if (settling || drawPileSettles++ < 24) requestAnimationFrame(alignDrawPiles);
     return;
   }
   // The LEFTMOST card on screen (a left-hand fan is mirrored, so it is not always the first).
@@ -7244,10 +7284,11 @@ function alignDrawPiles() {
   const reach = Math.max(drawSlot, piles.offsetWidth) + overflow;
   const room = Math.max(0, actions.offsetLeft - 8 - piles.offsetLeft - reach);
   piles.style.setProperty('--futa04-draw-shift', `${Math.round(Math.max(0, Math.min(desired, room)))}px`);
+  if (drawPileAnchorKey !== anchorKey) drawPilePlacedAt = performance.now();
   drawPileAnchorKey = anchorKey;
   drawPileGeometry = geometryKey;
   drawPileSettles = Math.max(1, drawPileSettles);
-  if (drawPileSettles++ < 24) requestAnimationFrame(alignDrawPiles);
+  if (settling || drawPileSettles++ < 24) requestAnimationFrame(alignDrawPiles);
 }
 /**
  * Wide screens: centre the cockpit in the empty space to the right of the board (owner,
