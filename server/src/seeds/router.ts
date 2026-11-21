@@ -2,6 +2,7 @@ import type { Action } from '../../../src/engine/index.js';
 import { isDealSeed } from '../../../src/campaign/index.js';
 import { ApiError } from '../errors.js';
 import type { PlayerRecord } from '../storage/types.js';
+import type { RewardResult } from './types.js';
 import type { WorldEconomyService } from './service.js';
 import { pickClientIp } from '../client-ip.js';
 import { createWorldReadGuard } from './world-read.js';
@@ -36,6 +37,12 @@ export const createWorldEconomyRouter = (deps: {
   });
   // Every successful world write drops this isolate's cached map.
   const wrote = <T>(value: T): T => { worldRead.invalidate(); return value; };
+  /**
+   * The server's clock on a settled receipt (owner ask, 2026-11-20). The finish card words the daily
+   * cap's wait from THIS, not the phone's clock, so a device that is hours out cannot print a wrong
+   * countdown. It is stamped here, on the one wire both Campaign and Training settle through.
+   */
+  const withServerNow = (reward: RewardResult): RewardResult => ({ ...reward, serverNow: (deps.now ?? Date.now)() });
   return async (req, path) => {
     const ok = (status: number, data: Record<string, unknown>): Outcome => ({ status, body: { ok: true, ...data } });
     if (req.method === 'GET' && path === '/v1/world') {
@@ -167,16 +174,16 @@ export const createWorldEconomyRouter = (deps: {
           step = await economy.trainingStep(player, await trainingTicketOf(body), actions, body.botVersion, token);
         }
         if (step.kind === 'resume') return { status: 202, body: { ok: true, resume: step.resume } };
-        return ok(200, { reward: step.reward });
+        return ok(200, { reward: withServerNow(step.reward) });
       }
       if (path === '/v1/seeds/campaign') {
         if (typeof body.levelId !== 'string') throw new ApiError('INVALID_REQUEST', 'A Campaign level is required.');
         // A random deal's seed (owner, 2026-11-01). Optional: a fixed-deal proof simply omits it.
         if (body.dealSeed !== undefined && !isDealSeed(body.dealSeed)) throw new ApiError('INVALID_REQUEST', 'That deal is not valid.');
-        return ok(200, { reward: await economy.campaign(player, body.levelId, actions, body.botVersion,
-          body.dealSeed === undefined ? undefined : body.dealSeed) });
+        return ok(200, { reward: withServerNow(await economy.campaign(player, body.levelId, actions, body.botVersion,
+          body.dealSeed === undefined ? undefined : body.dealSeed)) });
       }
-      return ok(200, { reward: await economy.training(player, await trainingTicketOf(body), actions, body.botVersion) });
+      return ok(200, { reward: withServerNow(await economy.training(player, await trainingTicketOf(body), actions, body.botVersion)) });
     }
     return null;
   };

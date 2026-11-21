@@ -45,6 +45,14 @@ const BEFORE_FINAL = JSON.stringify({
   best: {},
 });
 const WALLET = { balance: 0, lifetimeEarned: 0, lifetimeSpent: 0, worldInvitationSeen: true };
+/**
+ * THE SERVER'S CLOCK ON A SETTLED RECEIPT (owner ask, 2026-11-20). The real router stamps `serverNow`
+ * on every reward answer; the stubbed transport must say the same or it is testing a wire shape the
+ * game cannot receive. 20:00 UTC is four hours before the cap returns at 00:00 UTC, so the countdown
+ * is exactly "4h" — and the wrong-clock run below shifts the DEVICE by nine hours while this stays put.
+ */
+const SERVER_NOW = Date.UTC(2026, 10, 20, 20);
+const CAP_LINE = 'Seed limit · 4h to reset';
 
 type Scenario = 'pay' | 'cap' | 'reject' | 'hung';
 
@@ -85,8 +93,14 @@ const MEASURE = `(() => {
   const control = [...document.querySelectorAll('#gameover .go-buttons .btn')].filter((el) => el.getClientRects().length);
   const inside = (el) => { const r = el.getBoundingClientRect(); return r.top >= -1 && r.bottom <= window.innerHeight + 1; };
   const r = row ? row.getBoundingClientRect() : null;
+  // THE LINE'S OWN FIT (the 320px + Large text case): how many lines it takes and whether it is cut.
+  const hostStyle = host ? getComputedStyle(host) : null;
+  const lineHeight = hostStyle ? (parseFloat(hostStyle.lineHeight) || parseFloat(hostStyle.fontSize) * 1.3) : 0;
   return {
     line: host && shown(host) ? (host.textContent || '').trim() : '',
+    lineHeight: Math.round(lineHeight * 10) / 10,
+    lines: host && shown(host) && lineHeight > 0 ? Math.round(host.getBoundingClientRect().height / lineHeight) : null,
+    hostOverflow: host ? host.scrollWidth - host.clientWidth : null,
     spoken: label ? (label.textContent || '').trim() : '',
     rowText: row && shown(row) ? (row.textContent || '').trim() : '',
     title: (document.getElementById('go-title') || {}).textContent || '',
@@ -105,6 +119,7 @@ const MEASURE = `(() => {
 type Measured = {
   line: string; spoken: string; rowText: string; title: string; counted: boolean; number: string | null; label: string | null;
   animations: number; rowHeight: number | null; cardOverflow: number | null; screenOverflow: number | null;
+  lineHeight: number; lines: number | null; hostOverflow: number | null;
   pageWide: boolean; clipped: string[]; controls: number; seedLog: string[];
 };
 
@@ -275,7 +290,7 @@ const stubSeeds = async (page: Page, settle: Settle): Promise<void> => {
       // The wedged-request case: the connection is up but nothing comes back for a while.
       await new Promise<void>((resolve) => { hold.release = resolve; });
     }
-    return route.fulfill({ json: { reward: { awarded, reason, wallet: WALLET, replayed: false } } });
+    return route.fulfill({ json: { reward: { awarded, reason, wallet: WALLET, replayed: false, serverNow: SERVER_NOW } } });
   });
 };
 
@@ -357,7 +372,7 @@ const openLevelGame = async (page: Page): Promise<void> => {
 
 const boot = async (
   browser: Browser,
-  options: { width: number; height: number; reduceMotion?: boolean; lesson?: boolean },
+  options: { width: number; height: number; reduceMotion?: boolean; lesson?: boolean; largeText?: boolean; clockSkewMs?: number },
 ): Promise<{ context: BrowserContext; page: Page; errors: string[] }> => {
   const context = await browser.newContext({
     viewport: { width: options.width, height: options.height },
@@ -373,12 +388,16 @@ const boot = async (
       const settingsKey = ${JSON.stringify(SETTINGS_KEY)};
       try {
         localStorage.clear();
+        // A WRONG DEVICE CLOCK (owner ask, 2026-11-20): this phone is nine hours fast. The cap's wait
+        // must still be the server's, because the receipt carries serverNow and the countdown reads
+        // only that. A line computed from this clock would be nine hours out.
+        ${options.clockSkewMs ? `(() => { const real = Date.now.bind(Date); Date.now = () => real() + ${options.clockSkewMs}; })();` : ''}
         localStorage.setItem(identityKey, JSON.stringify({
           token: 'e2e-seed-token', playerId: 'e2e-seed-player', displayName: 'E2E', kind: 'guest',
         }));
         localStorage.setItem(settingsKey, JSON.stringify({
           sound: false, music: false, coach: false, speed: 'normal', reduceMotion: ${options.reduceMotion ? 'true' : 'false'},
-          eyeCandy: false, autoSkip: false,
+          eyeCandy: false, autoSkip: false, largeText: ${options.largeText ? 'true' : 'false'},
         }));
         localStorage.setItem('futa05:severgrow.install-prompt.v1', JSON.stringify({ games: 0, shown: true, never: true }));
         ${options.lesson ? `localStorage.setItem(${JSON.stringify(PROGRESS_KEY)}, ${JSON.stringify(BEFORE_FINAL)});` : ''}
@@ -393,6 +412,7 @@ const boot = async (
 };
 
 const portrait = { width: 390, height: 844 };
+const smallPhone = { width: 320, height: 568 };
 const desktop = { width: 1280, height: 800 };
 
 // THE SUITE OWNS ITS BUILD **AND** ITS PREVIEW, so it must supply both sides' environment. `build()`
@@ -423,7 +443,7 @@ const run = async (
   name: string,
   viewport: { width: number; height: number },
   scenario: Scenario,
-  options: { reduceMotion?: boolean; releaseAfterMs?: number; shot: string; lesson?: boolean; noTickets?: boolean },
+  options: { reduceMotion?: boolean; releaseAfterMs?: number; shot: string; lesson?: boolean; noTickets?: boolean; largeText?: boolean; clockSkewMs?: number },
 ): Promise<void> => {
   if (ONLY.length && !ONLY.includes(name)) return;
   tickets.clear();
@@ -432,6 +452,8 @@ const run = async (
     ...viewport,
     ...(options.reduceMotion ? { reduceMotion: true } : {}),
     ...(options.lesson ? { lesson: true } : {}),
+    ...(options.largeText ? { largeText: true } : {}),
+    ...(options.clockSkewMs ? { clockSkewMs: options.clockSkewMs } : {}),
   });
   let awarded: number | null = null;
   try {
@@ -465,7 +487,7 @@ const run = async (
       releaseHeld();
     }
 
-    const expectText = scenario === 'cap' ? 'Seed limit reached today'
+    const expectText = scenario === 'cap' ? CAP_LINE
       : scenario === 'reject' ? 'Seeds for this game could not be verified.'
       : null;
     if (expectText) {
@@ -505,7 +527,7 @@ const run = async (
     check(`${name}: every control is inside the viewport`, m.clipped.length === 0, m.clipped.join(','));
     check(`${name}: no page errors`, errors.length === 0, errors.slice(0, 2).join(' | '));
 
-    if (options.noTickets) check(`${name}: the win was sent as its deal and paid`, proofKind === 'deal' && awarded !== null && awarded > 0, `${proofKind} / ${awarded}`);
+    if (options.noTickets) check(`${name}: the win was sent as its deal${scenario === 'cap' ? '' : ' and paid'}`, proofKind === 'deal' && (scenario === 'cap' ? awarded === 0 : awarded !== null && awarded > 0), `${proofKind} / ${awarded}`);
     if (scenario === 'pay') {
       check(`${name}: the award is the amount the server paid`, m.spoken === `+${awarded} Seeds`, `${m.spoken} vs +${awarded}`);
       check(`${name}: the row is one line, emblem + amount`, m.counted && (m.rowHeight ?? 99) <= 34, `row ${m.rowHeight}px`);
@@ -514,8 +536,21 @@ const run = async (
       rows.push(`pay ${viewport.width}x${viewport.height} → ${m.line}`);
     }
     if (scenario === 'cap') {
-      check(`${name}: a capped payout is the calm limit line`, m.line === 'Seed limit reached today', m.line);
+      // THE WAIT (owner, 2026-11-20): a capped payout says how long, rounded up to whole hours, from
+      // the SERVER's clock on the receipt. "4h" here is 20:00 UTC to 00:00 UTC.
+      check(`${name}: a capped payout says when the cap returns`, m.line === CAP_LINE, m.line);
       check(`${name}: no counting row for a zero`, !m.counted);
+      // The line is one line inside the card: at 320px with Large text it must not wrap or be cut.
+      check(`${name}: the wait stays on one line`, (m.lines ?? 2) <= 1, `lines ${m.lines}`);
+      check(`${name}: the wait is not clipped`, (m.hostOverflow ?? 1) <= 0, `${m.hostOverflow}px`);
+      if (options.clockSkewMs) {
+        // The proof that this run is genuinely wrong-clock: the page's own clock is hours away from
+        // the receipt, and the line still names the server's wait.
+        const deviceNow = await page.evaluate('Date.now()') as number;
+        const skewH = Math.round((deviceNow - SERVER_NOW) / 3_600_000);
+        check(`${name}: the device clock is ${Math.round(options.clockSkewMs / 3_600_000)}h fast, the line is the server's`, Math.abs(deviceNow - SERVER_NOW) > 8 * 3_600_000, `${skewH}h from the receipt`);
+        check(`${name}: the countdown did not follow the device clock`, m.line === CAP_LINE, m.line);
+      }
     }
     if (scenario === 'reject') {
       check(`${name}: a refusal is said out loud`, m.line === 'Seeds for this game could not be verified.', m.line);
@@ -551,6 +586,9 @@ try {
   await run('pay/desktop', desktop, 'pay', { shot: 'award-1280x800' });
   await run('no ticket', portrait, 'pay', { noTickets: true, shot: 'deal-390x844' });
   await run('cap', portrait, 'cap', { shot: 'cap-390x844' });
+  // THE 320px + LARGE TEXT CASE, and the wrong-clock proof in one run: the device is nine hours fast,
+  // the receipt's server clock says 20:00 UTC, and the line must still read "4h" on one line.
+  await run('cap/320 large + wrong clock', smallPhone, 'cap', { shot: 'cap-320x568-large-wrong-clock', noTickets: true, largeText: true, clockSkewMs: 9 * 3_600_000 });
   await run('reject', portrait, 'reject', { shot: 'reject-390x844' });
   await run('hung', portrait, 'hung', { shot: 'hung-390x844' });
   await run('reduce motion', portrait, 'pay', { reduceMotion: true, shot: 'reduce-motion-390x844' });

@@ -8,7 +8,7 @@ import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { ONLINE } from '../../../src/strings.js';
 import { mark } from '../logic/timing.js';
 import type { SettledSeeds } from '../ui/seed-reveal.js';
-import { remainingMs } from './clock.js';
+import { remainingMs, correctedNow } from './clock.js';
 import type { ClockState } from './clock.js';
 import { createDraftEngine } from './draft.js';
 import type { DraftEngine } from './draft.js';
@@ -245,6 +245,8 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
       connection,
       presence,
       remainingMs: remainingMs(clock, player.turnDeadlineAt, now()),
+      // The same correction `remainingMs` uses: the server's clock, not this device's.
+      serverNow: correctedNow(clock, now()),
       hasDraft: draft.hasDraft(),
       notice,
       perspective: {

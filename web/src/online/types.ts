@@ -77,6 +77,12 @@ export type MatchDriverSnapshot = {
   presence: PresenceStatus;
   /** Remaining ms until deadline using the corrected clock; null when none. */
   remainingMs: number | null;
+  /**
+   * The SERVER's clock now, folded through the sync offset (`noteServerNow` in online/clock.ts), so
+   * a duration can be worded without trusting this device's wall clock. Optional because a test
+   * double may not keep a clock; a missing value means "do not print a countdown", never "invent one".
+   */
+  serverNow?: number;
   /** True when a local Grow draft exists after a committed Draw. */
   hasDraft: boolean;
   /** Quiet line for the UI ("Reconnecting", "Reload to update FUTASAKU", …). */

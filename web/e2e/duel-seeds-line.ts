@@ -112,10 +112,12 @@ try {
   const paid = await withReport('award', { awarded: 15, reason: null });
   check(paid.hidden !== true && paid.text.includes('15'), `a paid finish shows +15 Seeds (${paid.text})`);
 
-  // Capped: a real outcome, and the card says so calmly instead of "+0".
+  // Capped: a real outcome, and the card says so calmly instead of "+0". Since 2026-11-20 the calm
+  // line also says WHEN the cap returns, worded from the server clock the driver carries in its
+  // snapshot (`snapshot.serverNow`), so this asserts the countdown form rather than the bare sentence.
   const capped = await withReport('capped', { awarded: 0, reason: 'opponent_daily_limit' });
-  check(capped.hidden !== true && /Seed limit reached today/.test(capped.text),
-    `a capped finish says the limit is reached, not +0 (${capped.text})`);
+  check(capped.hidden !== true && /^Seed limit · (?:\d{1,2}m|\d{1,2}h) to reset$/.test(capped.text),
+    `a capped finish says the limit is reached and when it resets, not +0 (${capped.text})`);
 
   // A settled duel that genuinely paid nothing: silence.
   const nothing = await withReport('nothing', { awarded: 0, reason: null });
