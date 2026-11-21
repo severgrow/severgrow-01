@@ -1,4 +1,5 @@
 import { CHALLENGE_STAMP_GLSL } from './challenge-stamp.js';
+import { HEX_APOTHEM_RATIO, OWNER_RIM } from '../ui/owner-rim.js';
 import { tileFace, tileVariants } from './tile-face.js';
 import type { V3 } from './geometry.js';
 // THE PLANET IN SPACE. Two passes, no textures, no post-processing, no dependency:
@@ -72,6 +73,17 @@ precision highp float;
 varying vec3 vNormal; varying vec3 vColour; varying float vEdge; varying float vFlags; varying float vSeed; varying vec3 vLocal;
 varying vec2 vTile; varying float vSkin; uniform sampler2D uTiles; uniform float uTilesOn;
 uniform float uPulse; uniform float uPixel;
+// THE OWNER-COLOUR INNER RIM (ui/owner-rim.ts): inset 6% of the circumradius, 4.5% thick, clamped
+// to ${OWNER_RIM.minWidthPx}-${OWNER_RIM.maxWidthPx} CSS px. \`e\` is normalised 0 at a tile's centre to 1 along
+// its SIDES, so it runs along the APOTHEM: the contract's circumradius fractions are divided by
+// cos(30°) here (${(1 / HEX_APOTHEM_RATIO).toFixed(6)}x), and \`w\` is one CSS pixel in \`e\` units, which makes the ring
+// constant in SCREEN pixels at any zoom instead of shrinking with the tile.
+const float RIM_RADIUS = ${(1 / HEX_APOTHEM_RATIO).toFixed(6)};
+const float RIM_INSET = ${OWNER_RIM.insetFraction};
+const float RIM_WIDTH = ${OWNER_RIM.widthFraction};
+const float RIM_MIN = ${OWNER_RIM.minWidthPx.toFixed(2)};
+const float RIM_MAX = ${OWNER_RIM.maxWidthPx.toFixed(2)};
+const float RIM_ROOM = ${OWNER_RIM.maxBandFraction.toFixed(2)};
 float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 // Value noise fixed to the planet (not the screen), so the grain turns with the ground.
 float hash3(vec3 p){ p = fract(p * .3183099 + .1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
@@ -184,10 +196,10 @@ ${derivatives ? `  vec2 grad = vec2(dFdx(e), dFdy(e));
   float rim = pow(1.0 - max(dot(n, v), 0.0), 3.0);
   colour += vec3(.36, .5, .44) * rim * (.25 + .75 * day) * .55;
   // OWNER BORDERS: a quiet inner line in the tile's own colour, lifted a little (no glowing rim).
-  // IT IS NOT DRAWN ON A SKINNED TILE (owner, 2026-11-16: "theres still pink visible under it — it
-  // should be replacing the color"). A skinned tile is the picture, full stop: no owner-coloured
-  // line, margin or halo at its edge. Ownership is carried there by the owner's own set (exactly as
-  // on the board), the raised slab, and the deeper seam along a territory's edge below.
+  // THE OUTER LINE IS NOT DRAWN ON A SKINNED TILE (owner, 2026-11-16: "theres still pink visible
+  // under it — it should be replacing the color"): at the boundary a skinned tile is the picture,
+  // full stop. Ownership reads there from the thin INNER RIM above (owner, 2026-11-20), the raised
+  // slab, and the deeper seam along a territory's edge below — never from a colour on the art.
   float band = smoothstep(1.0 - w * 4.2, 1.0 - w * 2.6, e) * border * owned * (1.0 - skinned);
   colour = mix(colour, mix(c, vec3(.94, .91, .82), .3) * lit, band * .6);
   // The selection ring.
@@ -201,6 +213,27 @@ ${derivatives ? `  vec2 grad = vec2(dFdx(e), dFdy(e));
   float frontier = border * owned * skinned;
   float grout = smoothstep(1.0 - w * mix(1.7, 2.9, frontier), 1.0 - w * .35, e);
   colour = mix(colour, vec3(.018, .021, .02), grout * (kind > 4.5 ? .4 : mix(.78, .9, frontier)));
+  // THE OWNER-COLOUR INNER RIM (owner, 2026-11-20: the owner's colour on the planet is "a thin inner
+  // rim on a skinned tile"). The picture stays the picture — nothing is tinted, and no colour reaches
+  // the art — but a band just INSIDE the hexagon's boundary carries the owner's own palette colour,
+  // so ownership still reads once a skin is the surface. Drawn AFTER the grout and the frontier
+  // groove, so the outermost pixels of a territory keep it, and never outside the boundary.
+  if (skinned > .5) {
+    float radiusPx = RIM_RADIUS / max(w, 1e-5);        // the hexagon's circumradius, in CSS px
+    float inset = max(1.0, radiusPx * RIM_INSET) * w;  // inside the boundary, in e units
+    float wide = clamp(radiusPx * RIM_WIDTH, RIM_MIN, RIM_MAX) * w;
+    // The px clamps are a floor and a ceiling, not a promise: on a tile too small to hold the
+    // minimum ring, keep the largest one that still fits inside the outer band of the apothem.
+    // (e is 1 at the boundary, so RIM_ROOM of the apothem is simply RIM_ROOM here.)
+    float room = RIM_ROOM;
+    if (inset + wide > room) { float fit = room / (inset + wide); inset *= fit; wide *= fit; }
+    float e0 = 1.0 - inset - wide;                     // the band's inner edge
+    float e1 = 1.0 - inset;                            // its outer edge
+    float rimIn = smoothstep(e0 - w, e0 + w, e) * (1.0 - smoothstep(e1 - w, e1 + w, e));
+    // A territory keeps a little more of its colour at night (as its ground already does).
+    vec3 rimCol = vColour * mix(lit, 1.0, .35);
+    colour = mix(colour, mix(rimCol, vec3(.97, .95, .89), .14), rimIn * .88);
+  }
   colour += (hash(gl_FragCoord.xy) - .5) * .022;
   gl_FragColor = vec4(colour, 1.0);
 }`;

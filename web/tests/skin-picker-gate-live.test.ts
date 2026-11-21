@@ -77,10 +77,12 @@ describe('the skin picker on the live root', () => {
     mountSkinSwitch(box as unknown as HTMLElement);
     expect(skinPickerVisible()).toBe(false);
     expect(box.children, 'no section, no gap').toHaveLength(0);
-    expect(skinChoice()).toEqual({ mine: DEFAULT_SKIN.mine, theirs: DEFAULT_SKIN.theirs, background: DEFAULT_SKIN.background });
+    expect(skinChoice()).toEqual({
+      mine: DEFAULT_SKIN.mine, theirs: DEFAULT_SKIN.theirs, background: DEFAULT_SKIN.background, tileMine: null, tileTheirs: null,
+    });
   });
 
-  it('is the admin RYK\'s on the live root, with all three rows', async () => {
+  it('is the admin RYK\'s on the live root, with all five rows', async () => {
     data.clear();
     signInAs('RYK');
     const { mountSkinSwitch } = await import('../src/online/skin-switch.js');
@@ -91,6 +93,6 @@ describe('the skin picker on the live root', () => {
     const section = box.querySelector('#world-skin-switch');
     expect(section).not.toBeNull();
     const labels = section!.querySelectorAll('button[data-field]').map((b) => b.dataset.field);
-    expect(new Set(labels)).toEqual(new Set(['mine', 'theirs', 'background']));
+    expect(new Set(labels)).toEqual(new Set(['mine', 'theirs', 'tileMine', 'tileTheirs', 'background']));
   });
 });

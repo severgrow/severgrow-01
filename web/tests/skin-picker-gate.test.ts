@@ -102,9 +102,13 @@ describe('the skin picker belongs to the admin account alone', () => {
     const section = box.querySelector('#world-skin-switch');
     expect(section, 'the admin keeps the picker').not.toBeNull();
     const labels = section!.querySelectorAll('button[data-field]').map((b) => b.dataset.field);
-    expect(new Set(labels), 'your tiles, their tiles, the board background').toEqual(new Set(['mine', 'theirs', 'background']));
+    // The four PLANET sets, the six IN-GAME families (plus "no skin"), and the board backgrounds.
+    expect(new Set(labels), 'your tiles, their tiles, the six skins on each side, the board background')
+      .toEqual(new Set(['mine', 'theirs', 'tileMine', 'tileTheirs', 'background']));
     expect(labels.filter((field) => field === 'mine')).toHaveLength(4);
     expect(labels.filter((field) => field === 'theirs')).toHaveLength(4);
+    expect(labels.filter((field) => field === 'tileMine'), 'six skins + the shipped look').toHaveLength(7);
+    expect(labels.filter((field) => field === 'tileTheirs'), 'six skins + the shipped look').toHaveLength(7);
     expect(labels.filter((field) => field === 'background'), 'classic + the five painted grounds').toHaveLength(6);
   });
 
@@ -112,7 +116,9 @@ describe('the skin picker belongs to the admin account alone', () => {
     signInAs('Cedar');
     // The stored choice is the pre-gate case: water / toxic / cocoa. Skins must not win; the
     // background is deliberately NOT pinned (the owner asked for default skins only).
-    expect(skinChoice()).toEqual({ mine: DEFAULT_SKIN.mine, theirs: DEFAULT_SKIN.theirs, background: 'cocoa' });
+    expect(skinChoice()).toEqual({
+      mine: DEFAULT_SKIN.mine, theirs: DEFAULT_SKIN.theirs, background: 'cocoa', tileMine: null, tileTheirs: null,
+    });
     expect(DEFAULT_SKIN.mine, 'own tiles: Forest, the nine grass grounds + home-tree').toBe('forest');
     expect(DEFAULT_SKIN.theirs, 'opponent tiles: Ash, the nine ash grounds + home-volcano').toBe('ash');
     expect([...faSides()], 'the board wears exactly those two').toEqual(['forest', 'ash']);

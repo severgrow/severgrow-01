@@ -18,6 +18,8 @@ import { signedInNickname } from '../accounts/menu-key.js';
 import { IS_TEST_ROUTE, STORAGE_PREFIX } from '../channel.js';
 import { BACKGROUNDS, TERRITORY_IDS, setFaBackground, setFaSides } from './forestAsh.js';
 import type { BackgroundId, TerritoryId } from './forestAsh.js';
+import { setTileSkins, tileSkinOf } from './tileSkins.js';
+import type { TileSkinId } from './tileSkins.js';
 
 /**
  * The one account allowed to see (and use) the skin and background picker: the owner's nickname,
@@ -40,13 +42,25 @@ export const SKIN_SWITCH = IS_TEST_ROUTE
   || (typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname))
   || isSkinPickerAdmin();
 
-export type SkinChoice = { mine: TerritoryId; theirs: TerritoryId; background: BackgroundId };
+/**
+ * TWO AXES, DELIBERATELY (2026-11-20). `mine`/`theirs` are PLANET skins: they cross the wire
+ * (`claim.skin`), the account saves them, and only the four `TerritoryId`s exist there.
+ * `tileMine`/`tileTheirs` are the six in-game-only cosmetic families (ui/tileSkins.ts): fixed
+ * colours, no wire, no planet. `null` is the shipped Forest/Ash look, so a player who has chosen
+ * nothing — and every player but the admin — draws exactly what this board drew before.
+ */
+export type SkinChoice = {
+  mine: TerritoryId; theirs: TerritoryId; background: BackgroundId;
+  tileMine: TileSkinId | null; tileTheirs: TileSkinId | null;
+};
 /**
  * THE PRODUCT'S DEFAULT LOOK: your own tiles are Forest (the nine grass grounds, home-tree), your
  * opponent's are Ash (the nine ash grounds, home-volcano). Not a stored preference — this is where a
  * player who never chose, and every non-admin player, starts.
  */
-export const DEFAULT_SKIN: SkinChoice = { mine: 'forest', theirs: 'ash', background: 'slate' };
+export const DEFAULT_SKIN: SkinChoice = {
+  mine: 'forest', theirs: 'ash', background: 'slate', tileMine: null, tileTheirs: null,
+};
 const KEY = 'severgrow.board-skin.v1';
 
 const valid = (c: Partial<SkinChoice> | null): SkinChoice => {
@@ -54,11 +68,16 @@ const valid = (c: Partial<SkinChoice> | null): SkinChoice => {
     mine: TERRITORY_IDS.includes(c?.mine as TerritoryId) ? c!.mine! : DEFAULT_SKIN.mine,
     theirs: TERRITORY_IDS.includes(c?.theirs as TerritoryId) ? c!.theirs! : DEFAULT_SKIN.theirs,
     background: BACKGROUNDS.some((b) => b.id === c?.background) ? c!.background! : DEFAULT_SKIN.background,
+    // An id this build does not know (another build, a hand-edited row) is no choice at all.
+    tileMine: tileSkinOf(c?.tileMine),
+    tileTheirs: tileSkinOf(c?.tileTheirs),
   };
   // EVERY PLAYER BUT THE ADMIN WEARS THE PRODUCT SKINS, whatever this device (or the server) stored
   // before the gate existed. The background is deliberately left as stored: the owner asked for
   // default skins only, and nobody but him can select either now.
-  return isSkinPickerAdmin() ? picked : { ...picked, mine: DEFAULT_SKIN.mine, theirs: DEFAULT_SKIN.theirs };
+  return isSkinPickerAdmin()
+    ? picked
+    : { ...picked, mine: DEFAULT_SKIN.mine, theirs: DEFAULT_SKIN.theirs, tileMine: null, tileTheirs: null };
 };
 
 let current: SkinChoice = DEFAULT_SKIN;
@@ -76,7 +95,11 @@ if (SKIN_SWITCH) {
  * owner's "chosen forest, in game it gives me water" (reported 2026-11-15).
  */
 let revision = 0;
-const apply = () => { setFaSides(current.mine, current.theirs); setFaBackground(current.background); };
+const apply = () => {
+  setFaSides(current.mine, current.theirs);
+  setFaBackground(current.background);
+  setTileSkins(current.tileMine, current.tileTheirs);
+};
 apply();
 
 /**
