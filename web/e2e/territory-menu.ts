@@ -380,7 +380,10 @@ try {
   await page.evaluate(()=>{
     (window as any).__chipNods=[];
     const observer=new MutationObserver(()=>{for(const node of document.querySelectorAll('.world-colour-chip'))for(const a of node.getAnimations())(window as any).__chipNods.push(a.effect?.getTiming().iterations);});
-    observer.observe(document.getElementById('online-world-panel')!,{childList:true,subtree:true});
+    // THE SHEET IS A PAGE LAYER (owner, 2026-11-20): the SKINS pane re-parents the glass colour
+    // sheet to <body> so the window's rounded body cannot clip it, so a chip rebuilt by
+    // paintColourPane is no longer inside #online-world-panel. Watch the page instead.
+    observer.observe(document.body,{childList:true,subtree:true});
     (window as any).__chipObserver=observer;
   });
   await page.locator('.world-colour-swatch:not(.current)').first().click();
@@ -392,6 +395,10 @@ try {
   await page.locator('.world-colour-swatch:not(.current)').first().click();
   check('reduced motion keeps colour selection still',await page.locator('.world-colour-chip').evaluateAll(nodes=>nodes.every(n=>n.getAnimations().length===0)));
   await page.evaluate(()=>document.documentElement.classList.remove('reduce-motion'));
+  // THE GLASS SHEET IS MODAL (owner, 2026-11-20): a picked colour stays in the open sheet until
+  // Done, whose scrim would otherwise intercept the next press. Commit it, then close the window.
+  await page.click('#world-colour-done');
+  await page.waitForFunction(()=>document.getElementById('world-colour-sheet')?.hidden===true);
   await page.click('#online-world-menu');await page.waitForTimeout(250);
 
   // ---- small, landscape and desktop ---------------------------------------------------------------
