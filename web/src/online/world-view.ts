@@ -43,6 +43,7 @@ import { waitingActionCount } from './territory-attention.js';
 import { SEEDS_WORD, seedBalanceLabel, seedIcon } from './seed-icon.js';
 import type { AchievementView } from '../../../server/src/seeds/achievements.js';
 import { ACHIEVEMENT_COPY, ACHIEVEMENT_GROUP_TITLES, ACHIEVEMENTS_UI } from './achievement-copy.js';
+import { collectableAchievements, filedAchievements, filedScrollBehavior } from './achievement-collect.js';
 import {
   achievementsReady,
   achievementsVisible,
@@ -3215,14 +3216,20 @@ export class WorldView {
   }
 
   /**
-   * The achievements page: five short sections, each row a goal and its progress, CLAIM when earned.
+   * The achievements page: a SHELF of rewards to collect, then five short sections, each row a goal
+   * and its progress. COLLECT when earned.
    *
    * THIRTY-FIVE WITHOUT CLUTTER (owner, 2026-10-30: "around 35 achievements" and "keep it clean lean
    * and elegant"). The set is grouped by where it is earned — Territory, Duels, Craft, Company,
    * Campaign — and each heading carries the earned count, so a glance answers "what is left here".
    * Rows are one line of title plus one line of detail; a meter appears only when a goal is counted
-   * above one; an unearned row has NO reward teaser and NO amount. Earned-but-unclaimed is a CLAIM
-   * key, claimed is a tick, and nothing depends on colour to tell them apart.
+   * above one; an UNEARNED row has no reward teaser and no amount. A claimed row is a tick, and
+   * nothing depends on colour to tell them apart.
+   *
+   * THE SHELF (owner, 2026-11-20: "the newly achieved achievement showed there ... with button
+   * 'COLLECT' by the seed payout with our classic glow"). Every earned-but-uncollected achievement
+   * is taken OUT of its section and drawn at the top of the sheet, at full width, with its payout
+   * and its COLLECT key — once, never twice (see achievement-collect.ts).
    */
   private paintAchievements() {
     const list = document.getElementById('online-world-achievements');
@@ -3240,16 +3247,30 @@ export class WorldView {
     const signature = `achievements|${this.claimingAchievement}|${this.justClaimed}|${JSON.stringify(views)}`;
     if (signature === this.paneSignature) return;
     this.paneSignature = signature;
+
+    // THE SHELF. Only where the markup can hold it: an older page without it keeps the rows, and
+    // with them their own COLLECT key, exactly as before.
+    const shelfBox = document.getElementById('world-achievements-shelf');
+    const shelfList = document.getElementById('online-world-achievements-shelf');
+    const shelf = shelfBox && shelfList ? collectableAchievements(views) : [];
+    if (shelfBox && shelfList) {
+      shelfBox.hidden = shelf.length === 0;
+      const title = document.getElementById('world-shelf-title');
+      if (title) title.textContent = ACHIEVEMENTS_UI.ready(shelf.length);
+      shelfList.replaceChildren(...shelf.map((view) => this.achievementCard(view)));
+    }
+    const filed = new Set(filedAchievements(views, shelf).map((view) => view.id));
+
     const order = ['territory', 'duels', 'craft', 'company', 'campaign'] as const;
     const nodes: HTMLElement[] = [];
     for (const group of order) {
       const inGroup = views.filter((view) => view.group === group);
       if (inGroup.length === 0) continue;
       // What can be claimed comes first, then what is still being worked on, then the settled ones
-      // (owner, 2026-11-01 polish pass): the reward you can collect should never be below the fold
-      // just because its group sits low. Within a band the authored order is kept.
+      // (owner, 2026-11-01 polish pass). Within a band the authored order is kept. A waiting reward
+      // is on the shelf, so it has no row here.
       const band = (view: AchievementView) => (view.done && !view.claimed ? 0 : view.claimed ? 2 : 1);
-      const rows = [...inGroup].sort((a, b) => band(a) - band(b));
+      const rows = inGroup.filter((view) => filed.has(view.id)).sort((a, b) => band(a) - band(b));
       const earned = inGroup.filter((view) => view.done).length;
       const heading = document.createElement('h3');
       heading.className = 'world-achievement-heading';
@@ -3258,12 +3279,75 @@ export class WorldView {
       name.textContent = ACHIEVEMENT_GROUP_TITLES[group];
       const count = document.createElement('span');
       count.className = 'world-achievement-count';
-      count.textContent = `${earned}/${rows.length}`;
+      // The count is over the WHOLE group, including the rows waiting on the shelf.
+      count.textContent = `${earned}/${inGroup.length}`;
       heading.append(name, count);
       nodes.push(heading);
       for (const view of rows) nodes.push(this.achievementRow(view));
     }
     list.replaceChildren(...nodes);
+  }
+
+  /**
+   * ONE WAITING REWARD, at the top of the sheet: what it is, the Seeds it is holding, and the one
+   * key that collects it. `data-state="ready"` and `.ready` are the same vocabulary the rows use, so
+   * nothing downstream learns a second state.
+   */
+  private achievementCard(view: AchievementView): HTMLElement {
+    const copy = ACHIEVEMENT_COPY[view.id];
+    const card = document.createElement('div');
+    card.className = 'world-achievement world-achievement-card ready';
+    card.dataset.state = 'ready';
+    card.dataset.achievement = view.id;
+    card.setAttribute('role', 'listitem');
+    const text = document.createElement('span');
+    text.className = 'world-achievement-text';
+    const kicker = document.createElement('span');
+    kicker.className = 'world-achievement-kicker';
+    kicker.textContent = ACHIEVEMENTS_UI.kicker;
+    const title = document.createElement('strong');
+    title.textContent = copy.title;
+    const detail = document.createElement('span');
+    detail.textContent = view.goal > 1 ? `${copy.detail} · ${view.progress}/${view.goal}` : copy.detail;
+    text.append(kicker, title, detail);
+    const award = document.createElement('span');
+    award.className = 'world-achievement-award';
+    // THE PAYOUT, beside the key: the app's own seed glyph and the amount. The spoken form carries
+    // the currency word, so "+100" is never read as a bare number.
+    const payout = document.createElement('span');
+    payout.className = 'world-achievement-payout';
+    const amount = document.createElement('span');
+    amount.className = 'world-achievement-payout-amount';
+    amount.setAttribute('aria-hidden', 'true');
+    amount.textContent = `+${view.seeds}`;
+    const spoken = document.createElement('span');
+    spoken.className = 'sr-only';
+    spoken.textContent = ACHIEVEMENTS_UI.payout(view.seeds);
+    payout.append(seedIcon(20), amount, spoken);
+    award.append(payout, this.collectKey(view, copy.title));
+    card.append(text, award);
+    return card;
+  }
+
+  /**
+   * The COLLECT key. It wears the game's grow-glow (online-css.ts `.world-collect-glow`): a halo
+   * drawn once, breathing only its opacity. The accessible name names the achievement, because 35
+   * keys that all say COLLECT are 35 identical buttons to a screen reader.
+   */
+  private collectKey(view: AchievementView, title: string): HTMLButtonElement {
+    const key = document.createElement('button');
+    key.type = 'button';
+    // `.world-achievement-claim` is kept: the existing suites and the row vocabulary already use it.
+    key.className = 'world-achievement-claim world-collect';
+    const busy = this.claimingAchievement === view.id;
+    key.disabled = busy;
+    key.setAttribute('aria-label', ACHIEVEMENTS_UI.collectLabel(title, view.seeds));
+    const glow = document.createElement('span');
+    glow.className = 'world-collect-glow';
+    glow.setAttribute('aria-hidden', 'true');
+    key.append(glow, document.createTextNode(busy ? ACHIEVEMENTS_UI.claiming : ACHIEVEMENTS_UI.claim));
+    key.addEventListener('click', () => void this.collectAchievement(view.id));
+    return key;
   }
 
   /** One row: title, one-sentence rule, optional counted meter, and the one action it allows. */
@@ -3298,19 +3382,19 @@ export class WorldView {
       done.setAttribute('aria-label', ACHIEVEMENTS_UI.claimed);
       item.append(done);
     } else if (view.done) {
-      const key = document.createElement('button');
-      key.type = 'button';
-      key.className = 'world-claim-button world-achievement-claim';
-      const busy = this.claimingAchievement === view.id;
-      key.textContent = busy ? ACHIEVEMENTS_UI.claiming : ACHIEVEMENTS_UI.claim;
-      key.disabled = busy;
-      key.addEventListener('click', () => void this.claimAchievement(view.id));
-      item.append(key);
+      // A waiting reward normally lives on the shelf; this is the fallback for a page whose shelf
+      // markup is absent, and it keeps that page fully usable.
+      item.append(this.collectKey(view, copy.title));
     }
     return item;
   }
 
-  private async claimAchievement(id: string): Promise<void> {
+  /**
+   * Collect one. The SERVER pays: the client's claim call re-verifies the facts and settles under
+   * `achievement:<id>` (idempotent), and this only shows the answer, so a failed request can never
+   * leave a balance that the wallet does not also carry. The URL lives in the client, never here.
+   */
+  private async collectAchievement(id: string): Promise<void> {
     const identity = this.identity;
     if (!identity || this.claimingAchievement) return;
     this.claimingAchievement = id;
@@ -3326,7 +3410,11 @@ export class WorldView {
         rememberAchievements(browserStorage(), identity.playerId, this.achievements.views ?? []);
       this.justClaimed = id;
       this.cue('chime');
+      // The one announcement, in the screen's existing polite status line.
       this.notice(ACHIEVEMENTS_UI.paid(claim.awarded));
+      this.paintPanel();
+      // The card has left the shelf: file it into its own section and bring that row into view.
+      this.revealFiled(id);
       // The moment is CSS (finite); the flag only marks which row plays it on this paint.
       window.setTimeout(() => { if (this.justClaimed === id) { this.justClaimed = null; this.paintPanel(); } }, 1400);
     } catch {
@@ -3337,6 +3425,28 @@ export class WorldView {
       this.paintPanel();
       if (!this.active && this.menuPreview) await this.refresh(true, true);
     }
+  }
+
+  /**
+   * THE FILING. Scrolls the sheet only when the row it has just been filed into is off screen, and
+   * never touches the page behind the sheet. Reduce motion chooses an instant move instead of a
+   * glide; the row itself is always there, ticked, either way.
+   */
+  private revealFiled(id: string): void {
+    if (this.pane !== 'achievements') return;
+    const run = () => {
+      if (this.pane !== 'achievements') return;
+      const body = document.querySelector<HTMLElement>('#online-world-panel .world-panel-body');
+      const row = document.querySelector<HTMLElement>(`#online-world-achievements [data-achievement="${id}"]`);
+      if (!body || !row) return;
+      const box = body.getBoundingClientRect();
+      const line = row.getBoundingClientRect();
+      if (line.top >= box.top + 6 && line.bottom <= box.bottom - 6) return;
+      const centre = line.top - (box.top + box.height / 2 - line.height / 2);
+      body.scrollTo({ top: Math.max(0, body.scrollTop + centre), behavior: filedScrollBehavior(!interfaceMotionAllowed()) });
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+    else run();
   }
 
   private paintRanking(me: string | null) {

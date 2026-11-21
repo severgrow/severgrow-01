@@ -1228,11 +1228,91 @@ html.reduce-motion .world-colour-chip { animation:none!important; }
 .world-achievement.claimed .world-achievement-meter { display: none; }
 .world-achievement-done { font-size: .9rem; color: #f2c879; padding-right: 10px; }
 .world-achievement-claim { min-height: 44px; }
-/* the moment it pays: one warm flash across the row, finite */
+/* the moment it pays: one warm flash across the row, finite. It also LANDS the row: the collected
+   card has just left the shelf, so the ticked row drops the last 10px into its section — a
+   compositor-only translate (the background flash is the app's existing finite reward moment). */
 .world-achievement.just-claimed { animation: world-paid 900ms cubic-bezier(.2, .8, .3, 1) both; }
-@keyframes world-paid { 0% { background: #f2c87959; } 100% { background: #e8ddc508; } }
+@keyframes world-paid { 0% { background: #f2c87959; translate: 0 -10px; } 100% { background: #e8ddc508; translate: 0 0; } }
 @media (prefers-reduced-motion: reduce) { .world-achievement.just-claimed { animation: none; } }
 html.reduce-motion .world-achievement.just-claimed { animation: none; }
+
+/* ---- THE ACHIEVEMENTS SHEET (owner, 2026-11-20: "the achievements window same size as planet ...
+   the newly achieved achievement showed there ... with button 'COLLECT' by the seed payout with our
+   classic glow") ------------------------------------------------------------------------------
+   NOT a new screen. The Planet's own dialog already owns the close key, the scroll, the focus
+   return and the MENU/Escape wiring; only the achievements page is given the whole stage instead of
+   the 420px drawer. That is the smaller change, and it keeps every other page exactly as it was. */
+.world-panel[data-pane='achievements'] {
+  left: 10px; right: 10px; top: 62px; bottom: 10px;
+  width: auto; max-height: none; transform-origin: top center;
+}
+.world-panel[data-pane='achievements'] .world-panel-body { padding: 0; }
+/* The reading column never grows past a comfortable measure, however wide the stage is. */
+.world-panel[data-pane='achievements'] .world-pane[data-pane='achievements'] {
+  width: 100%; max-width: 760px; margin: 0 auto; padding: 4px 12px 22px; box-sizing: border-box;
+}
+
+/* THE SHELF: rewards already earned. One card per waiting achievement, drawn once, never repeated
+   in its section (achievement-collect.ts). Two or three across on a wide sheet, one on a phone. */
+.world-achievements-shelf { display: grid; gap: 6px; margin: 0 0 12px; }
+.world-achievements-shelf[hidden] { display: none; }
+.world-achievements-shelf-title {
+  margin: 2px 4px 0; font-size: .58rem; font-weight: 700; letter-spacing: .22em;
+  text-transform: uppercase; color: #f2c879;
+}
+.world-achievements-shelf-list {
+  display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+/* THE CARD. The gold of a waiting reward, one line of title at reading size, one line of rule, and
+   a footer that carries the payout and the one action. No new art, no new dependency. */
+.world-achievement.world-achievement-card {
+  display: grid; grid-template-columns: minmax(0, 1fr); align-content: space-between; gap: 12px;
+  min-height: 0; padding: 13px 14px 14px; border-radius: 12px;
+  background: linear-gradient(158deg, #f2c8791f, #e8ddc50b 58%, #e8ddc506);
+  box-shadow: inset 0 0 0 1px #f2c87940, 0 6px 18px #0003;
+}
+.world-achievement-kicker {
+  display: block; font-size: .55rem; font-weight: 700; letter-spacing: .24em;
+  text-transform: uppercase; color: #f2c879d9;
+}
+.world-achievement-card .world-achievement-text strong { font-size: .92rem; }
+.world-achievement-card .world-achievement-text > span { font-size: .7rem; }
+.world-achievement-award { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* THE SEED PAYOUT: the app's own seed glyph (seed-icon.ts), the amount, and the word for a screen
+   reader. No image, no second icon set. */
+.world-achievement-payout {
+  display: inline-flex; align-items: center; gap: 7px; flex: none;
+  font-size: .84rem; font-weight: 700; letter-spacing: .06em; color: #f2e7cb;
+  font-variant-numeric: tabular-nums;
+}
+.world-achievement-payout .seed-icon { width: 20px; height: 20px; color: #f2c879; }
+/* THE COLLECT KEY, wearing the game's grow-glow. The halo is drawn ONCE on a still node
+   (box-shadow, never animated) and only its OPACITY breathes — the same budget as the hand's
+   #hand.turn-glow .card::before and the piles' .gd-halo, both of which also only animate
+   opacity. A shadow or a filter on a moving node repaints every frame, which this surface must not
+   do: it sits over the map. */
+.world-collect {
+  position: relative; min-height: 44px; min-width: 122px; padding: 0 18px;
+  border: 0; border-radius: 11px;
+  background: linear-gradient(180deg, #f2d492, #e7b95f); color: #1b1406;
+  font: inherit; font-size: .66rem; font-weight: 700; letter-spacing: .18em;
+  cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.world-collect:disabled { opacity: .6; cursor: default; }
+.world-collect-glow {
+  position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  /* the grow-glow's own falloff: a hairline rim and two soft stops, all gold */
+  box-shadow: 0 0 0 1px #f2c87980, 0 0 18px 2px #f2c879a6, 0 0 36px 8px #f2c87938;
+  opacity: .8; animation: world-collect-glow 2.8s ease-in-out infinite;
+}
+@keyframes world-collect-glow { 0%, 100% { opacity: .72; } 50% { opacity: 1; } }
+.world-collect:focus-visible { outline: 2px solid #f2e5c5; outline-offset: 3px; }
+/* REDUCE MOTION KEEPS THE GLOW (owner: it must still BE there): the halo stops breathing and rests
+   lit. Nothing travels and nothing disappears. */
+@media (prefers-reduced-motion: reduce) {
+  .world-collect-glow { animation: none; opacity: .85; }
+}
+html.reduce-motion .world-collect-glow { animation: none; opacity: .85; }
 .world-ranking-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .world-ranking-row {
   width: 100%; display: grid; grid-template-columns: 2.4ch 10px minmax(0, 1fr) auto; align-items: center; gap: 9px;
@@ -1536,6 +1616,11 @@ html.reduce-motion :is(.world-spore, .world-ripples) { display: none; }
   .online-world .world-grid > .world-menu-key { top: 14px; right: 14px; }
   .online-world .world-keys { top: 14px; right: 66px; }
   .online-world :is(.world-panel, .world-chat) { top: 68px; right: 14px; width: 420px; max-height: calc(100% - 82px); }
+  /* The achievements sheet takes the stage on a wide screen too (owner, 2026-11-20): the same 14px
+     edge as the keys above it, the same bottom air as the map. Its reading column stays centred. */
+  .online-world .world-panel[data-pane='achievements'] {
+    left: 14px; right: 14px; top: 68px; bottom: 14px; width: auto; max-height: none;
+  }
 }
 
 /* Every free tile is open to grow now, so "available" is a quiet lift; the board's own global

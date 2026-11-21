@@ -268,3 +268,50 @@ CONNECTED TILES and TOTAL TILES. Existing navigation targets a real tile in the 
 See [implementation, test evidence, measured density limits and Cursor's server deployment](history/TERRITORY-FINAL-POLISH.md).
 This pass needs no migration or backfill; the owner assigned the Edge deployment to Cursor. The
 web remains compatible with the current server until that deployment. Grain stays above all layers.
+
+## The achievements sheet — 20 November 2026
+
+Owner: *"find a smart way for extra window or space - maybe replacing the planet view and showing
+there the achievements window same size as planet - with the newly acheived achievement showed there
+... just make it be dragged onto the section where this achievment is with button 'COLLECT' by the
+seed payout with our classic glow - same style as hand during grow etc."*
+
+**The achievements page now takes the Planet's own stage.** It is the same window every MENU key
+opens (`#online-world-panel`: one close key, one scroll body, Escape/MENU folding, focus return) —
+only the achievements page is given the whole stage instead of the 420px drawer: `left/right/top/
+bottom` under the key row, `width: auto`, `max-height: none`, with a centred 760px reading column
+inside it. No new screen, no second scroll container and no new navigation were needed, and
+Ranking, Challenges, Colour and Chat are untouched. This supersedes the two earlier sentences that
+describe the achievements list as a narrow panel page and its action as `CLAIM`.
+
+**The shelf.** Every earned-and-uncollected achievement is drawn ONCE at the top of the sheet
+(`#world-achievements-shelf`), at full width, with its seed payout (`seedIcon` + `+100`) and one
+`COLLECT` key; while it waits there its row in its section is skipped
+(`web/src/online/achievement-collect.ts`). Sections still count the whole group (`Planet 2/10`
+includes rows on the shelf). COLLECT posts the server's existing claim route: the server re-verifies
+the facts and settles under `achievement:<id>` (idempotent, one receipt per player), and the client
+shows only the wallet that answer carried. Once collected, the card leaves the shelf and the ticked
+row is FILED BACK into its section, bringing itself into view if it is below the fold — the "moved
+onto the section where this achievement is" in the owner's words, performed by the view so a
+keyboard or a thumb reaches it in the same one press. There is no drag gesture to learn or to be
+locked out of: `COLLECT` is a native `<button>` with a visible focus ring and an accessible name
+that carries the achievement and its amount.
+
+**The glow.** `.world-collect-glow` is the game's grow-glow: a halo drawn once with `box-shadow` on
+a still node, whose OPACITY alone animates (`world-collect-glow`, 2.8s) — the same budget as the
+hand's `#hand.turn-glow .card::before` and the piles' `.gd-halo`, neither of which animates a
+shadow or a filter. Reduce motion (OS media query or the in-game class) stops the breath and rests
+the halo lit at `opacity: .85`; it is never removed.
+
+**Announcing it.** The payment is spoken once through the screen's existing polite status line
+(`#online-world-notice`, `+100 Seeds`), and the wallet is the server's own read-out. The quiet
+achievement toast (`web/src/player/achievement-toast.ts`) is unchanged: it still announces an
+achievement being EARNED anywhere in the game; the shelf is the place it is COLLECTED. No second
+toast, no second announcement.
+
+Tests: `web/tests/achievement-collect.test.ts` (the split, the full-size geometry, the native
+button, the payout path and the glow's animation/reduce-motion rules) and
+`web/e2e/achievements-collect.ts` (the real build at 390×844 and 1280×800: stage-sized sheet,
+shelf, glow running and resting, Tab+Enter collect paying exactly 100, the row filed and in view,
+screenshots). `web/e2e/achievements-panel.ts` and `web/e2e/territory-menu.ts` still pass unchanged
+apart from the key's word (`COLLECT`).
